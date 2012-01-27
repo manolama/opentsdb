@@ -4,6 +4,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.Properties;
 
 import org.slf4j.Logger;
@@ -17,8 +18,8 @@ import org.slf4j.LoggerFactory;
  * <p>
  * loadConfig() should be called at the start of the application and it will
  * search default locations for config files or it will try to load a user
- * supplied file. The config file format is a standard java.properties file
- * with key=value pairs and the pound sign signifying comments.
+ * supplied file. The config file format is a standard java.properties file with
+ * key=value pairs and the pound sign signifying comments.
  */
 public final class Configuration {
   private static final Logger LOG = LoggerFactory
@@ -100,7 +101,7 @@ public final class Configuration {
     String val = props.getProperty(key);
     if (val == null)
       return defaultValue;
-    return val;
+    return val.trim();
   }
 
   /**
@@ -354,6 +355,34 @@ public final class Configuration {
       LOG.warn("Key provided is empty");
       return;
     }
-    props.setProperty(key, value);
+    props.setProperty(key.trim(), value.trim());
+  }
+
+  /**
+   * Returns all of the configurations stored in the properties list. Note that
+   * this is only the properties that have been set via command line or
+   * configuration file. Anything not listed will use the defaults
+   * @param as_json NOT IMPLEMENTED Returns a JSON string
+   * @return A string with all of the settings
+   */
+  public static final String dumpConfiguration(boolean as_json) {
+    if (props.isEmpty())
+      return "No configuration settings stored";
+
+    // if not asJson, iterate and build a string
+    if (as_json) {
+      // todo may need to move jsonHelper around to access it here
+      // JsonHelper json = new JsonHelper(props);
+      return "";
+    } else {
+      Enumeration e = props.propertyNames();
+      String response = "TSD Configuration:\n";
+      while (e.hasMoreElements()) {
+        String key = (String) e.nextElement();
+        response += "Key [" + key + "]  Value [" + props.getProperty(key)
+            + "]\n";
+      }
+      return response;
+    }
   }
 }

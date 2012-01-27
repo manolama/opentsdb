@@ -25,7 +25,9 @@ import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.hbase.async.HBaseClient;
 
 import net.opentsdb.BuildData;
+import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.core.Configuration;
 import net.opentsdb.tsd.PipelineFactory;
 
 /**
@@ -33,110 +35,154 @@ import net.opentsdb.tsd.PipelineFactory;
  */
 final class TSDMain {
 
-  /** Prints usage and exits with the given retval. */
+  /**
+   * Prints the command line usage information and exits with a specified
+   * exit code
+   * @param argp The list of command line arguments to print
+   * @param errmsg An error message to display to the user before printing
+   * the list of options
+   * @param retval The numeric exit code to return
+   */
   static void usage(final ArgP argp, final String errmsg, final int retval) {
     System.err.println(errmsg);
     System.err.println("Usage: tsd --port=PORT"
-      + " --staticroot=PATH --cachedir=PATH\n"
-      + "Starts the TSD, the Time Series Daemon");
+        + " --staticroot=PATH --cachedir=PATH\n"
+        + "Starts the TSD, the Time Series Daemon");
     if (argp != null) {
       System.err.print(argp.usage());
     }
     System.exit(retval);
   }
 
-  private static final short DEFAULT_FLUSH_INTERVAL = 1000;
+  /** Used to determine if we need to create a direcotry */
   private static final boolean DONT_CREATE = false;
   private static final boolean CREATE_IF_NEEDED = true;
   private static final boolean MUST_BE_WRITEABLE = true;
 
   /**
-   * Ensures the given directory path is usable and set it as a system prop.
-   * In case of problem, this function calls {@code System.exit}.
+   * Ensures the given directory path is usable and set it as a system prop. In
+   * case of problem, this function calls {@code System.exit}.
    * @param prop The name of the system property to set.
    * @param dir The path to the directory that needs to be checked.
    * @param need_write Whether or not the directory must be writeable.
-   * @param create If {@code true}, the directory {@code dir} will be created
-   * if it doesn't exist.
+   * @param create If {@code true}, the directory {@code dir} will be created if
+   *          it doesn't exist.
    */
-  private static void setDirectoryInSystemProps(final String prop,
-                                                final String dir,
-                                                final boolean need_write,
-                                                final boolean create) {
+  private static String checkDirectory(final String dir,
+      final boolean need_write, final boolean create) {
+    if (dir.isEmpty())
+      return "Directory path is empty";
     final File f = new File(dir);
-    final String path = f.getPath();
     if (!f.exists() && !(create && f.mkdirs())) {
-      usage(null, "No such directory: " + path, 3);
+      return "No such directory [" + dir + "]";
     } else if (!f.isDirectory()) {
-      usage(null, "Not a directory: " + path, 3);
+      return "Not a directory [" + dir + "]";
     } else if (need_write && !f.canWrite()) {
-      usage(null, "Cannot write to directory: " + path, 3);
+      return "Cannot write to directory [" + dir + "]";
     }
-    System.setProperty(prop, path + '/');
+    return "";
   }
 
+  /**
+   * The main entry point for the Time Series Daemon
+   * @param args Command line arguments
+   */
   public static void main(String[] args) {
     Logger log = LoggerFactory.getLogger(TSDMain.class);
     log.info("Starting.");
     log.info(BuildData.revisionString());
     log.info(BuildData.buildString());
+
+    // try to load default config
+    final boolean loaded_config = Configuration.loadConfig();
+
     try {
-      System.in.close();  // Release a FD we don't need.
+      System.in.close(); // Release a FD we don't need.
     } catch (Exception e) {
       log.warn("Failed to close stdin", e);
     }
 
+    // load CLI options
     final ArgP argp = new ArgP();
     CliOptions.addCommon(argp);
     argp.addOption("--port", "NUM", "TCP port to listen on.");
     argp.addOption("--staticroot", "PATH",
-                   "Web root from which to serve static files (/s URLs).");
+        "Web root from which to serve static files (/s URLs).");
     argp.addOption("--cachedir", "PATH",
-                   "Directory under which to cache result of requests.");
+        "Directory under which to cache result of requests.");
     argp.addOption("--flush-interval", "MSEC",
-                   "Maximum time for which a new data point can be buffered"
-                   + " (default: " + DEFAULT_FLUSH_INTERVAL + ").");
+        "Maximum time for which a new data point can be buffered"
+            + " (default: " + Const.FLUSH_INTERVAL + ").");
     CliOptions.addAutoMetricFlag(argp);
     args = CliOptions.parse(argp, args);
-    if (args == null || !argp.has("--port")
-        || !argp.has("--staticroot") || !argp.has("--cachedir")) {
+    if (!loaded_config
+        && (args == null || !argp.has("--port") || !argp.has("--staticroot") || !argp
+            .has("--cachedir"))) {
       usage(argp, "Invalid usage.", 1);
     } else if (args.length != 0) {
       usage(argp, "Too many arguments.", 2);
     }
-    args = null;  // free().
+    args = null; // free().
 
-    final short flush_interval = getFlushInterval(argp);
+    // load config if the user specified one
+    final String config_file = argp.get("--configfile", "");
+    if (!config_file.isEmpty())
+      Configuration.loadConfig(config_file);
 
-    setDirectoryInSystemProps("tsd.http.staticroot", argp.get("--staticroot"),
-                              DONT_CREATE, !MUST_BE_WRITEABLE);
-    setDirectoryInSystemProps("tsd.http.cachedir", argp.get("--cachedir"),
-                              CREATE_IF_NEEDED, MUST_BE_WRITEABLE);
+    // load CLI overloads
+    argp.overloadConfigs();
+    
+    // dump the configuration 
+    log.debug(Configuration.dumpConfiguration(false));
 
-    final NioServerSocketChannelFactory factory =
-        new NioServerSocketChannelFactory(Executors.newCachedThreadPool(),
-                                          Executors.newCachedThreadPool());
+    // check to make sure the directories are read/writable where appropriate
+    String error = checkDirectory(
+        Configuration.getString("tsd.staticroot", ""), DONT_CREATE,
+        !MUST_BE_WRITEABLE);
+    if (!error.isEmpty())
+      usage(argp, "[tsd.staticroot] " + error, 3);
+    error = checkDirectory(Configuration.getString("tsd.cachedir", ""),
+        CREATE_IF_NEEDED, MUST_BE_WRITEABLE);
+    if (!error.isEmpty())
+      usage(argp, "[tsd.cachdir] " + error, 3);
+
+    // setup some threads
+    final NioServerSocketChannelFactory factory = new NioServerSocketChannelFactory(
+        Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
+    
+    // setup hbase client
     final HBaseClient client = CliOptions.clientFromOptions(argp);
+    
     try {
       // Make sure we don't even start if we can't find out tables.
-      final String table = argp.get("--table", "tsdb");
-      final String uidtable = argp.get("--uidtable", "tsdb-uid");
+      final String table = Configuration.getString("tsd.table",
+          Const.HBASE_TABLE);
+      final String uidtable = Configuration.getString("tsd.uidtable",
+          Const.HBASE_UIDTABLE);
       client.ensureTableExists(table).joinUninterruptibly();
       client.ensureTableExists(uidtable).joinUninterruptibly();
 
-      client.setFlushInterval(flush_interval);
+      client.setFlushInterval(Configuration.getShort("tsd.flush.interval",
+          Const.FLUSH_INTERVAL, (short) 1, Short.MAX_VALUE));
+
       final TSDB tsdb = new TSDB(client, table, uidtable);
       registerShutdownHook(tsdb);
       final ServerBootstrap server = new ServerBootstrap(factory);
 
+      // setup the network sockets
       server.setPipelineFactory(new PipelineFactory(tsdb));
-      server.setOption("child.tcpNoDelay", true);
-      server.setOption("child.keepAlive", true);
-      server.setOption("reuseAddress", true);
-
-      final InetSocketAddress addr =
-        new InetSocketAddress(Integer.parseInt(argp.get("--port")));
+      server.setOption("child.tcpNoDelay", Configuration.getBoolean(
+          "tsd.network.tcpnodelay", Const.NETWORK_TCP_NODELAY));
+      server.setOption("child.keepAlive", Configuration.getBoolean(
+          "tsd.network.keepalive", Const.NETWORK_KEEPALIVE));
+      server.setOption("reuseAddress", Configuration.getBoolean(
+          "tsd.network.reuseaddress", Const.NETWORK_REUSEADDRESS));
+      final InetSocketAddress addr = new InetSocketAddress(
+          Configuration.getInt("tsd.network.port", Const.NETWORK_PORT));
+      
+      // start the server
       server.bind(addr);
+      
       log.info("Ready to serve on " + addr);
     } catch (Throwable e) {
       factory.releaseExternalResources();
@@ -151,34 +197,21 @@ final class TSDMain {
   }
 
   /**
-   * Parses the value of the --flush-interval parameter.
-   * @throws IllegalArgumentException if the flush interval is negative.
-   * @return The flush interval.
+   * ?
+   * @param tsdb The TSDB object to work with
    */
-  private static short getFlushInterval(final ArgP argp) {
-    final String flush_arg = argp.get("--flush-interval");
-    if (flush_arg == null) {
-      return DEFAULT_FLUSH_INTERVAL;
-    }
-    final short flush_interval = Short.parseShort(flush_arg);
-    if (flush_interval < 0) {
-      throw new IllegalArgumentException("Negative --flush-interval: "
-                                         + flush_interval);
-    }
-    return flush_interval;
-  }
-
   private static void registerShutdownHook(final TSDB tsdb) {
     final class TSDBShutdown extends Thread {
       public TSDBShutdown() {
         super("TSDBShutdown");
       }
+
       public void run() {
         try {
           tsdb.shutdown().join();
         } catch (Exception e) {
-          LoggerFactory.getLogger(TSDBShutdown.class)
-            .error("Uncaught exception during shutdown", e);
+          LoggerFactory.getLogger(TSDBShutdown.class).error(
+              "Uncaught exception during shutdown", e);
         }
       }
     }

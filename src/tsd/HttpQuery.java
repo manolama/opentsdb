@@ -42,6 +42,7 @@ import org.jboss.netty.handler.codec.http.HttpVersion;
 import org.jboss.netty.handler.codec.http.QueryStringDecoder;
 import org.jboss.netty.util.CharsetUtil;
 
+import net.opentsdb.core.Configuration;
 import net.opentsdb.core.Const;
 import net.opentsdb.graph.Plot;
 import net.opentsdb.stats.Histogram;
@@ -398,7 +399,7 @@ final class HttpQuery {
       plot.setParams(params);
       params = null;
       final String basepath =
-        RpcHandler.getDirectoryFromSystemProp("tsd.http.cachedir")
+        Configuration.getString("tsd.cachedir", "")
         + Integer.toHexString(msg.hashCode());
       GraphHandler.runGnuplot(this, basepath, plot);
       plot = null;

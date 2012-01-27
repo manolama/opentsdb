@@ -15,6 +15,12 @@ package net.opentsdb.tools;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import net.opentsdb.core.Configuration;
 
 /**
  * A dead simple command-line argument parser.
@@ -44,7 +50,8 @@ import java.util.HashMap;
  * This class is not thread-safe.
  */
 public final class ArgP {
-
+  private static final Logger LOG = LoggerFactory.getLogger(ArgP.class);
+  
   /**
    * Maps an option name (e.g, {@code "--foo"}) to a 2-element array
    * {@code ["META", "Help string"]}
@@ -271,4 +278,27 @@ public final class ArgP {
     return buf.toString();
   }
 
+  /**
+   * Copies the parsed command line options to the {@link Configuration} class
+   */
+  public void overloadConfigs(){
+    if (parsed.isEmpty()){
+      LOG.debug("No parsed options to copy");
+      return;
+    }
+    
+    // loop and switch so we can map cli options to tsdb options
+    for (Map.Entry<String, String> entry : parsed.entrySet()){
+      String option = CliOptions.CliToConfig.get(entry.getKey());
+      if (option == null || option.isEmpty()){
+        LOG.info("Unrecognized option [" + entry.getKey() + "]");
+        continue;
+      }
+      
+      // if the incoming option is a flag (e.g. --auto-metric) then we
+      // need to set a boolean value
+      Configuration.setConfig(option, 
+          entry.getValue() != null ? entry.getValue() : "true");
+    }
+  }
 }

@@ -32,7 +32,7 @@ final class IncomingDataPoints implements WritableDataPoints {
 
   /** For auto create metrics mode, set by --auto-metric flag in TSDMain.  */
   private static final boolean AUTO_METRIC =
-    System.getProperty("tsd.core.auto_create_metrics") != null;
+    Configuration.getBoolean("tsd.autometric", Const.AUTOMETRIC);
 
   /** For how long to buffer edits when doing batch imports (in ms).  */
   private static final short DEFAULT_BATCH_IMPORT_BUFFER_INTERVAL = 5000;

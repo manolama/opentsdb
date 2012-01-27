@@ -39,6 +39,7 @@ import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.Aggregator;
 import net.opentsdb.core.Aggregators;
+import net.opentsdb.core.Configuration;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.DataPoint;
 import net.opentsdb.core.DataPoints;
@@ -100,7 +101,7 @@ final class GraphHandler implements HttpRpc {
     // ArrayBlockingQueue does not scale as much as LinkedBlockingQueue in terms
     // of throughput but we don't need high throughput here.  We use ABQ instead
     // of LBQ because it creates far fewer references.
-    cachedir = RpcHandler.getDirectoryFromSystemProp("tsd.http.cachedir");
+    cachedir = Configuration.getString("tsd.cachedir", "");
   }
 
   public void execute(final TSDB tsdb, final HttpQuery query) {
