@@ -12,13 +12,20 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
+import org.codehaus.jackson.type.TypeReference;
 import org.jboss.netty.channel.Channel;
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import org.jboss.netty.util.CharsetUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Tags;
@@ -26,16 +33,158 @@ import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.uid.NoSuchUniqueName;
 
 /** Implements the "put" telnet-style command. */
-final class PutDataPointRpc implements TelnetRpc {
-
+final class PutDataPointRpc implements TelnetRpc, HttpRpc {
+  private static final Logger LOG = LoggerFactory
+      .getLogger(PutDataPointRpc.class);
   private static final AtomicLong requests = new AtomicLong();
   private static final AtomicLong hbase_errors = new AtomicLong();
   private static final AtomicLong invalid_values = new AtomicLong();
   private static final AtomicLong illegal_arguments = new AtomicLong();
   private static final AtomicLong unknown_metrics = new AtomicLong();
 
+  /**
+   * Handles the HTTP PUT command
+   * <p>
+   * Metrics should be sent in a JSON format via POST. The metrics format is:
+   * {"metric":"metric_name","timestamp":unix_epoch_time,"value":value",
+   * "tags":{"tag1":"tag_value1","tagN":"tag_valueN"}} You can combine multiple
+   * metrics in a single JSON array such as [{metric1},{metric2}]
+   * <p>
+   * This method will respond with a JSON string that lists the number of
+   * successfully parsed metrics and the number of failed metrics, along with a
+   * list of which metrics failed and why. If the JSON was improperly formatted
+   * or there was another error, a JSON-RPC style error will be returned.
+   * @param tsdb Master TSDB class object
+   * @param query The query from Netty
+   */
+  public void execute(final TSDB tsdb, final HttpQuery query) {
+    int success = 0;
+    int fail = 0;
+    String jsonp = "";
+    JsonRpcError jerror = null;
+    final TypeReference<ArrayList<Metric>> typeRef = new TypeReference<ArrayList<Metric>>() {
+    };
+    final String content = query.request().getContent()
+        .toString(CharsetUtil.UTF_8);
+    ArrayList<Metric> ms = new ArrayList<Metric>();
+
+    // make sure there is data in the content
+    if (content.length() < 1) {
+      query.sendReply(new JsonRpcError(
+          "Missing JSON data. Please post JSON data.", 400).getJSON());
+      return;
+    }
+
+    // see if we need to use JSONP in our response
+    if (query.hasQueryStringParam("json"))
+      jsonp = query.getQueryStringParam("json");
+
+    // setup a parser
+    JsonHelper json = null;
+
+    // if the content starts with a bracket, we have an array of metrics
+    if (content.subSequence(0, 1).equals("[")) {
+      json = new JsonHelper();
+      if (json.parseObject(content, typeRef))
+        ms = (ArrayList<Metric>) json.getObject();
+    } else {
+      // otherwise we have a single metric (hopefully)
+      json = new JsonHelper(new Metric());
+      if (json.parseObject(content))
+        ms.add((Metric) json.getObject());
+    }
+
+    // if parsing generated an error, return it
+    if (!json.getError().isEmpty()) {
+      jerror = new JsonRpcError(json.getError(), 422);
+      query.sendReply(HttpResponseStatus.UNPROCESSABLE_ENTITY,
+          (jsonp.isEmpty() ? jerror.getJSON() : jerror.getJSONP(jsonp)));
+      return;
+    }
+
+    // see if we got some metrics
+    if (ms.size() < 1) {
+      jerror = new JsonRpcError("Unable to parse any metrics from the data:"
+          + content, 422);
+      query.sendReply(HttpResponseStatus.UNPROCESSABLE_ENTITY,
+          (jsonp.isEmpty() ? jerror.getJSON() : jerror.getJSONP(jsonp)));
+      LOG.debug("Unable to extract metrics from: " + content);
+      return;
+    }
+
+    // these are for the response JSON
+    Map<String, Object> response = new HashMap<String, Object>();
+    ArrayList<Object> errors = new ArrayList<Object>();
+
+    // loop and store each metric
+    for (final Metric m : ms) {
+      try {
+        // set the error callback class
+        class PutErrback implements Callback<Exception, Exception> {
+          ArrayList<Object> errors = null;
+          Integer fail;
+
+          /**
+           * Constructor
+           * @param err Pass the array of errors here so we can add to it
+           * @param f Pass the failure count here so we can increment it
+           */
+          public PutErrback(ArrayList<Object> err, Integer f) {
+            errors = err;
+            fail = f;
+          }
+
+          public Exception call(final Exception arg) {
+            errors.add(m.BuildError("HBase error: " + arg.getMessage()));
+            hbase_errors.incrementAndGet();
+            fail++;
+            return arg;
+          }
+        }
+
+        // attempt the actual import
+        importDataPoint(tsdb, m).addErrback(
+            new PutErrback(errors, (Integer) fail));
+        success++;
+      } catch (NumberFormatException x) {
+        errors.add(m.BuildError("Invalid value: " + x.getMessage()));
+        fail++;
+        invalid_values.incrementAndGet();
+      } catch (IllegalArgumentException x) {
+        errors.add(m.BuildError("Illegal Argument: " + x.getMessage()));
+        fail++;
+        illegal_arguments.incrementAndGet();
+      } catch (NoSuchUniqueName x) {
+        errors.add(m.BuildError("Unknown Metric: " + x.getMessage()));
+        fail++;
+        unknown_metrics.incrementAndGet();
+      }
+    }
+
+    // build the response
+    response.put("success", success);
+    response.put("fail", fail);
+    if (errors.size() > 0)
+      response.put("errors", errors);
+
+    // send the response
+    json = new JsonHelper(response);
+    final String reply = json.getJsonString();
+    if (reply.isEmpty()){
+      jerror = new JsonRpcError("Error generating resposne JSON", 500);
+      query.sendReply(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+          (jsonp.isEmpty() ? jerror.getJSON() : jerror.getJSONP(jsonp)));
+    }else
+      query.sendReply((jsonp.isEmpty() ? json.getJsonString() 
+          : json.getJsonPString(jsonp)));
+    return;
+  }
+
+  /**
+   * Handles the Telnet PUT command
+   */
   public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
-                                  final String[] cmd) {
+      final String[] cmd) {
     requests.incrementAndGet();
     String errmsg = null;
     try {
@@ -47,6 +196,7 @@ final class PutDataPointRpc implements TelnetRpc {
           hbase_errors.incrementAndGet();
           return arg;
         }
+
         public String toString() {
           return "report error to channel";
         }
@@ -83,8 +233,8 @@ final class PutDataPointRpc implements TelnetRpc {
   /**
    * Imports a single data point.
    * @param tsdb The TSDB to import the data point into.
-   * @param words The words describing the data point to import, in
-   * the following format: {@code [metric, timestamp, value, ..tags..]}
+   * @param words The words describing the data point to import, in the
+   *          following format: {@code [metric, timestamp, value, ..tags..]}
    * @return A deferred object that indicates the completion of the request.
    * @throws NumberFormatException if the timestamp or value is invalid.
    * @throws IllegalArgumentException if any other argument is invalid.
@@ -92,10 +242,10 @@ final class PutDataPointRpc implements TelnetRpc {
    */
   private Deferred<Object> importDataPoint(final TSDB tsdb, final String[] words) {
     words[0] = null; // Ditch the "put".
-    if (words.length < 5) {  // Need at least: metric timestamp value tag
-      //               ^ 5 and not 4 because words[0] is "put".
+    if (words.length < 5) { // Need at least: metric timestamp value tag
+      // ^ 5 and not 4 because words[0] is "put".
       throw new IllegalArgumentException("not enough arguments"
-                                         + " (need least 4, got " + (words.length - 1) + ')');
+          + " (need least 4, got " + (words.length - 1) + ')');
     }
     final String metric = words[1];
     if (metric.length() <= 0) {
@@ -115,10 +265,42 @@ final class PutDataPointRpc implements TelnetRpc {
         Tags.parse(tags, words[i]);
       }
     }
-    if (value.indexOf('.') < 0) {  // integer value
+    if (value.indexOf('.') < 0) { // integer value
       return tsdb.addPoint(metric, timestamp, Tags.parseLong(value), tags);
-    } else {  // floating point value
+    } else { // floating point value
       return tsdb.addPoint(metric, timestamp, Float.parseFloat(value), tags);
+    }
+  }
+
+  /**
+   * Imports a single data point.
+   * @param tsdb The TSDB to import the data point into.
+   * @param metric A {@link Metric} object
+   * @return A deferred object that indicates the completion of the request.
+   * @throws NumberFormatException if the timestamp or value is invalid.
+   * @throws IllegalArgumentException if any other argument is invalid.
+   * @throws NoSuchUniqueName if the metric isn't registered.
+   */
+  private Deferred<Object> importDataPoint(final TSDB tsdb, final Metric metric) {
+    if (metric.getMetric().length() <= 0) {
+      throw new IllegalArgumentException("empty metric name");
+    }
+    if (metric.getTimestamp() <= 0) {
+      throw new IllegalArgumentException("invalid timestamp: "
+          + metric.getTimestamp());
+    }
+    if (metric.getValue().length() <= 0) {
+      throw new IllegalArgumentException("empty value");
+    }
+    if (metric.getTags() == null || metric.getTags().size() < 1) {
+      throw new IllegalArgumentException("Missing tags");
+    }
+    if (metric.getValue().indexOf('.') < 0) { // integer value
+      return tsdb.addPoint(metric.getMetric(), metric.getTimestamp(),
+          Tags.parseLong(metric.getValue()), metric.getTags());
+    } else { // floating point value
+      return tsdb.addPoint(metric.getMetric(), metric.getTimestamp(),
+          Float.parseFloat(metric.getValue()), metric.getTags());
     }
   }
 }

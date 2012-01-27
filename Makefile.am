@@ -68,6 +68,7 @@ tsdb_SRC := \
 	src/tsd/JsonHelper.java	\
 	src/tsd/JsonRpcError.java	\
 	src/tsd/LogsRpc.java	\
+	src/tsd/Metric.java	\
 	src/tsd/PipelineFactory.java	\
 	src/tsd/PutDataPointRpc.java	\
 	src/tsd/RpcHandler.java	\

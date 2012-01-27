@@ -50,4 +50,8 @@ public final class Const {
     'A', 'B', 'C', 'D', 'E', 'F'
   };
 
+  public static final int CHUNK_SIZE = 1048576;
+  
+  /** How often, in milliseconds, to flush incoming metrics to HBase */
+  public static final short FLUSH_INTERVAL = 1000;
 }
