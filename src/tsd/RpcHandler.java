@@ -95,7 +95,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     http_commands.put("logs", new LogsRpc());
     http_commands.put("q", new GraphHandler());
     http_commands.put("suggest", new Suggest());
-    //http_commands.put("put", new PutDataPointRpc());
+    http_commands.put("put", new PutDataPointRpc());
   }
 
   @Override
