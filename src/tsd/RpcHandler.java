@@ -95,6 +95,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     http_commands.put("logs", new LogsRpc());
     http_commands.put("q", new GraphHandler());
     http_commands.put("suggest", new Suggest());
+    //http_commands.put("put", new PutDataPointRpc());
   }
 
   @Override
@@ -320,7 +321,10 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   /** The "/aggregators" endpoint. */
   private static final class ListAggregators implements HttpRpc {
     public void execute(final TSDB tsdb, final HttpQuery query) {
-      query.sendJsonArray(Aggregators.set());
+      final String jsonp = JsonHelper.getJsonPFunction(query);
+      final JsonHelper response = new JsonHelper(Aggregators.set());
+      query.sendReply(jsonp.isEmpty() ? response.getJsonString() 
+          : response.getJsonPString(jsonp));
     }
   }
 
@@ -341,7 +345,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     }
 
     public void execute(final TSDB tsdb, final HttpQuery query) {
-      final boolean json = query.hasQueryStringParam("json");
+      final boolean json = JsonHelper.getJsonRequested(query);
       final StringBuilder buf = json ? null : new StringBuilder(2048);
       final ArrayList<String> stats = json ? new ArrayList<String>(64) : null;
       final StatsCollector collector = new StatsCollector("tsd") {
@@ -355,8 +359,12 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
         }
       };
       doCollectStats(tsdb, collector);
+      // handle JSON
       if (json) {
-        query.sendJsonArray(stats);
+        final String jsonp = JsonHelper.getJsonPFunction(query);
+        final JsonHelper response = new JsonHelper(stats);
+        query.sendReply(jsonp.isEmpty() ? response.getJsonString() 
+            : response.getJsonPString(jsonp));
       } else {
         query.sendReply(buf);
       }
@@ -371,9 +379,12 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     }
   }
 
-  /** The "/suggest" endpoint. */
+  /** The "/suggest" endpoint.
+   * It returns the suggestion lookups in JSON format 
+   */
   private static final class Suggest implements HttpRpc {
     public void execute(final TSDB tsdb, final HttpQuery query) {
+      final String jsonp = JsonHelper.getJsonPFunction(query);
       final String type = query.getRequiredQueryStringParam("type");
       final String q = query.getQueryStringParam("q");
       if (q == null) {
@@ -389,7 +400,9 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       } else {
         throw new BadRequestException("Invalid 'type' parameter:" + type);
       }
-      query.sendJsonArray(suggestions);
+      final JsonHelper response = new JsonHelper(suggestions);
+      query.sendReply(jsonp.isEmpty() ? response.getJsonString() 
+          : response.getJsonPString(jsonp));
     }
   }
 
@@ -415,31 +428,32 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     }
 
     public void execute(final TSDB tsdb, final HttpQuery query) {
-      final boolean json = query.request().getUri().endsWith("json");
-      StringBuilder buf;
-      if (json) {
-        buf = new StringBuilder(157 + BuildData.repo_status.toString().length()
-                                + BuildData.user.length() + BuildData.host.length()
-                                + BuildData.repo.length());
-        buf.append("{\"short_revision\":\"").append(BuildData.short_revision)
-          .append("\",\"full_revision\":\"").append(BuildData.full_revision)
-          .append("\",\"timestamp\":").append(BuildData.timestamp)
-          .append(",\"repo_status\":\"").append(BuildData.repo_status)
-          .append("\",\"user\":\"").append(BuildData.user)
-          .append("\",\"host\":\"").append(BuildData.host)
-          .append("\",\"repo\":\"").append(BuildData.repo)
-          .append("\"}");
+      // Send in JSON if requested
+      if (JsonHelper.getJsonRequested(query)) {
+        final String jsonp = JsonHelper.getJsonPFunction(query);
+        HashMap<String, Object> version = new HashMap<String, Object>();
+        version.put("short_revision", BuildData.short_revision);
+        version.put("full_revision", BuildData.full_revision);
+        version.put("timestamp", BuildData.timestamp);
+        version.put("repo_status", BuildData.repo_status);
+        version.put("user", BuildData.user);
+        version.put("host", BuildData.host);
+        version.put("repo", BuildData.repo);
+        final JsonHelper response = new JsonHelper(version);
+        query.sendReply(jsonp.isEmpty() ? response.getJsonString() 
+            : response.getJsonPString(jsonp));        
       } else {
+        StringBuilder buf;
         final String revision = BuildData.revisionString();
         final String build = BuildData.buildString();
         buf = new StringBuilder(2 // For the \n's
                                 + revision.length() + build.length());
         buf.append(revision).append('\n').append(build).append('\n');
+        query.sendReply(buf);
       }
-      query.sendReply(buf);
     }
   }
-
+  
   /**
    * Returns the directory path stored in the given system property.
    * @param prop The name of the system property.

@@ -270,25 +270,23 @@ final class GraphHandler implements HttpRpc {
 
     private void execute() throws IOException {
       final int nplotted = runGnuplot(query, basepath, plot);
-      if (query.hasQueryStringParam("json")) {
-        final StringBuilder buf = new StringBuilder(64);
-        buf.append("{\"plotted\":").append(nplotted)
-          .append(",\"points\":").append(npoints)
-          .append(",\"etags\":[");
-        for (final HashSet<String> tags : aggregated_tags) {
-          if (tags == null || tags.isEmpty()) {
-            buf.append("[]");
-          } else {
-            HttpQuery.toJsonArray(tags, buf);
-          }
-          buf.append(',');
-        }
-        buf.setCharAt(buf.length() - 1, ']');
-        // The "timing" field must remain last, loadCachedJson relies this.
-        buf.append(",\"timing\":").append(query.processingTimeMillis())
-          .append('}');
-        query.sendReply(buf);
-        writeFile(query, basepath + ".json", buf.toString().getBytes());
+
+      // if the user requested JSON, send them json 
+      if (JsonHelper.getJsonRequested(query)) {
+        final String jsonp = JsonHelper.getJsonPFunction(query);
+        
+        // build the JOGO object to serialize
+        HashMap<String, Object> stats = new HashMap<String, Object>();
+        stats.put("plotted", nplotted);
+        stats.put("points", npoints);
+        stats.put("timing", query.processingTimeMillis());
+        stats.put("etags", aggregated_tags);
+        
+        final JsonHelper response = new JsonHelper(stats);
+        final String jstring = jsonp.isEmpty() ? response.getJsonString() 
+            : response.getJsonPString(jsonp);       
+        query.sendReply(jstring);
+        writeFile(query, basepath + ".json", jstring.getBytes());
       } else {
           if (query.hasQueryStringParam("png")) {
             query.sendFile(basepath + ".png", max_age);

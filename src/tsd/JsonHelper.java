@@ -193,6 +193,29 @@ final class JsonHelper {
         + ");";
   }
 
+  /**
+   * Checks the HttpQuery to see if the json=functionName exists and if
+   * so then it returns the function name. If not, it returns an empty string
+   * @param query The HttpQuery to parse for "json"
+   * @return The function name supplied by the user or an empty string
+   */
+  public static final String getJsonPFunction(final HttpQuery query){
+    if (query.hasQueryStringParam("json"))
+      return query.getQueryStringParam("json");
+    else
+      return "";
+  }
+  
+  /**
+   * Checks the HttpQuery to see if the query includes "json" and the user
+   * wants to get a JSON formatted response
+   * @param query The HttpQuery to parse for "json"
+   * @return True if the parameter was included, false if not
+   */
+  public static final boolean getJsonRequested(final HttpQuery query){
+    return query.hasQueryStringParam("json");
+  }
+  
   /** Gets the error string */
   public final String getError() {
     return error;
