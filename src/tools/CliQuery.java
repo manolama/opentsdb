@@ -87,6 +87,11 @@ final class CliQuery {
     }
   }
 
+  /**
+   * Main entry point for the CliQuery command line tool
+   * @param args Command line arguments
+   * @throws IOException If something goes wrong
+   */
   public static void main(String[] args) throws IOException {
     ArgP argp = new ArgP();
     CliOptions.addCommon(argp);
@@ -131,6 +136,13 @@ final class CliQuery {
     }
   }
 
+  /**
+   * 
+   * @param tsdb
+   * @param args
+   * @param want_plot
+   * @return
+   */
   private static Plot doQuery(final TSDB tsdb,
                               final String args[],
                               final boolean want_plot) {
@@ -242,6 +254,11 @@ final class CliQuery {
     }
   }
 
+  /**
+   * 
+   * @param params
+   * @return
+   */
   private static HashMap<String, String> parsePlotParams(final ArrayList<String> params) {
     final HashMap<String, String> result =
       new HashMap<String, String>(params.size());

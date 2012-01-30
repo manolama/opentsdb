@@ -12,8 +12,13 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tools;
 
+import java.util.HashMap;
+
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.Level;
+
+import net.opentsdb.core.Configuration;
+import net.opentsdb.core.Const;
 
 import org.slf4j.LoggerFactory;
 
@@ -22,49 +27,71 @@ import org.jboss.netty.logging.Slf4JLoggerFactory;
 
 import org.hbase.async.HBaseClient;
 
-/** Helper functions to parse arguments passed to {@code main}.  */
+/** Helper functions to parse arguments passed to {@code main}. */
 final class CliOptions {
 
   static {
     InternalLoggerFactory.setDefaultFactory(new Slf4JLoggerFactory());
   }
 
-  /** Adds common TSDB options to the given {@code argp}.  */
-  static void addCommon(final ArgP argp) {
-    argp.addOption("--table", "TABLE",
-                   "Name of the HBase table where to store the time series"
-                   + " (default: tsdb).");
-    argp.addOption("--uidtable", "TABLE",
-                   "Name of the HBase table to use for Unique IDs"
-                   + " (default: tsdb-uid).");
-    argp.addOption("--zkquorum", "SPEC",
-                   "Specification of the ZooKeeper quorum to use"
-                   + " (default: localhost).");
-    argp.addOption("--zkbasedir", "PATH",
-                   "Path under which is the znode for the -ROOT- region"
-                   + " (default: /hbase).");
+  /** This maps CLI options to their Configuration option settings */
+  public static final HashMap<String, String> CliToConfig;
+  static {
+    HashMap<String, String> aMap = new HashMap<String, String>();
+    aMap.put("--table", "tsd.table");
+    aMap.put("--uidtable", "tsd.uidtable");
+    aMap.put("--zkquorum", "tsd.zkquorum");
+    aMap.put("--zkbasedir", "tsd.zkbasedir");
+    aMap.put("--logconfig", "tsd.logconfig");
+    aMap.put("--port", "tsd.network.port");
+    aMap.put("--staticroot", "tsd.staticroot");
+    aMap.put("--cachedir", "tsd.cachedir");
+    aMap.put("--flush-interval", "tsd.flush.interval");
+    aMap.put("--auto-metric", "tsd.autometric");
+    CliToConfig = aMap;
   }
 
-  /** Adds a --verbose flag.  */
+  /** Adds common TSDB options to the given {@code argp}. */
+  static void addCommon(final ArgP argp) {
+    argp.addOption("--table", "TABLE",
+        "Name of the HBase table where to store the time series"
+            + " (default: tsdb).");
+    argp.addOption("--uidtable", "TABLE",
+        "Name of the HBase table to use for Unique IDs"
+            + " (default: tsdb-uid).");
+    argp.addOption("--zkquorum", "SPEC",
+        "Specification of the ZooKeeper quorum to use"
+            + " (default: localhost).");
+    argp.addOption("--zkbasedir", "PATH",
+        "Path under which is the znode for the -ROOT- region"
+            + " (default: /hbase).");
+    argp.addOption("--configfile", "PATH", "Path to a configuration file"
+        + " (defaults: /etc/opentsdb/opentsdb.conf or ./opentsdb.conf).");
+    argp.addOption("--logconfig", "PATH",
+        "Path to a LOGBACK configuration file"
+            + " (defaults: {classpath}/logback.groovy or logback.xml).");
+  }
+
+  /** Adds a --verbose flag. */
   static void addVerbose(final ArgP argp) {
     argp.addOption("--verbose",
-                   "Print more logging messages and not just errors.");
+        "Print more logging messages and not just errors.");
     argp.addOption("-v", "Short for --verbose.");
   }
 
-  /** Adds the --auto-metric flag.  */
+  /** Adds the --auto-metric flag. */
   static void addAutoMetricFlag(final ArgP argp) {
     argp.addOption("--auto-metric", "Automatically add metrics to tsdb as they"
-                   + " are inserted.  Warning: this may cause unexpected"
-                   + " metrics to be tracked");
+        + " are inserted.  Warning: this may cause unexpected"
+        + " metrics to be tracked");
   }
 
   /**
    * Parse the command line arguments with the given options.
    * @param options Options to parse in the given args.
    * @param args Command line arguments to parse.
-   * @return The remainder of the command line or
-   * {@code null} if {@code args} were invalid and couldn't be parsed.
+   * @return The remainder of the command line or {@code null} if {@code args}
+   *         were invalid and couldn't be parsed.
    */
   static String[] parse(final ArgP argp, String[] args) {
     try {
@@ -77,31 +104,30 @@ final class CliOptions {
     return args;
   }
 
-  /** Changes the log level to 'WARN' unless --verbose is passed.  */
+  /** Changes the log level to 'WARN' unless --verbose is passed. */
   private static void honorVerboseFlag(final ArgP argp) {
     if (argp.optionExists("--verbose") && !argp.has("--verbose")
         && !argp.has("-v")) {
       // SLF4J doesn't provide any API to programmatically set the logging
-      // level of the underlying logging library.  So we have to violate the
+      // level of the underlying logging library. So we have to violate the
       // encapsulation provided by SLF4J.
-      for (final Logger logger :
-           ((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME))
-             .getLoggerContext().getLoggerList()) {
+      for (final Logger logger : ((Logger) LoggerFactory
+          .getLogger(Logger.ROOT_LOGGER_NAME)).getLoggerContext()
+          .getLoggerList()) {
         logger.setLevel(Level.WARN);
       }
     }
   }
 
   static HBaseClient clientFromOptions(final ArgP argp) {
-    if (argp.optionExists("--auto-metric") && argp.has("--auto-metric")) {
-      System.setProperty("tsd.core.auto_create_metrics", "true");
-    }
-    final String zkq = argp.get("--zkquorum", "localhost");
-    if (argp.has("--zkbasedir")) {
-      return new HBaseClient(zkq, argp.get("--zkbasedir"));
-    } else {
-      return new HBaseClient(zkq);
-    }
+    final String zkbasedir = Configuration.getString("tsd.zkbasedir", "");
+
+    if (zkbasedir.isEmpty())
+      return new HBaseClient(Configuration.getString("tsd.zkquorum",
+          Const.ZKQUORUM));
+    else
+      return new HBaseClient(Configuration.getString("tsd.zkquorum",
+          Const.ZKQUORUM), zkbasedir);
   }
 
 }
