@@ -30,7 +30,16 @@ final class StaticFileRpc implements HttpRpc {
    * Constructor.
    */
   public StaticFileRpc() {
-    staticroot = Configuration.getString("tsd.staticroot", "");
+    String temp = Configuration.getString("tsd.staticroot", "");
+    
+    // make sure the end has a slash
+    if (System.getProperty("os.name").contains("Windows") 
+        && !temp.endsWith("\\"))
+      temp += "\\";
+    else if (!temp.endsWith("/"))
+      temp += "/";
+    
+    staticroot = temp;
   }
 
   public void execute(final TSDB tsdb, final HttpQuery query)
