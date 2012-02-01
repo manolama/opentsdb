@@ -83,7 +83,7 @@ tsdb_SRC := \
 	src/tsd/StatsRPC.java	\
 	src/tsd/SuggestRPC.java	\
 	src/tsd/TelnetRpc.java	\
-	src/tsd/VersionRpc.java	\
+	src/tsd/VersionRPC.java	\
 	src/tsd/WordSplitter.java	\
 	src/uid/NoSuchUniqueId.java	\
 	src/uid/NoSuchUniqueName.java	\
