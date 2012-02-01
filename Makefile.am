@@ -59,6 +59,7 @@ tsdb_SRC := \
 	src/tools/TSDMain.java	\
 	src/tools/TextImporter.java	\
 	src/tools/UidManager.java	\
+	src/tsd/AggregatorsRPC.java	\
 	src/tsd/AsciiEmitter.java	\
 	src/tsd/BadRequestException.java	\
 	src/tsd/ConnectionManager.java	\
@@ -79,7 +80,10 @@ tsdb_SRC := \
 	src/tsd/QueryHandler.java	\
 	src/tsd/RpcHandler.java	\
 	src/tsd/StaticFileRpc.java	\
+	src/tsd/StatsRPC.java	\
+	src/tsd/SuggestRPC.java	\
 	src/tsd/TelnetRpc.java	\
+	src/tsd/VersionRpc.java	\
 	src/tsd/WordSplitter.java	\
 	src/uid/NoSuchUniqueId.java	\
 	src/uid/NoSuchUniqueName.java	\

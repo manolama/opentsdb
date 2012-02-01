@@ -680,7 +680,11 @@ public class QueryUi implements EntryPoint {
     }
     lastgraphuri = uri;
     graphstatus.setText("Loading graph...");
-    asyncGetJson(uri + "&json", new GotJsonCallback() {
+    
+    // so this hack kinda works to get the GUI to display the graph again
+    graph.setUrl(uri + "&png");
+    graph.setVisible(true);
+    /*asyncGetJson(uri + "&json", new GotJsonCallback() {
       public void got(final JSONValue json) {
         if (autoreoload_timer != null) {
           autoreoload_timer.cancel();
@@ -765,7 +769,7 @@ public class QueryUi implements EntryPoint {
           refreshGraph();
         }
       }
-    });
+    } );*/
   }
 
   private boolean addAllMetrics(final StringBuilder url) {

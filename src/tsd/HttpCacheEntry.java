@@ -2,6 +2,7 @@ package net.opentsdb.tsd;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.codehaus.jackson.annotate.JsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,6 +12,7 @@ class HttpCacheEntry{
   /** Hash of the query that generated this cache object */
   private int id = 0;
   /** Data representing the cache object in memory */
+  @JsonIgnore
   private byte[] data = null;
   /** How much data is stored in the byte array */
   private int data_size = 0;
@@ -70,6 +72,7 @@ class HttpCacheEntry{
    * Generates a meta object (just hits and data size) 
    * @return A new HttpCacheEntryMeta object for sorting
    */
+  @JsonIgnore
   public final HttpCacheEntryMeta getMeta(){
     return new HttpCacheEntryMeta(id, hits.get(), (data != null ? data.length : 0));
   }
@@ -92,9 +95,11 @@ class HttpCacheEntry{
    * Getter that returns the query hash
    * @return The Query hash
    */
+  @JsonIgnore
   public final int getKey(){
     return id;
   }
+  
   
   /**
    * Getter that returns the data
@@ -134,6 +139,33 @@ class HttpCacheEntry{
    */
   public final long getExpire(){
     return expire;
+  }
+
+  /** 
+   * Getter that returns how many hits this object has had
+   * @return Hits on this object as an int
+   */
+  public final int getHits(){
+    return hits.get();
+  }
+
+  
+  /** 
+   * Getter that returns the Unix epoch timestamp when this object
+   * should expire
+   * @return Unix epoch timestamp
+   */
+  public final long getExpireTimestamp(){
+    return this.expire_ts;
+  }
+  
+  /**
+   * Getter that returns the Unix epoch timestamp when the object
+   * was created
+   * @return Unix epoch timestamp
+   */
+  public final long getCreated(){
+    return created;
   }
 }
 

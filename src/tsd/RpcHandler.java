@@ -32,6 +32,8 @@ import org.jboss.netty.handler.codec.http.HttpRequest;
 
 import net.opentsdb.BuildData;
 import net.opentsdb.core.Aggregators;
+import net.opentsdb.core.Configuration;
+import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
 
@@ -42,6 +44,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(RpcHandler.class);
 
+  /** Stats */
   private static final AtomicLong telnet_rpcs_received = new AtomicLong();
   private static final AtomicLong http_rpcs_received = new AtomicLong();
   private static final AtomicLong exceptions_caught = new AtomicLong();
@@ -76,12 +79,12 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       http_commands.put("s", staticfile);
     }
     {
-      final Stats stats = new Stats();
+      final StatsRPC stats = new StatsRPC();
       telnet_commands.put("stats", stats);
       http_commands.put("stats", stats);
     }
     {
-      final Version version = new Version();
+      final VersionRPC version = new VersionRPC();
       telnet_commands.put("version", version);
       http_commands.put("version", version);
     }
@@ -91,11 +94,12 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     telnet_commands.put("put", new PutDataPointRpc());
 
     http_commands.put("", new HomePage());
-    http_commands.put("aggregators", new ListAggregators());
+    http_commands.put("aggregators", new AggregatorsRPC());
     http_commands.put("logs", new LogsRpc());
     http_commands.put("q", new QueryHandler());
-    http_commands.put("suggest", new Suggest());
+    http_commands.put("suggest", new SuggestRPC());
     http_commands.put("put", new PutDataPointRpc());
+    http_commands.put("cache", new HttpCache());
   }
 
   @Override
@@ -318,95 +322,6 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     }
   }
 
-  /** The "/aggregators" endpoint. */
-  private static final class ListAggregators implements HttpRpc {
-    public void execute(final TSDB tsdb, final HttpQuery query) {
-      final String jsonp = JsonHelper.getJsonPFunction(query);
-      final JsonHelper response = new JsonHelper(Aggregators.set());
-      query.sendReply(jsonp.isEmpty() ? response.getJsonString() 
-          : response.getJsonPString(jsonp));
-    }
-  }
-
-  /** The "stats" command and the "/stats" endpoint. */
-  private static final class Stats implements TelnetRpc, HttpRpc {
-    public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
-                                    final String[] cmd) {
-      final StringBuilder buf = new StringBuilder(1024);
-      final StatsCollector collector = new StatsCollector("tsd") {
-        @Override
-        public final void emit(final String line) {
-          buf.append(line);
-        }
-      };
-      doCollectStats(tsdb, collector);
-      chan.write(buf.toString());
-      return Deferred.fromResult(null);
-    }
-
-    public void execute(final TSDB tsdb, final HttpQuery query) {
-      final boolean json = JsonHelper.getJsonRequested(query);
-      final StringBuilder buf = json ? null : new StringBuilder(2048);
-      final ArrayList<String> stats = json ? new ArrayList<String>(64) : null;
-      final StatsCollector collector = new StatsCollector("tsd") {
-        @Override
-        public final void emit(final String line) {
-          if (json) {
-            stats.add(line.substring(0, line.length() - 1));  // strip the '\n'
-          } else {
-            buf.append(line);
-          }
-        }
-      };
-      doCollectStats(tsdb, collector);
-      // handle JSON
-      if (json) {
-        final String jsonp = JsonHelper.getJsonPFunction(query);
-        final JsonHelper response = new JsonHelper(stats);
-        query.sendReply(jsonp.isEmpty() ? response.getJsonString() 
-            : response.getJsonPString(jsonp));
-      } else {
-        query.sendReply(buf);
-      }
-    }
-
-    private void doCollectStats(final TSDB tsdb,
-                                final StatsCollector collector) {
-      collector.addHostTag();
-      ConnectionManager.collectStats(collector);
-      HttpCache.collectStats(collector);
-      RpcHandler.collectStats(collector);
-      tsdb.collectStats(collector);
-    }
-  }
-
-  /** The "/suggest" endpoint.
-   * It returns the suggestion lookups in JSON format 
-   */
-  private static final class Suggest implements HttpRpc {
-    public void execute(final TSDB tsdb, final HttpQuery query) {
-      final String jsonp = JsonHelper.getJsonPFunction(query);
-      final String type = query.getRequiredQueryStringParam("type");
-      final String q = query.getQueryStringParam("q");
-      if (q == null) {
-        throw BadRequestException.missingParameter("q");
-      }
-      List<String> suggestions;
-      if ("metrics".equals(type)) {
-        suggestions = tsdb.suggestMetrics(q);
-      } else if ("tagk".equals(type)) {
-        suggestions = tsdb.suggestTagNames(q);
-      } else if ("tagv".equals(type)) {
-        suggestions = tsdb.suggestTagValues(q);
-      } else {
-        throw new BadRequestException("Invalid 'type' parameter:" + type);
-      }
-      final JsonHelper response = new JsonHelper(suggestions);
-      query.sendReply(jsonp.isEmpty() ? response.getJsonString() 
-          : response.getJsonPString(jsonp));
-    }
-  }
-
   /** For unknown commands. */
   private static final class Unknown implements TelnetRpc {
     public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
@@ -414,44 +329,6 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       logWarn(chan, "unknown command : " + Arrays.toString(cmd));
       chan.write("unknown command: " + cmd[0] + ".  Try `help'.\n");
       return Deferred.fromResult(null);
-    }
-  }
-
-  /** The "version" command. */
-  private static final class Version implements TelnetRpc, HttpRpc {
-    public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
-                                    final String[] cmd) {
-      if (chan.isConnected()) {
-        chan.write(BuildData.revisionString() + '\n'
-                   + BuildData.buildString() + '\n');
-      }
-      return Deferred.fromResult(null);
-    }
-
-    public void execute(final TSDB tsdb, final HttpQuery query) {
-      // Send in JSON if requested
-      if (JsonHelper.getJsonRequested(query)) {
-        final String jsonp = JsonHelper.getJsonPFunction(query);
-        HashMap<String, Object> version = new HashMap<String, Object>();
-        version.put("short_revision", BuildData.short_revision);
-        version.put("full_revision", BuildData.full_revision);
-        version.put("timestamp", BuildData.timestamp);
-        version.put("repo_status", BuildData.repo_status);
-        version.put("user", BuildData.user);
-        version.put("host", BuildData.host);
-        version.put("repo", BuildData.repo);
-        final JsonHelper response = new JsonHelper(version);
-        query.sendReply(jsonp.isEmpty() ? response.getJsonString() 
-            : response.getJsonPString(jsonp));        
-      } else {
-        StringBuilder buf;
-        final String revision = BuildData.revisionString();
-        final String build = BuildData.buildString();
-        buf = new StringBuilder(2 // For the \n's
-                                + revision.length() + build.length());
-        buf.append(revision).append('\n').append(build).append('\n');
-        query.sendReply(buf);
-      }
     }
   }
   

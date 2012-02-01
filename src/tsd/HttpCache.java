@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import net.opentsdb.core.Configuration;
 import net.opentsdb.core.Const;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
 
 import org.slf4j.Logger;
@@ -24,7 +25,7 @@ import org.slf4j.LoggerFactory;
  * when they expire. It is also able to hold small objects in RAM for quick access
  * but if the configured RAM limit is reached, it will try to grab data from disk.
  */
-class HttpCache {
+class HttpCache implements HttpRpc {
   private static final Logger LOG = LoggerFactory.getLogger(HttpCache.class);
   
   /** Stores the cache entries */
@@ -122,6 +123,7 @@ class HttpCache {
    * @return True if we were able to store the data successfully, false if not
    */
   public static boolean storeCache(final HttpCacheEntry entry){
+    // TODO make this call asynchronous so queries can return faster
     // if expire == 0 then we are not caching the file
     if (entry.getExpire() < 1){
       LOG.debug("Entry [" + entry.getKey() + "] is set to not be cached");
@@ -139,7 +141,8 @@ class HttpCache {
     }
     
     // flush the bytes to a file if it hasn't been done already
-    if (!entry.getFileOnly() /* && filecache is enabled */){
+    if (!entry.getFileOnly() && !entry.getFile().isEmpty() 
+        /* && filecache is enabled */){
       try {
         LOG.debug("Attempting to save cache file [" + entry.getFile() + "]");
         final FileOutputStream out = new FileOutputStream(entry.getFile());
@@ -205,7 +208,28 @@ class HttpCache {
     collector.record("http.cache.size", cache.size(), "cache=objects");
     collector.record("http.cache.size", 0, "cache=disk");
   }
-  
+
+  /**
+   * Handles various HTTP commands related to the /cache endpoint 
+   * such as returning cache metadata or flushing the cache
+   * Note: responses are not cached, naturally
+   * @param tsdb not really used in this case
+   * @param query HTTP query to respond to
+   */
+  public void execute(final TSDB tsdb, final HttpQuery query) {
+    // respond with metadata about each cache object in a JSON format
+    final String jsonp = JsonHelper.getJsonPFunction(query);
+    
+    if (query.hasQueryStringParam("flush")){
+      // TODO flush the cache
+      query.sendReply(new JsonRpcError("Not implemented", 404).getJSON());
+    }else{
+      // the default is to print info about the cache
+      final JsonHelper response = new JsonHelper(HttpCache.cache);
+      query.sendReply(jsonp.isEmpty() ? response.getJsonString() 
+              : response.getJsonPString(jsonp));
+    }
+  }
   /**
    * Removes an object from the cache and attempts to delete the file associated
    * with it

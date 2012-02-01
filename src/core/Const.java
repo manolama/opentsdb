@@ -64,6 +64,9 @@ public final class Const {
   /** Largest size data can be to fit in RAM cache in KB */
   public static final int HTTP_CACHE_RAM_FILE_LIMIT = 64; 
 
+  /** How long, in seconds, to keep suggestion responses in cache */
+  public static final long HTTP_SUGGEST_EXPIRE = 60; 
+  
   // ************************************************************
   // ************************ WARNING ***************************
   // The constants below determine how metrics are stored in Hbase.

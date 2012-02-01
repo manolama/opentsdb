@@ -50,7 +50,7 @@ public class QueryHandler implements HttpRpc {
     final long start_time = query.getQueryStringDate("start");
     final boolean nocache = query.hasQueryStringParam("nocache");
     long end_time = query.getQueryStringDate("end");
-    final int query_hash = query.getQueryString().hashCode();
+    final int query_hash = query.getQueryStringHash();
     
     // first, see if we can satisfy the request from cache
     if (!nocache && HttpCache.readCache(query_hash, query)){

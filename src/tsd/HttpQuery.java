@@ -374,6 +374,23 @@ final class HttpQuery {
     logWarn("Bad Request on " + request.getUri() + ": " + explain);
   }
 
+  /**
+   * Returns a hashcode identifying the query string and URI, 
+   * stripping out any parameters that shouldn't affect cache
+   * generation
+   * @return An integer hash value (can be positive or negative)
+   */
+  public final int getQueryStringHash() {
+    // copy the query string map first so we can tweak it
+    final HashMap<String, List<String>> qs =
+      new HashMap<String, List<String>>(this.querystring);
+    // But first remove the parameters that don't influence the output.
+    qs.remove("ignore");
+    qs.remove("meta");
+    // run this through "Integer.toHexString()" to get a string value
+    return this.request.getUri().hashCode() | qs.hashCode();
+  }
+  
   /** Sends a 404 error page to the client. */
   public void notFound() {
     logWarn("Not Found: " + request.getUri());
