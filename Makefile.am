@@ -65,6 +65,8 @@ tsdb_SRC := \
 	src/tsd/DataEmitter.java	\
 	src/tsd/GnuGraphEmitter.java	\
 	src/tsd/GnuplotException.java	\
+	src/tsd/HttpCache.java	\
+	src/tsd/HttpCacheEntry.java	\
 	src/tsd/HttpQuery.java	\
 	src/tsd/HttpRpc.java	\
 	src/tsd/JsonEmitter.java	\
