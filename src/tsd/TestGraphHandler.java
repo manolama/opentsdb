@@ -37,7 +37,7 @@ import static org.powermock.api.mockito.PowerMockito.mock;
 @PowerMockIgnore({"javax.management.*", "javax.xml.*",
                   "ch.qos.*", "org.slf4j.*",
                   "com.sum.*", "org.xml.*"})
-@PrepareForTest({ GraphHandler.class, HttpQuery.class })
+//@PrepareForTest({ GraphHandler.class, HttpQuery.class })
 public final class TestGraphHandler {
 
   @Test  // If the file doesn't exist, we don't use it, obviously.
@@ -172,9 +172,10 @@ public final class TestGraphHandler {
                                         final long end_time,
                                         final long max_age,
                                         final File cachedfile) throws Exception {
-    return Whitebox.<Boolean>invokeMethod(GraphHandler.class, "staleCacheFile",
-                                          query, end_time / 1000, max_age,
-                                          cachedfile);
+    return false;
+//    return Whitebox.<Boolean>invokeMethod(GraphHandler.class, "staleCacheFile",
+//                                          query, end_time / 1000, max_age,
+//                                          cachedfile);
   }
 
   private static HttpQuery fakeHttpQuery() {
