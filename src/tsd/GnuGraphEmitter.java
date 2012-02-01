@@ -339,7 +339,7 @@ public class GnuGraphEmitter extends DataEmitter {
    * @return The path to the wrapper script.
    */
   private static String findGnuplotHelperScript() {
-    final URL url = GraphHandler.class.getClassLoader().getResource(WRAPPER);
+    final URL url = GnuGraphEmitter.class.getClassLoader().getResource(WRAPPER);
     if (url == null) {
       throw new RuntimeException("Couldn't find " + WRAPPER + " on the"
         + " CLASSPATH: " + System.getProperty("java.class.path"));

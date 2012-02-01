@@ -535,7 +535,7 @@ final class HttpQuery {
       }
       basepath += Integer.toHexString(msg.hashCode());
       
-      GraphHandler.runGnuplot(this, basepath, plot);
+      //GraphHandler.runGnuplot(this, basepath, plot);
       plot = null;
       sendFile(status, basepath + ".png", max_age);
     } catch (Exception e) {

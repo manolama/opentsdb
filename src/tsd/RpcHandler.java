@@ -218,7 +218,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     collector.record("rpc.received", http_rpcs_received, "type=http");
     collector.record("rpc.exceptions", exceptions_caught);
     HttpQuery.collectStats(collector);
-    GraphHandler.collectStats(collector);
+    //GraphHandler.collectStats(collector);
     PutDataPointRpc.collectStats(collector);
   }
 
@@ -243,7 +243,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     }
 
     private Deferred<Object> doShutdown(final TSDB tsdb, final Channel chan) {
-      ((GraphHandler) http_commands.get("q")).shutdown();
+     // ((GraphHandler) http_commands.get("q")).shutdown();
       ConnectionManager.closeAllConnections();
       // Netty gets stuck in an infinite loop if we shut it down from within a
       // NIO thread.  So do this from a newly created thread.
