@@ -85,8 +85,10 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
     // if the content starts with a bracket, we have an array of metrics
     if (content.subSequence(0, 1).equals("[")) {
       json = new JsonHelper();
-      if (json.parseObject(content, typeRef))
+      if (json.parseObject(content, typeRef)){
+        //@SuppressWarnings("unchecked")
         ms = (ArrayList<Metric>) json.getObject();
+      }
     } else {
       // otherwise we have a single metric (hopefully)
       json = new JsonHelper(new Metric());

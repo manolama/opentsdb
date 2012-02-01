@@ -12,8 +12,11 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+
+import org.codehaus.jackson.map.annotate.JsonSerialize;
 
 /**
  * Represents a single Metric object with associated timestamp, name, value and
@@ -23,16 +26,21 @@ import java.util.Map;
  * library. It also provides a shortcut for creating a useful error message that
  * can be sent back to API clients
  */
+@JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 public class Metric {
   /** The name of the metric **/
   private String metric = "";
   /** The unix epoch timestamp the metric was generated **/
+  @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
   private long timestamp = 0;
   /** The actual value of the metric **/
+  @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
   private String value = "";
   /** A map of tag names and values for the metric **/
   private Map<String, String> tags = null;
-
+  /** Array of data points for emitters */
+  public ArrayList<MetricDP> data = null;
+  
   /**
    * Builds an error map consisting of an error message and the actual metric
    * object itself. This can be sent to a serializer like Jackson to be
@@ -88,5 +96,24 @@ public class Metric {
   /** @param t A map of tags and values for the metric */
   public void setTags(Map<String, String> t) {
     tags = t;
+  }
+}
+
+/**
+ * Represents a single data point in the time series for a particular
+ * metric. The Metric class will have an array of these
+ */
+class MetricDP{
+  public long t;
+  public Object v;
+  
+  /**
+   * Constructor for the data point
+   * @param timestamp Unix epoch timestamp 
+   * @param value Value of the metric
+   */
+  public MetricDP(long timestamp, Object value) {
+    t = timestamp;
+    v = value;
   }
 }

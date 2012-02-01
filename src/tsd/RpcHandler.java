@@ -93,7 +93,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     http_commands.put("", new HomePage());
     http_commands.put("aggregators", new ListAggregators());
     http_commands.put("logs", new LogsRpc());
-    http_commands.put("q", new GraphHandler());
+    http_commands.put("q", new QueryHandler());
     http_commands.put("suggest", new Suggest());
     http_commands.put("put", new PutDataPointRpc());
   }
@@ -374,6 +374,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
                                 final StatsCollector collector) {
       collector.addHostTag();
       ConnectionManager.collectStats(collector);
+      HttpCache.collectStats(collector);
       RpcHandler.collectStats(collector);
       tsdb.collectStats(collector);
     }

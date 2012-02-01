@@ -59,18 +59,22 @@ tsdb_SRC := \
 	src/tools/TSDMain.java	\
 	src/tools/TextImporter.java	\
 	src/tools/UidManager.java	\
+	src/tsd/AsciiEmitter.java	\
 	src/tsd/BadRequestException.java	\
 	src/tsd/ConnectionManager.java	\
+	src/tsd/DataEmitter.java	\
+	src/tsd/GnuGraphEmitter.java	\
 	src/tsd/GnuplotException.java	\
-	src/tsd/GraphHandler.java	\
 	src/tsd/HttpQuery.java	\
 	src/tsd/HttpRpc.java	\
+	src/tsd/JsonEmitter.java	\
 	src/tsd/JsonHelper.java	\
 	src/tsd/JsonRpcError.java	\
 	src/tsd/LogsRpc.java	\
 	src/tsd/Metric.java	\
 	src/tsd/PipelineFactory.java	\
 	src/tsd/PutDataPointRpc.java	\
+	src/tsd/QueryHandler.java	\
 	src/tsd/RpcHandler.java	\
 	src/tsd/StaticFileRpc.java	\
 	src/tsd/TelnetRpc.java	\

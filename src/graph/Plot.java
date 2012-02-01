@@ -15,12 +15,15 @@ package net.opentsdb.graph;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.opentsdb.core.Const;
 import net.opentsdb.core.DataPoint;
 import net.opentsdb.core.DataPoints;
 
@@ -48,7 +51,7 @@ public final class Plot {
   private ArrayList<String> options = new ArrayList<String>();
 
   /** Global Gnuplot parameters. */
-  private Map<String, String> params;
+  private Map<String, String> params = new HashMap<String, String>();
 
   /** Minimum width / height allowed. */
   private static final short MIN_PIXELS = 100;
@@ -144,6 +147,65 @@ public final class Plot {
   }
 
   /**
+   * Applies the plot parameters from the query to the given plot.
+   * @param query The query from which to get the query string.
+   * @param plot The plot on which to apply the parameters.
+   */
+  public void setPlotParams(final Map<String, List<String>> querystring) {
+    String value;
+    if ((value = popParam(querystring, "yrange")) != null) {
+      params.put("yrange", value);
+    }
+    if ((value = popParam(querystring, "y2range")) != null) {
+      params.put("y2range", value);
+    }
+    if ((value = popParam(querystring, "ylabel")) != null) {
+      params.put("ylabel", stringify(value));
+    }
+    if ((value = popParam(querystring, "y2label")) != null) {
+      params.put("y2label", stringify(value));
+    }
+    if ((value = popParam(querystring, "yformat")) != null) {
+      params.put("format y", stringify(value));
+    }
+    if ((value = popParam(querystring, "y2format")) != null) {
+      params.put("format y2", stringify(value));
+    }
+    if ((value = popParam(querystring, "xformat")) != null) {
+      params.put("format x", stringify(value));
+    }
+    if ((value = popParam(querystring, "ylog")) != null) {
+      params.put("logscale", "y");
+    }
+    if ((value = popParam(querystring, "y2log")) != null) {
+      params.put("logscale", "y2");
+    }
+    if ((value = popParam(querystring, "key")) != null) {
+      params.put("key", value);
+    }
+    if ((value = popParam(querystring, "title")) != null) {
+      params.put("title", stringify(value));
+    }
+    // This must remain after the previous `if' in order to properly override
+    // any previous `key' parameter if a `nokey' parameter is given.
+    if ((value = popParam(querystring, "nokey")) != null) {
+      params.put("key", null);
+    }
+    
+    String wxh = "";
+    // get the dimensions
+    if ((value = popParam(querystring, "wxh")) != null){
+      wxh = value;
+    }
+    try {
+      this.setPlotDimensions(wxh);
+    } catch (Exception e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
+  }
+  
+  /**
    * Generates the Gnuplot script and data files.
    * @param basepath The base path to use.  A number of new files will be
    * created and their names will all start with this string.
@@ -179,6 +241,7 @@ public final class Plot {
           }
           datafile.print('\n');
         }
+        LOG.debug("Wrote datafile: " + datafiles[i]);
       } finally {
         datafile.close();
       }
@@ -205,7 +268,7 @@ public final class Plot {
    */
   private void writeGnuplotScript(final String basepath,
                                   final String[] datafiles) throws IOException {
-    final String script_path = basepath + ".gnuplot";
+    String script_path = basepath + ".gnuplot";
     final PrintWriter gp = new PrintWriter(script_path);
     try {
       // XXX don't hardcode all those settings.  At least not like that.
@@ -216,7 +279,10 @@ public final class Plot {
                 + "set xdata time\n"
                 + "set timefmt \"%s\"\n"
                 + "set xtic rotate\n"
-                + "set output \"").append(basepath + ".png").append("\"\n"
+                + "set output \"").append(
+                    (System.getProperty("os.name").contains("Windows")
+                    ? basepath.replace("\\", "\\\\")
+                        : basepath) + ".png").append("\"\n"
                 + "set xrange [\"")
         .append(String.valueOf(start_time + utc_offset))
         .append("\":\"")
@@ -225,7 +291,9 @@ public final class Plot {
       if (!params.containsKey("format x")) {
         gp.append("set format x \"").append(xFormat()).append("\"\n");
       }
+      LOG.debug("Going to get datapoints");
       final int nseries = datapoints.size();
+      LOG.debug("Datapoints size: " + nseries);
       if (nseries > 0) {
         gp.write("set grid\n"
                  + "set style data linespoints\n");
@@ -263,7 +331,10 @@ public final class Plot {
       for (int i = 0; i < nseries; i++) {
         final DataPoints dp = datapoints.get(i);
         final String title = dp.metricName() + dp.getTags();
-        gp.append(" \"").append(datafiles[i]).append("\" using 1:2 title \"")
+        gp.append(" \"").append(
+            System.getProperty("os.name").contains("Windows")
+            ? datafiles[i].replace("\\", "\\\\")
+                : datafiles[i]).append("\" using 1:2 title \"")
           // TODO(tsuna): Escape double quotes in title.
           .append(title).write('"');
         final String opts = options.get(i);
@@ -278,9 +349,14 @@ public final class Plot {
       if (nseries == 0) {
         gp.write('0');
       }
-    } finally {
+    }catch (NullPointerException e){
+      e.printStackTrace();
+      //LOG.error();
+      //LOG.error(e.getStackTrace());
+    }
+    finally {
       gp.close();
-      LOG.info("Wrote Gnuplot script to " + script_path);
+      LOG.info("Wrote Gnuplot script to [" + script_path + "]");
     }
   }
 
@@ -305,4 +381,104 @@ public final class Plot {
     }
   }
 
+  /** Parses the {@code wxh} query parameter to set the graph dimension. 
+   * @throws Exception */
+  private void setPlotDimensions(final String wxh) throws Exception {
+    //final String wxh = query.getQueryStringParam("wxh");
+    if (wxh != null && !wxh.isEmpty()) {
+      final int wxhlength = wxh.length();
+      if (wxhlength < 7) {  // 100x100 minimum.
+        throw new Exception("Parameter wxh too short: " + wxh);
+      }
+      final int x = wxh.indexOf('x', 3);  // Start at 2 as min size is 100x100
+      if (x < 0) {
+        throw new Exception("Invalid wxh parameter: " + wxh);
+      }
+      try {
+        final short width = Short.parseShort(wxh.substring(0, x));
+        final short height = Short.parseShort(wxh.substring(x + 1, wxhlength));
+        try {
+          this.setDimensions(width, height);
+        } catch (IllegalArgumentException e) {
+          throw new Exception("Invalid wxh parameter: " + wxh + ", "
+                                        + e.getMessage());
+        }
+      } catch (NumberFormatException e) {
+        throw new Exception("Can't parse wxh '" + wxh + "': "
+                                      + e.getMessage());
+      }
+    }
+  }
+  
+  /**
+   * Pops out of the query string the given parameter.
+   * @param querystring The query string.
+   * @param param The name of the parameter to pop out.
+   * @return {@code null} if the parameter wasn't passed, otherwise the
+   * value of the last occurrence of the parameter.
+   */
+  private String popParam(final Map<String, List<String>> querystring,
+                                     final String param) {
+    final List<String> params = querystring.remove(param);
+    if (params == null) {
+      return null;
+    }
+    return params.get(params.size() - 1);
+  }
+  
+  /**
+   * Formats and quotes the given string so it's a suitable Gnuplot string.
+   * @param s The string to stringify.
+   * @return A string suitable for use as a literal string in Gnuplot.
+   */
+  private String stringify(final String s) {
+    final StringBuilder buf = new StringBuilder(1 + s.length() + 1);
+    buf.append('"');
+    final int length = s.length();
+    int extra = 0;
+    // First count how many extra chars we'll need, if any.
+    for (int i = 0; i < length; i++) {
+      final char c = s.charAt(i);
+      switch (c) {
+        case '"':
+        case '\\':
+        case '\b':
+        case '\f':
+        case '\n':
+        case '\r':
+        case '\t':
+          extra++;
+          continue;
+      }
+      if (c < 0x001F) {
+        extra += 4;
+      }
+    }
+    if (extra == 0) {
+      buf.append(s);  // Nothing to escape.
+      return buf.toString();
+    }
+    buf.ensureCapacity(buf.length() + length + extra);
+    for (int i = 0; i < length; i++) {
+      final char c = s.charAt(i);
+      switch (c) {
+        case '"':  buf.append('\\').append('"');  continue;
+        case '\\': buf.append('\\').append('\\'); continue;
+        case '\b': buf.append('\\').append('b');  continue;
+        case '\f': buf.append('\\').append('f');  continue;
+        case '\n': buf.append('\\').append('n');  continue;
+        case '\r': buf.append('\\').append('r');  continue;
+        case '\t': buf.append('\\').append('t');  continue;
+      }
+      if (c < 0x001F) {
+        buf.append('\\').append('u').append('0').append('0')
+          .append((char) Const.HEX[(c >>> 4) & 0x0F])
+          .append((char) Const.HEX[c & 0x0F]);
+      } else {
+        buf.append(c);
+      }
+    }
+    buf.append('"');
+    return buf.toString();
+  }
 }

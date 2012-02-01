@@ -57,6 +57,12 @@ public final class Const {
 
   /** Disables automatic metric creation */
   public static final boolean AUTOMETRIC = false;
+  
+  /** Amount of RAM to use for the HTTP cache in KB (default = 32MB) */
+  public static final int HTTP_CACHE_RAM_LIMIT = 31250;
+  
+  /** Largest size data can be to fit in RAM cache in KB */
+  public static final int HTTP_CACHE_RAM_FILE_LIMIT = 64; 
 
   // ************************************************************
   // ************************ WARNING ***************************

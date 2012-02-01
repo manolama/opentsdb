@@ -13,9 +13,12 @@
 package net.opentsdb.tsd;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -153,6 +156,128 @@ final class HttpQuery {
     return params == null ? null : params.get(params.size() - 1);
   }
 
+  /**
+   * Returns a timestamp from a date specified in a query string parameter.
+   * Formats accepted are:
+   *   - Relative: "5m-ago", "1h-ago", etc.  See {@link #parseDuration}.
+   *   - Absolute human readable date: "yyyy/MM/dd-HH:mm:ss".
+   *   - UNIX timestamp (seconds since Epoch): "1234567890".
+   * @param query The HTTP query from which to get the query string parameter.
+   * @param paramname The name of the query string parameter.
+   * @return A UNIX timestamp in seconds (strictly positive 32-bit "unsigned")
+   * or -1 if there was no query string parameter named {@code paramname}.
+   * @throws BadRequestException if the date is invalid.
+   */
+  public long getQueryStringDate(final String paramname) {
+    final String date = getQueryStringParam(paramname);
+    if (date == null) {
+      return -1;
+    } else if (date.endsWith("-ago")) {
+      return (System.currentTimeMillis() / 1000
+              - parseDuration(date.substring(0, date.length() - 4)));
+    }
+    long timestamp;
+    try {
+      timestamp = Long.parseLong(date);   // Is it already a timestamp?
+    } catch (NumberFormatException ne) {  // Nope, try to parse a date then.
+      try {
+        final SimpleDateFormat fmt = new SimpleDateFormat("yyyy/MM/dd-HH:mm:ss");
+        timestamp = fmt.parse(date).getTime() / 1000;
+      } catch (ParseException e) {
+        throw new BadRequestException("Invalid " + paramname + " date: " + date
+                                      + ". " + e.getMessage());
+      } catch (NumberFormatException e) {
+        throw new BadRequestException("Invalid " + paramname + " date: " + date
+                                      + ". " + e.getMessage());
+      }
+    }
+    if (timestamp < 0) {
+      throw new BadRequestException("Bad " + paramname + " date: " + date);
+    }
+    return timestamp;
+  }
+  
+  /**
+   * Parses a human-readable duration (e.g, "10m", "3h", "14d") into seconds.
+   * <p>
+   * Formats supported: {@code s}: seconds, {@code m}: minutes,
+   * {@code h}: hours, {@code d}: days, {@code w}: weeks, {@code y}: years.
+   * @param duration The human-readable duration to parse.
+   * @return A strictly positive number of seconds.
+   * @throws BadRequestException if the interval was malformed.
+   */
+  public static final int parseDuration(final String duration) {
+    int interval;
+    final int lastchar = duration.length() - 1;
+    try {
+      interval = Integer.parseInt(duration.substring(0, lastchar));
+    } catch (NumberFormatException e) {
+      throw new BadRequestException("Invalid duration (number): " + duration);
+    }
+    if (interval <= 0) {
+      throw new BadRequestException("Zero or negative duration: " + duration);
+    }
+    switch (duration.charAt(lastchar)) {
+      case 's': return interval;                    // seconds
+      case 'm': return interval * 60;               // minutes
+      case 'h': return interval * 3600;             // hours
+      case 'd': return interval * 3600 * 24;        // days
+      case 'w': return interval * 3600 * 24 * 7;    // weeks
+      case 'y': return interval * 3600 * 24 * 365;  // years (screw leap years)
+    }
+    throw new BadRequestException("Invalid duration (suffix): " + duration);
+  }
+  
+  /**
+   * Decides how long we're going to allow the client to cache our response.
+   * <p>
+   * Based on the query, we'll decide whether or not we want to allow the
+   * client to cache our response and for how long.
+   * @param query The query to serve.
+   * @param start_time The start time on the query (32-bit unsigned int, secs).
+   * @param end_time The end time on the query (32-bit unsigned int, seconds).
+   * @param now The current time (32-bit unsigned int, seconds).
+   * @return A positive integer, in seconds.
+   */
+  public int computeMaxAge(final long start_time, final long end_time, final long now) {
+    // If the end time is in the future (1), make the graph uncacheable.
+    // Otherwise, if the end time is far enough in the past (2) such that
+    // no TSD can still be writing to rows for that time span and it's not
+    // specified in a relative fashion (3) (e.g. "1d-ago"), make the graph
+    // cacheable for a day since it's very unlikely that any data will change
+    // for this time span.
+    // Otherwise (4), allow the client to cache the graph for ~0.1% of the
+    // time span covered by the request e.g., for 1h of data, it's OK to
+    // serve something 3s stale, for 1d of data, 84s stale.
+    if (end_time > now) {                            // (1)
+      return 0;
+    } else if (end_time < now - Const.MAX_TIMESPAN   // (2)
+               && !isRelativeDate(this, "start")    // (3)
+               && !isRelativeDate(this, "end")) {
+      return 86400;
+    } else {                                         // (4)
+      return (int) (end_time - start_time) >> 10;
+    }
+  }
+  
+  /**
+   * Returns whether or not a date is specified in a relative fashion.
+   * <p>
+   * A date is specified in a relative fashion if it ends in "-ago",
+   * e.g. "1d-ago" is the same as "24h-ago".
+   * @param query The HTTP query from which to get the query string parameter.
+   * @param paramname The name of the query string parameter.
+   * @return {@code true} if the parameter is passed and is a relative date.
+   * Note the method doesn't attempt to validate the relative date.  So this
+   * function can return true on something that looks like a relative date,
+   * but is actually invalid once we really try to parse it.
+   */
+  private static boolean isRelativeDate(final HttpQuery query,
+                                        final String paramname) {
+    final String date = query.getQueryStringParam(paramname);
+    return date == null || date.endsWith("-ago");
+  }
+  
   /**
    * Returns the non-empty value of the given required query string parameter.
    * <p>
@@ -398,9 +523,18 @@ final class HttpQuery {
       buf = null;
       plot.setParams(params);
       params = null;
-      final String basepath =
-        Configuration.getString("tsd.cachedir", "")
-        + Integer.toHexString(msg.hashCode());
+      
+      // set the base path for the plot file
+      String basepath = Configuration.getString("tsd.cachedir", "");      
+      // check for slashes
+      if (System.getProperty("os.name").contains("Windows") 
+          && !basepath.endsWith("\\")){
+        basepath += "\\";
+      }else if (!basepath.endsWith("/")){
+        basepath += "/";
+      }
+      basepath += Integer.toHexString(msg.hashCode());
+      
       GraphHandler.runGnuplot(this, basepath, plot);
       plot = null;
       sendFile(status, basepath + ".png", max_age);
@@ -411,6 +545,216 @@ final class HttpQuery {
     }
   }
 
+  /**
+   * Checks whether or not it's possible to re-serve this query from disk.
+   * @param query The query to serve.
+   * @param end_time The end time on the query (32-bit unsigned int, seconds).
+   * @param max_age The maximum time (in seconds) we wanna allow clients to
+   * cache the result in case of a cache hit.
+   * @param basepath The base path used for the Gnuplot files.
+   * @return {@code true} if this request was served from disk (in which
+   * case processing can stop here), {@code false} otherwise (in which case
+   * the query needs to be processed).
+   */
+  public boolean isDiskCacheHit(final long end_time,
+                                 final int max_age,
+                                 final String basepath) throws IOException {
+    final String cachepath = basepath + (this.hasQueryStringParam("ascii")
+                                         ? ".txt" : ".png");
+    final File cachedfile = new File(cachepath);
+    if (cachedfile.exists()) {
+      final long bytes = cachedfile.length();
+      if (bytes < 21) {  // Minimum possible size for a PNG: 21 bytes.
+                         // For .txt files, <21 bytes is almost impossible.
+        logWarn("Cached " + cachepath + " is too small ("
+                + bytes + " bytes) to be valid.  Ignoring it.");
+        return false;
+      }
+      if (staleCacheFile(end_time, max_age, cachedfile)) {
+        return false;
+      }
+      if (this.hasQueryStringParam("json")) {
+        StringBuilder json = loadCachedJson(this, end_time, max_age, basepath);
+        if (json == null) {
+          json = new StringBuilder(32);
+          json.append("{\"timing\":");
+        }
+        json.append(this.processingTimeMillis())
+          .append(",\"cachehit\":\"disk\"}");
+        this.sendReply(json);
+      } else if (this.hasQueryStringParam("png")
+                 || this.hasQueryStringParam("ascii")) {
+        this.sendFile(cachepath, max_age);
+      } else {
+        this.sendReply(HttpQuery.makePage("TSDB Query", "Your graph is ready",
+            "<img src=\"" + this.request().getUri() + "&amp;png\"/><br/>"
+            + "<small>(served from disk cache)</small>"));
+      }
+      //graphs_diskcache_hit.incrementAndGet();
+      return true;
+    }
+    
+    // We didn't find an image.  Do a negative cache check.  If we've seen
+    // this query before but there was no result, we at least wrote the JSON.
+    final StringBuilder json = loadCachedJson(this, end_time, max_age, basepath);
+    // If we don't have a JSON file it's a complete cache miss.  If we have
+    // one, and it says 0 data points were plotted, it's a negative cache hit.
+    if (json == null || !json.toString().contains("\"plotted\":0")) {
+      return false;
+    }
+    if (this.hasQueryStringParam("json")) {
+      json.append(this.processingTimeMillis())
+        .append(",\"cachehit\":\"disk\"}");
+      this.sendReply(json);
+    } else if (this.hasQueryStringParam("png")) {
+      this.sendReply(" ");  // Send back an empty response...
+    } else {
+      this.sendReply(HttpQuery.makePage("TSDB Query", "No results",
+            "Sorry, your query didn't return anything.<br/>"
+            + "<small>(served from disk cache)</small>"));
+    }
+    //graphs_diskcache_hit.incrementAndGet();
+    return true;
+  }
+  
+  /**
+   * Attempts to read the cached {@code .json} file for this query.
+   * @param query The query to serve.
+   * @param end_time The end time on the query (32-bit unsigned int, seconds).
+   * @param max_age The maximum time (in seconds) we wanna allow clients to
+   * cache the result in case of a cache hit.
+   * @param basepath The base path used for the Gnuplot files.
+   * @return {@code null} in case no file was found, or the contents of the
+   * file if it was found.  In case some contents was found, it is truncated
+   * after the position of the last `:' in order to allow the caller to add
+   * the time taken to serve by the request and other JSON elements if wanted.
+   */
+  private StringBuilder loadCachedJson(final HttpQuery query,
+                                       final long end_time,
+                                       final long max_age,
+                                       final String basepath) {
+    final String json_path = basepath + ".json";
+    File json_cache = new File(json_path);
+    if (staleCacheFile(end_time, max_age, json_cache)) {
+      return null;
+    }
+    final byte[] json = readFile(json_cache, 4096);
+    if (json == null) {
+      return null;
+    }
+    json_cache = null;
+    final StringBuilder buf = new StringBuilder(20 + json.length);
+    // The json file is always expected to end in: {...,"timing":N}
+    // We remove everything past the last `:' so we can send the new
+    // timing for this request.  This doesn't work if there's a tag name
+    // with a `:' in it, which is not allowed right now.
+    int colon = 0;  // 0 isn't a valid value.
+    for (int i = 0; i < json.length; i++) {
+      buf.append((char) json[i]);
+      if (json[i] == ':') {
+        colon = i;
+      }
+    }
+    if (colon != 0) {
+      buf.setLength(colon + 1);
+      return buf;
+    } else {
+      logError("No `:' found in " + json_path + " (" + json.length
+               + " bytes) = " + new String(json));
+    }
+    return null;
+  }
+  
+  /**
+   * Reads a file into a byte array.
+   * @param query The query being handled (for logging purposes).
+   * @param file The file to read.
+   * @param max_length The maximum number of bytes to read from the file.
+   * @return {@code null} if the file doesn't exist or is empty or couldn't be
+   * read, otherwise a byte array of up to {@code max_length} bytes.
+   */
+  public static byte[] readFile(final File file,
+                                 final int max_length) {
+    final int length = (int) file.length();
+    if (length <= 0) {
+      return null;
+    }
+    FileInputStream in;
+    try {
+      in = new FileInputStream(file.getPath());
+    } catch (FileNotFoundException e) {
+      return null;
+    }
+    try {
+      final byte[] buf = new byte[Math.min(length, max_length)];
+      final int read = in.read(buf);
+      if (read != buf.length) {
+        LOG.error("When reading " + file + ": read only "
+                 + read + " bytes instead of " + buf.length);
+        return null;
+      }
+      return buf;
+    } catch (IOException e) {
+      LOG.error("Error while reading " + file, e);
+      return null;
+    } finally {
+      try {
+        in.close();
+      } catch (IOException e) {
+        LOG.error("Error while closing " + file, e);
+      }
+    }
+  }
+  
+  /**
+   * Returns whether or not the given cache file can be used or is stale.
+   * @param query The query to serve.
+   * @param end_time The end time on the query (32-bit unsigned int, seconds).
+   * @param max_age The maximum time (in seconds) we wanna allow clients to
+   * cache the result in case of a cache hit.  If the file is exactly that
+   * old, it is not considered stale.
+   * @param cachedfile The file to check for staleness.
+   */
+  private boolean staleCacheFile(final long end_time,
+                                        final long max_age,
+                                        final File cachedfile) {
+    final long mtime = cachedfile.lastModified() / 1000;
+    if (mtime <= 0) {
+      return true;  // File doesn't exist, or can't be read.
+    }
+
+    final long now = System.currentTimeMillis() / 1000;
+    // How old is the cached file, in seconds?
+    final long staleness = now - mtime;
+    if (staleness < 0) {  // Can happen if the mtime is "in the future".
+      logWarn("Not using file @ " + cachedfile + " with weird"
+              + " mtime in the future: " + mtime);
+      return true;  // Play it safe, pretend we can't use this file.
+    }
+
+    // Case 1: The end time is an absolute point in the past.
+    // We might be able to re-use the cached file.
+    if (0 < end_time && end_time < now) {
+      // If the file was created prior to the end time, maybe we first
+      // executed this query while the result was uncacheable.  We can
+      // tell by looking at the mtime on the file.  If the file was created
+      // before the query end time, then it contains partial results that
+      // shouldn't be served again.
+      return mtime < end_time;
+    }
+
+    // Case 2: The end time of the query is now or in the future.
+    // The cached file contains partial data and can only be re-used if it's
+    // not too old.
+    if (staleness > max_age) {
+      logInfo("Cached file @ " + cachedfile.getPath() + " is "
+              + staleness + "s stale, which is more than its limit of "
+              + max_age + "s, and needs to be regenerated.");
+      return true;
+    }
+    return false;
+  }
+  
   /**
    * Send a file (with zero-copy) to the client with a 200 OK status.
    * This method doesn't provide any security guarantee.  The caller is
@@ -664,6 +1008,10 @@ final class HttpQuery {
 
   private void logError(final String msg, final Exception e) {
     LOG.error(chan.toString() + ' ' + msg, e);
+  }
+  
+  private void logError(final String msg) {
+    LOG.error(chan.toString() + ' ' + msg);
   }
 
   // -------------------------------------------- //
