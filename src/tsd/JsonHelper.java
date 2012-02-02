@@ -117,7 +117,6 @@ final class JsonHelper {
    */
   public final boolean parseObject(final String json,
       final TypeReference<?> type) {
-    LOG.info("Made it here in the helper");
     // try parsing
     try {
       error = "";

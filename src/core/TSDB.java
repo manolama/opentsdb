@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
@@ -330,6 +332,29 @@ public final class TSDB {
   }
 
   /**
+   * Fetches the entire cache of Metrics
+   * @return A sorted list of metrics in HBase
+   */
+  public final SortedMap<String, Long> getMetrics(){
+    return metrics.getMap();
+  }
+  
+  /**
+   * Fetches the entire cache of tag names
+   * @return A sorted list of tag names
+   */
+  public final SortedMap<String, Long> getTagNames(){
+    return this.tag_names.getMap();
+  }
+  
+  /**
+   * Fetches the entire cache of tag values
+   * @return A sorted list of tag values
+   */
+  public final SortedMap<String, Long> getTagValues(){
+    return this.tag_values.getMap();
+  }
+  /**
    * Given a prefix search, returns a few matching metric names.
    * @param search A prefix to search.
    */
@@ -395,5 +420,4 @@ public final class TSDB {
   final Deferred<Object> delete(final byte[] key, final byte[][] qualifiers) {
     return client.delete(new DeleteRequest(table, key, FAMILY, qualifiers));
   }
-
 }

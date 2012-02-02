@@ -100,6 +100,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     http_commands.put("suggest", new SuggestRPC());
     http_commands.put("put", new PutDataPointRpc());
     http_commands.put("cache", new HttpCache());
+    http_commands.put("metrics", new MetricsRpc());
   }
 
   @Override

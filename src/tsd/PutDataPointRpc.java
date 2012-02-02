@@ -58,15 +58,14 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
    * @param query The query from Netty
    */
   public void execute(final TSDB tsdb, final HttpQuery query) {
+    final String content = query.request().getContent()
+        .toString(CharsetUtil.UTF_8);
+    final String format = query.getQueryStringParam("format");
+    ArrayList<Metric> ms = new ArrayList<Metric>();
     int success = 0;
     int fail = 0;
     String jsonp = "";
     JsonRpcError jerror = null;
-    final TypeReference<ArrayList<Metric>> typeRef = new TypeReference<ArrayList<Metric>>() {
-    };
-    final String content = query.request().getContent()
-        .toString(CharsetUtil.UTF_8);
-    ArrayList<Metric> ms = new ArrayList<Metric>();
 
     // make sure there is data in the content
     if (content.length() < 1) {
@@ -80,13 +79,17 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
       jsonp = query.getQueryStringParam("json");
 
     // setup a parser
-    JsonHelper json = null;
+    JsonHelper json = new JsonHelper();
 
+    // see if we have a specific format
+    if (!format.isEmpty() && format.equals("collectd")){
+      FormatCollectd.parseMetrics(content, ms, json);
+    }
     // if the content starts with a bracket, we have an array of metrics
-    if (content.subSequence(0, 1).equals("[")) {
-      json = new JsonHelper();
+    else if (content.subSequence(0, 1).equals("[")) {
+      final TypeReference<ArrayList<Metric>> typeRef = new TypeReference<ArrayList<Metric>>() {
+      };
       if (json.parseObject(content, typeRef)){
-        //@SuppressWarnings("unchecked")
         ms = (ArrayList<Metric>) json.getObject();
       }
     } else {
@@ -98,6 +101,8 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
 
     // if parsing generated an error, return it
     if (!json.getError().isEmpty()) {
+      // TEMP - log it
+      LOG.debug(content);
       jerror = new JsonRpcError(json.getError(), 422);
       query.sendReply(HttpResponseStatus.UNPROCESSABLE_ENTITY,
           (jsonp.isEmpty() ? jerror.getJSON() : jerror.getJSONP(jsonp)));
@@ -176,9 +181,11 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
       jerror = new JsonRpcError("Error generating resposne JSON", 500);
       query.sendReply(HttpResponseStatus.INTERNAL_SERVER_ERROR,
           (jsonp.isEmpty() ? jerror.getJSON() : jerror.getJSONP(jsonp)));
-    }else
+    }else{
       query.sendReply((jsonp.isEmpty() ? json.getJsonString() 
           : json.getJsonPString(jsonp)));
+      LOG.debug(json.getJsonString());
+    }
     return;
   }
 

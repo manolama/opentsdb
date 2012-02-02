@@ -375,6 +375,7 @@ public final class Configuration {
       // JsonHelper json = new JsonHelper(props);
       return "";
     } else {
+      @SuppressWarnings("rawtypes")
       Enumeration e = props.propertyNames();
       String response = "TSD Configuration:\n";
       while (e.hasMoreElements()) {

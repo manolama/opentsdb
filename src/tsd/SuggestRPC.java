@@ -58,7 +58,7 @@ final class SuggestRPC implements HttpRpc {
             false,
             cache_expire);
     if (!nocache && !HttpCache.storeCache(entry)){
-      LOG.warn("Unable to cache emitter for key [" + query_hash + "]");
+      LOG.warn("Unable to cache [" + query_hash + "]");
     }
     query.sendReply(entry.getData());
   }

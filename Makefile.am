@@ -64,6 +64,7 @@ tsdb_SRC := \
 	src/tsd/BadRequestException.java	\
 	src/tsd/ConnectionManager.java	\
 	src/tsd/DataEmitter.java	\
+	src/tsd/FormatCollectd.java	\
 	src/tsd/GnuGraphEmitter.java	\
 	src/tsd/GnuplotException.java	\
 	src/tsd/HttpCache.java	\
@@ -75,6 +76,7 @@ tsdb_SRC := \
 	src/tsd/JsonRpcError.java	\
 	src/tsd/LogsRpc.java	\
 	src/tsd/Metric.java	\
+	src/tsd/MetricsRpc.java	\
 	src/tsd/PipelineFactory.java	\
 	src/tsd/PutDataPointRpc.java	\
 	src/tsd/QueryHandler.java	\

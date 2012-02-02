@@ -17,6 +17,8 @@ import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
@@ -60,6 +62,8 @@ public final class UniqueId implements UniqueIdInterface {
   private static final short INITIAL_EXP_BACKOFF_DELAY = 800;
   /** Maximum number of results to return in suggest(). */
   private static final short MAX_SUGGESTIONS = 25;
+  /** How often to reload the map in seconds so we don't keep hitting HBase */
+  private static final int RELOAD_INTERVAL = 60;
 
   /** HBase client to use.  */
   private final HBaseClient client;
@@ -83,6 +87,9 @@ public final class UniqueId implements UniqueIdInterface {
   /** Number of times we had to read from HBase and populate the cache. */
   private volatile int cacheMisses;
 
+  /** Last time this map was loaded in it's entirety */
+  private long last_full_load = 0;
+  
   /**
    * Constructor.
    * @param client The HBase client to use.
@@ -417,6 +424,69 @@ public final class UniqueId implements UniqueIdInterface {
   }
 
   /**
+   * Loads the cache with all entries from HBase. To prevent too many hits on
+   * the region servers, it will only load every RELOAD_INTERVAL
+   * @return True if the load was successful, false if there was an error
+   */
+  public boolean loadAll(){
+    // determine if we need to load yet
+    if ((System.currentTimeMillis() / 1000) > this.last_full_load + RELOAD_INTERVAL)
+      return true;
+    this.last_full_load = System.currentTimeMillis() / 1000;
+    
+    final Scanner scanner = getFullScanner();
+    try {
+      ArrayList<ArrayList<KeyValue>> rows;
+      while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
+        for (final ArrayList<KeyValue> row : rows) {
+          if (row.size() != 1) {
+            LOG.error("WTF shouldn't happen!  Scanner " + scanner + " returned"
+                      + " a row that doesn't have exactly 1 KeyValue: " + row);
+            if (row.isEmpty()) {
+              continue;
+            }
+          }
+          final byte[] key = row.get(0).key();
+          final String name = fromBytes(key);
+          final byte[] id = row.get(0).value();
+          final byte[] cached_id = nameCache.get(name);
+          if (cached_id == null) {
+            addIdToCache(name, id);
+            addNameToCache(id, name);
+          } else if (!Arrays.equals(id, cached_id)) {
+            throw new IllegalStateException("WTF?  For kind=" + kind()
+              + " name=" + name + ", we have id=" + Arrays.toString(cached_id)
+              + " in cache, but just scanned id=" + Arrays.toString(id));
+          }
+        }
+      }
+      return true;
+    } catch (HBaseException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException("Should never be here", e);
+    }
+  }
+  
+  /**
+   * Retrieves the entire list of entries in the cache as a sorted
+   * map for display in the HTTP API
+   * @return A sorted map of UIDs and their numeric IDs
+   */
+  public final TreeMap<String, Long> getMap(){
+    loadAll();
+    final TreeMap<String, Long> sorted = new TreeMap<String, Long>();
+    for(Map.Entry<String, byte[]> entry : this.nameCache.entrySet()){
+      // TODO fix this, it's not returning the actual numeric ID
+      if (entry.getValue() == null || entry.getValue().length != 8)
+        sorted.put(entry.getKey(), 0L);
+      else
+        sorted.put(entry.getKey(), Bytes.getLong(entry.getValue()) + 1);
+    }
+    return sorted;
+  }
+  
+  /**
    * Reassigns the UID to a different name (non-atomic).
    * <p>
    * Whatever was the UID of {@code oldname} will be given to {@code newname}.
@@ -533,7 +603,27 @@ public final class UniqueId implements UniqueIdInterface {
     scanner.setMaxNumRows(MAX_SUGGESTIONS);
     return scanner;
   }
+  
+  
+  /**
+   * Creates a scanner that loads the whole set of UIDs for this particular
+   * type
+   * @return A scanner to use in an actual scan
+   */
+  private Scanner getFullScanner(){
+    final byte[] start_row;
+    final byte[] end_row;
+    start_row = START_ROW;
+    end_row = END_ROW;
+    final Scanner scanner = client.newScanner(table);
+    scanner.setStartKey(start_row);
+    scanner.setStopKey(end_row);
+    scanner.setFamily(ID_FAMILY);
+    scanner.setQualifier(kind);
+    return scanner;
+  }
 
+  
   /** Gets an exclusive lock for on the table using the MAXID_ROW.
    * The lock expires after hbase.regionserver.lease.period ms
    * (default = 60000)

@@ -6,9 +6,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import net.opentsdb.core.Configuration;
@@ -29,8 +29,8 @@ class HttpCache implements HttpRpc {
   private static final Logger LOG = LoggerFactory.getLogger(HttpCache.class);
   
   /** Stores the cache entries */
-  private static Map<Integer, HttpCacheEntry> cache = 
-    new HashMap<Integer, HttpCacheEntry>();
+  private static ConcurrentHashMap<Integer, HttpCacheEntry> cache = 
+    new ConcurrentHashMap<Integer, HttpCacheEntry>();
   
   /** How many times cache was fulfilled from RAM */
   private static final AtomicInteger cache_ram_hit = new AtomicInteger();
