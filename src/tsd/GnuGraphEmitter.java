@@ -59,6 +59,9 @@ public class GnuGraphEmitter extends DataEmitter {
   /** Plot object that handles graph verification and script creation */
   private Plot plot = null;
   
+  /** JSONP function if the user requests it */
+  String jsonp = "";
+  
   /** Name of the wrapper script we use to execute Gnuplot.  */
   private static final String WRAPPER = 
     System.getProperty("os.name").contains("Windows") ? "mygnuplot.bat" : "mygnuplot.sh";
@@ -68,6 +71,9 @@ public class GnuGraphEmitter extends DataEmitter {
     GNUPLOT = findGnuplotHelperScript();
   }
 
+  /** Stores metadata about the graph generation */
+  private Map<String, Object> results = new HashMap<String, Object>();
+  
   /**
    * Default constructor
    * @param start_time Timestamp of the start time of the result.
@@ -98,7 +104,10 @@ public class GnuGraphEmitter extends DataEmitter {
 
   /**
    * Creates the plotting script and data, then runs Gnuplot in a thread pool
-   * and blocks until we get a result.
+   * and blocks until we get a result. Gnuplot will write the PNG file to our
+   * cache directory and the emitter returns JSON meta data about the graph
+   * generation process. Then the GUI will parse the JSON data and request
+   * the PNG image directly from disk
    */
   public final boolean processData() {
     if (datapoints.size() < 1) {
@@ -153,6 +162,13 @@ public class GnuGraphEmitter extends DataEmitter {
         error = run.getError();
         return false;
       }
+      
+      // set our results
+      results.put("plotted", run.getNPlotted());
+      results.put("points", npoints);
+      results.put("etags", aggregated_tags);
+      results.put("image", Integer.toHexString(this.query_hash) + ".png");
+      
     } catch (RejectedExecutionException e) {
       this.error = "Too many requests pending, please try again later";
       LOG.error(error);
@@ -167,13 +183,16 @@ public class GnuGraphEmitter extends DataEmitter {
    * @return Returns a new cache entry object
    */
   public final HttpCacheEntry getCacheData(){
-    // we set the fileOnly flag to true because Gnu creates the image
-    // file for us
+ // now we have all the metrics stored, serialize and return
+    JsonHelper json = new JsonHelper(this.results);
+    String response = jsonp.isEmpty() ? json.getJsonString() : json
+        .getJsonPString(jsonp);
+    
     return new HttpCacheEntry(
         query_hash,
-        null,
-        basepath + ".png",
-        true,
+        (response.isEmpty() ? json.getError().getBytes() : response.getBytes()),
+        basepath + ".json",
+        false,
         computeExpire()
     );
   }
@@ -184,6 +203,7 @@ public class GnuGraphEmitter extends DataEmitter {
   private static final class RunGnuplot implements Runnable {
     private final Plot plot;
     private final String basepath;
+    private int nplotted = 0;
 
     private boolean finished = false;
     private String error = "";
@@ -228,7 +248,7 @@ public class GnuGraphEmitter extends DataEmitter {
      * @throws IOException
      */
     private void execute() throws IOException {
-      runGnuplot(basepath, plot);
+      nplotted = runGnuplot(basepath, plot);
 
       //graphlatency.add(query.processingTimeMillis());
       graphs_generated.incrementAndGet();
@@ -250,6 +270,11 @@ public class GnuGraphEmitter extends DataEmitter {
      */
     public final String getError(){
       return error;
+    }
+  
+    /** Returns the number of points plotted */
+    public final int getNPlotted(){
+      return nplotted;
     }
   }
   

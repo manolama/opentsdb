@@ -681,10 +681,7 @@ public class QueryUi implements EntryPoint {
     lastgraphuri = uri;
     graphstatus.setText("Loading graph...");
     
-    // so this hack kinda works to get the GUI to display the graph again
-    graph.setUrl(uri + "&png");
-    graph.setVisible(true);
-    /*asyncGetJson(uri + "&json", new GotJsonCallback() {
+    asyncGetJson(uri, new GotJsonCallback() {
       public void got(final JSONValue json) {
         if (autoreoload_timer != null) {
           autoreoload_timer.cancel();
@@ -700,12 +697,13 @@ public class QueryUi implements EntryPoint {
         } else {
           clearError();
           final JSONValue nplotted = result.get("plotted");
-          final JSONValue cachehit = result.get("cachehit");
-          if (cachehit != null) {
-            msg += "Cache hit (" + cachehit.isString().stringValue() + "). ";
-          }
+          //final JSONValue cachehit = result.get("cachehit");
+          final JSONValue image = result.get("image");
+//          if (cachehit != null) {
+//            msg += "Cache hit (" + cachehit.isString().stringValue() + "). ";
+//          }
           if (nplotted != null && nplotted.isNumber().doubleValue() > 0) {
-            graph.setUrl(uri + "&png");
+            graph.setUrl("/cache?file=" + image.isString().stringValue());
             graph.setVisible(true);
             msg += result.get("points").isNumber() + " points retrieved, "
               + nplotted + " points plotted";
@@ -769,7 +767,7 @@ public class QueryUi implements EntryPoint {
           refreshGraph();
         }
       }
-    } );*/
+    } );
   }
 
   private boolean addAllMetrics(final StringBuilder url) {

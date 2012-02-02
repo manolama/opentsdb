@@ -16,6 +16,7 @@ import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
 
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,7 +48,6 @@ class HttpCache implements HttpRpc {
   /** Sets the maximum chunk of data (or file) we can store in RAM */
   private static final int ram_file_size_limit = Configuration.getInt("ts.http.cache.ram.file.limit",
       Const.HTTP_CACHE_RAM_FILE_LIMIT);
-
   /**
    * Attempts to pull data from the cache, and if successful, 
    * returns it to the HTTP query
@@ -219,8 +219,33 @@ class HttpCache implements HttpRpc {
   public void execute(final TSDB tsdb, final HttpQuery query) {
     // respond with metadata about each cache object in a JSON format
     final String jsonp = JsonHelper.getJsonPFunction(query);
+    final String file = query.hasQueryStringParam("file") ? 
+      query.getQueryStringParam("file") : "";
     
-    if (query.hasQueryStringParam("flush")){
+    if (!file.isEmpty()){
+      // get the cache directory
+      String basepath = Configuration.getString("tsd.cachedir", "");
+      if (System.getProperty("os.name").contains("Windows")){
+        if (!basepath.endsWith("\\"))
+          basepath += "\\";
+      }else{
+        if (!basepath.endsWith("/"))
+          basepath += "/";     
+      }
+      
+      // see if the file exists
+      if (new File(basepath + file).exists()){
+        // TODO lookup the cache entry to get the actual cache time
+        try {
+          query.sendFile(basepath + file, 30);
+        } catch (IOException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
+      }else{
+        query.sendReply(HttpResponseStatus.NOT_FOUND, "File [" + file + "] not found");
+      }      
+    }else if (query.hasQueryStringParam("flush")){
       // TODO flush the cache
       query.sendReply(new JsonRpcError("Not implemented", 404).getJSON());
     }else{

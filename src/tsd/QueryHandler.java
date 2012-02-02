@@ -79,13 +79,8 @@ public class QueryHandler implements HttpRpc {
     
     // append the hash of the query string so we have effective caching
     basepath += Integer.toHexString(query_hash);
-    
-    // see how far back we should cache
-    final int max_age = query.computeMaxAge(start_time, end_time, now);
-    if (!nocache && query.isDiskCacheHit(end_time, max_age, basepath)) {
-      return;
-    }
-    
+
+    // determine how many HBase queries we'll need to run
     int total_queries = 0;
     Query[] tsdbqueries;
     tsdbqueries = parseQuery(tsdb, query);
