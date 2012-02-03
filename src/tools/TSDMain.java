@@ -89,6 +89,7 @@ final class TSDMain {
    */
   public static void main(String[] args) {
     Logger log = LoggerFactory.getLogger(TSDMain.class);
+
     log.info("Starting.");
     log.info(BuildData.revisionString());
     log.info(BuildData.buildString());
@@ -114,6 +115,7 @@ final class TSDMain {
         "Maximum time for which a new data point can be buffered"
             + " (default: " + Const.FLUSH_INTERVAL + ").");
     CliOptions.addAutoMetricFlag(argp);
+    CliOptions.addVerbose(argp);
     args = CliOptions.parse(argp, args);
     if (!loaded_config
         && (args == null || !argp.has("--port") || !argp.has("--staticroot") || !argp

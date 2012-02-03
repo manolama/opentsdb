@@ -16,6 +16,8 @@ import java.util.HashMap;
 
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.core.util.StatusPrinter;
 
 import net.opentsdb.core.Configuration;
 import net.opentsdb.core.Const;
@@ -106,6 +108,18 @@ final class CliOptions {
 
   /** Changes the log level to 'WARN' unless --verbose is passed. */
   private static void honorVerboseFlag(final ArgP argp) {
+    LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
+ 
+    // uncomment to dump it's config to stdout, you can use this to see what
+    // config file it loaded
+    //StatusPrinter.print(lc);
+    
+    // this is a gross hack to determine if a config file was loaded. If one was
+    // loaded, the count should be greater than 4 or 5, the default count when 
+    // the app launches
+    if (lc.getStatusManager().getCount() >= 5)
+      return;
+    
     if (argp.optionExists("--verbose") && !argp.has("--verbose")
         && !argp.has("-v")) {
       // SLF4J doesn't provide any API to programmatically set the logging
