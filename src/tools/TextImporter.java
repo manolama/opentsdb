@@ -31,6 +31,7 @@ import org.hbase.async.HBaseRpc;
 import org.hbase.async.PleaseThrottleException;
 import org.hbase.async.PutRequest;
 
+import net.opentsdb.core.Config;
 import net.opentsdb.core.Tags;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.WritableDataPoints;
@@ -58,12 +59,15 @@ final class TextImporter {
     } else if (args.length < 1) {
       usage(argp, 2);
     }
+    
+    // TODO instantiate config properly
+    Config config = new Config();
+    config.loadConfig();
 
-    final HBaseClient client = CliOptions.clientFromOptions(argp);
+    final HBaseClient client = CliOptions.clientFromOptions(config);
     // Flush more frequently since we read very fast from the files.
     client.setFlushInterval((short) 500);  // ms
-    final TSDB tsdb = new TSDB(client, argp.get("--table", "tsdb"),
-                               argp.get("--uidtable", "tsdb-uid"));
+    final TSDB tsdb = new TSDB(client, config);
     argp = null;
     try {
       int points = 0;

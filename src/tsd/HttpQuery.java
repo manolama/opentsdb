@@ -45,8 +45,8 @@ import org.jboss.netty.handler.codec.http.HttpVersion;
 import org.jboss.netty.handler.codec.http.QueryStringDecoder;
 import org.jboss.netty.util.CharsetUtil;
 
-import net.opentsdb.core.Configuration;
 import net.opentsdb.core.Const;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.graph.Plot;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
@@ -84,14 +84,23 @@ final class HttpQuery {
   /** Deferred result of this query, to allow asynchronous processing.  */
   private final Deferred<Object> deferred = new Deferred<Object>();
 
+  /** The {@code TSDB} instance we belong to */
+  private final TSDB tsdb;
+  
+  /** HTTP cache to store/read from */
+  private final HttpCache cache;
+  
   /**
    * Constructor.
    * @param request The request in this HTTP query.
    * @param chan The channel on which the request was received.
    */
-  public HttpQuery(final HttpRequest request, final Channel chan) {
+  public HttpQuery(final TSDB tsdb, final HttpRequest request, 
+      final Channel chan, final HttpCache cache) {
+    this.tsdb = tsdb;
     this.request = request;
     this.chan = chan;
+    this.cache = cache;
   }
 
   /**
@@ -405,6 +414,14 @@ final class HttpQuery {
   }
 
   /**
+   * Accessor for the cache object
+   * @return Cache reference
+   */
+  public HttpCache getCache(){
+    return this.cache;
+  }
+  
+  /**
    * Escapes a string appropriately to be a valid in JSON.
    * Valid JSON strings are defined in RFC 4627, Section 2.5.
    * @param s The string to escape, which is assumed to be in .
@@ -542,7 +559,7 @@ final class HttpQuery {
       params = null;
       
       // set the base path for the plot file
-      String basepath = Configuration.getString("tsd.cachedir", "");      
+      String basepath = tsdb.getConfig().cacheDirectory();      
       // check for slashes
       if (System.getProperty("os.name").contains("Windows") 
           && !basepath.endsWith("\\")){
@@ -1036,40 +1053,40 @@ final class HttpQuery {
   // -------------------------------------------- //
 
   private static final String PAGE_HEADER_START =
-    "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">"
-    + "<html><head>"
-    + "<meta http-equiv=content-type content=\"text/html;charset=utf-8\">"
-    + "<title>";
+    "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n"
+    + "<html>\n<head>\n"
+    + "\t<meta http-equiv=content-type content=\"text/html;charset=utf-8\">\n"
+    + "\t<title>\n\n";
 
   private static final String PAGE_HEADER_MID =
-    "</title>\n"
-    + "<style><!--\n"
+    "\t</title>\n"
+    + "\t\t<style><!--\n"
     + "body{font-family:arial,sans-serif;margin-left:2em}"
     + "A.l:link{color:#6f6f6f}"
     + "A.u:link{color:green}"
     + ".subg{background-color:#e2f4f7}"
     + ".fwf{font-family:monospace;white-space:pre-wrap}"
-    + "//--></style>";
+    + "//--></style>\n";
 
   private static final String PAGE_HEADER_END_BODY_START =
     "</head>\n"
-    + "<body text=#000000 bgcolor=#ffffff>"
-    + "<table border=0 cellpadding=2 cellspacing=0 width=100%>"
-    + "<tr><td rowspan=3 width=1% nowrap><b>"
+    + "<body text=#000000 bgcolor=#ffffff>\n"
+    + "\t<table border=0 cellpadding=2 cellspacing=0 width=100%>\n"
+    + "\t\t<tr><td rowspan=3 width=1% nowrap><b>"
     + "<font color=#c71a32 size=10>T</font>"
     + "<font color=#00a189 size=10>S</font>"
     + "<font color=#1a65b7 size=10>D</font>"
-    + "&nbsp;&nbsp;</b><td>&nbsp;</td></tr>"
-    + "<tr><td class=subg><font color=#507e9b><b>";
+    + "&nbsp;&nbsp;</b><td>&nbsp;</td></tr>\n"
+    + "\t\t<tr><td class=subg><font color=#507e9b><b>";
 
   private static final String PAGE_BODY_MID =
-    "</b></td></tr>"
-    + "<tr><td>&nbsp;</td></tr></table>";
+    "</b></td></tr>\n"
+    + "\t\t<tr><td>&nbsp;</td></tr>\n\t</table>\n";
 
   private static final String PAGE_FOOTER =
-    "<table width=100% cellpadding=0 cellspacing=0>"
-    + "<tr><td class=subg><img alt=\"\" width=1 height=6></td></tr>"
-    + "</table></body></html>";
+    "\t<table width=100% cellpadding=0 cellspacing=0>\n"
+    + "\t<tr><td class=subg><img alt=\"\" width=1 height=6></td></tr>\n"
+    + "\t</table>\n</body>\n</html>";
 
   private static final int BOILERPLATE_LENGTH =
     PAGE_HEADER_START.length()

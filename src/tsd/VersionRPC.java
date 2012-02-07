@@ -1,3 +1,15 @@
+// This file is part of OpenTSDB.
+// Copyright (C) 2012  The OpenTSDB Authors.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.  This program is distributed in the hope that it
+// will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser
+// General Public License for more details.  You should have received a copy
+// of the GNU Lesser General Public License along with this program.  If not,
+// see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
 import java.util.HashMap;
@@ -41,7 +53,7 @@ final class VersionRPC implements TelnetRpc, HttpRpc {
   public void execute(final TSDB tsdb, final HttpQuery query) {
     final boolean nocache = query.hasQueryStringParam("nocache");
     final int query_hash = query.getQueryStringHash();
-    if (!nocache && HttpCache.readCache(query_hash, query)) {
+    if (!nocache && query.getCache().readCache(query_hash, query)) {
       return;
     }
 
@@ -66,7 +78,7 @@ final class VersionRPC implements TelnetRpc, HttpRpc {
                                                       * these
                                                       */
           false, 86400);
-      if (!nocache && !HttpCache.storeCache(entry)) {
+      if (!nocache && !query.getCache().storeCache(entry)) {
         LOG.warn("Unable to cache emitter for key [" + query_hash + "]");
       }
       query.sendReply(entry.getData());
@@ -82,7 +94,7 @@ final class VersionRPC implements TelnetRpc, HttpRpc {
       HttpCacheEntry entry = new HttpCacheEntry(query_hash, buf.toString()
           .getBytes(), "", /* don't bother persisting these */
       false, 86400);
-      if (!nocache && !HttpCache.storeCache(entry)) {
+      if (!nocache && !query.getCache().storeCache(entry)) {
         LOG.warn("Unable to cache emitter for key [" + query_hash + "]");
       }
       query.sendReply(entry.getData());

@@ -17,7 +17,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
-import java.util.concurrent.ConcurrentHashMap;
 
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
@@ -60,6 +59,9 @@ public final class TSDB {
   /** Client for the HBase cluster to use.  */
   final HBaseClient client;
 
+  /** Configuration for the TSD and related services */
+  final Config config;
+
   /** Name of the table in which timeseries are stored.  */
   final byte[] table;
 
@@ -87,12 +89,12 @@ public final class TSDB {
    * are stored.
    */
   public TSDB(final HBaseClient client,
-              final String timeseries_table,
-              final String uniqueids_table) {
+              final Config config) {
     this.client = client;
-    table = timeseries_table.getBytes();
+    this.config = config;
+    table = config.tsdTable().getBytes();
 
-    final byte[] uidtable = uniqueids_table.getBytes();
+    final byte[] uidtable = config.tsdUIDTable().getBytes();
     metrics = new UniqueId(client, uidtable, METRICS_QUAL, METRICS_WIDTH);
     tag_names = new UniqueId(client, uidtable, TAG_NAME_QUAL, TAG_NAME_WIDTH);
     tag_values = new UniqueId(client, uidtable, TAG_VALUE_QUAL,
@@ -378,6 +380,14 @@ public final class TSDB {
     return tag_values.suggest(search);
   }
 
+  /**
+   * Returns the configuration reference
+   * @return Config reference
+   */
+  public Config getConfig(){
+    return this.config;
+  }
+  
   // ------------------ //
   // Compaction helpers //
   // ------------------ //

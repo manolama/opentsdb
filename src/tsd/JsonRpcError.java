@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2010  The OpenTSDB Authors.
+// Copyright (C) 2012  The OpenTSDB Authors.
 //
 // This program is free software: you can redistribute it and/or modify it
 // under the terms of the GNU Lesser General Public License as published by
@@ -19,10 +19,10 @@ import java.util.HashMap;
  */
 final class JsonRpcError {
   /** User provided error string */
-  private String message;
+  final private String message;
   
   /** User provided error code */
-  private int code;
+  final private int code;
 
   /**
    * Constructor that requires the user to supply a message and a numeric error

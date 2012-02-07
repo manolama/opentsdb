@@ -27,12 +27,12 @@ import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
 import org.hbase.async.Scanner;
 
+import net.opentsdb.core.Config;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.IllegalDataException;
 import net.opentsdb.core.Internal;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.uid.UniqueId;
 
 /**
  * Tool to look for and fix corrupted data in a TSDB.
@@ -66,10 +66,13 @@ final class Fsck {
       usage(argp, "Not enough arguments.", 2);
     }
 
-    final HBaseClient client = CliOptions.clientFromOptions(argp);
+    // TODO instantiate config properly
+    Config config = new Config();
+    config.loadConfig();
+    
+    final HBaseClient client = CliOptions.clientFromOptions(config);
     final byte[] table = argp.get("--table", "tsdb").getBytes();
-    final TSDB tsdb = new TSDB(client, argp.get("--table", "tsdb"),
-                               argp.get("--uidtable", "tsdb-uid"));
+    final TSDB tsdb = new TSDB(client, config);
     final boolean fix = argp.has("--fix");
     argp = null;
     int errors = 42;

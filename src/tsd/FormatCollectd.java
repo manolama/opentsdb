@@ -1,3 +1,15 @@
+// This file is part of OpenTSDB.
+// Copyright (C) 2012  The OpenTSDB Authors.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.  This program is distributed in the hope that it
+// will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser
+// General Public License for more details.  You should have received a copy
+// of the GNU Lesser General Public License along with this program.  If not,
+// see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
 import java.io.FileInputStream;
@@ -8,10 +20,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
-import net.opentsdb.core.Configuration;
+import net.opentsdb.core.TSDB;
 
 import org.codehaus.jackson.annotate.JsonAnySetter;
 import org.codehaus.jackson.annotate.JsonAutoDetect;
+import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +42,15 @@ class FormatCollectd {
   private static final Logger LOG = LoggerFactory
       .getLogger(FormatCollectd.class);
 
+  /**
+   * This map allows for overriding plugin names that are shortened in Collectd
+   * It also allows the user to supply a configuration file for overloading
+   * plugin names using the "tsd.formatter.collectd.override" setting in the
+   * OpenTSDB.conf file
+   */
+  @JsonIgnore
+  private final Map<String, String> plugin_overrides = new HashMap<String, String>();
+  
   // each array should have the same number of elements, if not, there was a
   // glitch
   /** Numeric values of the metric */
@@ -40,6 +62,7 @@ class FormatCollectd {
   /** Unix epoch timestamp */
   private long time = 0;
   /** How often this metric is sent. Can use this for metadata in the future */
+  @SuppressWarnings("unused")
   private long interval = 0;
   /** Host from whence the data came */
   private String host = "";
@@ -51,38 +74,33 @@ class FormatCollectd {
   private String type = "";
   /** Alternative instance name */
   private String type_instance = "";
-
-  /** 
-   * This map allows for overriding plugin names that are shortned in Collectd
-   * It also allows the user to supply a configuration file for overloading plugin
-   * names using the "tsd.formatter.collectd.override" setting in the OpenTSDB.conf
-   * file
+  
+  /**
+   * Default Constructor to assign the TSD
+   * @param tsd TSD to work with
    */
-  private final static Map<String, String> plugin_overrides = new HashMap<String, String>() {
-    private static final long serialVersionUID = -5866734167063844133L;
-    {
-      String path = Configuration.getString("tsd.formatter.collectd.override", "");
-      if (!path.isEmpty()){
-        Properties props = new Properties();
-        try{
-          props.load(new FileInputStream(path));
-          if (props.size() > 0){
-            @SuppressWarnings("rawtypes")
-            Enumeration e = props.propertyNames();
-            while (e.hasMoreElements()) {
-              final String key = (String) e.nextElement();
-              put(key, props.getProperty(key));
-            }
+  public FormatCollectd(final TSDB tsdb){
+    String path = tsdb.getConfig().formatterCollectdOverride();
+    if (!path.isEmpty()) {
+      Properties props = new Properties();
+      try {
+        props.load(new FileInputStream(path));
+        if (props.size() > 0) {
+          @SuppressWarnings("rawtypes")
+          Enumeration e = props.propertyNames();
+          while (e.hasMoreElements()) {
+            final String key = (String) e.nextElement();
+            plugin_overrides.put(key, props.getProperty(key));
           }
-        }catch (IOException e){
-          LOG.error(e.getMessage());
         }
-      }else{
-        put("if", "interface");
-        put("df", "disk");
+      } catch (IOException e) {
+        LOG.error(e.getMessage());
       }
+    } else {
+      plugin_overrides.put("if", "interface");
+      plugin_overrides.put("df", "disk");
     }
-  };
+  }
 
   /**
    * Attempts to parse the posted string for metrics and stores them in the
@@ -91,9 +109,10 @@ class FormatCollectd {
    * @param metrics An array of metrics to store results int
    * @return True if parsing was successful, false if there was an error
    */
-  public final static boolean parseMetrics(final String content,
+  public final boolean parseMetrics(final String content,
       final ArrayList<Metric> metrics, final JsonHelper json) {
-    final TypeReference<ArrayList<FormatCollectd>> typeRef = new TypeReference<ArrayList<FormatCollectd>>() {
+    final TypeReference<ArrayList<FormatCollectd>> typeRef = 
+      new TypeReference<ArrayList<FormatCollectd>>() {
     };
 
     if (json.parseObject(content, typeRef)) {
@@ -145,8 +164,9 @@ class FormatCollectd {
       m.setValue(this.values.get(i));
 
       // build metric name with some dedupe thrown in
-      StringBuilder metric = new StringBuilder(plugin_overrides.containsKey(plugin)
-          ? plugin_overrides.get(plugin) : plugin);
+      StringBuilder metric = new StringBuilder(
+          plugin_overrides.containsKey(plugin) ? plugin_overrides.get(plugin)
+              : plugin);
       if (!dsnames.get(i).equals(plugin)) {
         metric.append(".");
         metric.append(dsnames.get(i));

@@ -25,6 +25,7 @@ import org.hbase.async.HBaseClient;
 
 import net.opentsdb.core.Aggregator;
 import net.opentsdb.core.Aggregators;
+import net.opentsdb.core.Config;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.DataPoint;
 import net.opentsdb.core.DataPoints;
@@ -106,10 +107,13 @@ final class CliQuery {
     } else if (args.length < 3) {
       usage(argp, "Not enough arguments.", 2);
     }
+    
+    // TODO instantiate config properly
+    Config config = new Config();
+    config.loadConfig();
 
-    final HBaseClient client = CliOptions.clientFromOptions(argp);
-    final TSDB tsdb = new TSDB(client, argp.get("--table", "tsdb"),
-                               argp.get("--uidtable", "tsdb-uid"));
+    final HBaseClient client = CliOptions.clientFromOptions(config);
+    final TSDB tsdb = new TSDB(client, config);
     final String basepath = argp.get("--graph");
     argp = null;
 

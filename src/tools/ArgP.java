@@ -20,7 +20,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.opentsdb.core.Configuration;
+import net.opentsdb.core.Config;
 
 /**
  * A dead simple command-line argument parser.
@@ -279,9 +279,10 @@ public final class ArgP {
   }
 
   /**
-   * Copies the parsed command line options to the {@link Configuration} class
+   * Copies the parsed command line options to the {@link Config} class
+   * @param config Configuration instance to override
    */
-  public void overloadConfigs(){
+  public void overloadConfigs(final Config config){
     if (parsed.isEmpty()){
       LOG.debug("No parsed options to copy");
       return;
@@ -295,10 +296,26 @@ public final class ArgP {
         continue;
       }
       
-      // if the incoming option is a flag (e.g. --auto-metric) then we
-      // need to set a boolean value
-      Configuration.setConfig(option, 
-          entry.getValue() != null ? entry.getValue() : "true");
+      // map the overrides
+      if (entry.getKey().toLowerCase().equals("--auto_metric")){
+        config.autoMetric(true);
+      }else if (entry.getKey().toLowerCase().equals("--table")){
+        config.tsdTable(entry.getValue());
+      }else if (entry.getKey().toLowerCase().equals("--uidtable")){
+        config.tsdUIDTable(entry.getValue());
+      }else if (entry.getKey().toLowerCase().equals("--zkquorum")){
+        config.zookeeperQuorum(entry.getValue());
+      }else if (entry.getKey().toLowerCase().equals("--zkbasedir")){
+        config.zookeeperQuorum(entry.getValue());
+      }else if (entry.getKey().toLowerCase().equals("--port")){
+        config.networkPort(Integer.parseInt(entry.getValue()));
+      }else if (entry.getKey().toLowerCase().equals("--staticroot")){
+        config.httpStaticRoot(entry.getValue());
+      }else if (entry.getKey().toLowerCase().equals("--cachedir")){
+        config.cacheDirectory(entry.getValue());
+      }else if (entry.getKey().toLowerCase().equals("--flush-interval")){
+        config.flushInterval(Integer.parseInt(entry.getValue()));
+      }
     }
   }
 }

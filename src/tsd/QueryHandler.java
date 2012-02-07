@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2010  The OpenTSDB Authors.
+// Copyright (C) 2012  The OpenTSDB Authors.
 //
 // This program is free software: you can redistribute it and/or modify it
 // under the terms of the GNU Lesser General Public License as published by
@@ -22,7 +22,6 @@ import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.Aggregator;
 import net.opentsdb.core.Aggregators;
-import net.opentsdb.core.Configuration;
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
@@ -53,7 +52,7 @@ public class QueryHandler implements HttpRpc {
     final int query_hash = query.getQueryStringHash();
     
     // first, see if we can satisfy the request from cache
-    if (!nocache && HttpCache.readCache(query_hash, query)){
+    if (!nocache && query.getCache().readCache(query_hash, query)){
       // satisfied from cache!!
       return;
     }
@@ -68,7 +67,7 @@ public class QueryHandler implements HttpRpc {
     }
     
     // get the cache directory
-    String basepath = Configuration.getString("tsd.cachedir", "");
+    String basepath = tsdb.getConfig().cacheDirectory();
     if (System.getProperty("os.name").contains("Windows")){
       if (!basepath.endsWith("\\"))
         basepath += "\\";
@@ -138,7 +137,7 @@ public class QueryHandler implements HttpRpc {
 
     // cache the response if told to
     HttpCacheEntry entry = emitter.getCacheData();
-    if (!nocache && !HttpCache.storeCache(entry)){
+    if (!nocache && !query.getCache().storeCache(entry)){
       LOG.warn("Unable to cache emitter for key [" + query_hash + "]");
     }
     

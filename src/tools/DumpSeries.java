@@ -23,6 +23,7 @@ import org.hbase.async.HBaseClient;
 import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
 
+import net.opentsdb.core.Config;
 import net.opentsdb.core.IllegalDataException;
 import net.opentsdb.core.Internal;
 import net.opentsdb.core.Query;
@@ -65,10 +66,13 @@ final class DumpSeries {
       usage(argp, "Not enough arguments.", 2);
     }
 
-    final HBaseClient client = CliOptions.clientFromOptions(argp);
+    // TODO instantiate config properly
+    Config config = new Config();
+    config.loadConfig();
+    
+    final HBaseClient client = CliOptions.clientFromOptions(config);
     final byte[] table = argp.get("--table", "tsdb").getBytes();
-    final TSDB tsdb = new TSDB(client, argp.get("--table", "tsdb"),
-                               argp.get("--uidtable", "tsdb-uid"));
+    final TSDB tsdb = new TSDB(client, config);
     final boolean delete = argp.has("--delete");
     final boolean importformat = delete || argp.has("--import");
     argp = null;

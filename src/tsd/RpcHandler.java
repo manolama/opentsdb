@@ -12,10 +12,8 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.stumbleupon.async.Callback;
@@ -30,10 +28,6 @@ import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 
-import net.opentsdb.BuildData;
-import net.opentsdb.core.Aggregators;
-import net.opentsdb.core.Configuration;
-import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
 
@@ -55,7 +49,9 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   private final TelnetRpc unknown_cmd = new Unknown();
   /** Commands we serve on the HTTP interface. */
   private final HashMap<String, HttpRpc> http_commands;
-
+  /** Cache for HTTP commands */
+  private final HttpCache cache;
+  
   /** The TSDB to use. */
   private final TSDB tsdb;
 
@@ -65,6 +61,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
    */
   public RpcHandler(final TSDB tsdb) {
     this.tsdb = tsdb;
+    cache = new HttpCache(tsdb);
 
     telnet_commands = new HashMap<String, TelnetRpc>(6);
     http_commands = new HashMap<String, HttpRpc>(10);
@@ -99,7 +96,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     http_commands.put("q", new QueryHandler());
     http_commands.put("suggest", new SuggestRPC());
     http_commands.put("put", new PutDataPointRpc());
-    http_commands.put("cache", new HttpCache());
+    http_commands.put("cache", cache);
     http_commands.put("metrics", new MetricsRpc());
   }
 
@@ -149,7 +146,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
    */
   private void handleHttpQuery(final Channel chan, final HttpRequest req) {
     http_rpcs_received.incrementAndGet();
-    final HttpQuery query = new HttpQuery(req, chan);
+    final HttpQuery query = new HttpQuery(tsdb, req, chan, cache);
     if (req.isChunked()) {
       logError(query, "Received an unsupported chunked request: "
                + query.request());
@@ -223,7 +220,6 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     collector.record("rpc.received", http_rpcs_received, "type=http");
     collector.record("rpc.exceptions", exceptions_caught);
     HttpQuery.collectStats(collector);
-    //GraphHandler.collectStats(collector);
     PutDataPointRpc.collectStats(collector);
   }
 

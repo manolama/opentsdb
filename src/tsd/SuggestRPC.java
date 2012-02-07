@@ -1,3 +1,15 @@
+// This file is part of OpenTSDB.
+// Copyright (C) 2012  The OpenTSDB Authors.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.  This program is distributed in the hope that it
+// will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser
+// General Public License for more details.  You should have received a copy
+// of the GNU Lesser General Public License along with this program.  If not,
+// see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
 import java.util.List;
@@ -5,8 +17,6 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.opentsdb.core.Configuration;
-import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
 
 /**
@@ -16,18 +26,14 @@ import net.opentsdb.core.TSDB;
  */
 final class SuggestRPC implements HttpRpc {
   private static final Logger LOG = LoggerFactory.getLogger(SuggestRPC.class);
-  
-  /** Determines how long, in seconds, the suggestions remain in cache */
-  private static long cache_expire = 
-    Configuration.getLong("tsd.http.suggest_expire", Const.HTTP_SUGGEST_EXPIRE);
-  
+
   /**
    * Returns auto-complete data for HTTP queries in JSON format
    */
   public void execute(final TSDB tsdb, final HttpQuery query) {
     final boolean nocache = query.hasQueryStringParam("nocache");
     final int query_hash = query.getQueryStringHash();
-    if (!nocache && HttpCache.readCache(query_hash, query)){
+    if (!nocache && query.getCache().readCache(query_hash, query)){
       return;
     }
     
@@ -56,8 +62,8 @@ final class SuggestRPC implements HttpRpc {
             : response.getJsonPString(jsonp).getBytes(),
             "", /* don't bother persisting these */
             false,
-            cache_expire);
-    if (!nocache && !HttpCache.storeCache(entry)){
+            tsdb.getConfig().httpSuggestExpire());
+    if (!nocache && !query.getCache().storeCache(entry)){
       LOG.warn("Unable to cache [" + query_hash + "]");
     }
     query.sendReply(entry.getData());

@@ -57,6 +57,7 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
    * @param tsdb Master TSDB class object
    * @param query The query from Netty
    */
+  @SuppressWarnings("unchecked")
   public void execute(final TSDB tsdb, final HttpQuery query) {
     final String content = query.request().getContent()
         .toString(CharsetUtil.UTF_8);
@@ -83,7 +84,7 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
 
     // see if we have a specific format
     if (!format.isEmpty() && format.equals("collectd")){
-      FormatCollectd.parseMetrics(content, ms, json);
+      new FormatCollectd(tsdb).parseMetrics(content, ms, json);
     }
     // if the content starts with a bracket, we have an array of metrics
     else if (content.subSequence(0, 1).equals("[")) {

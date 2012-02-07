@@ -26,12 +26,11 @@ import org.jboss.netty.handler.codec.http.HttpChunkAggregator;
 import org.jboss.netty.handler.codec.http.HttpRequestDecoder;
 import org.jboss.netty.handler.codec.http.HttpResponseEncoder;
 
-import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
 
 /**
- * Creates a newly configured {@link ChannelPipeline} for a new channel.
- * This class is supposed to be a singleton.
+ * Creates a newly configured {@link ChannelPipeline} for a new channel. This
+ * class is supposed to be a singleton.
  */
 public final class PipelineFactory implements ChannelPipelineFactory {
 
@@ -48,17 +47,21 @@ public final class PipelineFactory implements ChannelPipelineFactory {
   /** Stateless handler for RPCs. */
   private final RpcHandler rpchandler;
 
+  /** The {@code TSDB} instance we belong to */
+  private final TSDB tsdb;
+
   /**
    * Constructor.
    * @param tsdb The TSDB to use.
    */
   public PipelineFactory(final TSDB tsdb) {
+    this.tsdb = tsdb;
     this.rpchandler = new RpcHandler(tsdb);
   }
 
   @Override
   public ChannelPipeline getPipeline() throws Exception {
-   final ChannelPipeline pipeline = pipeline();
+    final ChannelPipeline pipeline = pipeline();
 
     pipeline.addLast("connmgr", connmgr);
     pipeline.addLast("detect", HTTP_OR_RPC);
@@ -66,18 +69,17 @@ public final class PipelineFactory implements ChannelPipelineFactory {
   }
 
   /**
-   * Dynamically changes the {@link ChannelPipeline} based on the request.
-   * If a request uses HTTP, then this changes the pipeline to process HTTP.
+   * Dynamically changes the {@link ChannelPipeline} based on the request. If a
+   * request uses HTTP, then this changes the pipeline to process HTTP.
    * Otherwise, the pipeline is changed to processes an RPC.
    */
   final class DetectHttpOrRpc extends FrameDecoder {
 
     @Override
     protected Object decode(final ChannelHandlerContext ctx,
-                            final Channel chan,
-                            final ChannelBuffer buffer) throws Exception {
-      if (buffer.readableBytes() < 1) {  // Yes sometimes we can be called
-        return null;                     // with an empty buffer...
+        final Channel chan, final ChannelBuffer buffer) throws Exception {
+      if (buffer.readableBytes() < 1) { // Yes sometimes we can be called
+        return null; // with an empty buffer...
       }
 
       final int firstbyte = buffer.getUnsignedByte(buffer.readerIndex());
@@ -87,11 +89,12 @@ public final class PipelineFactory implements ChannelPipelineFactory {
       // so use this as a cheap way to differentiate the two.
       if ('A' <= firstbyte && firstbyte <= 'Z') {
         pipeline.addLast("decoder", new HttpRequestDecoder());
-        pipeline.addLast("aggregator", new HttpChunkAggregator(Const.CHUNK_SIZE));
+        pipeline.addLast("aggregator", new HttpChunkAggregator(tsdb.getConfig()
+            .httpChunkSize()));
         pipeline.addLast("encoder", new HttpResponseEncoder());
       } else {
-        pipeline.addLast("framer",
-                         new DelimiterBasedFrameDecoder(1024, DELIMITERS));
+        pipeline.addLast("framer", new DelimiterBasedFrameDecoder(1024,
+            DELIMITERS));
         pipeline.addLast("encoder", ENCODER);
         pipeline.addLast("decoder", DECODER);
       }

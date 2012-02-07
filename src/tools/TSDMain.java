@@ -25,9 +25,8 @@ import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.hbase.async.HBaseClient;
 
 import net.opentsdb.BuildData;
-import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.core.Configuration;
+import net.opentsdb.core.Config;
 import net.opentsdb.tsd.PipelineFactory;
 
 /**
@@ -95,8 +94,8 @@ final class TSDMain {
     log.info(BuildData.buildString());
 
     // try to load default config
-    final boolean loaded_config = Configuration.loadConfig();
-
+    Config config = new Config();
+    
     try {
       System.in.close(); // Release a FD we don't need.
     } catch (Exception e) {
@@ -113,37 +112,40 @@ final class TSDMain {
         "Directory under which to cache result of requests.");
     argp.addOption("--flush-interval", "MSEC",
         "Maximum time for which a new data point can be buffered"
-            + " (default: " + Const.FLUSH_INTERVAL + ").");
+            + " (default: " + config.flushInterval() + ").");
     CliOptions.addAutoMetricFlag(argp);
     CliOptions.addVerbose(argp);
     args = CliOptions.parse(argp, args);
-    if (!loaded_config
+    
+    // load config if the user specified one
+    final String config_file = argp.get("--configfile", "");
+    if (!config_file.isEmpty())
+      config.loadConfig(config_file);
+    else
+      config.loadConfig();
+    
+    if ((config.httpStaticRoot().isEmpty() || config.cacheDirectory().isEmpty())
         && (args == null || !argp.has("--port") || !argp.has("--staticroot") || !argp
             .has("--cachedir"))) {
-      usage(argp, "Invalid usage.", 1);
+      usage(argp, "Invalid usage. Missing required arguments", 1);
     } else if (args.length != 0) {
       usage(argp, "Too many arguments.", 2);
     }
     args = null; // free().
 
-    // load config if the user specified one
-    final String config_file = argp.get("--configfile", "");
-    if (!config_file.isEmpty())
-      Configuration.loadConfig(config_file);
-
     // load CLI overloads
-    argp.overloadConfigs();
+    argp.overloadConfigs(config);
     
     // dump the configuration 
-    log.debug(Configuration.dumpConfiguration(false));
+    log.debug(config.dumpConfiguration(false));
 
     // check to make sure the directories are read/writable where appropriate
     String error = checkDirectory(
-        Configuration.getString("tsd.staticroot", ""), DONT_CREATE,
+        config.httpStaticRoot(), DONT_CREATE,
         !MUST_BE_WRITEABLE);
     if (!error.isEmpty())
       usage(argp, "[tsd.staticroot] " + error, 3);
-    error = checkDirectory(Configuration.getString("tsd.cachedir", ""),
+    error = checkDirectory(config.cacheDirectory(),
         CREATE_IF_NEEDED, MUST_BE_WRITEABLE);
     if (!error.isEmpty())
       usage(argp, "[tsd.cachdir] " + error, 3);
@@ -153,34 +155,26 @@ final class TSDMain {
         Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
     
     // setup hbase client
-    final HBaseClient client = CliOptions.clientFromOptions(argp);
+    final HBaseClient client = CliOptions.clientFromOptions(config);
     
     try {
       // Make sure we don't even start if we can't find out tables.
-      final String table = Configuration.getString("tsd.table",
-          Const.HBASE_TABLE);
-      final String uidtable = Configuration.getString("tsd.uidtable",
-          Const.HBASE_UIDTABLE);
-      client.ensureTableExists(table).joinUninterruptibly();
-      client.ensureTableExists(uidtable).joinUninterruptibly();
+      client.ensureTableExists(config.tsdTable()).joinUninterruptibly();
+      client.ensureTableExists(config.tsdUIDTable()).joinUninterruptibly();
 
-      client.setFlushInterval(Configuration.getShort("tsd.flush.interval",
-          Const.FLUSH_INTERVAL, (short) 1, Short.MAX_VALUE));
+      client.setFlushInterval((short)config.flushInterval());
 
-      final TSDB tsdb = new TSDB(client, table, uidtable);
+      final TSDB tsdb = new TSDB(client, config);
       registerShutdownHook(tsdb);
       final ServerBootstrap server = new ServerBootstrap(factory);
 
       // setup the network sockets
       server.setPipelineFactory(new PipelineFactory(tsdb));
-      server.setOption("child.tcpNoDelay", Configuration.getBoolean(
-          "tsd.network.tcpnodelay", Const.NETWORK_TCP_NODELAY));
-      server.setOption("child.keepAlive", Configuration.getBoolean(
-          "tsd.network.keepalive", Const.NETWORK_KEEPALIVE));
-      server.setOption("reuseAddress", Configuration.getBoolean(
-          "tsd.network.reuseaddress", Const.NETWORK_REUSEADDRESS));
+      server.setOption("child.tcpNoDelay", config.networkTCPNoDelay());
+      server.setOption("child.keepAlive", config.networkKeepalive());
+      server.setOption("reuseAddress", config.networkReuseAddress());
       final InetSocketAddress addr = new InetSocketAddress(
-          Configuration.getInt("tsd.network.port", Const.NETWORK_PORT));
+          config.networkPort());
       
       // start the server
       server.bind(addr);

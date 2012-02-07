@@ -14,42 +14,20 @@ package net.opentsdb.tsd;
 
 import java.io.IOException;
 
-import net.opentsdb.core.Configuration;
 import net.opentsdb.core.TSDB;
 
 /** Implements the "/s" endpoint to serve static files. */
 final class StaticFileRpc implements HttpRpc {
 
-  /**
-   * The path to the directory where to find static files
-   * (for the {@code /s} URLs).
-   */
-  private final String staticroot;
-
-  /**
-   * Constructor.
-   */
-  public StaticFileRpc() {
-    String temp = Configuration.getString("tsd.staticroot", "");
-    
-    // make sure the end has a slash
-    if (System.getProperty("os.name").contains("Windows") 
-        && !temp.endsWith("\\"))
-      temp += "\\";
-    else if (!temp.endsWith("/"))
-      temp += "/";
-    
-    staticroot = temp;
-  }
-
   public void execute(final TSDB tsdb, final HttpQuery query)
-    throws IOException {
+      throws IOException {
     final String uri = query.request().getUri();
     if ("/favicon.ico".equals(uri)) {
-      query.sendFile(staticroot + "/favicon.ico", 31536000 /*=1yr*/);
+      query.sendFile(tsdb.getConfig().httpStaticRoot() + "/favicon.ico",
+          31536000 /* =1yr */);
       return;
     }
-    if (uri.length() < 3) {  // Must be at least 3 because of the "/s/".
+    if (uri.length() < 3) { // Must be at least 3 because of the "/s/".
       throw new BadRequestException("URI too short <code>" + uri + "</code>");
     }
     // Cheap security check to avoid directory traversal attacks.
@@ -59,7 +37,8 @@ final class StaticFileRpc implements HttpRpc {
     }
     final int questionmark = uri.indexOf('?', 3);
     final int pathend = questionmark > 0 ? questionmark : uri.length();
-    query.sendFile(staticroot + uri.substring(3, pathend),
-                   uri.contains("nocache") ? 0 : 31536000 /*=1yr*/);
+    query.sendFile(
+        tsdb.getConfig().httpStaticRoot() + uri.substring(3, pathend),
+        uri.contains("nocache") ? 0 : 31536000 /* =1yr */);
   }
 }

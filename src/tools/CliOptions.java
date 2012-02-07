@@ -17,10 +17,8 @@ import java.util.HashMap;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
-import ch.qos.logback.core.util.StatusPrinter;
 
-import net.opentsdb.core.Configuration;
-import net.opentsdb.core.Const;
+import net.opentsdb.core.Config;
 
 import org.slf4j.LoggerFactory;
 
@@ -133,15 +131,19 @@ final class CliOptions {
     }
   }
 
-  static HBaseClient clientFromOptions(final ArgP argp) {
-    final String zkbasedir = Configuration.getString("tsd.zkbasedir", "");
+  /**
+   * Creates a new HBaseClient object using settings from the 
+   * configuration instance
+   * @param config Configuration instance to use
+   * @return A reference to an HBaseClient
+   */
+  static HBaseClient clientFromOptions(final Config config) {
+    final String zkbasedir = config.zookeeperBaseDirectory();
 
     if (zkbasedir.isEmpty())
-      return new HBaseClient(Configuration.getString("tsd.zkquorum",
-          Const.ZKQUORUM));
+      return new HBaseClient(config.zookeeperQuorum());
     else
-      return new HBaseClient(Configuration.getString("tsd.zkquorum",
-          Const.ZKQUORUM), zkbasedir);
+      return new HBaseClient(config.zookeeperQuorum(), zkbasedir);
   }
 
 }
