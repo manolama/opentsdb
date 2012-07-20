@@ -14,6 +14,7 @@ package net.opentsdb.tsd;
 
 import java.util.HashMap;
 
+
 /**
  * Provides for a JSON-RPC style error response for use in the API calls
  */
@@ -49,7 +50,7 @@ final class JsonRpcError {
     nodes.put("message", message);
     main_node.put("error", nodes);
 
-    JsonHelper json = new JsonHelper(main_node);
+    JSON_HTTP json = new JSON_HTTP(main_node);
     String response = json.getJsonString();
     if (json.getError().isEmpty())
       return response;

@@ -61,7 +61,7 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
   public void execute(final TSDB tsdb, final HttpQuery query) {
     final String content = query.request().getContent()
         .toString(CharsetUtil.UTF_8);
-    final String format = query.getQueryStringParam("format");
+    final String format = (query.getQueryStringParam("format") != null ? query.getQueryStringParam("format") : "");
     ArrayList<Metric> ms = new ArrayList<Metric>();
     int success = 0;
     int fail = 0;
@@ -80,7 +80,7 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
       jsonp = query.getQueryStringParam("json");
 
     // setup a parser
-    JsonHelper json = new JsonHelper();
+    JSON_HTTP json = new JSON_HTTP();
 
     // see if we have a specific format
     if (!format.isEmpty() && format.equals("collectd")){
@@ -88,14 +88,16 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
     }
     // if the content starts with a bracket, we have an array of metrics
     else if (content.subSequence(0, 1).equals("[")) {
-      final TypeReference<ArrayList<Metric>> typeRef = new TypeReference<ArrayList<Metric>>() {
-      };
+      final TypeReference<ArrayList<Metric>> typeRef = new TypeReference<ArrayList<Metric>>() {};
       if (json.parseObject(content, typeRef)){
         ms = (ArrayList<Metric>) json.getObject();
+      }else{
+        LOG.error("Couldn't parse JSON content");
+        LOG.trace(content);
       }
     } else {
       // otherwise we have a single metric (hopefully)
-      json = new JsonHelper(new Metric());
+      json = new JSON_HTTP(new Metric());
       if (json.parseObject(content))
         ms.add((Metric) json.getObject());
     }
@@ -176,7 +178,7 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
       response.put("errors", errors);
 
     // send the response
-    json = new JsonHelper(response);
+    json = new JSON_HTTP(response);
     final String reply = json.getJsonString();
     if (reply.isEmpty()){
       jerror = new JsonRpcError("Error generating resposne JSON", 500);

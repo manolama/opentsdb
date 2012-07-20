@@ -183,7 +183,7 @@ public class GnuGraphEmitter extends DataEmitter {
    */
   public final HttpCacheEntry getCacheData(){
  // now we have all the metrics stored, serialize and return
-    JsonHelper json = new JsonHelper(this.results);
+    JSON_HTTP json = new JSON_HTTP(this.results);
     String response = jsonp.isEmpty() ? json.getJsonString() : json
         .getJsonPString(jsonp);
     

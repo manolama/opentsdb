@@ -66,11 +66,11 @@ public final class TSDB {
   final byte[] table;
 
   /** Unique IDs for the metric names. */
-  final UniqueId metrics;
+  public final UniqueId metrics;
   /** Unique IDs for the tag names. */
-  final UniqueId tag_names;
+  public final UniqueId tag_names;
   /** Unique IDs for the tag values. */
-  final UniqueId tag_values;
+  public final UniqueId tag_values;
 
   /**
    * Row keys that need to be compacted.
@@ -80,6 +80,32 @@ public final class TSDB {
    */
   private final CompactionQueue compactionq;
 
+  /**
+   * DEPRECATED Constructor
+   * Please use the constructor with the Config class instead
+   * @param client The HBase client to use.
+   * @param timeseries_table The name of the HBase table where time series
+   * data is stored.
+   * @param uniqueids_table The name of the HBase table where the unique IDs
+   * are stored.
+   */
+  public TSDB(final HBaseClient client,
+              final String timeseries_table,
+              final String uniqueids_table) {
+    this.client = client;
+    this.config = new Config();
+    table = timeseries_table.getBytes();
+    this.config.tsdTable(timeseries_table);
+    this.config.tsdUIDTable(uniqueids_table);
+    
+    final byte[] uidtable = uniqueids_table.getBytes();
+    metrics = new UniqueId(client, uidtable, METRICS_QUAL, METRICS_WIDTH);
+    tag_names = new UniqueId(client, uidtable, TAG_NAME_QUAL, TAG_NAME_WIDTH);
+    tag_values = new UniqueId(client, uidtable, TAG_VALUE_QUAL,
+                              TAG_VALUE_WIDTH);
+    compactionq = new CompactionQueue(this);
+  }
+  
   /**
    * Constructor.
    * @param client The HBase client to use.
@@ -356,6 +382,7 @@ public final class TSDB {
   public final SortedMap<String, Long> getTagValues(){
     return this.tag_values.getMap();
   }
+  
   /**
    * Given a prefix search, returns a few matching metric names.
    * @param search A prefix to search.

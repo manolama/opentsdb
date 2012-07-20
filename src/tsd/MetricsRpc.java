@@ -30,16 +30,16 @@ class MetricsRpc implements HttpRpc {
     if (!nocache && query.getCache().readCache(query_hash, query)){
       return;
     }
-    final JsonHelper response;
+    final JSON_HTTP response;
     
     // TEMP STUB
-    final String jsonp = JsonHelper.getJsonPFunction(query);
+    final String jsonp = JSON_HTTP.getJsonPFunction(query);
     if (query.hasQueryStringParam("tagk"))
-      response = new JsonHelper(tsdb.getTagNames());
+      response = new JSON_HTTP(tsdb.getTagNames());
     else if (query.hasQueryStringParam("tagv"))
-      response = new JsonHelper(tsdb.getTagValues());
+      response = new JSON_HTTP(tsdb.getTagValues());
     else
-      response = new JsonHelper(tsdb.getMetrics());
+      response = new JSON_HTTP(tsdb.getMetrics());
     
     // build our cache object, store and reply
     HttpCacheEntry entry = new HttpCacheEntry(query_hash, 

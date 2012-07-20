@@ -118,7 +118,7 @@ class JsonEmitter extends DataEmitter {
     }
     
     // now we have all the metrics stored, serialize and return
-    JsonHelper json = new JsonHelper(this.metrics);
+    JSON_HTTP json = new JSON_HTTP(this.metrics);
     String response = jsonp.isEmpty() ? json.getJsonString() : json
         .getJsonPString(jsonp);
     

@@ -25,6 +25,7 @@ import net.opentsdb.core.TSDB;
 import org.codehaus.jackson.annotate.JsonAnySetter;
 import org.codehaus.jackson.annotate.JsonAutoDetect;
 import org.codehaus.jackson.annotate.JsonIgnore;
+import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 import org.codehaus.jackson.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +39,7 @@ import org.slf4j.LoggerFactory;
  * "disk","plugin_instance":"sdb","type":"disk_octets","type_instance":""}
  */
 @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
+@JsonIgnoreProperties(ignoreUnknown = true)
 class FormatCollectd {
   private static final Logger LOG = LoggerFactory
       .getLogger(FormatCollectd.class);
@@ -74,6 +76,13 @@ class FormatCollectd {
   private String type = "";
   /** Alternative instance name */
   private String type_instance = "";
+
+  /**
+   * Empty constructor necessary for Jackson deserialization
+   */
+  public FormatCollectd(){
+    
+  }
   
   /**
    * Default Constructor to assign the TSD
@@ -110,17 +119,26 @@ class FormatCollectd {
    * @return True if parsing was successful, false if there was an error
    */
   public final boolean parseMetrics(final String content,
-      final ArrayList<Metric> metrics, final JsonHelper json) {
+      final ArrayList<Metric> metrics, final JSON_HTTP json) {
     final TypeReference<ArrayList<FormatCollectd>> typeRef = 
       new TypeReference<ArrayList<FormatCollectd>>() {
     };
 
+    
     if (json.parseObject(content, typeRef)) {
       @SuppressWarnings("unchecked")
       ArrayList<FormatCollectd> mets = (ArrayList<FormatCollectd>) json
           .getObject();
+      if (mets == null || mets.size() < 1)
+        return false;
+      
       for (FormatCollectd cd : mets) {
-        for (Metric m : cd.getMetrics())
+        Metric ms[] = cd.getMetrics();
+        if (ms == null || ms.length < 1){
+          LOG.warn("Unable to extract metrics");
+          continue;
+        }
+        for (Metric m : ms)
           metrics.add(m);
       }
     } else {
@@ -148,7 +166,9 @@ class FormatCollectd {
       LOG.error("Missing plugin name");
       return null;
     }
-    if (values.size() != dstypes.size() || dstypes.size() != dsnames.size()) {
+    // in older versions, we don't have dstypes
+    if (dstypes.size() > 0 && (values.size() != dstypes.size() || 
+        dstypes.size() != dsnames.size())) {
       LOG.error("One of the array sizes is off!");
       // TODO log which one is off
       return null;
@@ -167,11 +187,11 @@ class FormatCollectd {
       StringBuilder metric = new StringBuilder(
           plugin_overrides.containsKey(plugin) ? plugin_overrides.get(plugin)
               : plugin);
-      if (!dsnames.get(i).equals(plugin)) {
+      if (dsnames.size() > 0 && !dsnames.get(i).equals(plugin)) {
         metric.append(".");
         metric.append(dsnames.get(i));
       }
-      if (!type.isEmpty() && !dsnames.get(i).equals(type)
+      if (dsnames.size() > 0 && !type.isEmpty() && !dsnames.get(i).equals(type)
           && !plugin.equals(type)) {
         metric.append(".");
         metric.append(type);

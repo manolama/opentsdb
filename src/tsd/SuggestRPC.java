@@ -38,7 +38,7 @@ final class SuggestRPC implements HttpRpc {
     }
     
     // build up the suggestion
-    final String jsonp = JsonHelper.getJsonPFunction(query);
+    final String jsonp = JSON_HTTP.getJsonPFunction(query);
     final String type = query.getRequiredQueryStringParam("type");
     final String q = query.getQueryStringParam("q");
     if (q == null) {
@@ -54,7 +54,7 @@ final class SuggestRPC implements HttpRpc {
     } else {
       throw new BadRequestException("Invalid 'type' parameter:" + type);
     }
-    final JsonHelper response = new JsonHelper(suggestions);
+    final JSON_HTTP response = new JSON_HTTP(suggestions);
     
     // build our cache object, store and reply
     HttpCacheEntry entry = new HttpCacheEntry(query_hash, 

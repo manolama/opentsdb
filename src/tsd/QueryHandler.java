@@ -101,7 +101,7 @@ public class QueryHandler implements HttpRpc {
     
     // setup the proper emitter object
     DataEmitter emitter = null;
-    if (JsonHelper.getJsonRequested(query))
+    if (JSON_HTTP.getJsonRequested(query))
       emitter = new JsonEmitter(start_time, end_time, query.getQueryString(), query_hash);
     else if (query.hasQueryStringParam("ascii"))
       emitter = new AsciiEmitter(start_time, end_time, query.getQueryString(), query_hash);

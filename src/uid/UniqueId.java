@@ -21,6 +21,8 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
+import net.opentsdb.meta.MetaData;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -90,6 +92,8 @@ public final class UniqueId implements UniqueIdInterface {
   /** Last time this map was loaded in it's entirety */
   private long last_full_load = 0;
   
+  public final MetaData metadata;
+  
   /**
    * Constructor.
    * @param client The HBase client to use.
@@ -111,8 +115,18 @@ public final class UniqueId implements UniqueIdInterface {
       throw new IllegalArgumentException("Invalid width: " + width);
     }
     this.idWidth = (short) width;
+    this.metadata = new MetaData(client, table, false, kind);
   }
 
+  public static long IDtoLong(byte[] id){
+    long value = 0;
+    for (int i = 0; i < id.length; i++)
+    {
+       value += ((long) id[i] & 0xffL) << (8 * i);
+    }
+    return value;
+  }
+  
   /** The number of times we avoided reading from HBase thanks to the cache. */
   public int cacheHits() {
     return cacheHits;
@@ -430,8 +444,9 @@ public final class UniqueId implements UniqueIdInterface {
    */
   public boolean loadAll(){
     // determine if we need to load yet
-    if ((System.currentTimeMillis() / 1000) > this.last_full_load + RELOAD_INTERVAL)
+    if ((System.currentTimeMillis() / 1000) < this.last_full_load + RELOAD_INTERVAL)
       return true;
+
     this.last_full_load = System.currentTimeMillis() / 1000;
     
     final Scanner scanner = getFullScanner();
@@ -460,10 +475,12 @@ public final class UniqueId implements UniqueIdInterface {
           }
         }
       }
+
       return true;
     } catch (HBaseException e) {
       throw e;
     } catch (Exception e) {
+      e.printStackTrace();
       throw new RuntimeException("Should never be here", e);
     }
   }
@@ -483,6 +500,8 @@ public final class UniqueId implements UniqueIdInterface {
       else
         sorted.put(entry.getKey(), Bytes.getLong(entry.getValue()) + 1);
     }
+    if (sorted.size() < 1)
+      LOG.warn("No metrics found in HBase");
     return sorted;
   }
   

@@ -53,7 +53,7 @@ final class StatsRPC implements TelnetRpc, HttpRpc {
    * @param query HTTP query to respond to
    */
   public void execute(final TSDB tsdb, final HttpQuery query) {
-    final boolean json = JsonHelper.getJsonRequested(query);
+    final boolean json = JSON_HTTP.getJsonRequested(query);
     final StringBuilder buf = json ? null : new StringBuilder(2048);
     final ArrayList<String> stats = json ? new ArrayList<String>(64) : null;
     final StatsCollector collector = new StatsCollector("tsd") {
@@ -69,8 +69,8 @@ final class StatsRPC implements TelnetRpc, HttpRpc {
     doCollectStats(tsdb, collector);
     // handle JSON
     if (json) {
-      final String jsonp = JsonHelper.getJsonPFunction(query);
-      final JsonHelper response = new JsonHelper(stats);
+      final String jsonp = JSON_HTTP.getJsonPFunction(query);
+      final JSON_HTTP response = new JSON_HTTP(stats);
       query.sendReply(jsonp.isEmpty() ? response.getJsonString() : response
           .getJsonPString(jsonp));
     } else {

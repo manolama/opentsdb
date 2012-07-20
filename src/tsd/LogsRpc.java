@@ -32,9 +32,9 @@ final class LogsRpc implements HttpRpc {
   public void execute(final TSDB tsdb, final HttpQuery query) {
     LogIterator logmsgs = new LogIterator();
     // see if the user requested json
-    if (JsonHelper.getJsonRequested(query)) {
-      final String jsonp = JsonHelper.getJsonPFunction(query);
-      final JsonHelper response = new JsonHelper(logmsgs);
+    if (JSON_HTTP.getJsonRequested(query)) {
+      final String jsonp = JSON_HTTP.getJsonPFunction(query);
+      final JSON_HTTP response = new JSON_HTTP(logmsgs);
       query.sendReply(jsonp.isEmpty() ? response.getJsonString() 
           : response.getJsonPString(jsonp));
     } else if (query.hasQueryStringParam("level")) {

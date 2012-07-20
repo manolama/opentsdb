@@ -37,8 +37,8 @@ final class AggregatorsRPC implements HttpRpc {
       return;
     }
     
-    final String jsonp = JsonHelper.getJsonPFunction(query);
-    final JsonHelper response = new JsonHelper(Aggregators.set());
+    final String jsonp = JSON_HTTP.getJsonPFunction(query);
+    final JSON_HTTP response = new JSON_HTTP(Aggregators.set());
  
     // build our cache object, store and reply
     HttpCacheEntry entry = new HttpCacheEntry(query_hash, 

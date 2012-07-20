@@ -58,8 +58,8 @@ final class VersionRPC implements TelnetRpc, HttpRpc {
     }
 
     // Send in JSON if requested
-    if (JsonHelper.getJsonRequested(query)) {
-      final String jsonp = JsonHelper.getJsonPFunction(query);
+    if (JSON_HTTP.getJsonRequested(query)) {
+      final String jsonp = JSON_HTTP.getJsonPFunction(query);
       HashMap<String, Object> version = new HashMap<String, Object>();
       version.put("short_revision", BuildData.short_revision);
       version.put("full_revision", BuildData.full_revision);
@@ -68,7 +68,7 @@ final class VersionRPC implements TelnetRpc, HttpRpc {
       version.put("user", BuildData.user);
       version.put("host", BuildData.host);
       version.put("repo", BuildData.repo);
-      final JsonHelper response = new JsonHelper(version);
+      final JSON_HTTP response = new JSON_HTTP(version);
 
       // build our cache object, store and reply
       HttpCacheEntry entry = new HttpCacheEntry(query_hash,

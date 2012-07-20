@@ -365,7 +365,7 @@ final class HttpQuery {
    * @param explain The string describing why the request is bad.
    */
   public void badRequest(final String explain) {
-    if (JsonHelper.getJsonRequested(this)) {
+    if (JSON_HTTP.getJsonRequested(this)) {
     	sendReply(new JsonRpcError(explain, 404).getJSON());
     } else if (hasQueryStringParam("png")) {
       sendAsPNG(HttpResponseStatus.BAD_REQUEST, explain, 3600);
