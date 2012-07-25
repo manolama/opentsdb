@@ -39,6 +39,7 @@ import org.jboss.netty.channel.ChannelFutureListener;
 import org.jboss.netty.channel.DefaultFileRegion;
 import org.jboss.netty.handler.codec.http.DefaultHttpResponse;
 import org.jboss.netty.handler.codec.http.HttpHeaders;
+import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.jboss.netty.handler.codec.http.HttpVersion;
@@ -1028,6 +1029,27 @@ final class HttpQuery {
       + ')';
   }
 
+  // examines the method type AND the query string
+  public HttpMethod getMethod(){
+    if (this.request().getMethod().compareTo(HttpMethod.GET) == 0){
+      if (hasQueryStringParam("method")){
+        final String method = this.getQueryStringParam("method");
+        if (method.toUpperCase().compareTo("GET") == 0)
+          return this.request().getMethod();
+        else if (method.toUpperCase().compareTo("POST") == 0)
+          return HttpMethod.POST;
+        else if (method.toUpperCase().compareTo("DELETE") == 0)
+          return HttpMethod.DELETE;
+        else if (method.toUpperCase().compareTo("PUT") == 0)
+          return HttpMethod.PUT;
+        else
+          return HttpMethod.GET;
+      }
+      return HttpMethod.GET;
+    }else
+      return this.request().getMethod();
+  }
+  
   // ---------------- //
   // Logging helpers. //
   // ---------------- //

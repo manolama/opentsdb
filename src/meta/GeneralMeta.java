@@ -20,14 +20,17 @@ import org.slf4j.LoggerFactory;
  * each write if anything changes
  */
 public class GeneralMeta {
+  public enum Meta_Type { INVALID, METRICS, TAG, VALUE, TIMESERIES };
+  
   protected static final Logger LOG = LoggerFactory.getLogger(GeneralMeta.class);
   
-  protected long uid = 0;
+  protected String uid = "";
+  protected Meta_Type type = Meta_Type.INVALID;
   protected String name = "";
   protected String display_name = "";
   protected String description = "";
   protected String notes = "";
-  protected int created = 0; 
+  protected long created = 0; 
   protected Map<String, String> custom = null;
 
   // change flags used to determine what the user wants to modify
@@ -40,7 +43,12 @@ public class GeneralMeta {
   }
   
   public GeneralMeta(byte[] id){
-    this.uid = UniqueId.IDtoLong(id);
+    this.uid = UniqueId.IDtoString(id);
+  }
+  
+  public GeneralMeta(byte[] id, Meta_Type type){
+    this.uid = UniqueId.IDtoString(id);
+    this.type = type;
   }
   
   // returns the contents as a JSON string
@@ -67,15 +75,19 @@ public class GeneralMeta {
   }
   
   // **** GETTERS AND SETTERS ****
-  public long getUID(){
+  public String getUID(){
     return this.uid;
   }
 
+  public Meta_Type getType(){
+    return this.type;
+  }
+  
   public String getName(){
     return this.name;
   }
   
-  public String getDisplay_Name(){
+  public String getDisplay_name(){
     return this.display_name;
   }
   
@@ -87,7 +99,7 @@ public class GeneralMeta {
     return this.notes;
   }
   
-  public int getCreated(){
+  public long getCreated(){
     return this.created;
   }
   
@@ -95,15 +107,19 @@ public class GeneralMeta {
     return this.custom;
   }
   
-  public void setUID(final long u){
+  public void setUID(final String u){
     this.uid = u;
+  }
+  
+  public void setType(Meta_Type t){
+    this.type = t;
   }
   
   public void setName(final String n){
     this.name = n;
   }
   
-  public void setDisplay_Name(final String d){
+  public void setDisplay_name(final String d){
     this.display_name = d;
     this.c_display_name = true;
   }
@@ -118,7 +134,7 @@ public class GeneralMeta {
     this.c_notes = true;
   }
   
-  public void setCreated(final int c){
+  public void setCreated(final long c){
     this.created = c;
   }
   

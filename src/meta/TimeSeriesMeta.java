@@ -17,7 +17,7 @@ import org.codehaus.jackson.map.annotate.JsonSerialize;
 final public class TimeSeriesMeta {
 
   // stored values
-  private long uid = 0;
+  private String uid = "";
   private int retention = 0;
   private int max = 0;
   private int min = 0;
@@ -47,7 +47,7 @@ final public class TimeSeriesMeta {
   }
   
   public TimeSeriesMeta(byte[] id){
-    this.uid = UniqueId.IDtoLong(id);
+    this.uid = UniqueId.IDtoString(id);
   }
   
   // returns the entire object as a JSON string
@@ -89,7 +89,7 @@ final public class TimeSeriesMeta {
   }
   
   // **** GETTERS AND SETTERS ****
-  public long getUID(){
+  public String getUID(){
     return this.uid;
   }
   
@@ -141,7 +141,7 @@ final public class TimeSeriesMeta {
     return this.tags;
   }
   
-  public void setUID(final long u){
+  public void setUID(final String u){
     this.uid = u;
   }
   

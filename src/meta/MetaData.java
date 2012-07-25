@@ -4,6 +4,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDStore;
+import net.opentsdb.meta.GeneralMeta.Meta_Type;
 import net.opentsdb.uid.UniqueId;
 
 import org.hbase.async.HBaseClient;
@@ -73,22 +74,24 @@ public class MetaData {
       return new GeneralMeta(id);
   }
 
-  public Boolean putMeta(final byte[] id, final Object meta){
+  public Boolean putMeta(final Object meta){
     if (meta == null){
       LOG.error("Null value for meta object");
       return false;
     }
-    long uid = UniqueId.IDtoLong(id);
+
+    final String uid;
+    // check for uid
+    if (this.is_ts)
+      uid = ((TimeSeriesMeta)meta).getUID();
+    else
+      uid = ((GeneralMeta)meta).getUID();
+    if (uid.length() < 1){
+      LOG.error("Missing UID");
+      return false;
+    }
     
-    // check for uid (MAY not need)
-//    if (this.is_ts)
-//      uid = ((TimeSeriesMeta)meta).getUID();
-//    else
-//      uid = ((GeneralMeta)meta).getUID();
-//    if (uid < 1){
-//      LOG.error("Missing UID");
-//      return false;
-//    }
+    final byte[] id = UniqueId.StringtoID(uid);
     
     short attempt = 5;
     while (attempt-- > 0) {
@@ -120,10 +123,11 @@ public class MetaData {
         String json = "";      
         if (raw == null){
           // if nothing existed before, we'll store the user provided data
-          if (this.is_ts)
+          if (this.is_ts){    
             json = ((TimeSeriesMeta)meta).getJSON();
-          else
+          }else{
             json = ((GeneralMeta)meta).getJSON();
+          }
         }else{
           // otherwise, we will copy changes to the new meta entry
           if (this.is_ts){
@@ -134,7 +138,7 @@ public class MetaData {
               json = ((TimeSeriesMeta)meta).getJSON();
             }else{
               m = (TimeSeriesMeta)codec.getObject();
-              m.CopyChanges((TimeSeriesMeta)meta);
+              m = ((TimeSeriesMeta)meta).CopyChanges(m);
               json = m.getJSON();
             }
           }else{
@@ -142,10 +146,10 @@ public class MetaData {
             JSON codec = new JSON(m);
             if (!codec.parseObject(TSDStore.fromBytes(raw))){
               LOG.warn("Error parsing JSON from Hbase for ID [" + uid + "], replacing");
-              json = ((TimeSeriesMeta)meta).getJSON();
+              json = ((GeneralMeta)meta).getJSON();
             }else{
               m = (GeneralMeta)codec.getObject();
-              m.CopyChanges((GeneralMeta)meta);
+              m = ((GeneralMeta)meta).CopyChanges(m);
               json = m.getJSON();
             }
           }
@@ -171,7 +175,7 @@ public class MetaData {
     LOG.error("Failed to put the meta data");
     return false;
   }
-  
+
   // PRIVATES ---------------------------------------------------------
   
   private TimeSeriesMeta getTimeSeriesMetaFromHBase(final byte[] id) throws HBaseException {
@@ -193,19 +197,33 @@ public class MetaData {
   
   private GeneralMeta getGeneralMetaFromHBase(final byte[] id) throws HBaseException {
     final String cell = this.kind + "_meta";
+    final Meta_Type type;
+    if (this.kind.compareTo("metrics") == 0)
+      type = Meta_Type.METRICS;
+    else if (this.kind.compareTo("tagk") == 0)
+      type = Meta_Type.TAG;
+    else
+      type = Meta_Type.VALUE;
+    
     final byte[] raw_meta = storage.hbaseGet(id, TSDStore.toBytes("name"), 
         TSDStore.toBytes(cell));
     final String json = (raw_meta == null ? null : TSDStore.fromBytes(raw_meta));
     if (json == null)
-      // todo - log
-      return null;
+      return new GeneralMeta(id, type);
     
     JSON codec = new JSON(new GeneralMeta(id));
     if (codec.parseObject(json)){
-      return (GeneralMeta)codec.getObject();
+      final GeneralMeta meta = (GeneralMeta)codec.getObject();
+      if (this.kind.compareTo("metrics") == 0)
+        meta.setType(Meta_Type.METRICS);
+      else if (this.kind.compareTo("tagk") == 0)
+        meta.setType(Meta_Type.TAG);
+      else
+        meta.setType(Meta_Type.VALUE);
+      return meta;
     }
     // todo - log
-    return null;
+    return new GeneralMeta(id, type);
   }
 
 }

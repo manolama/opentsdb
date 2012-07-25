@@ -21,6 +21,9 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
+import javax.xml.bind.DatatypeConverter;
+
+import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaData;
 
 import org.slf4j.Logger;
@@ -118,13 +121,21 @@ public final class UniqueId implements UniqueIdInterface {
     this.metadata = new MetaData(client, table, false, kind);
   }
 
-  public static long IDtoLong(byte[] id){
-    long value = 0;
-    for (int i = 0; i < id.length; i++)
-    {
-       value += ((long) id[i] & 0xffL) << (8 * i);
+  // we need to pad so that we have a 3 byte ID
+  public static String IDtoString(final byte[] id){
+    String sid = DatatypeConverter.printHexBinary(id);
+    return sid;
+  }
+  
+  public static byte[] StringtoID(final String id){
+    // check padding
+    String sid = id;
+    if (sid.length() % 2 > 0)
+      sid = "0" + sid;
+    while (sid.length() < 6){
+      sid = "0" + sid;
     }
-    return value;
+    return DatatypeConverter.parseHexBinary(sid);
   }
   
   /** The number of times we avoided reading from HBase thanks to the cache. */
@@ -142,6 +153,10 @@ public final class UniqueId implements UniqueIdInterface {
     return nameCache.size() + idCache.size();
   }
 
+  public GeneralMeta getMeta(byte[] id){
+    return this.metadata.getGeneralMeta(id); 
+  }
+  
   public String kind() {
     return fromBytes(kind);
   }
@@ -374,6 +389,17 @@ public final class UniqueId implements UniqueIdInterface {
 
         addIdToCache(name, row);
         addNameToCache(row, name);
+        
+        // if we are a tag name or metrics ID, add a meta entry
+        if (this.kind().compareTo("metrics") == 0 ||
+            this.kind().compareTo("tagk") == 0){
+          GeneralMeta meta = new GeneralMeta();
+          meta.setUID(UniqueId.IDtoString(row));
+          meta.setCreated(System.currentTimeMillis() / 1000L);
+          meta.setName(name);
+          this.metadata.putMeta(meta);
+        }
+        
         return row;
       } finally {
         unlock(lock);
