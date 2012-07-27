@@ -17,6 +17,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.charset.Charset;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.HashMap;
@@ -57,39 +58,48 @@ import net.opentsdb.stats.StatsCollector;
  *
  * It makes it easier to provide a few utility methods to respond to the
  * requests.
+ * 
+ * The IO for the HTTP API is JSON but you can overload it with your own
+ * data format if necessary.
  */
-final class HttpQuery {
+class HttpQuery {
 
   private static final Logger LOG = LoggerFactory.getLogger(HttpQuery.class);
 
-  private static final String HTML_CONTENT_TYPE = "text/html; charset=UTF-8";
+  protected static final String HTML_CONTENT_TYPE = "text/html; charset=UTF-8";
 
   /**
    * Keep track of the latency of HTTP requests.
    */
-  private static final Histogram httplatency =
+  protected static final Histogram httplatency =
     new Histogram(16000, (short) 2, 100);
 
   /** When the query was started (useful for timing). */
-  private final long start_time = System.nanoTime();
+  protected final long start_time = System.nanoTime();
 
   /** The request in this HTTP query. */
-  private final HttpRequest request;
+  protected final HttpRequest request;
 
   /** The channel on which the request was received. */
-  private final Channel chan;
+  protected final Channel chan;
 
   /** Parsed query string (lazily built on first access). */
-  private Map<String, List<String>> querystring;
+  protected Map<String, List<String>> querystring;
 
   /** Deferred result of this query, to allow asynchronous processing.  */
-  private final Deferred<Object> deferred = new Deferred<Object>();
+  protected final Deferred<Object> deferred = new Deferred<Object>();
 
   /** The {@code TSDB} instance we belong to */
-  private final TSDB tsdb;
+  protected final TSDB tsdb;
   
   /** HTTP cache to store/read from */
-  private final HttpCache cache;
+  protected final HttpCache cache;
+  
+  protected String jsonp = "";
+  
+  protected String content_type = "";
+  
+  protected static final Charset CHARSET = Charset.forName("UTF-8");
   
   /**
    * Constructor.
@@ -102,6 +112,8 @@ final class HttpQuery {
     this.request = request;
     this.chan = chan;
     this.cache = cache;
+    this.jsonp = JSON_HTTP.getJsonPFunction(this);
+    
   }
 
   /**
@@ -138,6 +150,10 @@ final class HttpQuery {
     return (int) ((System.nanoTime() - start_time) / 1000000);
   }
 
+  public String getPostData(){
+    return this.request().getContent().toString(CHARSET);
+  }
+  
   /**
    * Returns the query string parameters passed in the URI.
    */
@@ -507,7 +523,7 @@ final class HttpQuery {
    */
   public void sendReply(final String buf) {
     sendBuffer(HttpResponseStatus.OK,
-               ChannelBuffers.copiedBuffer(buf, CharsetUtil.UTF_8));
+               ChannelBuffers.copiedBuffer(buf, CHARSET));
   }
 
   /**
@@ -530,6 +546,14 @@ final class HttpQuery {
 	  sendBuffer(status, ChannelBuffers.copiedBuffer(buf, CharsetUtil.UTF_8));
   }
 
+  public void sendError(final HttpResponseStatus status, final String buf) {
+    final JsonRpcError jerror = new JsonRpcError(buf, status.getCode());
+    this.content_type = "application/json";
+    sendBuffer(status, ChannelBuffers.copiedBuffer(
+        (this.jsonp.isEmpty() ? jerror.getJSON() : jerror.getJSONP(this.jsonp)), 
+        CHARSET));
+  }
+  
   /**
    * Sends the given message as a PNG image.
    * <strong>This method will block</strong> while image is being generated.
@@ -894,7 +918,9 @@ final class HttpQuery {
     }
     final DefaultHttpResponse response =
       new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
-    response.setHeader(HttpHeaders.Names.CONTENT_TYPE, guessMimeType(buf));
+    if (this.content_type.length() < 1)
+      this.content_type = guessMimeType(buf);
+    response.setHeader(HttpHeaders.Names.CONTENT_TYPE, this.content_type);
     // TODO(tsuna): Server, X-Backend, etc. headers.
     response.setContent(buf);
     final boolean keepalive = HttpHeaders.isKeepAlive(request);

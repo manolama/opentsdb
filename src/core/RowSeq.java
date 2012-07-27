@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
+import net.opentsdb.uid.UniqueId;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -232,6 +234,20 @@ final class RowSeq implements DataPoints {
     return RowKey.metricName(tsdb, key);
   }
 
+  public String getUID() {
+    // we need to strip the timestamp from the row key to get the
+    // UID of the metric
+    byte[] uid = new byte[this.key.length-4];
+    int x = 0;
+    for (int i=0; i<this.key.length; i++){
+      if (i < 3 || i > 6){
+        uid[x] = this.key[i];
+        x++;
+      }
+    }
+    return UniqueId.IDtoString(uid);
+  }
+  
   public Map<String, String> getTags() {
     return Tags.getTags(tsdb, key);
   }

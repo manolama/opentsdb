@@ -21,6 +21,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Groups multiple spans together and offers a dynamic "view" on them.
  * <p>
@@ -45,6 +48,8 @@ import java.util.NoSuchElementException;
  */
 final class SpanGroup implements DataPoints {
 
+  private static final Logger LOG = LoggerFactory.getLogger(SpanGroup.class);
+  
   /** Start time (UNIX timestamp in seconds) on 32 bits ("unsigned" int). */
   private final long start_time;
 
@@ -176,6 +181,10 @@ final class SpanGroup implements DataPoints {
     return spans.isEmpty() ? "" : spans.get(0).metricName();
   }
 
+  public String getUID() {
+    return spans.isEmpty() ? "" : spans.get(0).getUID();
+  }
+  
   public Map<String, String> getTags() {
     if (tags == null) {
       computeTags();

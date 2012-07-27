@@ -95,7 +95,7 @@ public final class UniqueId implements UniqueIdInterface {
   /** Last time this map was loaded in it's entirety */
   private long last_full_load = 0;
   
-  public final MetaData metadata;
+  private final MetaData metadata;
   
   /**
    * Constructor.
@@ -153,10 +153,6 @@ public final class UniqueId implements UniqueIdInterface {
     return nameCache.size() + idCache.size();
   }
 
-  public GeneralMeta getMeta(byte[] id){
-    return this.metadata.getGeneralMeta(id); 
-  }
-  
   public String kind() {
     return fromBytes(kind);
   }
@@ -252,6 +248,17 @@ public final class UniqueId implements UniqueIdInterface {
     }
   }
 
+  public GeneralMeta getGeneralMeta(final byte[] id){
+    GeneralMeta meta = this.metadata.getGeneralMeta(id);
+    if (meta.getName().length() < 1)
+      meta.setName(this.getName(id));
+    return meta;
+  }
+  
+  public Boolean putMeta(final GeneralMeta meta){
+    return this.metadata.putMeta(meta);
+  }
+  
   public byte[] getOrCreateId(String name) throws HBaseException {
     short attempt = MAX_ATTEMPTS_ASSIGN_ID;
     HBaseException hbe = null;

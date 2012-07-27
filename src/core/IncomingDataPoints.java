@@ -22,13 +22,19 @@ import com.stumbleupon.async.Deferred;
 
 import org.hbase.async.Bytes;
 import org.hbase.async.PutRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import net.opentsdb.stats.Histogram;
+import net.opentsdb.tsd.QueryHandler;
+import net.opentsdb.uid.UniqueId;
 
 /**
  * Receives new data points and stores them in HBase.
  */
 final class IncomingDataPoints implements WritableDataPoints {
+  private static final Logger LOG = LoggerFactory.getLogger(IncomingDataPoints.class);
+  
   /** For how long to buffer edits when doing batch imports (in ms).  */
   private static final short DEFAULT_BATCH_IMPORT_BUFFER_INTERVAL = 5000;
 
@@ -316,6 +322,11 @@ final class IncomingDataPoints implements WritableDataPoints {
     return tsdb.metrics.getName(id);
   }
 
+  public String getUID(){
+    LOG.warn("Not implemented");
+    return "";
+  }
+  
   public Map<String, String> getTags() {
     return Tags.getTags(tsdb, row);
   }

@@ -70,6 +70,7 @@ class JsonEmitter extends DataEmitter {
         m.data = new ArrayList<MetricDP>();
   
         // copy meta info
+        m.setUID(datapoints.get(i).getUID());
         m.setMetric(datapoints.get(i).metricName());
         m.setTags(datapoints.get(i).getTags());
   

@@ -28,8 +28,12 @@ import org.hbase.async.HBaseClient;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
+import org.mortbay.log.Log;
 
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.meta.GeneralMeta;
+import net.opentsdb.meta.MetaData;
+import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
 
@@ -72,6 +76,8 @@ public final class TSDB {
   /** Unique IDs for the tag values. */
   public final UniqueId tag_values;
 
+  private final MetaData timeseries_meta;
+  
   /**
    * Row keys that need to be compacted.
    * Whenever we write a new data point to a row, we add the row key to this
@@ -104,6 +110,7 @@ public final class TSDB {
     tag_values = new UniqueId(client, uidtable, TAG_VALUE_QUAL,
                               TAG_VALUE_WIDTH);
     compactionq = new CompactionQueue(this);
+    timeseries_meta = new MetaData(client, uidtable, true, "name");
   }
   
   /**
@@ -126,6 +133,7 @@ public final class TSDB {
     tag_values = new UniqueId(client, uidtable, TAG_VALUE_QUAL,
                               TAG_VALUE_WIDTH);
     compactionq = new CompactionQueue(this);
+    timeseries_meta = new MetaData(client, uidtable, true, "name");
   }
 
   /** Number of cache hits during lookups involving UIDs. */
@@ -413,6 +421,44 @@ public final class TSDB {
    */
   public Config getConfig(){
     return this.config;
+  }
+  
+  public TimeSeriesMeta getTimeSeriesMeta(final byte[] id){
+    TimeSeriesMeta meta = this.timeseries_meta.getTimeSeriesMeta(id);
+    if (meta == null)
+      return new TimeSeriesMeta(id);
+    
+    // otherwise we need to get the general metas for metrics and tags
+    byte[] metricID = MetaData.getMetricID(id);
+    if (metricID == null)
+      Log.debug(String.format("Unable to get metric meta data for ID [%s]", 
+          UniqueId.IDtoString(id)));
+    else
+      meta.setMetric(this.metrics.getGeneralMeta(metricID));
+    
+    // tags
+    ArrayList<byte[]> tags = MetaData.getTagIDs(id);
+    if (tags == null || tags.size() < 1)
+      Log.debug(String.format("Unable to get tag and value metadata for ID [%s]",
+          UniqueId.IDtoString(id)));
+    else{
+      ArrayList<GeneralMeta> tm = new ArrayList<GeneralMeta>();
+      int index=0;
+      for (byte[] tag : tags){
+        if ((index % 2) == 0)
+          tm.add(this.tag_names.getGeneralMeta(tag));
+        else
+          tm.add(this.tag_values.getGeneralMeta(tag));
+        index++;
+      }
+      meta.setTags(tm);
+    }
+    
+    return meta;
+  }
+  
+  public Boolean putMeta(final TimeSeriesMeta meta){
+    return this.timeseries_meta.putMeta(meta);
   }
   
   // ------------------ //

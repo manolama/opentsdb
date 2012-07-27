@@ -55,6 +55,11 @@ final class Span implements DataPoints {
     return rows.get(0).metricName();
   }
 
+  public String getUID() {
+    checkNotEmpty();
+    return rows.get(0).getUID();
+  }
+  
   public Map<String, String> getTags() {
     checkNotEmpty();
     return rows.get(0).getTags();

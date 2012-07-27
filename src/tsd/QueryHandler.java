@@ -81,8 +81,7 @@ public class QueryHandler implements HttpRpc {
 
     // determine how many HBase queries we'll need to run
     int total_queries = 0;
-    Query[] tsdbqueries;
-    tsdbqueries = parseQuery(tsdb, query);
+    Query[] tsdbqueries = parseQuery(tsdb, query);
 
     // loop through the queries and set the timestamps
     for (final Query tsdbquery : tsdbqueries) {

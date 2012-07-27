@@ -1,5 +1,6 @@
 package net.opentsdb.meta;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -7,6 +8,7 @@ import net.opentsdb.core.JSON;
 import net.opentsdb.uid.UniqueId;
 
 import org.codehaus.jackson.annotate.JsonIgnore;
+import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
 
 /**
@@ -14,20 +16,21 @@ import org.codehaus.jackson.map.annotate.JsonSerialize;
  * the specifics for a time series as well as the inherited Metric and TagK meta data
  */
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
+@JsonIgnoreProperties(ignoreUnknown = true)
 final public class TimeSeriesMeta {
 
   // stored values
   private String uid = "";
   private int retention = 0;
-  private int max = 0;
-  private int min = 0;
+  private double max = 0;
+  private double min = 0;
   private int interval = 0;
   private int first_received = 0;
   private int last_received = 0;
   private String notes = "";
   private String units = "";
-  private int type = 0;         // type of metric, e.g. counter/rate/something else
-  private Map<String, String> custom = new HashMap<String, String>();   
+  private int data_type = 0;         // type of metric, e.g. counter/rate/something else
+  private Map<String, String> custom = null;   
   
   // change variables
   private Boolean c_retention = false;
@@ -41,7 +44,7 @@ final public class TimeSeriesMeta {
   // API only
   private GeneralMeta metric = null;
   // <tag name, meta>
-  private Map<String, GeneralMeta> tags = null;
+  private ArrayList<GeneralMeta> tags = null;
  
   public TimeSeriesMeta(){
   }
@@ -82,7 +85,7 @@ final public class TimeSeriesMeta {
     if (this.c_units)
       m.units = this.units;
     if (this.c_type)
-      m.type = this.type;
+      m.data_type = this.data_type;
     if (this.c_custom)
       m.custom = this.custom;
     return m;
@@ -97,11 +100,11 @@ final public class TimeSeriesMeta {
     return this.retention;
   }
   
-  public int getMax(){
+  public double getMax(){
     return this.max;
   }
   
-  public int getMin(){
+  public double getMin(){
     return this.min;
   }
   
@@ -125,8 +128,8 @@ final public class TimeSeriesMeta {
     return this.units;
   }
   
-  public int getType(){
-    return this.type;
+  public int getData_type(){
+    return this.data_type;
   }
   
   public Map<String, String> getCustom(){
@@ -137,7 +140,7 @@ final public class TimeSeriesMeta {
     return this.metric;
   }
   
-  public Map<String, GeneralMeta> getTags(){
+  public ArrayList<GeneralMeta> getTags(){
     return this.tags;
   }
   
@@ -150,12 +153,12 @@ final public class TimeSeriesMeta {
     this.c_retention = true;
   }
   
-  public void setMax(final int m){
+  public void setMax(final double m){
     this.max = m;
     this.c_max = true;
   }
   
-  public void setMin(final int m){
+  public void setMin(final double m){
     this.min = m;
     this.c_min = true;
   }
@@ -182,8 +185,8 @@ final public class TimeSeriesMeta {
     this.c_units = true;
   }
   
-  public void setType(final int t){
-    this.type = t;
+  public void setData_type(final int t){
+    this.data_type = t;
     this.c_type = true;
   }
   
@@ -196,7 +199,7 @@ final public class TimeSeriesMeta {
     this.metric = m;
   }
   
-  public void setTags(final Map<String, GeneralMeta> t){
+  public void setTags(final ArrayList<GeneralMeta> t){
     this.tags = t;
   }
 }

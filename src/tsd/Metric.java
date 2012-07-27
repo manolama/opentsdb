@@ -30,6 +30,9 @@ import org.codehaus.jackson.map.annotate.JsonSerialize;
 public class Metric {
   /** The name of the metric **/
   private String metric = "";
+  
+  private String uid = "";
+  
   /** The unix epoch timestamp the metric was generated **/
   @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
   private long timestamp = 0;
@@ -63,6 +66,10 @@ public class Metric {
     return metric;
   }
 
+  public String getUID(){
+    return this.uid;
+  }
+  
   /** @return The unix epoch timestamp of the metric */
   public long getTimestamp() {
     return timestamp;
@@ -83,6 +90,10 @@ public class Metric {
     metric = m;
   }
 
+  public void setUID(String u) {
+    this.uid = u;
+  }
+  
   /** @param t The unix epoch timestamp of the metric */
   public void setTimestamp(long t) {
     timestamp = t;

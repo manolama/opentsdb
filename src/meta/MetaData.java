@@ -1,5 +1,8 @@
 package net.opentsdb.meta;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import net.opentsdb.core.JSON;
@@ -18,53 +21,52 @@ import org.slf4j.LoggerFactory;
  * different UIDs. It's similar to the UniqueId class.
  * 
  * To keep lookup times as short as possible, we're implementing this alongside
- * the UniqueId class instead of integrating it since it would balloon the memory
- * of the UID maps. Meta data will be used much less frequently than UIDs
+ * the UniqueId class instead of integrating it since it would balloon the
+ * memory of the UID maps. Meta data will be used much less frequently than UIDs
  */
 public class MetaData {
   private static final Logger LOG = LoggerFactory.getLogger(MetaData.class);
 
   final private TSDStore storage;
-  
-  /** Whether or not this cache handles Time Series meta data or general
-   * True = time series
-   * False = general 
+
+  /**
+   * Whether or not this cache handles Time Series meta data or general True =
+   * time series False = general
    */
   private final Boolean is_ts;
-  
+
   /** The kind of UniqueId, used as the column qualifier. */
   private final String kind;
-  
+
   /** Cache */
-  private final ConcurrentHashMap<byte[], Object> cache =
-    new ConcurrentHashMap<byte[], Object>();
-  
+  private final ConcurrentHashMap<byte[], Object> cache = new ConcurrentHashMap<byte[], Object>();
+
   /**
    * Constructor.
    * @param client The HBase client to use.
    * @param table The name of the HBase table to use.
    * @param kind The name of the cache, e.g. metrics, tagk or ts
    */
-  public MetaData(final HBaseClient client, final byte[] table, final Boolean is_ts,
-      final String kind) {
+  public MetaData(final HBaseClient client, final byte[] table,
+      final Boolean is_ts, final String kind) {
     this.storage = new TSDStore(client, table);
     this.is_ts = is_ts;
     this.kind = kind;
   }
 
-  public TimeSeriesMeta getTimeSeriesMeta(final byte[] id){
-    TimeSeriesMeta meta = (TimeSeriesMeta)cache.get(TSDStore.fromBytes(id));
+  public TimeSeriesMeta getTimeSeriesMeta(final byte[] id) {
+    TimeSeriesMeta meta = (TimeSeriesMeta) cache.get(TSDStore.fromBytes(id));
     if (meta != null)
       return meta;
     meta = getTimeSeriesMetaFromHBase(id);
-    if (meta != null)
+    if (meta != null) {
       return meta;
-    else
+    } else
       return new TimeSeriesMeta(id);
   }
 
-  public GeneralMeta getGeneralMeta(final byte[] id){
-    GeneralMeta meta = (GeneralMeta)cache.get(TSDStore.fromBytes(id));
+  public GeneralMeta getGeneralMeta(final byte[] id) {
+    GeneralMeta meta = (GeneralMeta) cache.get(TSDStore.fromBytes(id));
     if (meta != null)
       return meta;
     meta = getGeneralMetaFromHBase(id);
@@ -74,8 +76,8 @@ public class MetaData {
       return new GeneralMeta(id);
   }
 
-  public Boolean putMeta(final Object meta){
-    if (meta == null){
+  public Boolean putMeta(final Object meta) {
+    if (meta == null) {
       LOG.error("Null value for meta object");
       return false;
     }
@@ -83,16 +85,16 @@ public class MetaData {
     final String uid;
     // check for uid
     if (this.is_ts)
-      uid = ((TimeSeriesMeta)meta).getUID();
+      uid = ((TimeSeriesMeta) meta).getUID();
     else
-      uid = ((GeneralMeta)meta).getUID();
-    if (uid.length() < 1){
+      uid = ((GeneralMeta) meta).getUID();
+    if (uid.length() < 1) {
       LOG.error("Missing UID");
       return false;
     }
-    
+
     final byte[] id = UniqueId.StringtoID(uid);
-    
+
     short attempt = 5;
     while (attempt-- > 0) {
       // lock and get the latest from Hbase
@@ -103,99 +105,144 @@ public class MetaData {
         try {
           Thread.sleep(61000 / 5);
         } catch (InterruptedException ie) {
-          break;  // We've been asked to stop here, let's bail out.
+          break; // We've been asked to stop here, let's bail out.
         }
         continue;
       } catch (Exception e) {
         throw new RuntimeException("Should never be here", e);
       }
-      if (lock == null) {  // Should not happen.
+      if (lock == null) { // Should not happen.
         LOG.error("WTF, got a null pointer as a RowLock!");
         continue;
       }
-      
-      try{
+
+      try {
         // fetch from hbase so we know we have the latest value
         final String cell = this.kind + "_meta";
-        final byte[] raw = storage.hbaseGet(id, TSDStore.toBytes("name"), 
+        final byte[] raw = storage.hbaseGet(id, TSDStore.toBytes("name"),
             TSDStore.toBytes(cell), lock);
-        
-        String json = "";      
-        if (raw == null){
+
+        String json = "";
+        if (raw == null) {
           // if nothing existed before, we'll store the user provided data
-          if (this.is_ts){    
-            json = ((TimeSeriesMeta)meta).getJSON();
-          }else{
-            json = ((GeneralMeta)meta).getJSON();
+          if (this.is_ts) {
+            json = ((TimeSeriesMeta) meta).getJSON();
+          } else {
+            json = ((GeneralMeta) meta).getJSON();
           }
-        }else{
+        } else {
           // otherwise, we will copy changes to the new meta entry
-          if (this.is_ts){
+          if (this.is_ts) {
             TimeSeriesMeta m = new TimeSeriesMeta();
             JSON codec = new JSON(m);
-            if (!codec.parseObject(TSDStore.fromBytes(raw))){
-              LOG.warn("Error parsing JSON from Hbase for ID [" + uid + "], replacing");
-              json = ((TimeSeriesMeta)meta).getJSON();
-            }else{
-              m = (TimeSeriesMeta)codec.getObject();
-              m = ((TimeSeriesMeta)meta).CopyChanges(m);
+            if (!codec.parseObject(TSDStore.fromBytes(raw))) {
+              LOG.warn("Error parsing JSON from Hbase for ID [" + uid
+                  + "], replacing");
+              json = ((TimeSeriesMeta) meta).getJSON();
+            } else {
+              m = (TimeSeriesMeta) codec.getObject();
+              m = ((TimeSeriesMeta) meta).CopyChanges(m);
               json = m.getJSON();
             }
-          }else{
+          } else {
             GeneralMeta m = new GeneralMeta();
             JSON codec = new JSON(m);
-            if (!codec.parseObject(TSDStore.fromBytes(raw))){
-              LOG.warn("Error parsing JSON from Hbase for ID [" + uid + "], replacing");
-              json = ((GeneralMeta)meta).getJSON();
-            }else{
-              m = (GeneralMeta)codec.getObject();
-              m = ((GeneralMeta)meta).CopyChanges(m);
+            if (!codec.parseObject(TSDStore.fromBytes(raw))) {
+              LOG.warn("Error parsing JSON from Hbase for ID [" + uid
+                  + "], replacing");
+              json = ((GeneralMeta) meta).getJSON();
+            } else {
+              m = (GeneralMeta) codec.getObject();
+              m = ((GeneralMeta) meta).CopyChanges(m);
               json = m.getJSON();
             }
           }
         }
-        
+
         // put me
         try {
-          storage.hbasePutWithRetry(id, TSDStore.toBytes("name"), 
-              TSDStore.toBytes(this.kind + "_meta"), TSDStore.toBytes(json), lock);
+          storage.hbasePutWithRetry(id, TSDStore.toBytes("name"),
+              TSDStore.toBytes(this.kind + "_meta"), TSDStore.toBytes(json),
+              lock);
         } catch (HBaseException e) {
           LOG.error("Failed to Put Meta Data [" + uid + "]", e);
           continue;
         }
-        
+
         // cacheme
         this.cache.put(id, meta);
         return true;
       } finally {
         storage.unlock(lock);
       }
-    }   
-    
+    }
+
     LOG.error("Failed to put the meta data");
     return false;
   }
 
-  // PRIVATES ---------------------------------------------------------
+  // STATICS ---------------------------------------------------------
   
-  private TimeSeriesMeta getTimeSeriesMetaFromHBase(final byte[] id) throws HBaseException {
+  public static byte[] getMetricID(final byte[] id){
+    if (id.length < 3){
+      LOG.warn("Timeseries ID is too small");
+      return null;
+    }
+    
+    byte[] mid = new byte[3];
+    for (int i=0; i<3; i++)
+      mid[i] = id[i];
+    return mid;
+  }
+  
+  public static ArrayList<byte[]> getTagIDs(final byte[] id){
+    if (id.length < 3){
+      LOG.warn("Timeseries ID is too small");
+      return null;
+    }
+    if (id.length < 9){
+      LOG.warn("No tags found in ID");
+      return null;
+    }
+    
+    ArrayList<byte[]> tags = new ArrayList<byte[]>();
+    byte[] tag = new byte[3];
+    int x =0;
+    for (int i=3; i<id.length; i++){
+      if (i > 3 && (i % 3) == 0){
+        tags.add(tag);
+        x=0;
+        tag = new byte[3];
+      }
+      tag[x] = id[i];
+      x++;
+    }
+    tags.add(tag);
+    return tags;
+  }
+  
+  // PRIVATES ---------------------------------------------------------
+
+  private TimeSeriesMeta getTimeSeriesMetaFromHBase(final byte[] id)
+      throws HBaseException {
     final String cell = this.kind + "_meta";
-    final byte[] raw_meta = storage.hbaseGet(id, TSDStore.toBytes("name"), 
+    final byte[] raw_meta = storage.hbaseGet(id, TSDStore.toBytes("name"),
         TSDStore.toBytes(cell));
     final String json = (raw_meta == null ? null : TSDStore.fromBytes(raw_meta));
     if (json == null)
       // todo - log
       return null;
-    
+
     JSON codec = new JSON(new TimeSeriesMeta(id));
-    if (codec.parseObject(json)){
-      return (TimeSeriesMeta)codec.getObject();
+    if (codec.parseObject(json)) {
+      return (TimeSeriesMeta) codec.getObject();
     }
     // todo - log
     return null;
   }
-  
-  private GeneralMeta getGeneralMetaFromHBase(final byte[] id) throws HBaseException {
+
+  private GeneralMeta getGeneralMetaFromHBase(final byte[] id)
+      throws HBaseException {
     final String cell = this.kind + "_meta";
     final Meta_Type type;
     if (this.kind.compareTo("metrics") == 0)
@@ -204,16 +251,16 @@ public class MetaData {
       type = Meta_Type.TAG;
     else
       type = Meta_Type.VALUE;
-    
-    final byte[] raw_meta = storage.hbaseGet(id, TSDStore.toBytes("name"), 
+
+    final byte[] raw_meta = storage.hbaseGet(id, TSDStore.toBytes("name"),
         TSDStore.toBytes(cell));
     final String json = (raw_meta == null ? null : TSDStore.fromBytes(raw_meta));
     if (json == null)
       return new GeneralMeta(id, type);
-    
+
     JSON codec = new JSON(new GeneralMeta(id));
-    if (codec.parseObject(json)){
-      final GeneralMeta meta = (GeneralMeta)codec.getObject();
+    if (codec.parseObject(json)) {
+      final GeneralMeta meta = (GeneralMeta) codec.getObject();
       if (this.kind.compareTo("metrics") == 0)
         meta.setType(Meta_Type.METRICS);
       else if (this.kind.compareTo("tagk") == 0)

@@ -27,6 +27,8 @@ public interface DataPoints extends Iterable<DataPoint> {
    */
   String metricName();
 
+  String getUID();
+  
   /**
    * Returns the tags associated with these data points.
    * @return A non-{@code null} map of tag names (keys), tag values (values).

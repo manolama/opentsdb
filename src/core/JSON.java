@@ -137,4 +137,9 @@ public class JSON {
   public Object getObject() {
     return object;
   }
+
+  /** Lets other classes access the mapper directly */
+  public static ObjectMapper getMapper(){
+    return JsonMapper;
+  }
 }
