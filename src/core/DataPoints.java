@@ -27,7 +27,8 @@ public interface DataPoints extends Iterable<DataPoint> {
    */
   String metricName();
 
-  String getUID();
+  /** Returns a list of timeseries IDs (often just one) */
+  List<String> getUID();
   
   /**
    * Returns the tags associated with these data points.

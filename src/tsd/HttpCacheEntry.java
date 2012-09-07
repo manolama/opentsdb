@@ -108,7 +108,6 @@ class HttpCacheEntry{
     return id;
   }
   
-  
   /**
    * Getter that returns the data
    * @return data or null if data isn't set
@@ -157,7 +156,6 @@ class HttpCacheEntry{
     return hits.get();
   }
 
-  
   /** 
    * Getter that returns the Unix epoch timestamp when this object
    * should expire

@@ -6,6 +6,7 @@ import net.opentsdb.core.JSON;
 import net.opentsdb.uid.UniqueId;
 
 import org.codehaus.jackson.annotate.JsonIgnore;
+import org.codehaus.jackson.map.annotate.JsonSerialize;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,12 +21,14 @@ import org.slf4j.LoggerFactory;
  * each write if anything changes
  */
 public class GeneralMeta {
-  public enum Meta_Type { INVALID, METRICS, TAG, VALUE, TIMESERIES };
+  public enum Meta_Type { INVALID, METRICS, TAGK, TAGV, TIMESERIES };
   
   protected static final Logger LOG = LoggerFactory.getLogger(GeneralMeta.class);
   
   protected String uid = "";
+  @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
   protected Meta_Type type = Meta_Type.INVALID;
+  @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
   protected String name = "";
   protected String display_name = "";
   protected String description = "";

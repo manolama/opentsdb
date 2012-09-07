@@ -19,9 +19,9 @@ import net.opentsdb.core.JSON;
  * creating JSON strings. It's to help cut down on code repetition such as
  * catching Jackson errors, etc.
  * NOTE: this class is not thread safe, so only use it in the same thread
- * that where you create it.
+ * where you instantiated it.
  */
-final class JSON_HTTP extends JSON {
+public final class JSON_HTTP extends JSON {
   /**
    * Default constructor
    */

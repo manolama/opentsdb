@@ -12,6 +12,7 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
@@ -234,7 +235,7 @@ final class RowSeq implements DataPoints {
     return RowKey.metricName(tsdb, key);
   }
 
-  public String getUID() {
+  public List<String> getUID() {
     // we need to strip the timestamp from the row key to get the
     // UID of the metric
     byte[] uid = new byte[this.key.length-4];
@@ -245,7 +246,9 @@ final class RowSeq implements DataPoints {
         x++;
       }
     }
-    return UniqueId.IDtoString(uid);
+    List<String> ids = new ArrayList<String>();
+    ids.add(UniqueId.IDtoString(uid));
+    return ids;
   }
   
   public Map<String, String> getTags() {

@@ -32,6 +32,9 @@ public final class Aggregators {
 
   /** Aggregator that returns the average value of the data point. */
   public static final Aggregator AVG = new Avg();
+  
+  /** Aggregator that returns raw data without any alterations */
+  public static final Aggregator NONE = new None();
 
   /** Maps an aggregator name to its instance. */
   private static final HashMap<String, Aggregator> aggregators;
@@ -42,6 +45,7 @@ public final class Aggregators {
     aggregators.put("min", MIN);
     aggregators.put("max", MAX);
     aggregators.put("avg", AVG);
+    aggregators.put("none", NONE);
   }
 
   private Aggregators() {
@@ -181,4 +185,19 @@ public final class Aggregators {
 
   }
 
+  private static final class None implements Aggregator {
+
+    public long runLong(final Longs values) {
+      return 0;
+    }
+
+    public double runDouble(final Doubles values) {
+      return 0;
+    }
+
+    public String toString() {
+      return "none";
+    }
+
+  }
 }

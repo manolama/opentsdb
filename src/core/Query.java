@@ -19,7 +19,7 @@ import org.hbase.async.HBaseException;
 import net.opentsdb.uid.NoSuchUniqueName;
 
 /**
- * A query to retreive data from the TSDB.
+ * A query to retrieve data from the TSDB.
  */
 public interface Query {
 
@@ -104,4 +104,7 @@ public interface Query {
    */
   DataPoints[] run() throws HBaseException;
 
+  Aggregator getAggregator();
+  
+  int getDownsampleInterval();
 }

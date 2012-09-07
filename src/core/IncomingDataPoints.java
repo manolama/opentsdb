@@ -322,9 +322,9 @@ final class IncomingDataPoints implements WritableDataPoints {
     return tsdb.metrics.getName(id);
   }
 
-  public String getUID(){
+  public List<String> getUID(){
     LOG.warn("Not implemented");
-    return "";
+    return null;
   }
   
   public Map<String, String> getTags() {

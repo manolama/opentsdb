@@ -20,6 +20,7 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.Map.Entry;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,7 @@ import static org.hbase.async.Bytes.ByteMap;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
+import net.opentsdb.uid.UniqueId;
 
 /**
  * Non-synchronized implementation of {@link Query}.
@@ -156,13 +158,21 @@ final class TsdbQuery implements Query {
                             final Map<String, String> tags,
                             final Aggregator function,
                             final boolean rate) throws NoSuchUniqueName {
-    findGroupBys(tags);
+    this.findGroupBys(tags);
     this.metric = tsdb.metrics.getId(metric);
     this.tags = Tags.resolveAll(tsdb, tags);
     aggregator = function;
     this.rate = rate;
   }
 
+  public Aggregator getAggregator(){
+    return this.aggregator;
+  }
+  
+  public int getDownsampleInterval(){
+    return this.sample_interval;
+  }
+  
   public void downsample(final int interval, final Aggregator downsampler) {
     if (downsampler == null) {
       throw new NullPointerException("downsampler");
@@ -235,7 +245,7 @@ final class TsdbQuery implements Query {
    * stored in the map has its timestamp zero'ed out.
    * @throws HBaseException if there was a problem communicating with HBase to
    * perform the search.
-   * @throws IllegalArgumentException if bad data was retreived from HBase.
+   * @throws IllegalArgumentException if bad data was retrieved from HBase.
    */
   private TreeMap<byte[], Span> findSpans() throws HBaseException {
     final short metric_width = tsdb.metrics.width();
@@ -292,6 +302,17 @@ final class TsdbQuery implements Query {
     if (spans == null || spans.size() <= 0) {
       return NO_RESULT;
     }
+    
+    if (this.aggregator.toString() == "none"){
+      DataPoints[] dps = new DataPoints[spans.size()];
+      int i=0;
+      for (Span sp : spans.values()){
+        dps[i] = sp;
+        i++;
+      }
+      return dps;
+    }
+    
     if (group_bys == null) {
       // We haven't been asked to find groups, so let's put all the spans
       // together in the same group.

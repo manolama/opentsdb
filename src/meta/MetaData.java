@@ -128,6 +128,9 @@ public class MetaData {
           if (this.is_ts) {
             json = ((TimeSeriesMeta) meta).getJSON();
           } else {
+            ((GeneralMeta) meta).setCreated(System.currentTimeMillis() / 1000L);
+            ((GeneralMeta) meta).setName("");
+            ((GeneralMeta) meta).setType(Meta_Type.INVALID);
             json = ((GeneralMeta) meta).getJSON();
           }
         } else {
@@ -150,10 +153,14 @@ public class MetaData {
             if (!codec.parseObject(TSDStore.fromBytes(raw))) {
               LOG.warn("Error parsing JSON from Hbase for ID [" + uid
                   + "], replacing");
+              ((GeneralMeta) meta).setName("");
+              ((GeneralMeta) meta).setType(Meta_Type.INVALID);
               json = ((GeneralMeta) meta).getJSON();
             } else {
               m = (GeneralMeta) codec.getObject();
               m = ((GeneralMeta) meta).CopyChanges(m);
+              ((GeneralMeta) m).setName("");
+              ((GeneralMeta) m).setType(Meta_Type.INVALID);
               json = m.getJSON();
             }
           }
@@ -248,9 +255,9 @@ public class MetaData {
     if (this.kind.compareTo("metrics") == 0)
       type = Meta_Type.METRICS;
     else if (this.kind.compareTo("tagk") == 0)
-      type = Meta_Type.TAG;
+      type = Meta_Type.TAGK;
     else
-      type = Meta_Type.VALUE;
+      type = Meta_Type.TAGV;
 
     final byte[] raw_meta = storage.hbaseGet(id, TSDStore.toBytes("name"),
         TSDStore.toBytes(cell));
@@ -264,9 +271,9 @@ public class MetaData {
       if (this.kind.compareTo("metrics") == 0)
         meta.setType(Meta_Type.METRICS);
       else if (this.kind.compareTo("tagk") == 0)
-        meta.setType(Meta_Type.TAG);
+        meta.setType(Meta_Type.TAGK);
       else
-        meta.setType(Meta_Type.VALUE);
+        meta.setType(Meta_Type.TAGV);
       return meta;
     }
     // todo - log

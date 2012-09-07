@@ -15,8 +15,10 @@ package net.opentsdb.tsd;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.google.gwt.dev.js.rhino.ObjToIntMap.Iterator;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
@@ -29,6 +31,8 @@ import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Tags;
+import net.opentsdb.core.TimeSeries;
+import net.opentsdb.formatters.CollectdJSON;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.uid.NoSuchUniqueName;
 
@@ -59,10 +63,11 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
    */
   @SuppressWarnings("unchecked")
   public void execute(final TSDB tsdb, final HttpQuery query) {
+    // get the POST content
     final String content = query.request().getContent()
         .toString(CharsetUtil.UTF_8);
     final String format = (query.getQueryStringParam("format") != null ? query.getQueryStringParam("format") : "");
-    ArrayList<Metric> ms = new ArrayList<Metric>();
+    ArrayList<TimeSeries> ts = new ArrayList<TimeSeries>();
     int success = 0;
     int fail = 0;
     String jsonp = "";
@@ -84,22 +89,22 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
 
     // see if we have a specific format
     if (!format.isEmpty() && format.equals("collectd")){
-      new FormatCollectd(tsdb).parseMetrics(content, ms, json);
+      new CollectdJSON(tsdb).parseInput(content);
     }
     // if the content starts with a bracket, we have an array of metrics
     else if (content.subSequence(0, 1).equals("[")) {
-      final TypeReference<ArrayList<Metric>> typeRef = new TypeReference<ArrayList<Metric>>() {};
+      final TypeReference<ArrayList<TimeSeries>> typeRef = new TypeReference<ArrayList<TimeSeries>>() {};
       if (json.parseObject(content, typeRef)){
-        ms = (ArrayList<Metric>) json.getObject();
+        ts = (ArrayList<TimeSeries>) json.getObject();
       }else{
         LOG.error("Couldn't parse JSON content");
         LOG.trace(content);
       }
     } else {
       // otherwise we have a single metric (hopefully)
-      json = new JSON_HTTP(new Metric());
+      json = new JSON_HTTP(new TimeSeries());
       if (json.parseObject(content))
-        ms.add((Metric) json.getObject());
+        ts.add((TimeSeries) json.getObject());
     }
 
     // if parsing generated an error, return it
@@ -113,7 +118,7 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
     }
 
     // see if we got some metrics
-    if (ms.size() < 1) {
+    if (ts.size() < 1) {
       jerror = new JsonRpcError("Unable to parse any metrics from the data:"
           + content, 422);
       query.sendReply(HttpResponseStatus.UNPROCESSABLE_ENTITY,
@@ -127,7 +132,7 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
     ArrayList<Object> errors = new ArrayList<Object>();
 
     // loop and store each metric
-    for (final Metric m : ms) {
+    for (final TimeSeries m : ts) {
       try {
         // set the error callback class
         class PutErrback implements Callback<Exception, Exception> {
@@ -145,7 +150,8 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
           }
 
           public Exception call(final Exception arg) {
-            errors.add(m.BuildError("HBase error: " + arg.getMessage()));
+            // todo - fixme
+            //errors.add(m.BuildError("HBase error: " + arg.getMessage()));
             hbase_errors.incrementAndGet();
             fail++;
             return arg;
@@ -157,15 +163,18 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
             new PutErrback(errors, (Integer) fail));
         success++;
       } catch (NumberFormatException x) {
-        errors.add(m.BuildError("Invalid value: " + x.getMessage()));
+     // todo - fixme
+        //errors.add(m.BuildError("Invalid value: " + x.getMessage()));
         fail++;
         invalid_values.incrementAndGet();
       } catch (IllegalArgumentException x) {
-        errors.add(m.BuildError("Illegal Argument: " + x.getMessage()));
+     // todo - fixme
+        //errors.add(m.BuildError("Illegal Argument: " + x.getMessage()));
         fail++;
         illegal_arguments.incrementAndGet();
       } catch (NoSuchUniqueName x) {
-        errors.add(m.BuildError("Unknown Metric: " + x.getMessage()));
+     // todo - fixme
+        //errors.add(m.BuildError("Unknown Metric: " + x.getMessage()));
         fail++;
         unknown_metrics.incrementAndGet();
       }
@@ -293,26 +302,26 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
    * @throws IllegalArgumentException if any other argument is invalid.
    * @throws NoSuchUniqueName if the metric isn't registered.
    */
-  private Deferred<Object> importDataPoint(final TSDB tsdb, final Metric metric) {
-    if (metric.getMetric().length() <= 0) {
+  private Deferred<Object> importDataPoint(final TSDB tsdb, final TimeSeries metric) {
+    if (metric.metric_name.length() <= 0) {
       throw new IllegalArgumentException("empty metric name");
     }
-    if (metric.getTimestamp() <= 0) {
-      throw new IllegalArgumentException("invalid timestamp: "
-          + metric.getTimestamp());
-    }
-    if (metric.getValue().length() <= 0) {
-      throw new IllegalArgumentException("empty value");
-    }
-    if (metric.getTags() == null || metric.getTags().size() < 1) {
+    if (metric.tags == null || metric.tags.size() < 1){
       throw new IllegalArgumentException("Missing tags");
     }
-    if (metric.getValue().indexOf('.') < 0) { // integer value
-      return tsdb.addPoint(metric.getMetric(), metric.getTimestamp(),
-          Tags.parseLong(metric.getValue()), metric.getTags());
-    } else { // floating point value
-      return tsdb.addPoint(metric.getMetric(), metric.getTimestamp(),
-          Float.parseFloat(metric.getValue()), metric.getTags());
+    if (metric.dps == null || metric.dps.size() < 1){
+      throw new IllegalArgumentException("Missing data points");
     }
+
+    // put each data point
+    Deferred<Object> rv = null;
+    for (Entry<Long, Object> entry : metric.dps.entrySet()) {
+      if (TimeSeries.isFloat(entry.getValue())){
+        rv = tsdb.addPoint(metric.metric_name, entry.getKey(), (Float)entry.getValue(), metric.tags);
+      }else{
+        rv = tsdb.addPoint(metric.metric_name, entry.getKey(), (Long)entry.getValue(), metric.tags);
+      }
+    }
+    return rv;
   }
 }

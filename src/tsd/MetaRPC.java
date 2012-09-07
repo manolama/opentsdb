@@ -1,0 +1,368 @@
+// This file is part of OpenTSDB.
+// Copyright (C) 2010-2012  The OpenTSDB Authors.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 2.1 of the License, or (at your
+// option) any later version.  This program is distributed in the hope that it
+// will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser
+// General Public License for more details.  You should have received a copy
+// of the GNU Lesser General Public License along with this program.  If not,
+// see <http://www.gnu.org/licenses/>.
+package net.opentsdb.tsd;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import net.opentsdb.core.JSON;
+import net.opentsdb.core.TSDB;
+import net.opentsdb.meta.GeneralMeta;
+import net.opentsdb.meta.GeneralMeta.Meta_Type;
+import net.opentsdb.meta.TimeSeriesMeta;
+import net.opentsdb.uid.UniqueId;
+
+import org.codehaus.jackson.JsonNode;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
+import org.jboss.netty.handler.codec.http.HttpMethod;
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Handles methods for editing, fetching and searching the metadata objects
+ * stored in the TSDB UID table.
+ * 
+ */
+public class MetaRPC implements HttpRpc {
+  private static final Logger LOG = LoggerFactory.getLogger(MetaRPC.class);
+
+  /**
+   * Routes the query to the proper handler
+   */
+  public void execute(final TSDB tsdb, final HttpQuery query) {
+    LOG.trace(query.request.getUri());
+    // GET
+    if (query.getMethod() == HttpMethod.GET) {
+      // check method
+      this.handleGet(tsdb, query);
+      return;
+      // POST
+    } else if (query.getMethod().compareTo(HttpMethod.POST) == 0 ||
+        query.getMethod().compareTo(HttpMethod.PUT) == 0) {
+      Meta_Type type = Meta_Type.INVALID;
+      try {
+        int t = 0;
+        // determine the type first
+        if (!query.hasQueryStringParam("type")){
+          JsonNode root = JSON.getMapper().readValue(query.getPostData(), JsonNode.class);
+          t = root.path("type").asInt();
+          if (t < 1 || t > Meta_Type.values().length){
+            query.sendError(HttpResponseStatus.BAD_REQUEST, "Invalid [type] value");
+            return;
+          }
+        }else{
+          t = Integer.parseInt(query.getQueryStringParam("type"));
+        }
+        type = Meta_Type.values()[t];
+      } catch (JsonParseException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      } catch (JsonMappingException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      } catch (IOException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
+      
+      // route
+      switch(type){
+      case METRICS:
+      case TAGK:
+      case TAGV:
+        this.handlePostGeneral(tsdb, query);
+        break;
+      case TIMESERIES:
+        this.handlePostTimeseries(tsdb, query);
+        break;
+      default:
+        query.sendError(HttpResponseStatus.BAD_REQUEST, 
+            String.format("Unknown type [%s]", type));
+        return; 
+      }
+      return;
+    } else {
+      query.sendReply(HttpResponseStatus.METHOD_NOT_ALLOWED,
+          String.format("Method [%s] is not allowed", query.getMethod()));
+      return;
+    }
+  }
+
+  /**
+   * Handles GET requests for the meta RPC
+   * @param tsdb The TSDB to use for fetching/writing meta data
+   * @param query The Query to respond to
+   */
+  private void handleGet(final TSDB tsdb, final HttpQuery query) {
+    if (!query.hasQueryStringParam("uid")) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, "Missing [uid] parameter");
+      return;
+    }
+
+    if (!query.hasQueryStringParam("type")) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, "Missing [type] parameter");
+      return;
+    }
+
+    byte[] id = UniqueId.StringtoID(query.getQueryStringParam("uid"));
+    int type = Integer.parseInt(query.getQueryStringParam("type"));
+    if (type < 1 || type > Meta_Type.values().length) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, "Invalid [type] value");
+      return;
+    }
+    Meta_Type meta_type = Meta_Type.values()[type];
+    GeneralMeta meta = null;
+    JSON parser = new JSON(meta);
+    switch (meta_type) {
+    case METRICS:
+      meta = tsdb.metrics.getGeneralMeta(id);
+      parser = new JSON(meta);
+      query.sendReply(parser.getJsonString());
+      return;
+    case TAGK:
+      meta = tsdb.tag_names.getGeneralMeta(id);
+      parser = new JSON(meta);
+      query.sendReply(parser.getJsonString());
+      break;
+    case TAGV:
+      meta = tsdb.tag_values.getGeneralMeta(id);
+      parser = new JSON(meta);
+      query.sendReply(parser.getJsonString());
+      return;
+    case TIMESERIES:
+      TimeSeriesMeta ts_meta = tsdb.getTimeSeriesMeta(id);
+      parser = new JSON(ts_meta);
+      query.sendReply(parser.getJsonString());
+      break;
+    default:
+      query.sendError(HttpResponseStatus.BAD_REQUEST, 
+          String.format("Unkown type value: %d", type));
+      return;
+    }
+
+    return;
+  }
+
+  /**
+   * Handles POST requests for the meta RPC
+   * @param tsdb The TSDB to use for fetching/writing meta data
+   * @param query The Query to respond to
+   */
+  private void handlePostGeneral(final TSDB tsdb, final HttpQuery query) {
+    final String content = query.getPostData();    
+    GeneralMeta meta = new GeneralMeta();
+
+    // if it's not a true post, parse the query string for the data
+    if (content.length() < 1) {
+      // check query string for values
+      if (!query.hasQueryStringParam("uid")) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST,
+            "Missing [uid] parameter");
+        return;
+      }
+
+      meta.setUID(query.getQueryStringParam("uid"));
+      if (query.hasQueryStringParam("display_name"))
+        meta.setDisplay_name(query.getQueryStringParam("display_name"));
+      if (query.hasQueryStringParam("description"))
+        meta.setDescription(query.getQueryStringParam("description"));
+      if (query.hasQueryStringParam("notes"))
+        meta.setNotes(query.getQueryStringParam("notes"));
+      if (query.hasQueryStringParam("type")){
+        final int type = Integer.parseInt(query
+            .getQueryStringParam("type"));
+        if (type < 1 || type >= Meta_Type.values().length){
+          query.sendError(HttpResponseStatus.BAD_REQUEST,
+            "Invalid [type] value or unable to parse it as an integer");
+        }
+        meta.setType(Meta_Type.values()[type]);
+      }
+      
+      // custom tags are &key1=name&val1=value
+      int i = 1;
+      Map<String, String> custom = new HashMap<String, String>();
+      while (query.hasQueryStringParam("key" + i)) {
+        if (!query.hasQueryStringParam("val" + i)) {
+          LOG.trace(String.format(
+                  "Breaking because [key%d] does not have a corresponding value",
+                  i));
+          break;
+        }
+        final String key = query.getQueryStringParam("key" + i);
+        final String val = query.getQueryStringParam("val" + i);
+        custom.put(key, val);
+        i++;
+      }
+      if (custom.size() > 0)
+        meta.setCustom(custom);
+    } else {
+      // parse
+      JSON parser = new JSON(meta);
+      if (!parser.parseObject(content)) {
+        LOG.error("Couldn't parse JSON content");
+        LOG.trace(content);
+        query.sendError(HttpResponseStatus.UNPROCESSABLE_ENTITY,
+            parser.getError());
+        return;
+      }
+      meta = (GeneralMeta) parser.getObject();
+    }
+
+    // sanity checks
+    if (meta.getUID().isEmpty()) {
+      query
+          .sendError(HttpResponseStatus.BAD_REQUEST, "Missing [uid] parameter");
+      return;
+    }
+    if (meta.getType() == Meta_Type.INVALID) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST,
+          "Missing [type] parameter");
+      return;
+    }
+
+    // put it in the right place
+    switch (meta.getType()) {
+    case METRICS:
+      if (!tsdb.metrics.putMeta(meta)) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+            "Error saving data");
+        return;
+      }
+      meta = tsdb.metrics.getGeneralMeta(UniqueId.StringtoID(meta
+          .getUID()));
+      break;
+    case TAGK:
+      if (!tsdb.tag_names.putMeta(meta)) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+            "Error saving data");
+        return;
+      }
+      meta = tsdb.tag_names.getGeneralMeta(UniqueId.StringtoID(meta
+          .getUID()));
+      break;
+    case TAGV:
+      if (!tsdb.tag_values.putMeta(meta)) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+            "Error saving data");
+        return;
+      }
+      meta = tsdb.tag_values.getGeneralMeta(UniqueId.StringtoID(meta
+          .getUID()));
+      break;
+    }
+
+    JSON parser = new JSON(meta);
+    query.sendReply(parser.getJsonString());
+    return;
+  }
+  
+  /**
+   * Handles POST requests for the meta RPC
+   * @param tsdb The TSDB to use for fetching/writing meta data
+   * @param query The Query to respond to
+   */
+  private void handlePostTimeseries(final TSDB tsdb, final HttpQuery query) {
+    final String content = query.getPostData();    
+    TimeSeriesMeta ts_meta = new TimeSeriesMeta();
+
+    // if it's not a true post, parse the query string for the data
+    if (content.length() < 1) {
+      // check query string for values
+      if (!query.hasQueryStringParam("uid")) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST,
+            "Missing [uid] parameter");
+        return;
+      }
+
+      if (query.hasQueryStringParam("notes"))
+        ts_meta.setNotes(query.getQueryStringParam("notes"));
+      if (query.hasQueryStringParam("retention")){
+        final int retention = Integer.parseInt(query
+            .getQueryStringParam("retention"));
+        ts_meta.setRetention(retention);
+      }
+      if (query.hasQueryStringParam("max")){
+        final double max = Double.parseDouble(query
+            .getQueryStringParam("max"));
+        ts_meta.setMax(max);
+      }
+      if (query.hasQueryStringParam("min")){
+        final double min = Double.parseDouble(query
+            .getQueryStringParam("min"));
+        ts_meta.setMax(min);
+      }
+      if (query.hasQueryStringParam("units"))
+        ts_meta.setUnits(query.getQueryStringParam("units"));
+      if (query.hasQueryStringParam("data_type")){
+        final int retention = Integer.parseInt(query
+            .getQueryStringParam("data_type"));
+        ts_meta.setRetention(retention);
+      }
+      
+      // custom tags are &key1=name&val1=value
+      int i = 1;
+      Map<String, String> custom = new HashMap<String, String>();
+      while (query.hasQueryStringParam("key" + i)) {
+        if (!query.hasQueryStringParam("val" + i)) {
+          LOG.trace(String.format(
+                  "Breaking because [key%d] does not have a corresponding value",
+                  i));
+          break;
+        }
+        final String key = query.getQueryStringParam("key" + i);
+        final String val = query.getQueryStringParam("val" + i);
+        custom.put(key, val);
+        i++;
+      }
+      if (custom.size() > 0)
+        ts_meta.setCustom(custom);
+    } else {
+      // parse
+      JSON parser = new JSON(ts_meta);
+      if (!parser.parseObject(content)) {
+        LOG.error("Couldn't parse JSON content");
+        LOG.trace(content);
+        query.sendError(HttpResponseStatus.UNPROCESSABLE_ENTITY,
+            parser.getError());
+        return;
+      }
+      ts_meta = (TimeSeriesMeta)parser.getObject();
+    }
+
+    // sanity checks
+    if (ts_meta.getUID().isEmpty()) {
+      query
+          .sendError(HttpResponseStatus.BAD_REQUEST, "Missing [uid] parameter");
+      return;
+    }
+
+    if (!tsdb.putMeta(ts_meta)){
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+          "Error saving data");
+      return;
+    }
+    ts_meta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(ts_meta.getUID()));
+    
+    JSON parser = new JSON(ts_meta);
+    query.sendReply(parser.getJsonString());
+    return;
+  }
+}
+
+final class MetaUIDs{
+  public String uid = "";
+  public int type = 0;
+}

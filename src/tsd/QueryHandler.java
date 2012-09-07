@@ -13,20 +13,27 @@
 package net.opentsdb.tsd;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.TreeMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.Aggregator;
 import net.opentsdb.core.Aggregators;
+import net.opentsdb.core.DataPoint;
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Tags;
+import net.opentsdb.core.TimeSeries;
+import net.opentsdb.formatters.Ascii;
+import net.opentsdb.formatters.TsdbJSON;
 import net.opentsdb.uid.NoSuchUniqueName;
+import net.opentsdb.uid.UniqueId;
 
 /**
  * Used to be the GraphHandler, but we won't always be requesting graphs. Instead we'll
@@ -51,6 +58,7 @@ public class QueryHandler implements HttpRpc {
     long end_time = query.getQueryStringDate("end");
     final int query_hash = query.getQueryStringHash();
     
+    LOG.trace(String.format("HTTP Start [%d] End [%d]", start_time, end_time));
     // first, see if we can satisfy the request from cache
     if (!nocache && query.getCache().readCache(query_hash, query)){
       // satisfied from cache!!
@@ -99,15 +107,16 @@ public class QueryHandler implements HttpRpc {
     }
     
     // setup the proper emitter object
-    DataEmitter emitter = null;
-    if (JSON_HTTP.getJsonRequested(query))
-      emitter = new JsonEmitter(start_time, end_time, query.getQueryString(), query_hash);
-    else if (query.hasQueryStringParam("ascii"))
-      emitter = new AsciiEmitter(start_time, end_time, query.getQueryString(), query_hash);
-    else
-     emitter = new GnuGraphEmitter(start_time, end_time, query.getQueryString(), query_hash);    
-    emitter.setBasepath(basepath);
+//    DataEmitter emitter = null;
+//    if (JSON_HTTP.getJsonRequested(query))
+//      emitter = new JsonEmitter(start_time, end_time, query.getQueryString(), query_hash);
+//    else if (query.hasQueryStringParam("ascii"))
+//      emitter = new AsciiEmitter(start_time, end_time, query.getQueryString(), query_hash);
+//    else
+//     emitter = new GnuGraphEmitter(start_time, end_time, query.getQueryString(), query_hash);    
+//    emitter.setBasepath(basepath);
     
+    ArrayList<TimeSeries> timeseries = new ArrayList<TimeSeries>();
     final int nqueries = tsdbqueries.length;
     for (int i = 0; i < nqueries; i++) {
       try {  // execute the TSDB query!
@@ -115,9 +124,37 @@ public class QueryHandler implements HttpRpc {
         // TODO(tsuna): Optimization: run each query in parallel.
         final DataPoints[] series = tsdbqueries[i].run();
         
+        TimeSeries ts = new TimeSeries();
         // loop through the series and add them to the emitter
         for (final DataPoints datapoints : series) {
-          emitter.add(datapoints);
+ 
+          // todo - hackish crap, copy to TimeSeries
+          ts.metric_name = datapoints.metricName();
+          ts.tags = datapoints.getTags();
+          //data.metadata = ?
+          ts.dps = new TreeMap<Long, Object>();
+          for (final DataPoint d : datapoints){
+            // if aggregator == none, strip out any dps that fall outside the requested timespan
+            if (tsdbqueries[i].getAggregator().toString() == "none"){
+              if (d.timestamp() < start_time || d.timestamp() > end_time)
+                continue;
+            }
+            if (d.isInteger())
+              ts.dps.put(d.timestamp(), d.longValue());
+            else
+              ts.dps.put(d.timestamp(), d.doubleValue());            
+          }
+
+          for (String ag : datapoints.getAggregatedTags()){
+            System.out.println("Aggregated tag: " + ag);
+          }
+          // don't get metadata, it could add WAY too much data to the output when we really just want
+          // the basics
+          //ts.metadata = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(datapoints.getUID().get(0)));
+          ts.uids = (ArrayList<String>) datapoints.getUID();
+          ts.aggregator = tsdbqueries[i].getAggregator().toString();
+          timeseries.add(ts);
+          //emitter.add(datapoints);
         }
       } catch (RuntimeException e) {
         LOG.info("Query failed (stack trace coming): " + tsdbqueries[i]);
@@ -128,24 +165,41 @@ public class QueryHandler implements HttpRpc {
     tsdbqueries = null;  // free()
     
     // process the emitter
-    if (!emitter.processData()){
-      LOG.error("Processing error: " + emitter.getError());
-      query.sendReply(emitter.getError());
-      return;
-    }
+//    if (!emitter.processData()){
+//      LOG.error("Processing error: " + emitter.getError());
+//      query.sendReply(emitter.getError());
+//      return;
+//    }
 
     // cache the response if told to
-    HttpCacheEntry entry = emitter.getCacheData();
-    if (!nocache && !query.getCache().storeCache(entry)){
-      LOG.warn("Unable to cache emitter for key [" + query_hash + "]");
-    }
+//    HttpCacheEntry entry = emitter.getCacheData();
+//    if (!nocache && !query.getCache().storeCache(entry)){
+//      LOG.warn("Unable to cache emitter for key [" + query_hash + "]");
+//    }
     
     // return data
-    if (entry.getFileOnly()){
-      query.sendFile(entry.getFile(), (int)entry.getExpire());
-    }else{
-      query.sendReply(entry.getData());
-    }
+//    if (entry.getFileOnly()){
+//      query.sendFile(entry.getFile(), (int)entry.getExpire());
+//    }else{
+//      query.sendReply(entry.getData());
+//    }
+    
+    // spit it out
+    if (JSON_HTTP.getJsonRequested(query)){
+      //emitter = new JsonEmitter(start_time, end_time, query.getQueryString(), query_hash);
+      TsdbJSON formatter = new TsdbJSON();
+      formatter.setTimeseries(timeseries);
+      query.sendReply(formatter.getOutput());
+    }else if (query.hasQueryStringParam("ascii")){
+      Ascii formatter = new Ascii();
+      formatter.setTimeseries(timeseries);
+      query.sendReply(formatter.getOutput());
+      //emitter = new AsciiEmitter(start_time, end_time, query.getQueryString(), query_hash);
+    }else
+      query.sendReply("Blarg!!!");
+     //emitter = new GnuGraphEmitter(start_time, end_time, query.getQueryString(), query_hash);    
+    //emitter.setBasepath(basepath);
+    
   }
   
   /**

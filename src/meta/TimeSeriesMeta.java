@@ -25,8 +25,8 @@ final public class TimeSeriesMeta {
   private double max = 0;
   private double min = 0;
   private int interval = 0;
-  private int first_received = 0;
-  private int last_received = 0;
+  private long first_received = 0;
+  private long last_received = 0;
   private String notes = "";
   private String units = "";
   private int data_type = 0;         // type of metric, e.g. counter/rate/something else
@@ -88,6 +88,8 @@ final public class TimeSeriesMeta {
       m.data_type = this.data_type;
     if (this.c_custom)
       m.custom = this.custom;
+    if (this.last_received > m.last_received)
+      m.last_received = this.last_received;
     return m;
   }
   
@@ -112,11 +114,11 @@ final public class TimeSeriesMeta {
     return this.interval;
   }
   
-  public int getFirst_Received(){
+  public long getFirst_Received(){
     return this.first_received;
   }
   
-  public int getLast_Received(){
+  public long getLast_Received(){
     return this.last_received;
   }
   
@@ -167,11 +169,11 @@ final public class TimeSeriesMeta {
     this.interval = i;
   }
   
-  public void setFirst_Received(final int f){
+  public void setFirst_Received(final long f){
     this.first_received = f;
   }
   
-  public void setLast_Received(final int l){
+  public void setLast_Received(final long l){
     this.last_received = l;
   }
   

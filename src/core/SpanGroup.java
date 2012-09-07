@@ -181,8 +181,19 @@ final class SpanGroup implements DataPoints {
     return spans.isEmpty() ? "" : spans.get(0).metricName();
   }
 
-  public String getUID() {
-    return spans.isEmpty() ? "" : spans.get(0).getUID();
+  public List<String> getUID() {
+    if (spans.isEmpty())
+      return null;
+    List<String> ids = new ArrayList<String>();
+    for (int i=0; i<spans.size(); i++){
+      List<String> row_ids = spans.get(i).getUID();
+      for (int r=0; r<row_ids.size(); r++){
+        final String id = row_ids.get(r);
+        if (id != null && !ids.contains(id))
+          ids.add(row_ids.get(r));
+      }
+    }
+    return ids;
   }
   
   public Map<String, String> getTags() {

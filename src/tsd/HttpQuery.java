@@ -23,6 +23,7 @@ import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 
 import com.stumbleupon.async.Deferred;
 
@@ -208,6 +209,8 @@ class HttpQuery {
     } catch (NumberFormatException ne) {  // Nope, try to parse a date then.
       try {
         final SimpleDateFormat fmt = new SimpleDateFormat("yyyy/MM/dd-HH:mm:ss");
+        // todo - set the timezone for the queries here!!!!
+        fmt.setTimeZone(TimeZone.getTimeZone("GMT"));
         timestamp = fmt.parse(date).getTime() / 1000;
       } catch (ParseException e) {
         throw new BadRequestException("Invalid " + paramname + " date: " + date
