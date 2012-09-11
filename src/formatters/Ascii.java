@@ -3,8 +3,6 @@ package net.opentsdb.formatters;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import net.opentsdb.core.DataPoint;
-import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.TimeSeries;
 
 import org.slf4j.Logger;
