@@ -12,7 +12,6 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
-import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -20,7 +19,6 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.Map.Entry;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,9 +30,9 @@ import org.hbase.async.Scanner;
 import static org.hbase.async.Bytes.ByteMap;
 
 import net.opentsdb.stats.Histogram;
+import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
-import net.opentsdb.uid.UniqueId;
 
 /**
  * Non-synchronized implementation of {@link Query}.
@@ -52,12 +50,6 @@ final class TsdbQuery implements Query {
    * 100 ms after we which we switch to exponential buckets.
    */
   static final Histogram scanlatency = new Histogram(16000, (short) 2, 100);
-
-  /**
-   * Charset to use with our server-side row-filter.
-   * We use this one because it preserves every possible byte unchanged.
-   */
-  private static final Charset CHARSET = Charset.forName("ISO-8859-1");
 
   /** The TSDB we belong to. */
   private final TSDB tsdb;
@@ -254,10 +246,10 @@ final class TsdbQuery implements Query {
     int nrows = 0;
     int hbase_time = 0;  // milliseconds.
     long starttime = System.nanoTime();
-    final Scanner scanner = getScanner();
+    final TsdbScanner scanner = getScanner();
     try {
       ArrayList<ArrayList<KeyValue>> rows;
-      while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
+      while ((rows = tsdb.storage.nextRows(scanner).joinUninterruptibly()) != null) {
         hbase_time += (System.nanoTime() - starttime) / 1000000;
         for (final ArrayList<KeyValue> row : rows) {
           final byte[] key = row.get(0).key();
@@ -383,7 +375,7 @@ final class TsdbQuery implements Query {
   /**
    * Creates the {@link Scanner} to use for this query.
    */
-  Scanner getScanner() throws HBaseException {
+  TsdbScanner getScanner() throws HBaseException {
     final short metric_width = tsdb.metrics.width();
     final byte[] start_row = new byte[metric_width + Const.TIMESTAMP_BYTES];
     final byte[] end_row = new byte[metric_width + Const.TIMESTAMP_BYTES];
@@ -401,14 +393,14 @@ final class TsdbQuery implements Query {
     System.arraycopy(metric, 0, start_row, 0, metric_width);
     System.arraycopy(metric, 0, end_row, 0, metric_width);
 
-    final Scanner scanner = tsdb.client.newScanner(tsdb.table);
-    scanner.setStartKey(start_row);
-    scanner.setStopKey(end_row);
+    final TsdbScanner scanner = new TsdbScanner();
+    scanner.setStartRow(start_row);
+    scanner.setEndRow(end_row);
     if (tags.size() > 0 || group_bys != null) {
       createAndSetFilter(scanner);
     }
     scanner.setFamily(TSDB.FAMILY);
-    return scanner;
+    return tsdb.storage.openScanner(scanner);
   }
 
   /** Returns the UNIX timestamp from which we must start scanning.  */
@@ -448,7 +440,7 @@ final class TsdbQuery implements Query {
    * server-side filter that matches a regular expression on the row key.
    * @param scanner The scanner on which to add the filter.
    */
-  void createAndSetFilter(final Scanner scanner) {
+  void createAndSetFilter(final TsdbScanner scanner) {
     if (group_bys != null) {
       Collections.sort(group_bys, Bytes.MEMCMP);
     }
@@ -506,7 +498,7 @@ final class TsdbQuery implements Query {
     } while (tag != group_by);  // Stop when they both become null.
     // Skip any number of tags before the end.
     buf.append("(?:.{").append(tagsize).append("})*$");
-    scanner.setKeyRegexp(buf.toString(), CHARSET);
+    scanner.setRowRegex(buf.toString());
    }
 
   /**

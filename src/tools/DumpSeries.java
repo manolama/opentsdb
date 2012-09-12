@@ -21,13 +21,15 @@ import org.hbase.async.Bytes;
 import org.hbase.async.DeleteRequest;
 import org.hbase.async.HBaseClient;
 import org.hbase.async.KeyValue;
-import org.hbase.async.Scanner;
 
 import net.opentsdb.core.Config;
 import net.opentsdb.core.IllegalDataException;
 import net.opentsdb.core.Internal;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.storage.TsdbScanner;
+import net.opentsdb.storage.TsdbStore;
+import net.opentsdb.storage.TsdbStoreHBase;
 
 /**
  * Tool to dump the data straight from HBase.
@@ -92,11 +94,12 @@ final class DumpSeries {
     final ArrayList<Query> queries = new ArrayList<Query>();
     CliQuery.parseCommandLineQuery(args, tsdb, queries, null, null);
 
+    TsdbStore storage = new TsdbStoreHBase(table, client);
     final StringBuilder buf = new StringBuilder();
     for (final Query query : queries) {
-      final Scanner scanner = Internal.getScanner(query);
+      final TsdbScanner scanner = Internal.getScanner(query);
       ArrayList<ArrayList<KeyValue>> rows;
-      while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
+      while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
         for (final ArrayList<KeyValue> row : rows) {
           buf.setLength(0);
           final byte[] key = row.get(0).key();

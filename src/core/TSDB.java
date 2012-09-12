@@ -22,12 +22,9 @@ import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import org.hbase.async.Bytes;
-import org.hbase.async.DeleteRequest;
-import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseClient;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
-import org.hbase.async.PutRequest;
 import org.mortbay.log.Log;
 
 import net.opentsdb.uid.UniqueId;
@@ -36,6 +33,8 @@ import net.opentsdb.meta.MetaData;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.storage.TsdbStore;
+import net.opentsdb.storage.TsdbStoreHBase;
 
 /**
  * Thread-safe implementation of the TSDB client.
@@ -61,7 +60,7 @@ public final class TSDB {
   }
 
   /** Client for the HBase cluster to use.  */
-  final HBaseClient client;
+  final TsdbStore storage;
 
   /** Configuration for the TSD and related services */
   final Config config;
@@ -98,11 +97,12 @@ public final class TSDB {
   public TSDB(final HBaseClient client,
               final String timeseries_table,
               final String uniqueids_table) {
-    this.client = client;
+    //this.client = client;
     this.config = new Config();
     table = timeseries_table.getBytes();
     this.config.tsdTable(timeseries_table);
     this.config.tsdUIDTable(uniqueids_table);
+    this.storage = new TsdbStoreHBase(table, client);
     
     final byte[] uidtable = uniqueids_table.getBytes();
     metrics = new UniqueId(client, uidtable, METRICS_QUAL, METRICS_WIDTH);
@@ -123,10 +123,11 @@ public final class TSDB {
    */
   public TSDB(final HBaseClient client,
               final Config config) {
-    this.client = client;
+    //this.client = client;
     this.config = config;
     table = config.tsdTable().getBytes();
-
+    this.storage = new TsdbStoreHBase(table, client);
+    
     final byte[] uidtable = config.tsdUIDTable().getBytes();
     metrics = new UniqueId(client, uidtable, METRICS_QUAL, METRICS_WIDTH);
     tag_names = new UniqueId(client, uidtable, TAG_NAME_QUAL, TAG_NAME_WIDTH);
@@ -182,11 +183,11 @@ public final class TSDB {
     } finally {
       collector.clearExtraTag("class");
     }
-    collector.record("hbase.root_lookups", client.rootLookupCount());
-    collector.record("hbase.meta_lookups",
-                     client.uncontendedMetaLookupCount(), "type=uncontended");
-    collector.record("hbase.meta_lookups",
-                     client.contendedMetaLookupCount(), "type=contended");
+//    collector.record("hbase.root_lookups", client.rootLookupCount());
+//    collector.record("hbase.meta_lookups",
+//                     client.uncontendedMetaLookupCount(), "type=uncontended");
+//    collector.record("hbase.meta_lookups",
+//                     client.contendedMetaLookupCount(), "type=contended");
 
     compactionq.collectStats(collector);
   }
@@ -315,11 +316,12 @@ public final class TSDB {
     scheduleForCompaction(row, (int) base_time);
     final short qualifier = (short) ((timestamp - base_time) << Const.FLAG_BITS
                                      | flags);
-    final PutRequest point = new PutRequest(table, row, FAMILY,
-                                            Bytes.fromShort(qualifier), value);
-    // TODO(tsuna): Add a callback to time the latency of HBase and store the
-    // timing in a moving Histogram (once we have a class for this).
-    return client.put(point);
+//    final PutRequest point = new PutRequest(table, row, FAMILY,
+//                                            Bytes.fromShort(qualifier), value);
+//    // TODO(tsuna): Add a callback to time the latency of HBase and store the
+//    // timing in a moving Histogram (once we have a class for this).
+//    return client.put(point);
+    return storage.putWithRetry(row, FAMILY, Bytes.fromShort(qualifier), value);
   }
 
   /**
@@ -335,7 +337,7 @@ public final class TSDB {
    * recoverable by retrying, some are not.
    */
   public Deferred<Object> flush() throws HBaseException {
-    return client.flush();
+    return storage.flush();
   }
 
   /**
@@ -355,7 +357,7 @@ public final class TSDB {
   public Deferred<Object> shutdown() {
     final class HClientShutdown implements Callback<Object, ArrayList<Object>> {
       public Object call(final ArrayList<Object> args) {
-        return client.shutdown();
+        return storage.shutdown();
       }
       public String toString() {
         return "shutdown HBase client";
@@ -364,7 +366,7 @@ public final class TSDB {
     // First flush the compaction queue, then shutdown the HBase client.
     return enable_compactions
       ? compactionq.flush().addBoth(new HClientShutdown())
-      : client.shutdown();
+      : storage.shutdown();
   }
 
   /**
@@ -483,24 +485,4 @@ public final class TSDB {
     }
   }
 
-  // ------------------------ //
-  // HBase operations helpers //
-  // ------------------------ //
-
-  /** Gets the entire given row from the data table. */
-  final Deferred<ArrayList<KeyValue>> get(final byte[] key) {
-    return client.get(new GetRequest(table, key));
-  }
-
-  /** Puts the given value into the data table. */
-  final Deferred<Object> put(final byte[] key,
-                             final byte[] qualifier,
-                             final byte[] value) {
-    return client.put(new PutRequest(table, key, FAMILY, qualifier, value));
-  }
-
-  /** Deletes the given cells from the data table. */
-  final Deferred<Object> delete(final byte[] key, final byte[][] qualifiers) {
-    return client.delete(new DeleteRequest(table, key, FAMILY, qualifiers));
-  }
 }

@@ -15,9 +15,10 @@ package net.opentsdb.core;
 import java.util.ArrayList;
 import java.util.Map;
 
+import net.opentsdb.storage.TsdbScanner;
+
 import org.hbase.async.Bytes;
 import org.hbase.async.KeyValue;
-import org.hbase.async.Scanner;
 
 /**
  * <strong>This class is not part of the public API.</strong>
@@ -73,7 +74,7 @@ public final class Internal {
   }
 
   /** @see TsdbQuery#getScanner */
-  public static Scanner getScanner(final Query query) {
+  public static TsdbScanner getScanner(final Query query) {
     return ((TsdbQuery) query).getScanner();
   }
 

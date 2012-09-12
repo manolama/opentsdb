@@ -25,7 +25,6 @@ import org.hbase.async.DeleteRequest;
 import org.hbase.async.HBaseClient;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
-import org.hbase.async.Scanner;
 
 import net.opentsdb.core.Config;
 import net.opentsdb.core.Const;
@@ -33,6 +32,9 @@ import net.opentsdb.core.IllegalDataException;
 import net.opentsdb.core.Internal;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.storage.TsdbScanner;
+import net.opentsdb.storage.TsdbStore;
+import net.opentsdb.storage.TsdbStoreHBase;
 
 /**
  * Tool to look for and fix corrupted data in a TSDB.
@@ -112,6 +114,7 @@ final class Fsck {
     int errors = 0;
     int correctable = 0;
 
+    TsdbStore storage = new TsdbStoreHBase(table, client);
     final short metric_width = Internal.metricWidth(tsdb);
 
     final ArrayList<Query> queries = new ArrayList<Query>();
@@ -124,9 +127,9 @@ final class Fsck {
       long kvcount = 0;
       long rowcount = 0;
       final Bytes.ByteMap<Seen> seen = new Bytes.ByteMap<Seen>();
-      final Scanner scanner = Internal.getScanner(query);
+      final TsdbScanner scanner = Internal.getScanner(query);
       ArrayList<ArrayList<KeyValue>> rows;
-      while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
+      while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
         for (final ArrayList<KeyValue> row : rows) {
           rowcount++;
           // Take a copy of the row-key because we're going to zero-out the

@@ -1,18 +1,16 @@
 package net.opentsdb.meta;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import net.opentsdb.core.JSON;
-import net.opentsdb.core.TSDStore;
 import net.opentsdb.meta.GeneralMeta.Meta_Type;
+import net.opentsdb.storage.TsdbStore;
+import net.opentsdb.storage.TsdbStoreHBase;
 import net.opentsdb.uid.UniqueId;
 
 import org.hbase.async.HBaseClient;
 import org.hbase.async.HBaseException;
-import org.hbase.async.RowLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +25,7 @@ import org.slf4j.LoggerFactory;
 public class MetaData {
   private static final Logger LOG = LoggerFactory.getLogger(MetaData.class);
 
-  final private TSDStore storage;
+  final private TsdbStore storage;
 
   /**
    * Whether or not this cache handles Time Series meta data or general True =
@@ -49,13 +47,13 @@ public class MetaData {
    */
   public MetaData(final HBaseClient client, final byte[] table,
       final Boolean is_ts, final String kind) {
-    this.storage = new TSDStore(client, table);
+    this.storage = new TsdbStoreHBase(table, client);
     this.is_ts = is_ts;
     this.kind = kind;
   }
 
   public TimeSeriesMeta getTimeSeriesMeta(final byte[] id) {
-    TimeSeriesMeta meta = (TimeSeriesMeta) cache.get(TSDStore.fromBytes(id));
+    TimeSeriesMeta meta = (TimeSeriesMeta) cache.get(TsdbStore.fromBytes(id));
     if (meta != null)
       return meta;
     meta = getTimeSeriesMetaFromHBase(id);
@@ -66,7 +64,7 @@ public class MetaData {
   }
 
   public GeneralMeta getGeneralMeta(final byte[] id) {
-    GeneralMeta meta = (GeneralMeta) cache.get(TSDStore.fromBytes(id));
+    GeneralMeta meta = (GeneralMeta) cache.get(TsdbStore.fromBytes(id));
     if (meta != null)
       return meta;
     meta = getGeneralMetaFromHBase(id);
@@ -98,9 +96,9 @@ public class MetaData {
     short attempt = 5;
     while (attempt-- > 0) {
       // lock and get the latest from Hbase
-      RowLock lock;
+      Object lock;
       try {
-        lock = storage.lock(id);
+        lock = storage.getRowLock(id);
       } catch (HBaseException e) {
         try {
           Thread.sleep(61000 / 5);
@@ -119,8 +117,8 @@ public class MetaData {
       try {
         // fetch from hbase so we know we have the latest value
         final String cell = this.kind + "_meta";
-        final byte[] raw = storage.hbaseGet(id, TSDStore.toBytes("name"),
-            TSDStore.toBytes(cell), lock);
+        final byte[] raw = storage.getValue(id, TsdbStore.toBytes("name"),
+            TsdbStore.toBytes(cell), lock);
 
         String json = "";
         if (raw == null) {
@@ -138,7 +136,7 @@ public class MetaData {
           if (this.is_ts) {
             TimeSeriesMeta m = new TimeSeriesMeta();
             JSON codec = new JSON(m);
-            if (!codec.parseObject(TSDStore.fromBytes(raw))) {
+            if (!codec.parseObject(TsdbStore.fromBytes(raw))) {
               LOG.warn("Error parsing JSON from Hbase for ID [" + uid
                   + "], replacing");
               json = ((TimeSeriesMeta) meta).getJSON();
@@ -150,7 +148,7 @@ public class MetaData {
           } else {
             GeneralMeta m = new GeneralMeta();
             JSON codec = new JSON(m);
-            if (!codec.parseObject(TSDStore.fromBytes(raw))) {
+            if (!codec.parseObject(TsdbStore.fromBytes(raw))) {
               LOG.warn("Error parsing JSON from Hbase for ID [" + uid
                   + "], replacing");
               ((GeneralMeta) meta).setName("");
@@ -168,8 +166,8 @@ public class MetaData {
 
         // put me
         try {
-          storage.hbasePutWithRetry(id, TSDStore.toBytes("name"),
-              TSDStore.toBytes(this.kind + "_meta"), TSDStore.toBytes(json),
+          storage.putWithRetry(id, TsdbStore.toBytes("name"),
+              TsdbStore.toBytes(this.kind + "_meta"), TsdbStore.toBytes(json),
               lock);
         } catch (HBaseException e) {
           LOG.error("Failed to Put Meta Data [" + uid + "]", e);
@@ -180,7 +178,7 @@ public class MetaData {
         this.cache.put(id, meta);
         return true;
       } finally {
-        storage.unlock(lock);
+        storage.releaseRowLock(lock);
       }
     }
 
@@ -233,9 +231,9 @@ public class MetaData {
   private TimeSeriesMeta getTimeSeriesMetaFromHBase(final byte[] id)
       throws HBaseException {
     final String cell = this.kind + "_meta";
-    final byte[] raw_meta = storage.hbaseGet(id, TSDStore.toBytes("name"),
-        TSDStore.toBytes(cell));
-    final String json = (raw_meta == null ? null : TSDStore.fromBytes(raw_meta));
+    final byte[] raw_meta = storage.getValue(id, TsdbStore.toBytes("name"),
+        TsdbStore.toBytes(cell));
+    final String json = (raw_meta == null ? null : TsdbStore.fromBytes(raw_meta));
     if (json == null)
       // todo - log
       return null;
@@ -259,9 +257,9 @@ public class MetaData {
     else
       type = Meta_Type.TAGV;
 
-    final byte[] raw_meta = storage.hbaseGet(id, TSDStore.toBytes("name"),
-        TSDStore.toBytes(cell));
-    final String json = (raw_meta == null ? null : TSDStore.fromBytes(raw_meta));
+    final byte[] raw_meta = storage.getValue(id, TsdbStore.toBytes("name"),
+        TsdbStore.toBytes(cell));
+    final String json = (raw_meta == null ? null : TsdbStore.fromBytes(raw_meta));
     if (json == null)
       return new GeneralMeta(id, type);
 

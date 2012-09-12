@@ -16,8 +16,6 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.SortedMap;
 
-import net.opentsdb.meta.TimeSeriesMeta;
-
 /**
  * This guy defines what composes a time series of data for use in formatters
  */

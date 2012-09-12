@@ -172,7 +172,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       nflushes++;
       maxflushes--;
       size.decrementAndGet();
-      ds.add(tsdb.get(row).addCallbacks(compactcb, handle_read_error));
+      ds.add(tsdb.storage.getRow(row).addCallbacks(compactcb, handle_read_error));
     }
     final Deferred<ArrayList<Object>> group = Deferred.group(ds);
     if (nflushes == MAX_CONCURRENT_FLUSHES && maxflushes > 0) {
@@ -382,7 +382,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       final byte[] qual = compact.qualifier();
       final byte[] value = compact.value();
       written_cells.incrementAndGet();
-      return tsdb.put(key, qual, value)
+      return tsdb.storage.putWithRetry(key, null, qual, value)
         .addCallbacks(new DeleteCompactedCB(row), handle_write_error);
     } else {
       // We had nothing to write, because one of the cells is already the
@@ -722,7 +722,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     }
 
     public Object call(final Object arg) {
-      return tsdb.delete(key, qualifiers).addErrback(handle_delete_error);
+      return tsdb.storage.deleteValues(key, family, qualifiers).addErrback(handle_delete_error);
     }
 
     public String toString() {
