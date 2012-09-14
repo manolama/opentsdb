@@ -14,6 +14,8 @@ package net.opentsdb.core;
 
 import java.io.IOException;
 
+import net.opentsdb.storage.TsdbStore;
+
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
 import org.slf4j.Logger;
@@ -65,11 +67,11 @@ public class JSON {
    * to the constructor. NOTE: The an object must have been provided via the
    * constructor or this method will log an error and return false
    * @param json A JSON formatted string to deserialize
-   * @return True if deserialization was successful (no errors encounterd) or
+   * @return True if deserialization was successful (no errors encountered) or
    *         false if there was an error. Check the error string via
    *         {@link getError} to find out what went wrong
    */
-  public boolean parseObject(final String json) {
+  public final boolean parseObject(final String json) {
     // try parsing
     try {
       error = "";   // reset error if one existed
@@ -82,16 +84,39 @@ public class JSON {
     }
     return false;
   }
+  
+  /**
+   * Attempts to parse the provided JSON string using the class that was passed
+   * to the constructor. NOTE: The an object must have been provided via the
+   * constructor or this method will log an error and return false
+   * @param json A JSON formatted array of bytes to deserialize
+   * @return True if deserialization was successful (no errors encountered) or
+   *         false if there was an error. Check the error string via
+   *         {@link getError} to find out what went wrong
+   */
+  public final boolean parseObject(final byte[] json) {
+    // try parsing
+    try {
+      error = "";   // reset error if one existed
+      object = JsonMapper.readValue(json, object.getClass());
+      return true;
+    } catch (Exception e) {
+      error = "Failed to parse JSON: " + e.getMessage();
+      LOG.error(error);
+      LOG.trace(TsdbStore.fromBytes(json));
+    }
+    return false;
+  }
 
   /**
    * Attempts to parse the provided JSON string using a provided type reference.
    * @param json A JSON formatted string to deserialize
    * @param type The type of object to load into
-   * @return True if deserialization was successful (no errors encounterd) or
+   * @return True if deserialization was successful (no errors encountered) or
    *         false if there was an error. Check the error string via
    *         {@link getError} to find out what went wrong
    */
-  public boolean parseObject(final String json,
+  public final boolean parseObject(final String json,
       final TypeReference<?> type) {
     // try parsing
     try {
@@ -106,13 +131,37 @@ public class JSON {
     }
     return false;
   }
+  
+  /**
+   * Attempts to parse the provided JSON string using a provided type reference.
+   * @param json A JSON formatted byte array to deserialize
+   * @param type The type of object to load into
+   * @return True if deserialization was successful (no errors encountered) or
+   *         false if there was an error. Check the error string via
+   *         {@link getError} to find out what went wrong
+   */
+  public final boolean parseObject(final byte[] json,
+      final TypeReference<?> type) {
+    // try parsing
+    try {
+      error = "";
+      object = JsonMapper.readValue(json, type);
+      return true;
+
+    } catch (Exception e) {
+      error = "Failed to parse JSON: " + e.getMessage();
+      LOG.error(error);
+      LOG.trace(TsdbStore.fromBytes(json));
+    }
+    return false;
+  }
 
   /**
    * Returns a JSON formatted string of the Object provided in the constructor.
    * @return A JSON formatted string if successful, an empty string if there was
    *         an error. Check {@link getError} to find out what went wrong
    */
-  public String getJsonString() {
+  public final String getJsonString() {
     if (object == null) {
       error = "TSD Error: The object was null";
       return "";
@@ -127,14 +176,35 @@ public class JSON {
     }
     return "";
   }
+  
+  /**
+   * Returns the JSON data as a byte array, useful for passing directly to storage
+   * @return A byte array of JSON data if successful, null if there was an error.
+   *         Check {@link getError} to find out what went wrong
+   */
+  public final byte[] getJsonBytes() {
+    if (object == null) {
+      error = "TSD Error: The object was null";
+      return null;
+    }
+
+    try {
+      error = "";
+      return JsonMapper.writeValueAsBytes(object);
+    } catch (IOException e) {
+      error = "Unable to serialize object to JSON: " + e.getMessage();
+      LOG.error(error);
+    }
+    return null;
+  }
 
   /** Gets the error string */
-  public String getError() {
+  public final String getError() {
     return error;
   }
 
   /** Gets the object */
-  public Object getObject() {
+  public final Object getObject() {
     return object;
   }
 

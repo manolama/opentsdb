@@ -145,16 +145,33 @@ public class TsdbStoreHBase extends TsdbStore {
       final byte[] family, final byte[] qualifier, final byte[] data,
       final Object rowLock, final Boolean durable, final Boolean bufferable) 
       throws TsdbStorageException {
+    // data check
+    if (table == null){
+      LOG.error("Missing table value");
+      return null;
+    }
+    if (key == null){
+      LOG.error("Missing key value");
+      return null;
+    }
+    if (qualifier == null){
+      LOG.error("Missing qualifier value");
+      return null;
+    }
+    if (data == null){
+      LOG.error("Missing data value");
+      return null;
+    }
+    
     short attempts = MAX_ATTEMPTS_PUT;
     short wait = INITIAL_EXP_BACKOFF_DELAY;
-    final PutRequest put = new PutRequest(table, key, family, qualifier, data,
+    final PutRequest put = new PutRequest(this.table, key, family, qualifier, data,
         (rowLock != null ? (RowLock) rowLock : null));
     put.setDurable(durable);
     put.setBufferable(bufferable);
     while (attempts-- > 0) {
       try {
-        client.put(put).joinUninterruptibly();
-        return null;
+        return client.put(put);
       } catch (HBaseException e) {
         if (attempts > 0) {
           LOG.error("Put failed, attempts left=" + attempts + " (retrying in "
@@ -202,8 +219,15 @@ public class TsdbStoreHBase extends TsdbStore {
    * @throws TsdbStorageException
    */
   public Boolean releaseRowLock(final Object lock) throws TsdbStorageException {
+    if (lock == null)
+      return true;
     try {
-      client.unlockRow((RowLock) lock);
+      try {
+        client.unlockRow((RowLock) lock).joinUninterruptibly();
+      } catch (Exception e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
       return true;
     } catch (HBaseException e) {
       LOG.error("Error while releasing the lock on row ", e);
@@ -277,6 +301,10 @@ public class TsdbStoreHBase extends TsdbStore {
 
   // GETTERS AND SETTERS ------------------------------------------------
 
+  public final void setTable(String table){
+    this.table = toBytes(table);
+  }
+  
   public final short getFlushInterval() throws TsdbStorageException {
     return client.getFlushInterval();
   }

@@ -166,6 +166,7 @@ final class TSDMain {
 
       final TSDB tsdb = new TSDB(client, config);
       registerShutdownHook(tsdb);
+      tsdb.startManagementThreads();
       final ServerBootstrap server = new ServerBootstrap(factory);
 
       // setup the network sockets

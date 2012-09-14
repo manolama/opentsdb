@@ -187,36 +187,36 @@ public class MetaData {
   }
 
   // STATICS ---------------------------------------------------------
-  
-  public static byte[] getMetricID(final byte[] id){
-    if (id.length < 3){
+
+  public static byte[] getMetricID(final byte[] id) {
+    if (id.length < 3) {
       LOG.warn("Timeseries ID is too small");
       return null;
     }
-    
+
     byte[] mid = new byte[3];
-    for (int i=0; i<3; i++)
+    for (int i = 0; i < 3; i++)
       mid[i] = id[i];
     return mid;
   }
-  
-  public static ArrayList<byte[]> getTagIDs(final byte[] id){
-    if (id.length < 3){
+
+  public static ArrayList<byte[]> getTagIDs(final byte[] id) {
+    if (id.length < 3) {
       LOG.warn("Timeseries ID is too small");
       return null;
     }
-    if (id.length < 9){
+    if (id.length < 9) {
       LOG.warn("No tags found in ID");
       return null;
     }
-    
+
     ArrayList<byte[]> tags = new ArrayList<byte[]>();
     byte[] tag = new byte[3];
-    int x =0;
-    for (int i=3; i<id.length; i++){
-      if (i > 3 && (i % 3) == 0){
+    int x = 0;
+    for (int i = 3; i < id.length; i++) {
+      if (i > 3 && (i % 3) == 0) {
         tags.add(tag);
-        x=0;
+        x = 0;
         tag = new byte[3];
       }
       tag[x] = id[i];
@@ -225,7 +225,7 @@ public class MetaData {
     tags.add(tag);
     return tags;
   }
-  
+
   // PRIVATES ---------------------------------------------------------
 
   private TimeSeriesMeta getTimeSeriesMetaFromHBase(final byte[] id)
@@ -233,7 +233,8 @@ public class MetaData {
     final String cell = this.kind + "_meta";
     final byte[] raw_meta = storage.getValue(id, TsdbStore.toBytes("name"),
         TsdbStore.toBytes(cell));
-    final String json = (raw_meta == null ? null : TsdbStore.fromBytes(raw_meta));
+    final String json = (raw_meta == null ? null : TsdbStore
+        .fromBytes(raw_meta));
     if (json == null)
       // todo - log
       return null;
@@ -259,7 +260,8 @@ public class MetaData {
 
     final byte[] raw_meta = storage.getValue(id, TsdbStore.toBytes("name"),
         TsdbStore.toBytes(cell));
-    final String json = (raw_meta == null ? null : TsdbStore.fromBytes(raw_meta));
+    final String json = (raw_meta == null ? null : TsdbStore
+        .fromBytes(raw_meta));
     if (json == null)
       return new GeneralMeta(id, type);
 

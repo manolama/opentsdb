@@ -36,7 +36,7 @@ public abstract class TsdbStore {
   /** Amount of time to wait, in ms, to gain a lock */
   protected static short LOCK_TIMEOUT = 800;
   /** Table to work with */
-  protected final byte[] table;
+  protected byte[] table;
 
   /**
    * Default Constructor requires a table name When extending this class, be
@@ -198,7 +198,7 @@ public abstract class TsdbStore {
       final byte[] family, final byte[] qualifier, final byte[] data,
       final Object rowLock) 
       throws TsdbStorageException{
-    return putWithRetry(key, family, qualifier, data, null, true, false);
+    return putWithRetry(key, family, qualifier, data, rowLock, true, false);
   }
 
   /**
@@ -308,6 +308,8 @@ public abstract class TsdbStore {
     return this.table;
   }
 
+  abstract public void setTable(String table);
+  
   public final String getTableString() {
     return fromBytes(this.table);
   }

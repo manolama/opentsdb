@@ -18,7 +18,6 @@ import org.codehaus.jackson.map.annotate.JsonSerialize;
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
 final public class TimeSeriesMeta {
-
   // stored values
   private String uid = "";
   private int retention = 0;
@@ -58,6 +57,13 @@ final public class TimeSeriesMeta {
   public String getJSON(){
     JSON json = new JSON(this);
     return json.getJsonString();
+  }
+  
+//returns the entire object as a JSON string
+  @JsonIgnore  
+  public byte[] getJSONBytes(){
+    JSON json = new JSON(this);
+    return json.getJsonBytes();
   }
   
   // returns just the data we should put in storage
@@ -113,15 +119,7 @@ final public class TimeSeriesMeta {
   public int getInterval(){
     return this.interval;
   }
-  
-  public long getFirst_Received(){
-    return this.first_received;
-  }
-  
-  public long getLast_Received(){
-    return this.last_received;
-  }
-  
+
   public String getNotes(){
     return this.notes;
   }
@@ -203,5 +201,21 @@ final public class TimeSeriesMeta {
   
   public void setTags(final ArrayList<GeneralMeta> t){
     this.tags = t;
+  }
+
+  public long getFirstReceived() {
+    return first_received;
+  }
+
+  public void setFirstReceived(long first_received) {
+    this.first_received = first_received;
+  }
+
+  public long getLastReceived() {
+    return last_received;
+  }
+
+  public void setLastReceived(long last_received) {
+    this.last_received = last_received;
   }
 }

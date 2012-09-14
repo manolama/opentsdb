@@ -52,22 +52,13 @@ public class UniqueIdMap {
   /** The UID of the object this map is associated with */
   @JsonIgnore
   private String uid;
-  
-  /** List of unique metric UID values */
-  private Set<String> metric = null;
-  
-  /** List of unique tagk UID values */
-  private Set<String> tagk = null;
-  
-  /** List of unique tagv UID values */
-  private Set<String> tagv = null;
-  
+
   /** List of unique tagk/tagv pair UID values */
   private Set<String> tags = null;
-  
-  /** List of unique time series UID values */
-  private Set<String> ts = null;
 
+  /** Flag to determine if an update needs to be flushed to storage */
+  private Boolean has_changed = false;
+  
   /**
    * Constructor
    * Empty to make Jackson serialization happy
@@ -86,12 +77,9 @@ public class UniqueIdMap {
    * Creates a copy of the given object
    * @param map The object to copy data from
    */
-  public void Copy(final UniqueIdMap map){
+  public final void Copy(final UniqueIdMap map){
     this.uid = map.uid;
-    this.tagk = map.tagk;
-    this.tagv = map.tagv;
     this.tags = map.tags;
-    this.metric = map.metric;
   }
   
   /**
@@ -101,7 +89,7 @@ public class UniqueIdMap {
    * @param type The type of UID being written, "metric", "tagk", "tagv", "tags" or "ts"
    * @return True if the put was successful, false if there was an error
    */
-  public Boolean putMap(final String uid, final String type){
+  public final Boolean putMap(final String uid, final String type){
     if (uid.length() < 1){
       LOG.error("Missing UID value");
       return false;
@@ -111,30 +99,14 @@ public class UniqueIdMap {
       return false;
     }
     
-    if (type.toLowerCase().compareTo("tagk") == 0){
-      if (this.tagk == null)
-        tagk = new TreeSet<String>();
-      tagk.add(uid);
-      return true;
-    }else if (type.toLowerCase().compareTo("tagv") == 0){
-      if (this.tagv == null)
-        tagv = new TreeSet<String>();
-      tagv.add(uid);
-      return true;
-    }else if (type.toLowerCase().compareTo("tags") == 0){
+    int size = 0;
+    if (type.toLowerCase().compareTo("tags") == 0){
       if (this.tags == null)
         tags = new TreeSet<String>();
+      size = tags.size();
       tags.add(uid);
-      return true;
-    }else if (type.toLowerCase().compareTo("ts") == 0){
-      if (this.ts == null)
-        ts = new TreeSet<String>();
-      ts.add(uid);
-      return true;
-    }else if (type.toLowerCase().compareTo("metric") == 0){
-      if (this.metric == null)
-        metric = new TreeSet<String>();
-      metric.add(uid);
+      if (tags.size() != size)
+        this.has_changed = true;
       return true;
     }
     
@@ -147,10 +119,9 @@ public class UniqueIdMap {
    * @return A string on success, NULL if there was an error serializing
    */
   @JsonIgnore
-  public String getJSONString(){
+  public final String getJSONString(){
     // don't bother if all maps are null
-    if (tagk == null && tagv == null && tags == null
-        && ts == null && metric == null){
+    if (tags == null){
       LOG.error("No data was stored in the map");
       return null;
     }
@@ -162,12 +133,12 @@ public class UniqueIdMap {
   
   /**
    * Attempts to load a JSON string into the local map
-   * @param map The JSON string to parse
+   * @param raw The JSON string to parse
    * @return True if the load was successful, False if there was an error parsing
    */
-  public Boolean deserialize(final String map){
+  public final Boolean deserialize(final byte[] raw){
     JSON codec = new JSON(this);
-    if (!codec.parseObject(map)){
+    if (!codec.parseObject(raw)){
       LOG.error(String.format("Unable to parse UID Map [%s]", codec.getError()));
       return false;
     }
@@ -175,30 +146,108 @@ public class UniqueIdMap {
     return true;
   }
   
-  // GETTERS AND SETTERS
+  /**
+   * Determines if the provided map is identical to the current map
+   * Note that the order of values in the sets don't matter as long as all of the 
+   * same values are present.
+   * @param map Map to compare against
+   * @return True if the maps are identical, false if they differ.
+   */
+  public final Boolean equals(final UniqueIdMap map){
+    if (this.uid != map.uid)
+      return false;
+    if ((this.tags == null) ^ (map.tags == null))
+      return false;
+    if (this.tags != null && map.tags != null &&
+        this.tags.equals(map.tags))
+      return false;
+    return true;
+  }
   
+  /**
+   * Merges the values from the provided map to the local copy
+   * @param map Map to merge into the local copy
+   */
+  public final void merge(final UniqueIdMap map){
+    if (this.tags == null && map.tags != null)
+      this.tags = map.tags;
+    else if (this.tags != null && map.tags != null)
+      this.tags.addAll(map.tags);
+  }
+  
+  /**
+   * Extracts a list of timeseries UIDs related to the current object by
+   * searching for tag pairs
+   * @param ts_uids A list of all of the Timeseries UIDs in the system
+   * @param metric_width The width of the metric tag to match against
+   * @return A list of matching Timeseries UIDs, may be NULL if there was an error
+   * or it may be empty if no TSUIDs were found to match
+   */
+  @JsonIgnore
+  public final Set<String> getTSUIDs(final Set<String> ts_uids, final short metric_width){
+    Set<String> ids = new TreeSet<String>();
+    // todo(CL) - there MUST be a better way. This could take ages
+    for (String pair : this.tags){
+      for (String tsuid : ts_uids){
+        if (tsuid.contains(pair))
+          ids.add(tsuid);
+      }
+    }
+    return ids;
+  }
+
+  /**
+   * Extracts a list of unique tagk or tagvs from the list of pairs
+   * @param type Either "tagk" or "tagv" depending on what you need
+   * @param tag_width The width of the tags
+   * @return A set of unique tagk or tagvs, or null if there was an error. The set
+   * may be empty if the pairs is empty
+   */
+  @JsonIgnore
+  public final Set<String> getTags(final String type, final short tag_width){
+    Set<String> ids = new TreeSet<String>();
+    if (type != "tagk" && type != "tagv"){
+      LOG.error(String.format("Invalid tag type [%s]", type));
+      return null;
+    }
+    final boolean is_tagk = type == "tagk" ? true : false;
+    for (String pair : this.tags){
+      if (is_tagk)
+        ids.add(pair.substring(0, tag_width * 2));
+      else
+        ids.add(pair.substring(tag_width * 2));
+    }
+    return ids;
+  }
+  
+  /**
+   * Extracts a list of metric UIDs related to the current object by
+   * searching for tag pairs in the timestamp uid list
+   * @param ts_uids A list of all of the Timeseries UIDs in the system
+   * @param metric_width The width of the metric tag to match against
+   * @return A list of matching metric UIDs, may be NULL if there was an error
+   * or it may be empty if no TSUIDs were found to match
+   */
+  @JsonIgnore
+  public final Set<String> getMetrics(final Set<String> ts_uids, final short metric_width){
+    Set<String> ids = new TreeSet<String>();
+    // todo(CL) - there MUST be a better way. This could take ages
+    for (String pair : this.tags){
+      for (String tsuid : ts_uids){
+        if (tsuid.contains(pair))
+          ids.add(tsuid.substring(0, metric_width * 2));
+      }
+    }
+    return ids;
+  }
+  
+  // GETTERS AND SETTERS
   public String getUid() {
     return uid;
   }
 
   public void setUid(String uid) {
     this.uid = uid;
-  }
-  
-  public Set<String> getTagk() {
-    return tagk;
-  }
-
-  public void setTagk(Set<String> tagk) {
-    this.tagk = tagk;
-  }
-
-  public Set<String> getTagv() {
-    return tagv;
-  }
-
-  public void setTagv(Set<String> tagv) {
-    this.tagv = tagv;
   }
 
   public Set<String> getTags() {
@@ -209,19 +258,13 @@ public class UniqueIdMap {
     this.tags = tags;
   }
 
-  public Set<String> getTs() {
-    return ts;
+  @JsonIgnore
+  public Boolean getHasChanged() {
+    return this.has_changed;
   }
-
-  public void setTs(Set<String> ts) {
-    this.ts = ts;
-  }
-
-  public Set<String> getMetric() {
-    return metric;
-  }
-
-  public void setMetric(Set<String> metric) {
-    this.metric = metric;
+  
+  @JsonIgnore
+  public void setHasChanged(final Boolean changed){
+    this.has_changed = changed;
   }
 }

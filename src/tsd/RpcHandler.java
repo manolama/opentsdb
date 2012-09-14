@@ -99,6 +99,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     http_commands.put("cache", cache);
     http_commands.put("metrics", new MetricsRpc());
     http_commands.put("meta", new MetaRPC());
+    http_commands.put("map", new MapRPC());
   }
 
   @Override
