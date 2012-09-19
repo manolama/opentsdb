@@ -48,7 +48,7 @@ public class TsdbStoreHBase extends TsdbStore {
     super(table);
     this.client = client;
   }
-
+  
   /**
    * Attempts to retrieve the latest value for a specific cell within a locked
    * key
@@ -165,8 +165,11 @@ public class TsdbStoreHBase extends TsdbStore {
     
     short attempts = MAX_ATTEMPTS_PUT;
     short wait = INITIAL_EXP_BACKOFF_DELAY;
-    final PutRequest put = new PutRequest(this.table, key, family, qualifier, data,
-        (rowLock != null ? (RowLock) rowLock : null));
+    final PutRequest put;
+    if (rowLock != null)
+      put = new PutRequest(this.table, key, family, qualifier, data, (RowLock) rowLock);
+    else
+      put = new PutRequest(this.table, key, family, qualifier, data);
     put.setDurable(durable);
     put.setBufferable(bufferable);
     while (attempts-- > 0) {

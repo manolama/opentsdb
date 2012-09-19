@@ -24,6 +24,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.stumbleupon.async.Deferred;
 
@@ -63,12 +65,15 @@ import net.opentsdb.stats.StatsCollector;
  * The IO for the HTTP API is JSON but you can overload it with your own
  * data format if necessary.
  */
-class HttpQuery {
+public class HttpQuery {
 
   private static final Logger LOG = LoggerFactory.getLogger(HttpQuery.class);
 
   protected static final String HTML_CONTENT_TYPE = "text/html; charset=UTF-8";
 
+  /** Extracts the final endpoint of the path from the path string */
+  protected static final Pattern ep_regex = Pattern.compile("^/.*\\/(\\w+).*$");
+  
   /**
    * Keep track of the latency of HTTP requests.
    */
@@ -153,6 +158,19 @@ class HttpQuery {
 
   public String getPostData(){
     return this.request().getContent().toString(CHARSET);
+  }
+  
+  /**
+   * Returns the the full path from the uri without the protocol, host, port
+   * or query string such as "/path/starts/here"
+   * @return The path within the URI
+   */
+  public String getQueryPath(){
+    try {
+      return new QueryStringDecoder(request.getUri()).getPath();
+    } catch (IllegalArgumentException e) {
+      throw new BadRequestException("Bad query string: " + e.getMessage());
+    }
   }
   
   /**
@@ -1077,6 +1095,47 @@ class HttpQuery {
       return HttpMethod.GET;
     }else
       return this.request().getMethod();
+  }
+  
+  /**
+   * Parses a string from a query to determine the boolean value.
+   * The only possible values that would return true are:
+   * - 1
+   * - true
+   * - yes
+   * Case insensitive
+   * @param value The string value to parse
+   * @return True only when one of the listed values is parsed, false in every
+   * other situation.
+   */
+  public Boolean parseBoolean(final String value){
+    if (value == null)
+      return false;
+    if (value.compareTo("1") == 0)
+      return true;
+    if (value.toLowerCase().compareTo("true") == 0)
+      return true;
+    if (value.toLowerCase().compareTo("yes") == 0)
+      return true;
+    return false;
+  }
+  
+  /**
+   * Attempts to extract the final endpoint of the URI from the full URI path
+   * E.g. if the path is "/q/opentsdb", this will return "opentsdb"
+   * @param query The HttpQuery object to fetch the URI from
+   * @return The endpoint as a string, a null if not found
+   */
+  public final String getEndpoint(){
+    String path = this.getQueryPath();
+    if (path == null)
+      return null;
+    
+    Matcher m = ep_regex.matcher(path);
+    if (m.find() && m.groupCount() >= 1){
+      return m.group(1).toLowerCase();
+    }
+    return null;
   }
   
   // ---------------- //

@@ -12,27 +12,22 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.google.gwt.dev.js.rhino.ObjToIntMap.Iterator;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
-import org.codehaus.jackson.type.TypeReference;
 import org.jboss.netty.channel.Channel;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
-import org.jboss.netty.util.CharsetUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Tags;
-import net.opentsdb.core.TimeSeries;
+import net.opentsdb.formatters.Ascii;
 import net.opentsdb.formatters.CollectdJSON;
+import net.opentsdb.formatters.TSDFormatter;
+import net.opentsdb.formatters.TsdbJSON;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.uid.NoSuchUniqueName;
 
@@ -61,143 +56,21 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
    * @param tsdb Master TSDB class object
    * @param query The query from Netty
    */
-  @SuppressWarnings("unchecked")
   public void execute(final TSDB tsdb, final HttpQuery query) {
-    // get the POST content
-    final String content = query.request().getContent()
-        .toString(CharsetUtil.UTF_8);
-    final String format = (query.getQueryStringParam("format") != null ? query.getQueryStringParam("format") : "");
-    ArrayList<TimeSeries> ts = new ArrayList<TimeSeries>();
-    int success = 0;
-    int fail = 0;
-    String jsonp = "";
-    JsonRpcError jerror = null;
-
-    // make sure there is data in the content
-    if (content.length() < 1) {
-      query.sendReply(new JsonRpcError(
-          "Missing JSON data. Please post JSON data.", 400).getJSON());
-      return;
-    }
-
-    // see if we need to use JSONP in our response
-    if (query.hasQueryStringParam("json"))
-      jsonp = query.getQueryStringParam("json");
-
-    // setup a parser
-    JSON_HTTP json = new JSON_HTTP();
-
-    // see if we have a specific format
-    if (!format.isEmpty() && format.equals("collectd")){
-      new CollectdJSON(tsdb).parseInput(content);
-    }
-    // if the content starts with a bracket, we have an array of metrics
-    else if (content.subSequence(0, 1).equals("[")) {
-      final TypeReference<ArrayList<TimeSeries>> typeRef = new TypeReference<ArrayList<TimeSeries>>() {};
-      if (json.parseObject(content, typeRef)){
-        ts = (ArrayList<TimeSeries>) json.getObject();
+    String endpoint = query.getEndpoint();
+    final TSDFormatter formatter;
+    if (endpoint != null){
+      if (endpoint.compareTo("ascii") == 0){
+        formatter = new Ascii(tsdb);
+      }else if (endpoint.compareTo("collectdjson") == 0){
+        formatter = new CollectdJSON(tsdb);
       }else{
-        LOG.error("Couldn't parse JSON content");
-        LOG.trace(content);
+        formatter = new TsdbJSON(tsdb);
       }
-    } else {
-      // otherwise we have a single metric (hopefully)
-      json = new JSON_HTTP(new TimeSeries());
-      if (json.parseObject(content))
-        ts.add((TimeSeries) json.getObject());
-    }
-
-    // if parsing generated an error, return it
-    if (!json.getError().isEmpty()) {
-      // TEMP - log it
-      LOG.debug(content);
-      jerror = new JsonRpcError(json.getError(), 422);
-      query.sendReply(HttpResponseStatus.UNPROCESSABLE_ENTITY,
-          (jsonp.isEmpty() ? jerror.getJSON() : jerror.getJSONP(jsonp)));
-      return;
-    }
-
-    // see if we got some metrics
-    if (ts.size() < 1) {
-      jerror = new JsonRpcError("Unable to parse any metrics from the data:"
-          + content, 422);
-      query.sendReply(HttpResponseStatus.UNPROCESSABLE_ENTITY,
-          (jsonp.isEmpty() ? jerror.getJSON() : jerror.getJSONP(jsonp)));
-      LOG.debug("Unable to extract metrics from: " + content);
-      return;
-    }
-
-    // these are for the response JSON
-    Map<String, Object> response = new HashMap<String, Object>();
-    ArrayList<Object> errors = new ArrayList<Object>();
-
-    // loop and store each metric
-    for (final TimeSeries m : ts) {
-      try {
-        // set the error callback class
-        class PutErrback implements Callback<Exception, Exception> {
-          ArrayList<Object> errors = null;
-          Integer fail;
-
-          /**
-           * Constructor
-           * @param err Pass the array of errors here so we can add to it
-           * @param f Pass the failure count here so we can increment it
-           */
-          public PutErrback(ArrayList<Object> err, Integer f) {
-            errors = err;
-            fail = f;
-          }
-
-          public Exception call(final Exception arg) {
-            // todo - fixme
-            //errors.add(m.BuildError("HBase error: " + arg.getMessage()));
-            hbase_errors.incrementAndGet();
-            fail++;
-            return arg;
-          }
-        }
-
-        // attempt the actual import
-        importDataPoint(tsdb, m).addErrback(
-            new PutErrback(errors, (Integer) fail));
-        success++;
-      } catch (NumberFormatException x) {
-     // todo - fixme
-        //errors.add(m.BuildError("Invalid value: " + x.getMessage()));
-        fail++;
-        invalid_values.incrementAndGet();
-      } catch (IllegalArgumentException x) {
-     // todo - fixme
-        //errors.add(m.BuildError("Illegal Argument: " + x.getMessage()));
-        fail++;
-        illegal_arguments.incrementAndGet();
-      } catch (NoSuchUniqueName x) {
-     // todo - fixme
-        //errors.add(m.BuildError("Unknown Metric: " + x.getMessage()));
-        fail++;
-        unknown_metrics.incrementAndGet();
-      }
-    }
-
-    // build the response
-    response.put("success", success);
-    response.put("fail", fail);
-    if (errors.size() > 0)
-      response.put("errors", errors);
-
-    // send the response
-    json = new JSON_HTTP(response);
-    final String reply = json.getJsonString();
-    if (reply.isEmpty()){
-      jerror = new JsonRpcError("Error generating resposne JSON", 500);
-      query.sendReply(HttpResponseStatus.INTERNAL_SERVER_ERROR,
-          (jsonp.isEmpty() ? jerror.getJSON() : jerror.getJSONP(jsonp)));
-    }else{
-      query.sendReply((jsonp.isEmpty() ? json.getJsonString() 
-          : json.getJsonPString(jsonp)));
-      LOG.debug(json.getJsonString());
-    }
+    }else
+      formatter = new TsdbJSON(tsdb);
+    
+    formatter.handleHTTPPut(query);
     return;
   }
 
@@ -291,37 +164,5 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
     } else { // floating point value
       return tsdb.addPoint(metric, timestamp, Float.parseFloat(value), tags);
     }
-  }
-
-  /**
-   * Imports a single data point.
-   * @param tsdb The TSDB to import the data point into.
-   * @param metric A {@link Metric} object
-   * @return A deferred object that indicates the completion of the request.
-   * @throws NumberFormatException if the timestamp or value is invalid.
-   * @throws IllegalArgumentException if any other argument is invalid.
-   * @throws NoSuchUniqueName if the metric isn't registered.
-   */
-  private Deferred<Object> importDataPoint(final TSDB tsdb, final TimeSeries metric) {
-    if (metric.metric_name.length() <= 0) {
-      throw new IllegalArgumentException("empty metric name");
-    }
-    if (metric.tags == null || metric.tags.size() < 1){
-      throw new IllegalArgumentException("Missing tags");
-    }
-    if (metric.dps == null || metric.dps.size() < 1){
-      throw new IllegalArgumentException("Missing data points");
-    }
-
-    // put each data point
-    Deferred<Object> rv = null;
-    for (Entry<Long, Object> entry : metric.dps.entrySet()) {
-      if (TimeSeries.isFloat(entry.getValue())){
-        rv = tsdb.addPoint(metric.metric_name, entry.getKey(), (Float)entry.getValue(), metric.tags);
-      }else{
-        rv = tsdb.addPoint(metric.metric_name, entry.getKey(), (Long)entry.getValue(), metric.tags);
-      }
-    }
-    return rv;
   }
 }

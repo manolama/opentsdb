@@ -15,15 +15,10 @@ package net.opentsdb.uid;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
-import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.xml.bind.DatatypeConverter;
@@ -34,13 +29,11 @@ import net.opentsdb.meta.MetaData;
 import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
-import net.opentsdb.storage.TsdbStoreHBase;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.hbase.async.Bytes;
-import org.hbase.async.HBaseClient;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 
@@ -110,10 +103,10 @@ public final class UniqueId implements UniqueIdInterface {
    * @throws IllegalArgumentException if width is negative or too small/large or
    *           if kind is an empty string.
    */
-  public UniqueId(final HBaseClient client, final byte[] table,
+  public UniqueId(final TsdbStore client, final byte[] table,
       final String kind, final int width) {
     this.table = table;
-    this.storage = new TsdbStoreHBase(table, client);
+    this.storage = client;
     if (kind.isEmpty()) {
       throw new IllegalArgumentException("Empty string as 'kind' argument!");
     }
@@ -390,7 +383,8 @@ public final class UniqueId implements UniqueIdInterface {
         meta.setName(this.getName(id));
       return meta;
     }catch (NoSuchUniqueId nuid){
-      LOG.error(String.format("Metric UID [%s] does not exist in storage", IDtoString(id)));
+      LOG.error(String.format("%s UID [%s] does not exist in storage", fromBytes(kind), 
+          IDtoString(id)));
       return null;
     }
   }
@@ -429,96 +423,101 @@ public final class UniqueId implements UniqueIdInterface {
    */
   public void flushMaps(final Boolean use_local){
     long changed = 0;
-    for (Map.Entry<String, UniqueIdMap> entry : this.uid_map.entrySet()){
-      UniqueIdMap map = entry.getValue();
-      if (!map.getHasChanged())
-        continue;
-      
-      String uid_str = map.getUid();
-      if (uid_str == null){
-        LOG.error(String.format("Null UID for %s map ID [%s]", fromBytes(kind), entry.getKey()));
-        continue;
-      }
-      
-      // lock, fetch, merge, put
-      byte[] uid = StringtoID(uid_str);
-      byte[] qualifier = toBytes(fromBytes(kind) + "_map");
-      short attempt = 3;
-      Object lock = null;
-      try{
-        while(attempt-- > 0){
-          LOG.debug(String.format("Attempting to sync map for %s [%s]", 
-              fromBytes(kind), map.getUid()));
-          // first, we need to lock the row for exclusive access on the set
-          try {
-            lock = storage.getRowLock(uid);          
-            if (lock == null) {
-              LOG.error("Received null for row lock");
-              continue;
-            }
-            LOG.debug(String.format("Successfully locked UID row [%s]", map.getUid()));
-            
-            UniqueIdMap temp_map = new UniqueIdMap(map.getUid());
-            JSON codec = new JSON(temp_map);
-            
-            // get the current value from storage so we don't overwrite other TSDs changes
-            byte[] smap = storage.getValue(uid, ID_FAMILY, qualifier, lock);
-            if (smap == null){
-              LOG.warn("UID map was not found in the storage system");
-            }else{
-              if (!codec.parseObject(TsdbStore.fromBytes(smap))){
-                LOG.error("Unable to parse UID map from the storage system");
-                return;
-              }
-              temp_map = (UniqueIdMap)codec.getObject();
-              LOG.debug("Successfully loaded UID map from the storage system");
-              
-              // now we compare the newly loaded list and the old one, if there are any differences,
-              // we need to update storage
-              if (map.equals(temp_map)){
-                LOG.debug("No changes from stored data");
-                return;
-              }
-            }          
-            
-            // there was a difference so merge the two sets, then write to storage
-            if (!use_local)
-              map.merge(temp_map);
-            LOG.trace(String.format("%s UID [%s] requires updating",
-                fromBytes(kind), map.getUid()));            
-            
-            codec = new JSON(map);
-            storage.putWithRetry(uid, ID_FAMILY, qualifier, codec.getJsonBytes(), lock)
-                .joinUninterruptibly();
-            LOG.info("Successfully updated UID map in storage");
-            // do NOT forget to unlock
-            LOG.trace("Releasing lock");
-            if (storage.releaseRowLock(lock))
-              lock = null;
-            changed++;
-          } catch (TsdbStorageException e) {
+    try{
+      for (Map.Entry<String, UniqueIdMap> entry : this.uid_map.entrySet()){
+        UniqueIdMap map = entry.getValue();
+        if (!map.getHasChanged())
+          continue;
+        
+        String uid_str = map.getUid();
+        if (uid_str == null){
+          LOG.error(String.format("Null UID for %s map ID [%s]", fromBytes(kind), entry.getKey()));
+          continue;
+        }
+        
+        // lock, fetch, merge, put
+        byte[] uid = StringtoID(uid_str);
+        byte[] qualifier = toBytes(fromBytes(kind) + "_map");
+        short attempt = 3;
+        Object lock = null;
+        try{
+          while(attempt-- > 0){
+            LOG.debug(String.format("Attempting to sync map for %s [%s]", 
+                fromBytes(kind), map.getUid()));
+            // first, we need to lock the row for exclusive access on the set
             try {
-              Thread.sleep(61000 / 3);
-            } catch (InterruptedException ie) {
+              lock = storage.getRowLock(uid);          
+              if (lock == null) {
+                LOG.error("Received null for row lock");
+                continue;
+              }
+              LOG.debug(String.format("Successfully locked UID row [%s]", map.getUid()));
+              
+              UniqueIdMap temp_map = new UniqueIdMap(map.getUid());
+              JSON codec = new JSON(temp_map);
+              
+              // get the current value from storage so we don't overwrite other TSDs changes
+              byte[] smap = storage.getValue(uid, ID_FAMILY, qualifier, lock);
+              if (smap == null){
+                LOG.warn(String.format("UID map for [%s] was not found in the storage system", 
+                    fromBytes(kind)));
+              }else{
+                if (!codec.parseObject(TsdbStore.fromBytes(smap))){
+                  LOG.error("Unable to parse UID map from the storage system");
+                  return;
+                }
+                temp_map = (UniqueIdMap)codec.getObject();
+                LOG.debug("Successfully loaded UID map from the storage system");
+                
+                // now we compare the newly loaded list and the old one, if there are any differences,
+                // we need to update storage
+                if (map.equals(temp_map)){
+                  LOG.debug("No changes from stored data");
+                  return;
+                }
+              }          
+              
+              // there was a difference so merge the two sets, then write to storage
+              if (!use_local)
+                map.merge(temp_map);
+              LOG.trace(String.format("%s UID [%s] requires updating",
+                  fromBytes(kind), map.getUid()));            
+              
+              codec = new JSON(map);
+              storage.putWithRetry(uid, ID_FAMILY, qualifier, codec.getJsonBytes(), lock)
+                  .joinUninterruptibly();
+              LOG.info("Successfully updated UID map in storage");
+              // do NOT forget to unlock
+              LOG.trace("Releasing lock");
+              if (storage.releaseRowLock(lock))
+                lock = null;
+              changed++;
+            } catch (TsdbStorageException e) {
+              try {
+                Thread.sleep(61000 / 3);
+              } catch (InterruptedException ie) {
+                return;
+              }
+              continue;
+            } catch (Exception e){
+              LOG.error(String.format("Unhandled exception [%s]", e));
+              e.printStackTrace();
               return;
             }
-            continue;
-          } catch (Exception e){
-            LOG.error(String.format("Unhandled exception [%s]", e));
-            e.printStackTrace();
-            return;
           }
+        }catch (TsdbStorageException tex){
+          LOG.warn(String.format("Exception from storage [%s]", tex.getMessage()));
+          return;
+        } finally {
+          LOG.trace("Releasing lock");
+          if (storage.releaseRowLock(lock))
+            lock = null;
         }
-      }catch (TsdbStorageException tex){
-        LOG.warn(String.format("Exception from storage [%s]", tex.getMessage()));
-        return;
-      } finally {
-        LOG.trace("Releasing lock");
-        if (storage.releaseRowLock(lock))
-          lock = null;
       }
+    }catch (Exception e){
+      e.printStackTrace();
+      return;
     }
-    
     LOG.trace(String.format("Updated [%d] out of [%d] %s maps", changed, 
         uid_map.size(), fromBytes(kind)));
   }

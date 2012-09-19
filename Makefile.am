@@ -32,12 +32,14 @@ tsdb_SRC := \
 	src/core/CompactionQueue.java	\
 	src/core/Const.java	\
 	src/core/Config.java	\
+	src/core/Configuration.java	\
 	src/core/DataPoint.java	\
 	src/core/DataPoints.java	\
 	src/core/DataPointsIterator.java	\
 	src/core/IncomingDataPoints.java	\
 	src/core/IllegalDataException.java	\
 	src/core/Internal.java	\
+	src/core/JSON.java	\
 	src/core/Query.java	\
 	src/core/RowKey.java	\
 	src/core/RowSeq.java	\
@@ -48,34 +50,44 @@ tsdb_SRC := \
 	src/core/Tags.java	\
 	src/core/TsdbQuery.java	\
 	src/core/WritableDataPoints.java	\
+	src/formatters/Ascii.java	\
+	src/formatters/CollectdJSON.java	\
+	src/formatters/TSDFormatter.java	\
+	src/formatters/TsdbJSON.java	\
 	src/graph/Plot.java	\
+	src/meta/GeneralMeta.java	\
+	src/meta/MetaData.java	\
+	src/meta/TimeSeriesMeta.java	\
 	src/stats/Histogram.java	\
 	src/stats/StatsCollector.java	\
+	src/storage/TsdbScanner.java	\
+	src/storage/TsdbStorageException.java	\
+	src/storage/TsdbStore.java	\
+	src/storage/TsdbStoreHBase.java	\
 	src/tools/ArgP.java	\
 	src/tools/CliOptions.java	\
 	src/tools/CliQuery.java	\
 	src/tools/DumpSeries.java	\
 	src/tools/Fsck.java	\
+	src/tools/MapSync.java	\
 	src/tools/TSDMain.java	\
 	src/tools/TextImporter.java	\
 	src/tools/UidManager.java	\
 	src/tsd/AggregatorsRPC.java	\
-	src/tsd/AsciiEmitter.java	\
 	src/tsd/BadRequestException.java	\
 	src/tsd/ConnectionManager.java	\
 	src/tsd/DataEmitter.java	\
-	src/tsd/FormatCollectd.java	\
 	src/tsd/GnuGraphEmitter.java	\
 	src/tsd/GnuplotException.java	\
 	src/tsd/HttpCache.java	\
 	src/tsd/HttpCacheEntry.java	\
 	src/tsd/HttpQuery.java	\
 	src/tsd/HttpRpc.java	\
-	src/tsd/JsonEmitter.java	\
-	src/tsd/JsonHelper.java	\
+	src/tsd/JSON_HTTP.java	\
 	src/tsd/JsonRpcError.java	\
 	src/tsd/LogsRpc.java	\
-	src/tsd/Metric.java	\
+	src/tsd/MapRPC.java	\
+	src/tsd/MetaRPC.java	\
 	src/tsd/MetricsRpc.java	\
 	src/tsd/PipelineFactory.java	\
 	src/tsd/PutDataPointRpc.java	\
@@ -90,7 +102,8 @@ tsdb_SRC := \
 	src/uid/NoSuchUniqueId.java	\
 	src/uid/NoSuchUniqueName.java	\
 	src/uid/UniqueId.java	\
-	src/uid/UniqueIdInterface.java
+	src/uid/UniqueIdInterface.java \
+	src/uid/UniqueIdMap.java
 
 tsdb_DEPS = \
 	$(ASYNCHBASE)	\

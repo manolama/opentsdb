@@ -45,9 +45,9 @@ public class MetaData {
    * @param table The name of the HBase table to use.
    * @param kind The name of the cache, e.g. metrics, tagk or ts
    */
-  public MetaData(final HBaseClient client, final byte[] table,
+  public MetaData(final TsdbStore client, final byte[] table,
       final Boolean is_ts, final String kind) {
-    this.storage = new TsdbStoreHBase(table, client);
+    this.storage = client;
     this.is_ts = is_ts;
     this.kind = kind;
   }
@@ -169,6 +169,7 @@ public class MetaData {
           storage.putWithRetry(id, TsdbStore.toBytes("name"),
               TsdbStore.toBytes(this.kind + "_meta"), TsdbStore.toBytes(json),
               lock);
+          LOG.debug("Updated meta for [" + this.kind + "] on UID [" + UniqueId.IDtoString(id) + "]");
         } catch (HBaseException e) {
           LOG.error("Failed to Put Meta Data [" + uid + "]", e);
           continue;

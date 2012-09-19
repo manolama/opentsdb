@@ -249,7 +249,7 @@ final class IncomingDataPoints implements WritableDataPoints {
 
     // TODO(tsuna): Add an errback to handle some error cases here.
     //point.setDurable(!batch_import);
-    return tsdb.storage.putWithRetry(row, TSDB.FAMILY, Bytes.fromShort(qualifier), value,
+    return tsdb.data_storage.putWithRetry(row, TSDB.FAMILY, Bytes.fromShort(qualifier), value,
         null, !batch_import, false)/*.addBoth(cb)*/;
   }
 
@@ -287,14 +287,14 @@ final class IncomingDataPoints implements WritableDataPoints {
     if (time < 0) {
       throw new IllegalArgumentException("negative time: " + time);
     }
-    tsdb.storage.setFlushInterval(time);
+    tsdb.data_storage.setFlushInterval(time);
   }
 
   public void setBatchImport(final boolean batchornot) {
     if (batch_import == batchornot) {
       return;
     }
-    final long current_interval = tsdb.storage.getFlushInterval();
+    final long current_interval = tsdb.data_storage.getFlushInterval();
     if (batchornot) {
       batch_import = true;
       // If we already were given a larger interval, don't override it.

@@ -249,7 +249,7 @@ final class TsdbQuery implements Query {
     final TsdbScanner scanner = getScanner();
     try {
       ArrayList<ArrayList<KeyValue>> rows;
-      while ((rows = tsdb.storage.nextRows(scanner).joinUninterruptibly()) != null) {
+      while ((rows = tsdb.data_storage.nextRows(scanner).joinUninterruptibly()) != null) {
         hbase_time += (System.nanoTime() - starttime) / 1000000;
         for (final ArrayList<KeyValue> row : rows) {
           final byte[] key = row.get(0).key();
@@ -400,7 +400,7 @@ final class TsdbQuery implements Query {
       createAndSetFilter(scanner);
     }
     scanner.setFamily(TSDB.FAMILY);
-    return tsdb.storage.openScanner(scanner);
+    return tsdb.data_storage.openScanner(scanner);
   }
 
   /** Returns the UNIX timestamp from which we must start scanning.  */

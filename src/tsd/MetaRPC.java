@@ -12,7 +12,6 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -23,9 +22,6 @@ import net.opentsdb.meta.GeneralMeta.Meta_Type;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.uid.UniqueId;
 
-import org.codehaus.jackson.JsonNode;
-import org.codehaus.jackson.JsonParseException;
-import org.codehaus.jackson.map.JsonMappingException;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
@@ -46,56 +42,29 @@ public class MetaRPC implements HttpRpc {
     LOG.trace(query.request.getUri());
     // GET
     if (query.getMethod() == HttpMethod.GET) {
-      // check method
-      this.handleGet(tsdb, query);
+      this.getMeta(tsdb, query);
       return;
       // POST
-    } else if (query.getMethod().compareTo(HttpMethod.POST) == 0 ||
-        query.getMethod().compareTo(HttpMethod.PUT) == 0) {
-      Meta_Type type = Meta_Type.INVALID;
-      try {
-        int t = 0;
-        // determine the type first
-        if (!query.hasQueryStringParam("type")){
-          JsonNode root = JSON.getMapper().readValue(query.getPostData(), JsonNode.class);
-          t = root.path("type").asInt();
-          if (t < 1 || t > Meta_Type.values().length){
-            query.sendError(HttpResponseStatus.BAD_REQUEST, "Invalid [type] value");
-            return;
-          }
-        }else{
-          t = Integer.parseInt(query.getQueryStringParam("type"));
-        }
-        type = Meta_Type.values()[t];
-      } catch (JsonParseException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
-      } catch (JsonMappingException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
-      } catch (IOException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
-      }
+    } else if (query.getMethod() == HttpMethod.POST ||
+        query.getMethod() == HttpMethod.PUT ) {    
       
-      // route
-      switch(type){
-      case METRICS:
-      case TAGK:
-      case TAGV:
-        this.handlePostGeneral(tsdb, query);
-        break;
-      case TIMESERIES:
-        this.handlePostTimeseries(tsdb, query);
-        break;
-      default:
-        query.sendError(HttpResponseStatus.BAD_REQUEST, 
-            String.format("Unknown type [%s]", type));
-        return; 
+      final String endpoint = query.getEndpoint();
+      if (endpoint == null || endpoint.isEmpty()){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Missing proper endpoint");
+        return;
       }
-      return;
+
+      if (endpoint.compareTo("timeseries") == 0)
+        this.postTimeseries(tsdb, query);
+      else if (endpoint.compareTo("metric") == 0)
+        this.postGeneral(tsdb, query, Meta_Type.METRICS);
+      else if (endpoint.compareTo("tagk") == 0)
+        this.postGeneral(tsdb, query, Meta_Type.TAGK);
+      else if (endpoint.compareTo("tagv") == 0)
+        this.postGeneral(tsdb, query, Meta_Type.TAGV);
+      
     } else {
-      query.sendReply(HttpResponseStatus.METHOD_NOT_ALLOWED,
+      query.sendError(HttpResponseStatus.METHOD_NOT_ALLOWED,
           String.format("Method [%s] is not allowed", query.getMethod()));
       return;
     }
@@ -106,53 +75,40 @@ public class MetaRPC implements HttpRpc {
    * @param tsdb The TSDB to use for fetching/writing meta data
    * @param query The Query to respond to
    */
-  private void handleGet(final TSDB tsdb, final HttpQuery query) {
+  private void getMeta(final TSDB tsdb, final HttpQuery query) {
     if (!query.hasQueryStringParam("uid")) {
       query.sendError(HttpResponseStatus.BAD_REQUEST, "Missing [uid] parameter");
       return;
     }
-
-    if (!query.hasQueryStringParam("type")) {
-      query.sendError(HttpResponseStatus.BAD_REQUEST, "Missing [type] parameter");
-      return;
-    }
-
     byte[] id = UniqueId.StringtoID(query.getQueryStringParam("uid"));
-    int type = Integer.parseInt(query.getQueryStringParam("type"));
-    if (type < 1 || type > Meta_Type.values().length) {
-      query.sendError(HttpResponseStatus.BAD_REQUEST, "Invalid [type] value");
-      return;
-    }
-    Meta_Type meta_type = Meta_Type.values()[type];
+    
+    final String endpoint = query.getEndpoint();
+
     GeneralMeta meta = null;
-    JSON parser = new JSON(meta);
-    switch (meta_type) {
-    case METRICS:
-      meta = tsdb.metrics.getGeneralMeta(id);
-      parser = new JSON(meta);
-      query.sendReply(parser.getJsonString());
-      return;
-    case TAGK:
-      meta = tsdb.tag_names.getGeneralMeta(id);
-      parser = new JSON(meta);
-      query.sendReply(parser.getJsonString());
-      break;
-    case TAGV:
-      meta = tsdb.tag_values.getGeneralMeta(id);
-      parser = new JSON(meta);
-      query.sendReply(parser.getJsonString());
-      return;
-    case TIMESERIES:
+    JSON parser = null;
+    if (endpoint == null || endpoint.isEmpty() || endpoint.compareTo("timeseries") == 0){
       TimeSeriesMeta ts_meta = tsdb.getTimeSeriesMeta(id);
-      parser = new JSON(ts_meta);
-      query.sendReply(parser.getJsonString());
-      break;
-    default:
-      query.sendError(HttpResponseStatus.BAD_REQUEST, 
-          String.format("Unkown type value: %d", type));
-      return;
+      if (ts_meta != null)
+        parser = new JSON(ts_meta);
+    } else if (endpoint.compareTo("metric") == 0){
+      meta = tsdb.metrics.getGeneralMeta(id);
+      if (meta != null)
+        parser = new JSON(meta);
+    } else if (endpoint.compareTo("tagk") == 0){
+      meta = tsdb.tag_names.getGeneralMeta(id);
+      if (meta != null)
+        parser = new JSON(meta);
+    } else if (endpoint.compareTo("tagv") == 0){
+      meta = tsdb.tag_values.getGeneralMeta(id);
+      if (meta != null)
+        parser = new JSON(meta);
     }
 
+    if (parser == null){
+      query.sendError(HttpResponseStatus.BAD_REQUEST, "UID object was not found");
+      return;
+    }
+    query.sendReply(parser.getJsonBytes());
     return;
   }
 
@@ -161,7 +117,8 @@ public class MetaRPC implements HttpRpc {
    * @param tsdb The TSDB to use for fetching/writing meta data
    * @param query The Query to respond to
    */
-  private void handlePostGeneral(final TSDB tsdb, final HttpQuery query) {
+  private void postGeneral(final TSDB tsdb, final HttpQuery query, 
+      final Meta_Type type) {
     final String content = query.getPostData();    
     GeneralMeta meta = new GeneralMeta();
 
@@ -181,15 +138,6 @@ public class MetaRPC implements HttpRpc {
         meta.setDescription(query.getQueryStringParam("description"));
       if (query.hasQueryStringParam("notes"))
         meta.setNotes(query.getQueryStringParam("notes"));
-      if (query.hasQueryStringParam("type")){
-        final int type = Integer.parseInt(query
-            .getQueryStringParam("type"));
-        if (type < 1 || type >= Meta_Type.values().length){
-          query.sendError(HttpResponseStatus.BAD_REQUEST,
-            "Invalid [type] value or unable to parse it as an integer");
-        }
-        meta.setType(Meta_Type.values()[type]);
-      }
       
       // custom tags are &key1=name&val1=value
       int i = 1;
@@ -227,14 +175,9 @@ public class MetaRPC implements HttpRpc {
           .sendError(HttpResponseStatus.BAD_REQUEST, "Missing [uid] parameter");
       return;
     }
-    if (meta.getType() == Meta_Type.INVALID) {
-      query.sendError(HttpResponseStatus.BAD_REQUEST,
-          "Missing [type] parameter");
-      return;
-    }
 
     // put it in the right place
-    switch (meta.getType()) {
+    switch (type) {
     case METRICS:
       if (!tsdb.metrics.putMeta(meta)) {
         query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
@@ -274,7 +217,7 @@ public class MetaRPC implements HttpRpc {
    * @param tsdb The TSDB to use for fetching/writing meta data
    * @param query The Query to respond to
    */
-  private void handlePostTimeseries(final TSDB tsdb, final HttpQuery query) {
+  private void postTimeseries(final TSDB tsdb, final HttpQuery query) {
     final String content = query.getPostData();    
     TimeSeriesMeta ts_meta = new TimeSeriesMeta();
 
@@ -360,9 +303,4 @@ public class MetaRPC implements HttpRpc {
     query.sendReply(parser.getJsonString());
     return;
   }
-}
-
-final class MetaUIDs{
-  public String uid = "";
-  public int type = 0;
 }

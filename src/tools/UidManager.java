@@ -31,6 +31,7 @@ import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
 
 import net.opentsdb.core.Config;
+import net.opentsdb.storage.TsdbStoreHBase;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueId;
@@ -289,7 +290,8 @@ final class UidManager {
                             final byte[] table,
                             final short idwidth,
                             final String[] args) {
-    final UniqueId uid = new UniqueId(client, table, args[1], (int) idwidth);
+    final UniqueId uid = new UniqueId(new TsdbStoreHBase(table, client), 
+        table, args[1], (int) idwidth);
     for (int i = 2; i < args.length; i++) {
       try {
         uid.getOrCreateId(args[i]);
@@ -318,7 +320,8 @@ final class UidManager {
     final String kind = args[1];
     final String oldname = args[2];
     final String newname = args[3];
-    final UniqueId uid = new UniqueId(client, table, kind, (int) idwidth);
+    final UniqueId uid = new UniqueId(new TsdbStoreHBase(table, client), 
+        table, kind, (int) idwidth);
     try {
       uid.rename(oldname, newname);
     } catch (HBaseException e) {
@@ -577,7 +580,8 @@ final class UidManager {
                                     final short idwidth,
                                     final String kind,
                                     final byte[] id) {
-    final UniqueId uid = new UniqueId(client, table, kind, (int) idwidth);
+    final UniqueId uid = new UniqueId(new TsdbStoreHBase(table, client), 
+        table, kind, (int) idwidth);
     try {
       final String name = uid.getName(id);
       System.out.println(kind + ' ' + name + ": " + Arrays.toString(id));
@@ -643,7 +647,8 @@ final class UidManager {
                                       final short idwidth,
                                       final String kind,
                                       final String name) {
-    final UniqueId uid = new UniqueId(client, table, kind, (int) idwidth);
+    final UniqueId uid = new UniqueId(new TsdbStoreHBase(table, client), 
+        table, kind, (int) idwidth);
     try {
       final byte[] id = uid.getId(name);
       System.out.println(kind + ' ' + name + ": " + Arrays.toString(id));

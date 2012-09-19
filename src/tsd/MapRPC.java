@@ -17,12 +17,7 @@ public class MapRPC implements HttpRpc {
 
   public void execute(final TSDB tsdb, final HttpQuery query) {
     LOG.trace(query.request.getUri());
-
-    Pattern p = Pattern.compile("^/.*\\/(\\w+).*$");
-    Matcher m = p.matcher(query.request.getUri());
-    String endpoint = "";
-    if (m.find() && m.groupCount() >= 1)
-      endpoint = m.group(1);
+    String endpoint = query.getEndpoint();
 
     // if they didn't choose an endpoint, dump the timeseries UIDs
     if (endpoint.length() < 1 ||
