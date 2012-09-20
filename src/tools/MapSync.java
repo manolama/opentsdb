@@ -129,7 +129,7 @@ final class MapSync {
             tsdb.ts_uids.add(ts_uid);
             
             // update maps and metadata
-            tsdb.processNewTSUID(temp, true);
+            tsdb.processNewTSUID(temp, false);
             
             // update metadata
             

@@ -15,15 +15,19 @@ package net.opentsdb.uid;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 import javax.xml.bind.DatatypeConverter;
 
 import net.opentsdb.core.JSON;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaData;
 import net.opentsdb.storage.TsdbScanner;
@@ -86,7 +90,8 @@ public final class UniqueId implements UniqueIdInterface {
   private volatile int cacheMisses;
 
   /** Last time this map was loaded in it's entirety */
-  private long last_full_load = 0;
+  private long last_full_uid_load = 0;
+  private long last_full_map_load = 0;
 
   /** Metadata associated with this UID */
   private final MetaData metadata;
@@ -457,7 +462,7 @@ public final class UniqueId implements UniqueIdInterface {
               JSON codec = new JSON(temp_map);
               
               // get the current value from storage so we don't overwrite other TSDs changes
-              byte[] smap = storage.getValue(uid, ID_FAMILY, qualifier, lock);
+              byte[] smap = storage.getValue(uid, NAME_FAMILY, qualifier, lock);
               if (smap == null){
                 LOG.warn(String.format("UID map for [%s] was not found in the storage system", 
                     fromBytes(kind)));
@@ -484,7 +489,7 @@ public final class UniqueId implements UniqueIdInterface {
                   fromBytes(kind), map.getUid()));            
               
               codec = new JSON(map);
-              storage.putWithRetry(uid, ID_FAMILY, qualifier, codec.getJsonBytes(), lock)
+              storage.putWithRetry(uid, NAME_FAMILY, qualifier, codec.getJsonBytes(), lock)
                   .joinUninterruptibly();
               LOG.info("Successfully updated UID map in storage");
               // do NOT forget to unlock
@@ -755,16 +760,17 @@ public final class UniqueId implements UniqueIdInterface {
    * the region servers, it will only load every RELOAD_INTERVAL
    * @return True if the load was successful, false if there was an error
    */
-  public boolean loadAll() {
+  public boolean loadAllUIDs() {
     // determine if we need to load yet
-    if ((System.currentTimeMillis() / 1000) < this.last_full_load
+    if ((System.currentTimeMillis() / 1000) < this.last_full_uid_load
         + RELOAD_INTERVAL)
       return true;
 
-    this.last_full_load = System.currentTimeMillis() / 1000;
+    this.last_full_uid_load = System.currentTimeMillis() / 1000;
 
-    final TsdbScanner scanner = getFullScanner();
+    final TsdbScanner scanner = getFullScanner(false);
     try {
+      long count=0;
       ArrayList<ArrayList<KeyValue>> rows;
       while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
         for (final ArrayList<KeyValue> row : rows) {
@@ -788,9 +794,53 @@ public final class UniqueId implements UniqueIdInterface {
                 + Arrays.toString(cached_id)
                 + " in cache, but just scanned id=" + Arrays.toString(id));
           }
+          count++;
         }
       }
+      LOG.trace(String.format("Loaded [%d] uids for [%s]", count, fromBytes(kind)));
+      return true;
+    } catch (HBaseException e) {
+      throw e;
+    } catch (Exception e) {
+      e.printStackTrace();
+      throw new RuntimeException("Should never be here", e);
+    }
+  }
+  
+  public boolean loadAllMaps() {
+    // determine if we need to load yet
+    if ((System.currentTimeMillis() / 1000) < this.last_full_map_load
+        + RELOAD_INTERVAL)
+      return true;
 
+    this.last_full_map_load = System.currentTimeMillis() / 1000;
+
+    UniqueIdMap map = new UniqueIdMap("");
+    JSON codec = new JSON(map);
+    final TsdbScanner scanner = getFullScanner(true);
+    try {
+      long count=0;
+      ArrayList<ArrayList<KeyValue>> rows;
+      while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
+        for (final ArrayList<KeyValue> row : rows) {
+          if (row.size() != 1) {
+            LOG.error("WTF shouldn't happen!  Scanner " + scanner + " returned"
+                + " a row that doesn't have exactly 1 KeyValue: " + row);
+            if (row.isEmpty()) {
+              continue;
+            }
+          }
+          final byte[] key = row.get(0).key();
+          map = new UniqueIdMap("");
+          if (!codec.parseObject(row.get(0).value())){
+            LOG.error(String.format("Unable to parse map for [%s]", IDtoString(key)));
+            continue;
+          }
+          this.uid_map.put(IDtoString(key), (UniqueIdMap)codec.getObject());
+          count++;
+        }
+      }
+      LOG.trace(String.format("Loaded [%d] maps for [%s]", count, fromBytes(kind)));
       return true;
     } catch (HBaseException e) {
       throw e;
@@ -806,7 +856,7 @@ public final class UniqueId implements UniqueIdInterface {
    * @return A sorted map of UIDs and their numeric IDs
    */
   public final TreeMap<String, Long> getMap() {
-    loadAll();
+    loadAllUIDs();
     final TreeMap<String, Long> sorted = new TreeMap<String, Long>();
     for (Map.Entry<String, byte[]> entry : this.nameCache.entrySet()) {
       // TODO fix this, it's not returning the actual numeric ID
@@ -912,6 +962,47 @@ public final class UniqueId implements UniqueIdInterface {
     // Success!
   }
 
+  public void searchNames(final Pattern regex, final Boolean get_meta, 
+      Set<String> matches){  
+    // load all metrics so we can scan
+    this.loadAllUIDs();
+    this.loadAllMaps();
+    
+    // scan!
+    for (String name : this.nameCache.keySet()){
+      if (regex.matcher(name).find()){
+        String uid = IDtoString(this.nameCache.get(name));
+        LOG.trace(String.format("Matched [%s] UID [%s] name [%s]", fromBytes(kind),
+           uid, name));
+        
+        UniqueIdMap map = this.getMap(uid);
+        if (map == null)
+          continue;
+        
+        // only return relevant tags
+        if (fromBytes(kind).compareTo("metrics") == 0)
+          matches.add(uid);
+        else{
+          Set<String> pairs = map.getTags();
+          if (pairs == null)
+            continue;
+          for (String pair : pairs){
+            if (fromBytes(kind).compareTo("tagk") == 0
+                && pair.substring(0, 6).compareTo(uid) == 0)
+              matches.add(pair);
+            else if (fromBytes(kind).compareTo("tagv") == 0
+                && pair.substring(6).compareTo(uid) == 0)
+              matches.add(pair);
+          }
+        }
+//        
+//        LOG.trace("Pairs: " + tags.size());
+//        for (String t : tags)
+//          LOG.trace("Pair: " + t);
+      }
+    }
+  }
+  
   /**
    * Attempts to retrieve the map from storage This method will also add the map
    * to the cache if it's found
@@ -921,7 +1012,7 @@ public final class UniqueId implements UniqueIdInterface {
   private final UniqueIdMap getMapFromStorage(final String id) {
     String qualifier = fromBytes(kind) + "_map";
     try {
-      final byte[] raw = storage.getValue(StringtoID(id), ID_FAMILY,
+      final byte[] raw = storage.getValue(StringtoID(id), NAME_FAMILY,
           toBytes(qualifier));
       if (raw == null){
         LOG.trace(String.format("Couldn't find %s UID [%s] in storage",
@@ -979,14 +1070,24 @@ public final class UniqueId implements UniqueIdInterface {
    * Creates a scanner that loads the whole set of UIDs for this particular type
    * @return A scanner to use in an actual scan
    */
-  private TsdbScanner getFullScanner() {
+  private TsdbScanner getFullScanner(final Boolean map) {
     final byte[] start_row;
     final byte[] end_row;
-    start_row = START_ROW;
-    end_row = END_ROW;
+    if (map){
+      start_row = new byte[] {0, 0, 0};
+      end_row = new byte[] {127, 127, 127};
+    }else{
+      start_row = START_ROW;
+      end_row = END_ROW;
+    }
     final TsdbScanner scanner = new TsdbScanner(start_row, end_row, table);
-    scanner.setFamily(ID_FAMILY);
-    scanner.setQualifier(kind);
+    if (map){
+      scanner.setFamily(NAME_FAMILY);
+      scanner.setQualifier(toBytes(fromBytes(kind) + "_map"));
+    }else{
+      scanner.setFamily(ID_FAMILY);
+      scanner.setQualifier(kind);
+    }
     return storage.openScanner(scanner);
   }
 

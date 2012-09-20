@@ -241,6 +241,19 @@ public class UniqueIdMap {
     return ids;
   }
   
+  public static final Set<String> getTSUIDs(final Set<String> tags, final Set<String> ts_uids, 
+      final short metric_width){
+    Set<String> ids = new TreeSet<String>();
+    // todo(CL) - there MUST be a better way. This could take ages
+    for (String pair : tags){
+      for (String tsuid : ts_uids){
+        if (tsuid.contains(pair))
+          ids.add(tsuid);
+      }
+    }
+    return ids;
+  }
+  
   // GETTERS AND SETTERS
   public String getUid() {
     return uid;
