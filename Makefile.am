@@ -93,6 +93,7 @@ tsdb_SRC := \
 	src/tsd/PutDataPointRpc.java	\
 	src/tsd/QueryHandler.java	\
 	src/tsd/RpcHandler.java	\
+	src/tsd/SearchRPC.java	\
 	src/tsd/StaticFileRpc.java	\
 	src/tsd/StatsRPC.java	\
 	src/tsd/SuggestRPC.java	\
