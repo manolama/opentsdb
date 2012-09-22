@@ -32,6 +32,7 @@ import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.Tags;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.graph.Plot;
+import net.opentsdb.storage.TsdbStoreHBase;
 
 final class CliQuery {
 
@@ -113,7 +114,8 @@ final class CliQuery {
     config.loadConfig();
 
     final HBaseClient client = CliOptions.clientFromOptions(config);
-    final TSDB tsdb = new TSDB(client, config);
+    final TsdbStoreHBase storage = new TsdbStoreHBase(config.tsdTable().getBytes(), client);
+    final TSDB tsdb = new TSDB(storage, storage, config);
     final String basepath = argp.get("--graph");
     argp = null;
 

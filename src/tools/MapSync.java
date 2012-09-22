@@ -88,16 +88,16 @@ final class MapSync {
     // setup hbase client
     final HBaseClient client = CliOptions.clientFromOptions(config);
     final TsdbStore storage = new TsdbStoreHBase(TsdbStore.toBytes(config.tsdTable()), client);
-    final TSDB tsdb = new TSDB(client, config);
+    final TSDB tsdb = new TSDB(storage, storage, config);
     argp = null;
     try {
       
       // TEMP ---------------     
-//      cellKiller(storage, "id", "ts_uids");
-//      cellKiller(storage, "id", "metrics_map");
-//      cellKiller(storage, "id", "tagk_map");
-//      cellKiller(storage, "id", "tagv_map");
-//      System.exit(0);
+      cellKiller(storage, "id", "ts_uids");
+      cellKiller(storage, "id", "metrics_map");
+      cellKiller(storage, "id", "tagk_map");
+      cellKiller(storage, "id", "tagv_map");
+      System.exit(0);
       
       TsdbScanner scanner = new TsdbScanner();
       scanner.setFamily(TsdbStore.toBytes("t"));

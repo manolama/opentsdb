@@ -101,6 +101,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     http_commands.put("meta", new MetaRPC());
     http_commands.put("map", new MapRPC());
     http_commands.put("search", new SearchRPC());
+    http_commands.put("group", new GroupRPC());
   }
 
   @Override

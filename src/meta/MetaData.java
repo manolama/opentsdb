@@ -53,7 +53,7 @@ public class MetaData {
   }
 
   public TimeSeriesMeta getTimeSeriesMeta(final byte[] id) {
-    TimeSeriesMeta meta = (TimeSeriesMeta) cache.get(TsdbStore.fromBytes(id));
+    TimeSeriesMeta meta = (TimeSeriesMeta) cache.get(UniqueId.IDtoString(id));
     if (meta != null)
       return meta;
     meta = getTimeSeriesMetaFromHBase(id);
@@ -64,7 +64,7 @@ public class MetaData {
   }
 
   public GeneralMeta getGeneralMeta(final byte[] id) {
-    GeneralMeta meta = (GeneralMeta) cache.get(TsdbStore.fromBytes(id));
+    GeneralMeta meta = (GeneralMeta) cache.get(UniqueId.IDtoString(id));
     if (meta != null)
       return meta;
     meta = getGeneralMetaFromHBase(id);

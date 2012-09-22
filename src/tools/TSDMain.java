@@ -22,11 +22,21 @@ import org.slf4j.LoggerFactory;
 import org.jboss.netty.bootstrap.ServerBootstrap;
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 
+import org.apache.cassandra.thrift.Cassandra;
+import org.apache.cassandra.thrift.TBinaryProtocol;
+import org.apache.thrift.TException;
+import org.apache.thrift.protocol.TProtocol;
+import org.apache.thrift.transport.TFramedTransport;
+import org.apache.thrift.transport.TSocket;
+import org.apache.thrift.transport.TTransport;
 import org.hbase.async.HBaseClient;
 
 import net.opentsdb.BuildData;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Config;
+import net.opentsdb.storage.TsdbStore;
+import net.opentsdb.storage.TsdbStoreCass;
+import net.opentsdb.storage.TsdbStoreHBase;
 import net.opentsdb.tsd.PipelineFactory;
 
 /**
@@ -156,7 +166,7 @@ final class TSDMain {
     
     // setup hbase client
     final HBaseClient client = CliOptions.clientFromOptions(config);
-    
+    log.info("Setup the HBase client");
     try {
       // Make sure we don't even start if we can't find out tables.
       client.ensureTableExists(config.tsdTable()).joinUninterruptibly();
@@ -164,8 +174,38 @@ final class TSDMain {
 
       client.setFlushInterval((short)config.flushInterval());
 
-      final TSDB tsdb = new TSDB(client, config);
+      final TsdbStore uid_storage;
+      final TsdbStore data_storage;
+      final Boolean use_cass = true;
+      if (use_cass){
+        Cassandra.Client cass_uid = null;
+        Cassandra.Client cass_data = null;
+        try{
+          TTransport tr = new TFramedTransport(new TSocket("localhost", 9160));
+          TProtocol proto = new TBinaryProtocol(tr);
+          cass_uid = new Cassandra.Client(proto);
+          cass_data = new Cassandra.Client(proto);
+          tr.open();
+        } catch (TException te){
+          te.printStackTrace();
+        }
+        
+        // temp!
+        log.info("Running with Casandra");
+        config.tsdUIDTable("tsdbuid");
+        config.tsdTable("tsdb");
+        uid_storage = new TsdbStoreCass(config.tsdUIDTable().getBytes(), cass_uid);
+        data_storage = new TsdbStoreCass(config.tsdTable().getBytes(), cass_data);
+        data_storage.setTable("tsdb");
+      }else{
+        log.info("Running with HBase");
+        uid_storage = new TsdbStoreHBase(config.tsdUIDTable().getBytes(), client);
+        data_storage = new TsdbStoreHBase(config.tsdTable().getBytes(), client);
+      }
+      final TSDB tsdb = new TSDB(uid_storage, data_storage, config);
+      log.info("Setup tsdb");
       registerShutdownHook(tsdb);
+      log.info("Registered shutdown hook");
       tsdb.startManagementThreads();
       final ServerBootstrap server = new ServerBootstrap(factory);
 

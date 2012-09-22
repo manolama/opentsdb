@@ -250,7 +250,7 @@ final class IncomingDataPoints implements WritableDataPoints {
     // TODO(tsuna): Add an errback to handle some error cases here.
     //point.setDurable(!batch_import);
     return tsdb.data_storage.putWithRetry(row, TSDB.FAMILY, Bytes.fromShort(qualifier), value,
-        null, !batch_import, false)/*.addBoth(cb)*/;
+        null, !batch_import, true)/*.addBoth(cb)*/;
   }
 
   private void grow() {

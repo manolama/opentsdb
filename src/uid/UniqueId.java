@@ -319,6 +319,8 @@ public final class UniqueId implements UniqueIdInterface {
   }
 
   private String getNameFromHBase(final byte[] id) throws HBaseException {
+    LOG.trace(String.format("ID as string [%s] from byte [%s] kind [%s] fam [%s]", 
+        IDtoString(id), Arrays.toString(id), fromBytes(kind), fromBytes(NAME_FAMILY)));
     final byte[] name = storage.getValue(id, NAME_FAMILY, kind);
     return name == null ? null : fromBytes(name);
   }
@@ -347,6 +349,7 @@ public final class UniqueId implements UniqueIdInterface {
         throw new NoSuchUniqueName(kind(), name);
       }
       if (id.length != idWidth) {
+        LOG.trace(String.format("Invalid id [%s]", IDtoString(id)));
         throw new IllegalStateException("Found id.length = " + id.length
             + " which is != " + idWidth + " required for '" + kind() + '\'');
       }
@@ -362,6 +365,8 @@ public final class UniqueId implements UniqueIdInterface {
 
   private byte[] getIdFromStorage(final String name)
       throws TsdbStorageException {
+    LOG.trace(String.format("Fetching ID for name [%s] and kind [%s] table [%s] fam [%s]", 
+        name, fromBytes(kind), storage.getTableString(), fromBytes(ID_FAMILY)));
     return storage.getValue(toBytes(name), ID_FAMILY, kind);
   }
 
@@ -384,8 +389,11 @@ public final class UniqueId implements UniqueIdInterface {
   public GeneralMeta getGeneralMeta(final byte[] id) {
     try{
       GeneralMeta meta = this.metadata.getGeneralMeta(id);
-      if (meta.getName().length() < 1)
+      if (meta.getName().length() < 1){
+        LOG.trace(String.format("Didn't find %s metatdata for UID [%s]",
+            fromBytes(kind), IDtoString(id)));
         meta.setName(this.getName(id));
+      }
       return meta;
     }catch (NoSuchUniqueId nuid){
       LOG.error(String.format("%s UID [%s] does not exist in storage", fromBytes(kind), 

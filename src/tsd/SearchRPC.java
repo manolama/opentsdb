@@ -18,9 +18,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.regex.Pattern;
 
 import org.jboss.netty.handler.codec.http.HttpMethod;
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,6 +51,8 @@ public class SearchRPC implements HttpRpc {
     String field = "all";
     String search = "";
     Boolean return_meta = false;
+    long limit = 25;
+    long page = 0;
     
     // load query string
     if (query.hasQueryStringParam("field"))
@@ -56,7 +61,22 @@ public class SearchRPC implements HttpRpc {
       search = query.getQueryStringParam("query");
     if (query.hasQueryStringParam("return_meta"))
       return_meta = query.parseBoolean(query.getQueryStringParam("return_meta"));
-    
+    if (query.hasQueryStringParam("limit")){
+      try{
+      limit = Long.parseLong(query.getQueryStringParam("limit"));
+      } catch (NumberFormatException nfe){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the limit value");
+        return;
+      }
+    }
+    if (query.hasQueryStringParam("page")){
+      try{
+        page = Long.parseLong(query.getQueryStringParam("page"));
+      } catch (NumberFormatException nfe){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the page value");
+        return;
+      }
+    }
     // checks!!
     
     // results will be stored by UID and object to avoid duplication
@@ -101,49 +121,74 @@ public class SearchRPC implements HttpRpc {
           pairs.add(tsuid.substring(i, i + 12));
         }
 
-        Map<String, Object> ts = new HashMap<String, Object>();
-        ts.put("uid", tsuid);
-        ts.put("metric", tsdb.metrics.getName(UniqueId.StringtoID(tsuid.substring(0, 6))));
-        
-        Map<String, String> kv = new HashMap<String, String>();
-        for (String pair : pairs){
-          Map<String, String> p = (Map<String, String>)tag_pair_map.get(pair);
-          if (p != null){
-            kv.put(p.get("key"), p.get("value"));
-            continue;
-          }
-          try{
-            
-            String t = tsdb.tag_names.getName(UniqueId.StringtoID(pair.substring(0, 6)));
-            String v = tsdb.tag_values.getName(UniqueId.StringtoID(pair.substring(6)));
-            kv.put(t, v);
-            p = new HashMap<String, String>();
-            p.put("key", t);
-            p.put("value", v);
-            tag_pair_map.put(pair, p);
-          } catch (NoSuchUniqueId nsui){
-            LOG.debug(String.format("No UID for [%s]", tsuid));
-          }
+//        Map<String, Object> ts = new HashMap<String, Object>();
+//        ts.put("uid", tsuid);
+//        ts.put("metric", tsdb.metrics.getName(UniqueId.StringtoID(tsuid.substring(0, 6))));
+//        
+//        Map<String, String> kv = new HashMap<String, String>();
+//        for (String pair : pairs){
+//          Map<String, String> p = (Map<String, String>)tag_pair_map.get(pair);
+//          if (p != null){
+//            kv.put(p.get("key"), p.get("value"));
+//            continue;
+//          }
+//          try{
+//            
+//            String t = tsdb.tag_names.getName(UniqueId.StringtoID(pair.substring(0, 6)));
+//            String v = tsdb.tag_values.getName(UniqueId.StringtoID(pair.substring(6)));
+//            kv.put(t, v);
+//            p = new HashMap<String, String>();
+//            p.put("key", t);
+//            p.put("value", v);
+//            tag_pair_map.put(pair, p);
+//          } catch (NoSuchUniqueId nsui){
+//            LOG.debug(String.format("No UID for [%s]", tsuid));
+//          }
+//        }
+//        ts.put("tags", kv);
+//        
+//        results.put(tsuid, ts);
+        try{
+          results.put(tsuid, tsdb.getTSUIDShortMeta(tsuid));
+        } catch (NoSuchUniqueId nsui){
+          LOG.trace(nsui.getMessage());
         }
-        ts.put("tags", kv);
-        
-        results.put(tsuid, ts);
       }catch (NoSuchUniqueId nsui){
         LOG.debug(String.format("No UID for [%s]", tsuid));
       }
       
       count++;
-//      if (count > 5)
-//        break;
     }
     
     // build a response map
     Map<String, Object> response = new HashMap<String, Object>();
-    response.put("limit", 0);
-    response.put("page", 0);
+    response.put("limit", limit);
+    response.put("page", page);
     response.put("total_uids", results.size());
-    response.put("results", results.values());
+    response.put("total_pages", ((results.size() / limit) + 1));
     
+    // limit and page calculations    
+    if (limit < 1 || results.size() <= limit){
+      response.put("results", results.values());
+    }else{
+      LOG.trace(String.format("Limiting to [%d] uids on page [%d]", limit, page));
+      SortedMap<String, Object> limited_results = new TreeMap<String, Object>();
+      long start = (page > 0 ? page * limit : 0);
+      long end = (page + 1) * limit;
+      long uids = 0;
+      for (Map.Entry<String, Object> entry : results.entrySet()){
+        if (uids >= end){
+          LOG.trace(String.format("Hit the limit [%d] with [%d] uids", 
+              end, uids));
+          break;
+        }
+        if (uids >= start && uids <= end){
+          limited_results.put(entry.getKey(), entry.getValue());
+        }
+        uids++;
+      }
+      response.put("results", limited_results);
+    }   
     JSON codec = new JSON(response);
     query.sendReply(codec.getJsonBytes());
     return;

@@ -36,6 +36,7 @@ import net.opentsdb.core.Tags;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.WritableDataPoints;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.storage.TsdbStoreHBase;
 
 final class TextImporter {
 
@@ -67,7 +68,8 @@ final class TextImporter {
     final HBaseClient client = CliOptions.clientFromOptions(config);
     // Flush more frequently since we read very fast from the files.
     client.setFlushInterval((short) 500);  // ms
-    final TSDB tsdb = new TSDB(client, config);
+    final TsdbStoreHBase storage = new TsdbStoreHBase(config.tsdTable().getBytes(), client);
+    final TSDB tsdb = new TSDB(storage, storage, config);
     argp = null;
     try {
       int points = 0;

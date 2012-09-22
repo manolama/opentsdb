@@ -189,7 +189,8 @@ public class UniqueIdMap {
     // todo(CL) - there MUST be a better way. This could take ages
     for (String pair : this.tags){
       for (String tsuid : ts_uids){
-        if (tsuid.contains(pair))
+        // need to start AFTER the metric
+        if (tsuid.substring(metric_width*2).contains(pair))
           ids.add(tsuid);
       }
     }
@@ -247,7 +248,8 @@ public class UniqueIdMap {
     // todo(CL) - there MUST be a better way. This could take ages
     for (String pair : tags){
       for (String tsuid : ts_uids){
-        if (tsuid.contains(pair))
+        // need to start AFTER the metric
+        if (tsuid.substring(metric_width*2).contains(pair))
           ids.add(tsuid);
       }
     }

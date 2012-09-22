@@ -74,7 +74,8 @@ final class Fsck {
     
     final HBaseClient client = CliOptions.clientFromOptions(config);
     final byte[] table = argp.get("--table", "tsdb").getBytes();
-    final TSDB tsdb = new TSDB(client, config);
+    final TsdbStoreHBase storage = new TsdbStoreHBase(table, client);
+    final TSDB tsdb = new TSDB(storage, storage, config);
     final boolean fix = argp.has("--fix");
     argp = null;
     int errors = 42;

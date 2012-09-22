@@ -14,6 +14,7 @@ package net.opentsdb.core;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -24,12 +25,12 @@ import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import org.hbase.async.Bytes;
-import org.hbase.async.HBaseClient;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaData;
@@ -38,7 +39,6 @@ import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
-import net.opentsdb.storage.TsdbStoreHBase;
 
 /**
  * Thread-safe implementation of the TSDB client.
@@ -74,7 +74,12 @@ public final class TSDB {
   /** Name of the table in which timeseries are stored.  */
   final byte[] table;
   
+  /** This will be used for puts */
   public volatile Set<String> ts_uids = new TreeSet<String>();
+  
+  /** This will store just the short info like metric and tags for tsuids */
+  private volatile Map<String, Map<String, Object>> tsuid_short_meta = 
+    new HashMap<String, Map<String, Object>>();
 
   /** Unique IDs for the metric names. */
   public final UniqueId metrics;
@@ -105,16 +110,16 @@ public final class TSDB {
    * @param uniqueids_table The name of the HBase table where the unique IDs
    * are stored.
    */
-  public TSDB(final HBaseClient client, final String timeseries_table,
+  public TSDB(final TsdbStore uid_store, final TsdbStore data_store, final String timeseries_table,
               final String uniqueids_table) {
     //this.client = client;
     this.config = new Config();
     table = timeseries_table.getBytes();
     this.config.tsdTable(timeseries_table);
     this.config.tsdUIDTable(uniqueids_table);
-    this.uid_storage = new TsdbStoreHBase(uniqueids_table.getBytes(), client);
-    this.data_storage = new TsdbStoreHBase(table, client);
-    
+    this.uid_storage = uid_store;
+    this.data_storage = data_store;
+        
     final byte[] uidtable = uniqueids_table.getBytes();
     metrics = new UniqueId(uid_storage, uidtable, METRICS_QUAL, METRICS_WIDTH);
     tag_names = new UniqueId(uid_storage, uidtable, TAG_NAME_QUAL, TAG_NAME_WIDTH);
@@ -133,12 +138,12 @@ public final class TSDB {
    * @param uniqueids_table The name of the HBase table where the unique IDs
    * are stored.
    */
-  public TSDB(final HBaseClient client, final Config config) {
+  public TSDB(final TsdbStore uid_store, final TsdbStore data_store, final Config config) {
     //this.client = client;
     this.config = config;
     table = config.tsdTable().getBytes();
-    this.uid_storage = new TsdbStoreHBase(config.tsdUIDTable().getBytes(), client);
-    this.data_storage = new TsdbStoreHBase(table, client);
+    this.uid_storage = uid_store;
+    this.data_storage = data_store;
     
     final byte[] uidtable = config.tsdUIDTable().getBytes();
     metrics = new UniqueId(uid_storage, uidtable, METRICS_QUAL, METRICS_WIDTH);
@@ -157,6 +162,63 @@ public final class TSDB {
   public void startManagementThreads(){
     uid_manager = new UIDManager(config.tsdUIDTable());
     uid_manager.start();
+  }
+  
+  /**
+   * 
+   * This data never expires so we don't need to worry about that aspect
+   * @param tsuid The TSUID to lookup or fetch data for
+   * @return Null if there was an error looking up any metric or tag, a map with
+   * the metadata if successful
+   */
+  public final Map<String, Object> getTSUIDShortMeta(final String tsuid){
+    Map<String, Object> meta = this.tsuid_short_meta.get(tsuid);
+    if (meta != null){
+      return meta;
+    }
+    
+    LOG.trace(String.format("Cache miss on [%s]", tsuid));
+    String mid = tsuid.substring(0, 6);
+    String metric = null;
+    try{
+      metric = metrics.getName(UniqueId.StringtoID(mid));
+    } catch (NoSuchUniqueId nsui){
+      LOG.trace(String.format("No metric UID for [%s] in tsuid [%s]", mid, tsuid));
+      throw nsui;
+    }
+    
+    // explode tags
+    List<String> pairs = new ArrayList<String>();
+    for (int i = 6; i<tsuid.length(); i+=12){
+      pairs.add(tsuid.substring(i, i + 12));
+    }
+    Map<String, String> tags = new HashMap<String, String>();
+    for (String pair : pairs){
+      String t = "";
+      String v = "";
+      try{ 
+        t = tag_names.getName(UniqueId.StringtoID(pair.substring(0, 6)));
+      } catch (NoSuchUniqueId nsui){
+        LOG.debug(String.format("No tagk UID for [%s] from tsuid [%s]",
+            pair.substring(0, 6), tsuid));
+        throw nsui;
+      }
+      try{ 
+        v = tag_values.getName(UniqueId.StringtoID(pair.substring(6)));
+      } catch (NoSuchUniqueId nsui){
+        LOG.debug(String.format("No tagv UID for [%s] from tsuid", 
+            pair.substring(6), tsuid));
+        throw nsui;
+      }
+      tags.put(t, v);
+    }
+    
+    Map<String, Object> v = new HashMap<String, Object>();
+    v.put("metric", metric);
+    v.put("uid", tsuid);
+    v.put("tags", tags);
+    tsuid_short_meta.put(tsuid, v);
+    return v;
   }
   
   /** Number of cache hits during lookups involving UIDs. */
@@ -374,7 +436,8 @@ public final class TSDB {
 //    // TODO(tsuna): Add a callback to time the latency of HBase and store the
 //    // timing in a moving Histogram (once we have a class for this).
 //    return client.put(point);
-    return data_storage.putWithRetry(row, FAMILY, Bytes.fromShort(qualifier), value);
+    return data_storage.putWithRetry(row, FAMILY, Bytes.fromShort(qualifier), value,
+        null, false, true);
   }
 
   /**
@@ -518,6 +581,7 @@ public final class TSDB {
     
     // otherwise we need to get the general metas for metrics and tags
     byte[] metricID = MetaData.getMetricID(id);
+    LOG.trace(String.format("Metric ID %s", Arrays.toString(metricID)));
     if (metricID == null)
       LOG.debug(String.format("Unable to get metric meta data for ID [%s]", 
           UniqueId.IDtoString(id)));
@@ -817,6 +881,9 @@ public final class TSDB {
             ((System.currentTimeMillis() / 1000) - last_ts_uid_load) >= 15){
           LOG.trace("Triggering TS UID sync");
           syncTSUIDs();
+          metrics.flushMaps(false);
+          tag_names.flushMaps(false);
+          tag_values.flushMaps(false);
           last_tsuid_size = ts_uids.size();
           last_ts_uid_load = System.currentTimeMillis() / 1000;
         }
