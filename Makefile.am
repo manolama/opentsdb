@@ -79,6 +79,7 @@ tsdb_SRC := \
 	src/tsd/DataEmitter.java	\
 	src/tsd/GnuGraphEmitter.java	\
 	src/tsd/GnuplotException.java	\
+	src/tsd/GroupRPC.java	\
 	src/tsd/HttpCache.java	\
 	src/tsd/HttpCacheEntry.java	\
 	src/tsd/HttpQuery.java	\

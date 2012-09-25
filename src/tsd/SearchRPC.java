@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -48,53 +49,51 @@ public class SearchRPC implements HttpRpc {
       // todo - handle me!!!
     }
     
-    String field = "all";
-    String search = "";
-    Boolean return_meta = false;
-    long limit = 25;
-    long page = 0;
+    if (tsdb.ts_uids.isEmpty()){
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Timeseries UID list is empty");
+      return;
+    }
     
-    // load query string
-    if (query.hasQueryStringParam("field"))
-      field = query.getQueryStringParam("field").toLowerCase();
-    if (query.hasQueryStringParam("query"))
-      search = query.getQueryStringParam("query");
-    if (query.hasQueryStringParam("return_meta"))
-      return_meta = query.parseBoolean(query.getQueryStringParam("return_meta"));
-    if (query.hasQueryStringParam("limit")){
-      try{
-      limit = Long.parseLong(query.getQueryStringParam("limit"));
-      } catch (NumberFormatException nfe){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the limit value");
+    SearchQuery search_query = new SearchQuery();
+    if (query.getMethod() == HttpMethod.POST){
+      JSON codec = new JSON(search_query);
+      if (!codec.parseObject(query.getPostData())){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse JSON data");
         return;
       }
-    }
-    if (query.hasQueryStringParam("page")){
-      try{
-        page = Long.parseLong(query.getQueryStringParam("page"));
-      } catch (NumberFormatException nfe){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the page value");
+    }else{
+      search_query = this.parseQueryString(query);
+      // error already sent
+      if (search_query == null)
         return;
-      }
     }
-    // checks!!
-    
+     
     // results will be stored by UID and object to avoid duplication
     Map<String, Object> results = new HashMap<String, Object>();
     Set<String> tag_pairs = new HashSet<String>();
     Set<String> metrics = new HashSet<String>();
     
-    Pattern reg_query = Pattern.compile(search);
+    Pattern reg_query = Pattern.compile(search_query.query);
+    
+    Map<String, Pattern> tags = new HashMap<String, Pattern>();
+    for (Map.Entry<String, String> entry : search_query.tags.entrySet()){
+      Pattern tagv_pattern = Pattern.compile(entry.getValue());
+      tags.put(entry.getKey(), tagv_pattern);
+    }
     
     // if all, then run regex against:
-    // Storage JSON
     // metric names
     // tagk names
     // tagv names
     
-    tsdb.metrics.searchNames(reg_query, return_meta, metrics);
-    tsdb.tag_names.searchNames(reg_query, return_meta, tag_pairs);
-    tsdb.tag_values.searchNames(reg_query, return_meta, tag_pairs);
+    tsdb.metrics.LoadAllMeta();
+    tsdb.tag_names.LoadAllMeta();
+    tsdb.tag_values.LoadAllMeta();
+    LOG.trace("Loaded all of the general meta objects");
+    
+    tsdb.metrics.searchNames(reg_query, metrics);
+    tsdb.tag_names.searchNames(reg_query, tag_pairs);
+    tsdb.tag_values.searchNames(reg_query, tag_pairs);
     
     // with the list of tagpairs, we can get a list of TSUIDs
     Set<String> tsuids = UniqueIdMap.getTSUIDs(tag_pairs, tsdb.ts_uids, (short)3);
@@ -120,36 +119,19 @@ public class SearchRPC implements HttpRpc {
         for (int i = 6; i<tsuid.length(); i+=12){
           pairs.add(tsuid.substring(i, i + 12));
         }
-
-//        Map<String, Object> ts = new HashMap<String, Object>();
-//        ts.put("uid", tsuid);
-//        ts.put("metric", tsdb.metrics.getName(UniqueId.StringtoID(tsuid.substring(0, 6))));
-//        
-//        Map<String, String> kv = new HashMap<String, String>();
-//        for (String pair : pairs){
-//          Map<String, String> p = (Map<String, String>)tag_pair_map.get(pair);
-//          if (p != null){
-//            kv.put(p.get("key"), p.get("value"));
-//            continue;
-//          }
-//          try{
-//            
-//            String t = tsdb.tag_names.getName(UniqueId.StringtoID(pair.substring(0, 6)));
-//            String v = tsdb.tag_values.getName(UniqueId.StringtoID(pair.substring(6)));
-//            kv.put(t, v);
-//            p = new HashMap<String, String>();
-//            p.put("key", t);
-//            p.put("value", v);
-//            tag_pair_map.put(pair, p);
-//          } catch (NoSuchUniqueId nsui){
-//            LOG.debug(String.format("No UID for [%s]", tsuid));
-//          }
-//        }
-//        ts.put("tags", kv);
-//        
-//        results.put(tsuid, ts);
         try{
-          results.put(tsuid, tsdb.getTSUIDShortMeta(tsuid));
+          
+          // if we have tags, checkem!
+          for (Map.Entry<String, Pattern> entry : tags.entrySet()){
+            
+          }
+        
+          // all good, so store it!
+
+          if (search_query.return_meta)
+            results.put(tsuid, tsdb.getTimeSeriesMeta(UniqueId.StringtoID(tsuid)));
+          else
+            results.put(tsuid, tsdb.getTSUIDShortMeta(tsuid));
         } catch (NoSuchUniqueId nsui){
           LOG.trace(nsui.getMessage());
         }
@@ -162,19 +144,19 @@ public class SearchRPC implements HttpRpc {
     
     // build a response map
     Map<String, Object> response = new HashMap<String, Object>();
-    response.put("limit", limit);
-    response.put("page", page);
+    response.put("limit", search_query.limit);
+    response.put("page", search_query.page);
     response.put("total_uids", results.size());
-    response.put("total_pages", ((results.size() / limit) + 1));
+    response.put("total_pages", ((results.size() / search_query.limit) + 1));
     
     // limit and page calculations    
-    if (limit < 1 || results.size() <= limit){
+    if (search_query.limit < 1 || results.size() <= search_query.limit){
       response.put("results", results.values());
     }else{
-      LOG.trace(String.format("Limiting to [%d] uids on page [%d]", limit, page));
+      LOG.trace(String.format("Limiting to [%d] uids on page [%d]", search_query.limit, search_query.page));
       SortedMap<String, Object> limited_results = new TreeMap<String, Object>();
-      long start = (page > 0 ? page * limit : 0);
-      long end = (page + 1) * limit;
+      long start = (search_query.page > 0 ? search_query.page * search_query.limit : 0);
+      long end = (search_query.page + 1) * search_query.limit;
       long uids = 0;
       for (Map.Entry<String, Object> entry : results.entrySet()){
         if (uids >= end){
@@ -192,5 +174,59 @@ public class SearchRPC implements HttpRpc {
     JSON codec = new JSON(response);
     query.sendReply(codec.getJsonBytes());
     return;
+  }
+  
+  private SearchQuery parseQueryString(final HttpQuery query){
+    SearchQuery sq = new SearchQuery();
+    
+    // todo - tags and custom
+    
+    sq.created = query.getQueryStringParam("created");
+    sq.retention = query.getQueryStringParam("retention");
+    sq.max = query.getQueryStringParam("max");
+    sq.min = query.getQueryStringParam("min");
+    sq.interval = query.getQueryStringParam("interval");
+    sq.first_received = query.getQueryStringParam("first_received");
+    sq.last_received = query.getQueryStringParam("last_received");
+    sq.field = query.getQueryStringParam("field").toLowerCase();
+    sq.query = query.getQueryStringParam("query");
+    sq.return_meta = query.parseBoolean(query.getQueryStringParam("return_meta"));
+    if (query.hasQueryStringParam("limit")){
+      try{
+        sq.limit = Long.parseLong(query.getQueryStringParam("limit"));
+      } catch (NumberFormatException nfe){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the limit value");
+        return null;
+      }
+    }
+    if (query.hasQueryStringParam("page")){
+      try{
+        sq.page = Long.parseLong(query.getQueryStringParam("page"));
+      } catch (NumberFormatException nfe){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the page value");
+        return null;
+      }
+    }
+    
+    
+    return sq;
+  }
+  
+  @SuppressWarnings("unused")
+  private static class SearchQuery{
+    public Map<String, String> tags;
+    public Map<String, String> custom;
+    public String created;
+    public String retention;
+    public String max;
+    public String min;
+    public String interval;
+    public String first_received;
+    public String last_received;
+    public String field;
+    public String query;
+    public long limit = 25;
+    public long page = 0;
+    public Boolean return_meta = false;
   }
 }

@@ -28,7 +28,6 @@ public class GeneralMeta {
   protected String uid = "";
   @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
   protected Meta_Type type = Meta_Type.INVALID;
-  @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
   protected String name = "";
   protected String display_name = "";
   protected String description = "";
@@ -66,6 +65,10 @@ public class GeneralMeta {
   // stored_data = user_data.CopyChanges(stored_data);
   // write stored_data;
   public GeneralMeta CopyChanges(GeneralMeta m){
+    LOG.trace("Meta [" + m.getName() + "]");
+    if (m.name.compareTo(this.name) != 0)
+      if (m.name.isEmpty())
+        m.name = this.name;
     if (this.c_display_name)
       m.display_name = this.display_name;
     if (this.c_description)

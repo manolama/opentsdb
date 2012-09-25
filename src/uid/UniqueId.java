@@ -16,6 +16,7 @@ import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +52,12 @@ public final class UniqueId implements UniqueIdInterface {
 
   private static final Logger LOG = LoggerFactory.getLogger(UniqueId.class);
 
+  private enum ScanType {
+    NAME,
+    MAP,
+    META
+  }
+  
   /** Charset used to convert Strings to byte arrays and back. */
   private static final Charset CHARSET = Charset.forName("ISO-8859-1");
   /** The single column family used by this class. */
@@ -89,9 +96,12 @@ public final class UniqueId implements UniqueIdInterface {
   /** Number of times we had to read from HBase and populate the cache. */
   private volatile int cacheMisses;
 
+  private volatile Set<byte[]> bad_meta_ids = new HashSet<byte[]>();
+  
   /** Last time this map was loaded in it's entirety */
   private long last_full_uid_load = 0;
   private long last_full_map_load = 0;
+  private long last_full_meta_load = 0;
 
   /** Metadata associated with this UID */
   private final MetaData metadata;
@@ -319,8 +329,8 @@ public final class UniqueId implements UniqueIdInterface {
   }
 
   private String getNameFromHBase(final byte[] id) throws HBaseException {
-    LOG.trace(String.format("ID as string [%s] from byte [%s] kind [%s] fam [%s]", 
-        IDtoString(id), Arrays.toString(id), fromBytes(kind), fromBytes(NAME_FAMILY)));
+//    LOG.trace(String.format("ID as string [%s] from byte [%s] kind [%s] fam [%s]", 
+//        IDtoString(id), Arrays.toString(id), fromBytes(kind), fromBytes(NAME_FAMILY)));
     final byte[] name = storage.getValue(id, NAME_FAMILY, kind);
     return name == null ? null : fromBytes(name);
   }
@@ -365,8 +375,8 @@ public final class UniqueId implements UniqueIdInterface {
 
   private byte[] getIdFromStorage(final String name)
       throws TsdbStorageException {
-    LOG.trace(String.format("Fetching ID for name [%s] and kind [%s] table [%s] fam [%s]", 
-        name, fromBytes(kind), storage.getTableString(), fromBytes(ID_FAMILY)));
+//    LOG.trace(String.format("Fetching ID for name [%s] and kind [%s] table [%s] fam [%s]", 
+//        name, fromBytes(kind), storage.getTableString(), fromBytes(ID_FAMILY)));
     return storage.getValue(toBytes(name), ID_FAMILY, kind);
   }
 
@@ -388,16 +398,34 @@ public final class UniqueId implements UniqueIdInterface {
 
   public GeneralMeta getGeneralMeta(final byte[] id) {
     try{
+      if (this.bad_meta_ids.contains(id)){
+        LOG.trace("ID [" + IDtoString(id) + "] was in the bad list");
+        return null;
+      }
       GeneralMeta meta = this.metadata.getGeneralMeta(id);
-      if (meta.getName().length() < 1){
+      if (meta.getName().length() < 1 && meta.getCreated() < 1){
         LOG.trace(String.format("Didn't find %s metatdata for UID [%s]",
             fromBytes(kind), IDtoString(id)));
-        meta.setName(this.getName(id));
+        String name = this.getName(id);
+        if (name == null || name.isEmpty()){
+          LOG.error(String.format("%s UID [%s] does not exist in storage", fromBytes(kind), 
+              IDtoString(id)));
+          this.bad_meta_ids.add(id);
+          return null;
+        }
+        //LOG.trace("Saving " + name);
+        meta.setName(name);
+        // todo - do we want to put here?
+        //this.metadata.putMeta(meta);
       }
+      // temp
+      if (meta.getName().isEmpty())
+        meta.setName(this.getName(id));
       return meta;
     }catch (NoSuchUniqueId nuid){
       LOG.error(String.format("%s UID [%s] does not exist in storage", fromBytes(kind), 
           IDtoString(id)));
+      this.bad_meta_ids.add(id);
       return null;
     }
   }
@@ -776,7 +804,7 @@ public final class UniqueId implements UniqueIdInterface {
 
     this.last_full_uid_load = System.currentTimeMillis() / 1000;
 
-    final TsdbScanner scanner = getFullScanner(false);
+    final TsdbScanner scanner = getFullScanner(ScanType.NAME);
     try {
       long count=0;
       ArrayList<ArrayList<KeyValue>> rows;
@@ -815,8 +843,50 @@ public final class UniqueId implements UniqueIdInterface {
     }
   }
   
-  public boolean loadAllMaps() {
+  public boolean LoadAllMeta() {
     // determine if we need to load yet
+    if ((System.currentTimeMillis() / 1000) < this.last_full_meta_load
+        + RELOAD_INTERVAL)
+      return true;
+
+    this.last_full_meta_load = System.currentTimeMillis() / 1000;
+
+    GeneralMeta meta = new GeneralMeta(new byte[] {0});
+    JSON codec = new JSON(meta);
+    final TsdbScanner scanner = getFullScanner(ScanType.META);
+    try {
+      long count=0;
+      ArrayList<ArrayList<KeyValue>> rows;
+      while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
+        for (final ArrayList<KeyValue> row : rows) {
+          if (row.size() != 1) {
+            LOG.error("WTF shouldn't happen!  Scanner " + scanner + " returned"
+                + " a row that doesn't have exactly 1 KeyValue: " + row);
+            if (row.isEmpty()) {
+              continue;
+            }
+          }
+          meta = new GeneralMeta(row.get(0).key());
+          if (!codec.parseObject(row.get(0).value())){
+            LOG.error(String.format("Unable to parse metadata for [%s]", IDtoString(row.get(0).key())));
+            continue;
+          }
+          this.metadata.putCache(row.get(0).key(), meta);
+          count++;
+        }
+      }
+      LOG.trace(String.format("Loaded [%d] metas for [%s]", count, fromBytes(kind)));
+      return true;
+    } catch (HBaseException e) {
+      throw e;
+    } catch (Exception e) {
+      e.printStackTrace();
+      throw new RuntimeException("Should never be here", e);
+    }
+  }
+
+  public boolean loadAllMaps() {
+ // determine if we need to load yet
     if ((System.currentTimeMillis() / 1000) < this.last_full_map_load
         + RELOAD_INTERVAL)
       return true;
@@ -825,7 +895,7 @@ public final class UniqueId implements UniqueIdInterface {
 
     UniqueIdMap map = new UniqueIdMap("");
     JSON codec = new JSON(map);
-    final TsdbScanner scanner = getFullScanner(true);
+    final TsdbScanner scanner = getFullScanner(ScanType.MAP);
     try {
       long count=0;
       ArrayList<ArrayList<KeyValue>> rows;
@@ -857,7 +927,7 @@ public final class UniqueId implements UniqueIdInterface {
       throw new RuntimeException("Should never be here", e);
     }
   }
-
+  
   /**
    * Retrieves the entire list of entries in the cache as a sorted map for
    * display in the HTTP API
@@ -970,8 +1040,7 @@ public final class UniqueId implements UniqueIdInterface {
     // Success!
   }
 
-  public void searchNames(final Pattern regex, final Boolean get_meta, 
-      Set<String> matches){  
+  public void searchNames(final Pattern regex, Set<String> matches){  
     // load all metrics so we can scan
     this.loadAllUIDs();
     this.loadAllMaps();
@@ -1003,11 +1072,40 @@ public final class UniqueId implements UniqueIdInterface {
               matches.add(pair);
           }
         }
-//        
-//        LOG.trace("Pairs: " + tags.size());
-//        for (String t : tags)
-//          LOG.trace("Pair: " + t);
       }
+    }
+  }
+
+  public void searchMeta(final Pattern regex, Set<String> matches){
+    this.LoadAllMeta();
+        
+  }
+  
+  /**
+   * Scans the entire ID cf to see if a name has the matching ID
+   * @param id UID to search for
+   * @return null if the ID wasn't found, a string with the name of the 
+   * metric, tag or value
+   */
+  public String findMissingID(final byte[] id){
+    final TsdbScanner scanner = getFullScanner(ScanType.NAME);
+    try {
+      ArrayList<ArrayList<KeyValue>> rows;
+      while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
+        for (final ArrayList<KeyValue> row : rows) {
+          if (Arrays.equals(id, row.get(0).value())){
+            return fromBytes(row.get(0).key());
+          }
+        }
+      }
+      LOG.trace(String.format("Could not find a matching ID for [%s] in [%s]", 
+          IDtoString(id), fromBytes(kind)));
+      return null;
+    } catch (HBaseException e) {
+      throw e;
+    } catch (Exception e) {
+      e.printStackTrace();
+      throw new RuntimeException("Should never be here", e);
     }
   }
   
@@ -1078,10 +1176,10 @@ public final class UniqueId implements UniqueIdInterface {
    * Creates a scanner that loads the whole set of UIDs for this particular type
    * @return A scanner to use in an actual scan
    */
-  private TsdbScanner getFullScanner(final Boolean map) {
+  private TsdbScanner getFullScanner(final ScanType type) {
     final byte[] start_row;
     final byte[] end_row;
-    if (map){
+    if (type == ScanType.MAP || type == ScanType.META){
       start_row = new byte[] {0, 0, 0};
       end_row = new byte[] {127, 127, 127};
     }else{
@@ -1089,12 +1187,18 @@ public final class UniqueId implements UniqueIdInterface {
       end_row = END_ROW;
     }
     final TsdbScanner scanner = new TsdbScanner(start_row, end_row, table);
-    if (map){
-      scanner.setFamily(NAME_FAMILY);
-      scanner.setQualifier(toBytes(fromBytes(kind) + "_map"));
-    }else{
+    switch (type){
+    case NAME:
       scanner.setFamily(ID_FAMILY);
       scanner.setQualifier(kind);
+      break;
+    case MAP:
+      scanner.setFamily(NAME_FAMILY);
+      scanner.setQualifier(toBytes(fromBytes(kind) + "_map"));
+      break;
+    case META:
+      scanner.setFamily(NAME_FAMILY);
+      scanner.setQualifier(toBytes(fromBytes(kind) + "_meta"));
     }
     return storage.openScanner(scanner);
   }

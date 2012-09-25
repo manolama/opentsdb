@@ -12,11 +12,13 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeSet;
@@ -37,6 +39,7 @@ import net.opentsdb.meta.MetaData;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
 
@@ -90,7 +93,8 @@ public final class TSDB {
 
   private final MetaData timeseries_meta;
   /** Thread that synchronizes UID maps */
-  private volatile UIDManager uid_manager;
+  private UIDManager uid_manager;
+  private TSUIDManager tsuid_manager;
   
   /**
    * Row keys that need to be compacted.
@@ -100,6 +104,8 @@ public final class TSDB {
    */
   private final CompactionQueue compactionq;
 
+  private final ArrayDeque<TSUID> tsuid_queue;
+  
   /**
    * DEPRECATED Constructor
    * Please use the constructor with the Config class instead
@@ -126,7 +132,8 @@ public final class TSDB {
     tag_values = new UniqueId(uid_storage, uidtable, TAG_VALUE_QUAL,
                               TAG_VALUE_WIDTH);
     compactionq = new CompactionQueue(this);
-    timeseries_meta = new MetaData(uid_storage, uidtable, true, "name");
+    timeseries_meta = new MetaData(uid_storage, uidtable, true, "ts");
+    tsuid_queue = new ArrayDeque<TSUID>();
   }
   
   /**
@@ -151,7 +158,8 @@ public final class TSDB {
     tag_values = new UniqueId(uid_storage, uidtable, TAG_VALUE_QUAL,
                               TAG_VALUE_WIDTH);
     compactionq = new CompactionQueue(this);
-    timeseries_meta = new MetaData(uid_storage, uidtable, true, "name");
+    timeseries_meta = new MetaData(uid_storage, uidtable, true, "ts");
+    tsuid_queue = new ArrayDeque<TSUID>();
   }
 
   /**
@@ -162,6 +170,8 @@ public final class TSDB {
   public void startManagementThreads(){
     uid_manager = new UIDManager(config.tsdUIDTable());
     uid_manager.start();
+    tsuid_manager = new TSUIDManager(config.tsdUIDTable());
+    tsuid_manager.start();
   }
   
   /**
@@ -403,6 +413,8 @@ public final class TSDB {
     }catch (NumberFormatException nfe){
       throw new IllegalArgumentException(String.format("Unable to convert metric [%s] value [%s]: %s", 
           metric, value, nfe.getMessage()));
+    }catch (NullPointerException npe){
+      throw new IllegalArgumentException("Value for the datapoint was null");
     }
   }
 
@@ -421,11 +433,8 @@ public final class TSDB {
 
     IncomingDataPoints.checkMetricAndTags(metric, tags);
     final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);
-    final String tsuid = UniqueId.IDtoString(UniqueId.getTSUIDFromKey(row, (short)3, (short)4));
-    if (!this.ts_uids.contains(tsuid)){
-      LOG.info("Processing new TSUID [" + tsuid + "]");
-      this.processNewTSUID(row, true);
-    }
+    // add to the processing queue
+    this.tsuid_queue.add(new TSUID(row, System.currentTimeMillis() / 1000));    
     final long base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
     Bytes.setInt(row, (int) base_time, metrics.width());
     scheduleForCompaction(row, (int) base_time);
@@ -574,43 +583,100 @@ public final class TSDB {
       LOG.debug("ID was too short");
       return null;
     }
-    
-    TimeSeriesMeta meta = this.timeseries_meta.getTimeSeriesMeta(id);
-    if (meta == null)
-      return new TimeSeriesMeta(id);
-    
-    // otherwise we need to get the general metas for metrics and tags
-    byte[] metricID = MetaData.getMetricID(id);
-    LOG.trace(String.format("Metric ID %s", Arrays.toString(metricID)));
-    if (metricID == null)
-      LOG.debug(String.format("Unable to get metric meta data for ID [%s]", 
-          UniqueId.IDtoString(id)));
-    else
-      meta.setMetric(this.metrics.getGeneralMeta(metricID));
-    
-    // tags
-    ArrayList<byte[]> tags = MetaData.getTagIDs(id);
-    if (tags == null || tags.size() < 1)
-      LOG.debug(String.format("Unable to get tag and value metadata for ID [%s]",
-          UniqueId.IDtoString(id)));
-    else{
-      ArrayList<GeneralMeta> tm = new ArrayList<GeneralMeta>();
-      int index=0;
-      for (byte[] tag : tags){
-        if ((index % 2) == 0)
-          tm.add(this.tag_names.getGeneralMeta(tag));
-        else
-          tm.add(this.tag_values.getGeneralMeta(tag));
-        index++;
+    try{
+      TimeSeriesMeta meta = this.timeseries_meta.getTimeSeriesMeta(id);
+      if (meta == null)
+        meta = new TimeSeriesMeta(id);
+      
+      // otherwise we need to get the general metas for metrics and tags
+      byte[] metricID = MetaData.getMetricID(id);
+      //LOG.trace(String.format("Metric ID %s", Arrays.toString(metricID)));
+      if (metricID == null){
+        LOG.debug(String.format("Unable to get metric meta data for ID [%s]", 
+            UniqueId.IDtoString(id)));
+        return null;
+      }else{
+        meta.setMetric(this.metrics.getGeneralMeta(metricID));
+        if (meta.getMetric() == null)
+          return null;
       }
-      meta.setTags(tm);
+      
+      // tags
+      ArrayList<byte[]> tags = MetaData.getTagIDs(id);
+      if (tags == null || tags.size() < 1)
+        LOG.debug(String.format("Unable to get tag and value metadata for ID [%s]",
+            UniqueId.IDtoString(id)));
+      else{
+        ArrayList<GeneralMeta> tm = new ArrayList<GeneralMeta>();
+        int index=0;
+        for (byte[] tag : tags){
+          if ((index % 2) == 0)
+            tm.add(this.tag_names.getGeneralMeta(tag));
+          else
+            tm.add(this.tag_values.getGeneralMeta(tag));
+          index++;
+        }
+        meta.setTags(tm);
+      }
+      
+      return meta;
+    }catch (NoSuchUniqueId nsui){
+      
     }
-    
-    return meta;
+    return null;
   }
   
   public Boolean putMeta(final TimeSeriesMeta meta){
     return this.timeseries_meta.putMeta(meta);
+  }
+  
+  /**
+   * Loads all general meta and then compiles a timeseries meta list
+   * todo - if we store general meta in the TS list, that would SUCK cause it
+   * eats up a crap load of duplicate space
+   * @return
+   */
+  public Boolean loadAllTSMeta(){
+    final byte[] start_row = new byte[] {127, 127, 127};
+    final byte[] end_row = new byte[] { '~' };
+    
+    final TsdbScanner scanner = new TsdbScanner(start_row, end_row, TsdbStore.toBytes("tsdb-uid"));
+    scanner.setFamily(TsdbStore.toBytes("name"));
+    scanner.setQualifier(TsdbStore.toBytes("ts_meta"));
+    this.uid_storage.openScanner(scanner);
+    
+    try {
+      long count=0;
+      ArrayList<ArrayList<KeyValue>> rows;
+      TimeSeriesMeta meta = new TimeSeriesMeta(new byte[] {0});
+      JSON codec = new JSON(meta);
+      while ((rows = uid_storage.nextRows(scanner).joinUninterruptibly()) != null) {
+        for (final ArrayList<KeyValue> row : rows) {
+          if (row.size() != 1) {
+            LOG.error("WTF shouldn't happen!  Scanner " + scanner + " returned"
+                + " a row that doesn't have exactly 1 KeyValue: " + row);
+            if (row.isEmpty()) {
+              continue;
+            }
+          }
+          meta = new TimeSeriesMeta(row.get(0).key());
+          if (!codec.parseObject(row.get(0).value())){
+            LOG.error(String.format("Unable to parse metadata for [%s]", 
+                UniqueId.IDtoString(row.get(0).key())));
+            continue;
+          }
+          this.timeseries_meta.putCache(row.get(0).key(), meta);
+          count++;
+        }
+      }
+      LOG.trace(String.format("Loaded [%d] metas for [timeseries]", count));
+      return true;
+    } catch (HBaseException e) {
+      throw e;
+    } catch (Exception e) {
+      e.printStackTrace();
+      throw new RuntimeException("Should never be here", e);
+    }
   }
   
   /**
@@ -736,8 +802,9 @@ public final class TSDB {
       List<byte[]> tagks = UniqueId.getTagksFromTagPairs(pairs, (short)3);
       List<byte[]> tagvs = UniqueId.getTagvsFromTagPairs(pairs, (short)3);
       
-      this.ts_uids.add(UniqueId.IDtoString(UniqueId.getTSUIDFromKey(row_key, (short)3, (short)4)));
-      
+      final String tsuid = UniqueId.IDtoString(UniqueId.getTSUIDFromKey(row_key, (short)3, (short)4));
+      this.ts_uids.add(tsuid);
+      LOG.trace(String.format("Processing new TSUID [%s]", tsuid));
       // metric            
       for (byte[] p : pairs)
         metrics.putMap(metric, UniqueId.IDtoString(p), "tags");
@@ -752,6 +819,7 @@ public final class TSDB {
           GeneralMeta meta = this.tag_names.getGeneralMeta(tagk);
           if (meta == null){
             meta = new GeneralMeta(tagk);
+            meta.setName(this.tag_names.getName(tagk));
             meta.setCreated(Bytes.getUnsignedInt(row_key, (short)3));
             this.tag_names.putMeta(meta);
           }else if (meta.getCreated() < 1){
@@ -771,6 +839,7 @@ public final class TSDB {
           GeneralMeta meta = this.tag_values.getGeneralMeta(tagv);
           if (meta == null){
             meta = new GeneralMeta(tagv);
+            meta.setName(this.tag_values.getName(tagv));
             meta.setCreated(Bytes.getUnsignedInt(row_key, (short)3));
             this.tag_values.putMeta(meta);
           }else if (meta.getCreated() < 1){
@@ -785,6 +854,7 @@ public final class TSDB {
         GeneralMeta meta = this.metrics.getGeneralMeta(UniqueId.StringtoID(metric));
         if (meta == null){
           meta = new GeneralMeta(UniqueId.StringtoID(metric));
+          meta.setName(this.metrics.getName(UniqueId.StringtoID(metric)));
           meta.setCreated(Bytes.getUnsignedInt(row_key, (short)3));
           this.metrics.putMeta(meta);
         }else if (meta.getCreated() < 1){
@@ -895,7 +965,48 @@ public final class TSDB {
         }
       }
     }
+  }
+  
+  private final class TSUIDManager extends Thread {
+    private final TsdbStore local_store = uid_storage;
     
+    public TSUIDManager(String uid_table){
+      local_store.setTable(uid_table);
+    } 
     
+    public void run(){
+      while(true){
+        try {
+          Thread.sleep(1000);
+        } catch (InterruptedException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
+        
+        while(true){
+          try{
+            final TSUID uid = tsuid_queue.pop();
+            final String tsuid = UniqueId.IDtoString(UniqueId.getTSUIDFromKey(uid.row, (short)3, (short)4));
+            if (!ts_uids.contains(tsuid)){
+              LOG.info("Calling processNewTSUID TSUID [" + tsuid + "]");
+              processNewTSUID(uid.row, true);
+            }
+          }catch (NoSuchElementException nse){
+            break;
+          }
+        }
+      }
+    }
+  }
+  
+  @SuppressWarnings("unused")
+  private final class TSUID {
+    public byte[] row;
+    public long ts;
+    
+    TSUID (final byte[] row, final long ts){
+      this.row = row;
+      this.ts = ts;
+    }
   }
 }
