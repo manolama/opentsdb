@@ -14,6 +14,8 @@ package net.opentsdb.storage;
 
 import java.util.ArrayList;
 
+import net.opentsdb.uid.UniqueId;
+
 import org.hbase.async.DeleteRequest;
 import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseClient;
@@ -37,7 +39,7 @@ public class TsdbStoreHBase extends TsdbStore {
       .getLogger(TsdbStoreHBase.class);
 
   /** HBase client to use. */
-  private final HBaseClient client;
+  private HBaseClient client;
 
   /**
    * Initializes the TsdbStore class, sets the table and the HBase client object
@@ -47,6 +49,10 @@ public class TsdbStoreHBase extends TsdbStore {
   public TsdbStoreHBase(final byte[] table, final HBaseClient client) {
     super(table);
     this.client = client;
+  }
+  
+  public void copy(final TsdbStore store){
+    this.client = ((TsdbStoreHBase)store).client;
   }
   
   /**
@@ -64,16 +70,20 @@ public class TsdbStoreHBase extends TsdbStore {
    */
   public byte[] getValue(final byte[] key, final byte[] family,
       final byte[] qualifier, final Object rowLock) throws TsdbStorageException {
+//    LOG.trace(String.format("Fetching key [%s]family [%s] qualifier [%s] lock [%s]", 
+//        UniqueId.IDtoString(key), fromBytes(family), fromBytes(qualifier),
+//        rowLock == null ? "no" : "yes"));
     final GetRequest get = new GetRequest(table, key);
-    if (rowLock != null) {
+    if (rowLock != null)
       get.withRowLock((RowLock) rowLock);
-    }
     get.family(family).qualifier(qualifier);
     try {
       final ArrayList<KeyValue> row = client.get(get).joinUninterruptibly();
       if (row == null || row.isEmpty()) {
+        //LOG.trace("Nothing found in storage");
         return null;
       }
+      //LOG.trace(String.format("Found [%s] cells w [%s]", row.size(), fromBytes(row.get(0).value())));
       return row.get(0).value();
     } catch (HBaseException e) {
       throw new TsdbStorageException(e.getMessage(), e);
@@ -146,16 +156,8 @@ public class TsdbStoreHBase extends TsdbStore {
       final Object rowLock, final Boolean durable, final Boolean bufferable) 
       throws TsdbStorageException {
     // data check
-    if (table == null){
-      LOG.error("Missing table value");
-      return null;
-    }
     if (key == null){
       LOG.error("Missing key value");
-      return null;
-    }
-    if (qualifier == null){
-      LOG.error("Missing qualifier value");
       return null;
     }
     if (data == null){
@@ -256,8 +258,10 @@ public class TsdbStoreHBase extends TsdbStore {
         .newScanner(scanner.getTable() == null ? this.table : scanner
             .getTable());
 
-    scnr.setStartKey(scanner.getStart_row());
-    scnr.setStopKey(scanner.getEndRow());
+    if (scanner.getStart_row() != null)
+      scnr.setStartKey(scanner.getStart_row());
+    if (scanner.getEndRow() != null)
+      scnr.setStopKey(scanner.getEndRow());
     if (scanner.getFamily() != null)
       scnr.setFamily(scanner.getFamily());
     if (scanner.getRowRegex() != null && scanner.getRowRegex().length() > 0)

@@ -871,6 +871,7 @@ public final class UniqueId implements UniqueIdInterface {
             LOG.error(String.format("Unable to parse metadata for [%s]", IDtoString(row.get(0).key())));
             continue;
           }
+          meta = (GeneralMeta)codec.getObject();
           this.metadata.putCache(row.get(0).key(), meta);
           count++;
         }
@@ -1040,45 +1041,141 @@ public final class UniqueId implements UniqueIdInterface {
     // Success!
   }
 
-  public void searchNames(final Pattern regex, Set<String> matches){  
+  /**
+   * Loads all UIDs, Maps (and if applicable, meta) for this type, then scans for matches.
+   * If a match is made on the proper field, it will put the metric UID (if this is a 
+   * metrics cache) or tag/value pair (if tagk or tagv) in the "matches" set. The set will
+   * be used to filter on the tsuids. 
+   * 
+   * NOTE: If the field is set, then the metadata will be loaded
+   * @param field The field to match on. 
+   * @param regex The regex to match with
+   * @param custom A list of metadata custom tags to filter on
+   * @param matches Set of UID or UID pairs that had data matching the regex
+   */
+  public void search(final String field, final Pattern regex, final Map<String, Pattern> custom, 
+      Set<String> matches){  
     // load all metrics so we can scan
     this.loadAllUIDs();
     this.loadAllMaps();
+    Boolean load_meta = false;
+    if (field.compareTo(fromBytes(kind)) != 0 || custom.size() > 0){
+      this.LoadAllMeta();
+      load_meta = true;
+    }
+    GeneralMeta meta = null;
     
     // scan!
     for (String name : this.nameCache.keySet()){
-      if (regex.matcher(name).find()){
-        String uid = IDtoString(this.nameCache.get(name));
-        LOG.trace(String.format("Matched [%s] UID [%s] name [%s]", fromBytes(kind),
-           uid, name));
-        
+      Boolean match = false;
+      String uid = IDtoString(this.nameCache.get(name));
+      if (load_meta){
+        meta = this.metadata.getGeneralMeta(this.nameCache.get(name));
+      }
+      
+      // if the regex is null AND we don't have a custom filter, just return the data 
+      // since we don't have to do any processing
+      if (regex == null && custom.size() < 1)
+        match = true;      
+      else{ 
+        // otherwise, we need to check all or one field
+        if (regex != null){
+          if ((field.compareTo("all") == 0 || field.compareTo(fromBytes(kind)) == 0)
+              && regex.matcher(name).find()){
+            LOG.trace(String.format("Matched [%s] UID [%s] name [%s]", fromBytes(kind),
+               uid, name));
+            match = true;
+          }
+
+          if ((field.compareTo("all") == 0 || field.compareTo("display_name") == 0)
+              && meta != null && regex.matcher(meta.getDisplay_name()).find()){
+            LOG.trace(String.format("Matched [%s] UID [%s] display name [%s]", fromBytes(kind),
+               uid, meta.getDisplay_name()));
+            match = true;
+          }
+          
+          if ((field.compareTo("all") == 0 || field.compareTo("description") == 0)
+              && meta != null && regex.matcher(meta.getDescription()).find()){
+            LOG.trace(String.format("Matched [%s] UID [%s] description [%s]", fromBytes(kind),
+               uid, meta.getDescription()));
+            match = true;
+          }
+          
+          if ((field.compareTo("all") == 0 || field.compareTo("notes") == 0)
+              && meta != null && regex.matcher(meta.getNotes()).find()){
+            LOG.trace(String.format("Matched [%s] UID [%s] notes [%s]", fromBytes(kind),
+               uid, meta.getNotes()));
+            match = true;
+          }
+          
+          if (field.compareTo("all") == 0 && meta.getCustom() != null){
+            Map<String, String> custom_tags = meta.getCustom();
+            for (Map.Entry<String, String> tag : custom_tags.entrySet()){
+              if (regex.matcher(tag.getKey()).find()){
+                LOG.trace(String.format("Matched [%s] custom tag [%s] for uid [%s]",
+                    fromBytes(kind), tag.getKey(), uid));
+                match = true;
+                break;
+              }
+              if (regex.matcher(tag.getValue()).find()){
+                LOG.trace(String.format("Matched [%s] custom tag value [%s] for uid [%s]",
+                    fromBytes(kind), tag.getKey(), uid));
+                match = true;
+                break;
+              }
+            }
+          }
+        }
+
+        if (custom != null && custom.size() > 0 && meta != null){
+          match = false;
+          Map<String, String> custom_tags = meta.getCustom();
+          if (custom_tags != null && custom_tags.size() > 0){
+            int matched = 0;
+            for (Map.Entry<String, Pattern> entry : custom.entrySet()){
+              for (Map.Entry<String, String> tag : custom_tags.entrySet()){
+                if (tag.getKey().toLowerCase().compareTo(entry.getKey().toLowerCase()) == 0
+                    && entry.getValue().matcher(tag.getValue()).find()){
+                  LOG.trace(String.format("Matched custom tag [%s] on filter [%s] with value [%s]",
+                      tag.getKey(), entry.getValue().toString(), tag.getValue()));
+                  matched++;
+                }
+              }
+            }
+            if (matched != custom.size()){
+              LOG.trace(String.format("%s UID [%s] did not match all of the custom tag filters", 
+                  fromBytes(kind), uid));
+            }else
+              match = true;
+          }
+        }
+      }
+      
+      // if no match, just move on
+      if (!match)
+        continue;
+
+      // only return the metric OR tag/value pairs
+      if (fromBytes(kind).compareTo("metrics") == 0)
+        matches.add(uid);
+      else{
         UniqueIdMap map = this.getMap(uid);
         if (map == null)
           continue;
         
-        // only return relevant tags
-        if (fromBytes(kind).compareTo("metrics") == 0)
-          matches.add(uid);
-        else{
-          Set<String> pairs = map.getTags();
-          if (pairs == null)
-            continue;
-          for (String pair : pairs){
-            if (fromBytes(kind).compareTo("tagk") == 0
-                && pair.substring(0, 6).compareTo(uid) == 0)
-              matches.add(pair);
-            else if (fromBytes(kind).compareTo("tagv") == 0
-                && pair.substring(6).compareTo(uid) == 0)
-              matches.add(pair);
-          }
+        Set<String> pairs = map.getTags();
+        if (pairs == null)
+          continue;
+        for (String pair : pairs){
+          if (fromBytes(kind).compareTo("tagk") == 0
+              && pair.substring(0, 6).compareTo(uid) == 0)
+            matches.add(pair);
+          else if (fromBytes(kind).compareTo("tagv") == 0
+              && pair.substring(6).compareTo(uid) == 0)
+            matches.add(pair);
         }
       }
     }
-  }
-
-  public void searchMeta(final Pattern regex, Set<String> matches){
-    this.LoadAllMeta();
-        
   }
   
   /**
@@ -1121,7 +1218,7 @@ public final class UniqueId implements UniqueIdInterface {
       final byte[] raw = storage.getValue(StringtoID(id), NAME_FAMILY,
           toBytes(qualifier));
       if (raw == null){
-        LOG.trace(String.format("Couldn't find %s UID [%s] in storage",
+        LOG.trace(String.format("Couldn't find %s UID [%s]'s map in storage",
             fromBytes(kind), id));
         return null;
       }

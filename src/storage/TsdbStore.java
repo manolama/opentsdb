@@ -45,7 +45,14 @@ public abstract class TsdbStore {
   public TsdbStore(final byte[] table) {
     this.table = table;
   }
+  
+  public TsdbStore(final byte[] table, final TsdbStore store) {
+    this.table = table;
+    this.copy(store);
+  }
 
+  abstract public void copy(final TsdbStore store);
+  
   /**
    * Attempts to retrieve the latest value for a specific cell and convert it to
    * a string

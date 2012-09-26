@@ -20,6 +20,7 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.GeneralMeta.Meta_Type;
 import net.opentsdb.meta.TimeSeriesMeta;
+import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
 
 import org.jboss.netty.handler.codec.http.HttpMethod;
@@ -176,35 +177,43 @@ public class MetaRPC implements HttpRpc {
       return;
     }
 
-    // put it in the right place
-    switch (type) {
-    case METRICS:
-      if (!tsdb.metrics.putMeta(meta)) {
-        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
-            "Error saving data");
-        return;
+    try{
+      // put it in the right place
+      switch (type) {
+      case METRICS:
+        meta.setName(tsdb.metrics.getName(UniqueId.StringtoID(meta.getUID())));
+        if (!tsdb.metrics.putMeta(meta)) {
+          query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+              "Error saving data");
+          return;
+        }
+        meta = tsdb.metrics.getGeneralMeta(UniqueId.StringtoID(meta
+            .getUID()));
+        break;
+      case TAGK:
+        meta.setName(tsdb.tag_names.getName(UniqueId.StringtoID(meta.getUID())));
+        if (!tsdb.tag_names.putMeta(meta)) {
+          query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+              "Error saving data");
+          return;
+        }
+        meta = tsdb.tag_names.getGeneralMeta(UniqueId.StringtoID(meta
+            .getUID()));
+        break;
+      case TAGV:
+        meta.setName(tsdb.tag_values.getName(UniqueId.StringtoID(meta.getUID())));
+        if (!tsdb.tag_values.putMeta(meta)) {
+          query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+              "Error saving data");
+          return;
+        }
+        meta = tsdb.tag_values.getGeneralMeta(UniqueId.StringtoID(meta
+            .getUID()));
+        break;
       }
-      meta = tsdb.metrics.getGeneralMeta(UniqueId.StringtoID(meta
-          .getUID()));
-      break;
-    case TAGK:
-      if (!tsdb.tag_names.putMeta(meta)) {
-        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
-            "Error saving data");
-        return;
-      }
-      meta = tsdb.tag_names.getGeneralMeta(UniqueId.StringtoID(meta
-          .getUID()));
-      break;
-    case TAGV:
-      if (!tsdb.tag_values.putMeta(meta)) {
-        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
-            "Error saving data");
-        return;
-      }
-      meta = tsdb.tag_values.getGeneralMeta(UniqueId.StringtoID(meta
-          .getUID()));
-      break;
+    } catch (NoSuchUniqueId nsui){
+      LOG.warn(String.format("No UID found for [%s]", meta.getUID()));
+      query.sendError(HttpResponseStatus.BAD_REQUEST, "UID was not found");
     }
 
     JSON parser = new JSON(meta);

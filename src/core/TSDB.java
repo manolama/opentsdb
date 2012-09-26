@@ -22,6 +22,7 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
@@ -34,6 +35,7 @@ import org.slf4j.LoggerFactory;
 
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.uid.UniqueIdMap;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaData;
 import net.opentsdb.meta.TimeSeriesMeta;
@@ -637,10 +639,7 @@ public final class TSDB {
    * @return
    */
   public Boolean loadAllTSMeta(){
-    final byte[] start_row = new byte[] {127, 127, 127};
-    final byte[] end_row = new byte[] { '~' };
-    
-    final TsdbScanner scanner = new TsdbScanner(start_row, end_row, TsdbStore.toBytes("tsdb-uid"));
+    final TsdbScanner scanner = new TsdbScanner(null, null, TsdbStore.toBytes("tsdb-uid"));
     scanner.setFamily(TsdbStore.toBytes("name"));
     scanner.setQualifier(TsdbStore.toBytes("ts_meta"));
     this.uid_storage.openScanner(scanner);
@@ -665,17 +664,96 @@ public final class TSDB {
                 UniqueId.IDtoString(row.get(0).key())));
             continue;
           }
+          meta = (TimeSeriesMeta)codec.getObject();
           this.timeseries_meta.putCache(row.get(0).key(), meta);
           count++;
         }
       }
-      LOG.trace(String.format("Loaded [%d] metas for [timeseries]", count));
+      LOG.trace(String.format("Loaded [%d] metadata entries for [timeseries]", count));
       return true;
     } catch (HBaseException e) {
       throw e;
     } catch (Exception e) {
       e.printStackTrace();
       throw new RuntimeException("Should never be here", e);
+    }
+  }
+  
+  public void searchTSMeta(final String field, final Pattern regex, final Map<String, Pattern> custom, 
+      Set<String> matches){  
+    loadAllTSMeta();
+
+    // scan!
+    for (String tsuid : this.ts_uids){
+      boolean match = false;
+      TimeSeriesMeta meta = this.timeseries_meta.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
+      if (meta == null)
+        continue;
+
+      // otherwise, we need to check all or one field
+      if (regex != null){
+
+//        if ((field.compareTo("all") == 0 || field.compareTo("description") == 0)
+//            && meta != null && regex.matcher(meta.getDescription()).find()){
+//          LOG.trace(String.format("Matched [%s] UID [%s] description [%s]", fromBytes(kind),
+//             uid, meta.getDescription()));
+//          match = true;
+//        }
+        
+        if ((field.compareTo("all") == 0 || field.compareTo("notes") == 0)
+            && meta != null && regex.matcher(meta.getNotes()).find()){
+          LOG.trace(String.format("Matched [timeseries] UID [%s] notes [%s]",
+             tsuid, meta.getNotes()));
+          match = true;
+        }
+        
+        // customs
+        if (field.compareTo("all") == 0 && meta.getCustom() != null){
+          Map<String, String> custom_tags = meta.getCustom();
+          for (Map.Entry<String, String> tag : custom_tags.entrySet()){
+            if (regex.matcher(tag.getKey()).find()){
+              LOG.trace(String.format("Matched custom tag [%s] for uid [%s]",
+                  tag.getKey(), tsuid));
+              match = true;
+              break;
+            }
+            if (regex.matcher(tag.getValue()).find()){
+              LOG.trace(String.format("Matched custom tag value [%s] for uid [%s]",
+                  tag.getValue(), tsuid));
+              match = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // filter if we're provided customer info
+      if (custom != null && custom.size() > 0 && meta != null){
+        match = false;
+        Map<String, String> custom_tags = meta.getCustom();
+        if (custom_tags != null && custom_tags.size() > 0){
+          int matched = 0;
+          for (Map.Entry<String, Pattern> entry : custom.entrySet()){
+            for (Map.Entry<String, String> tag : custom_tags.entrySet()){
+              if (tag.getKey().toLowerCase().compareTo(entry.getKey().toLowerCase()) == 0
+                  && entry.getValue().matcher(tag.getValue()).find()){
+                LOG.trace(String.format("Matched custom tag [%s] on filter [%s] with value [%s]",
+                    tag.getKey(), entry.getValue().toString(), tag.getValue()));
+                matched++;
+              }
+            }
+          }
+          if (matched != custom.size()){
+            LOG.trace(String.format("timeseries UID [%s] did not match all of the custom tag filters", 
+                tsuid));
+          }else
+            match = true;
+        }
+      }
+      
+      // if no match, just move on
+      if (match)
+        matches.add(tsuid);
     }
   }
   
