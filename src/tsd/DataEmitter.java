@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.DataPoints;
 
@@ -142,7 +143,7 @@ class DataEmitter {
    * Stub to get a cache entry to store and/or return to the user
    * @return
    */
-  public HttpCacheEntry getCacheData(){
+  public CacheEntry getCacheData(){
     LOG.warn("Not implemented");
     return null;
   }

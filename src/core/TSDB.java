@@ -189,7 +189,7 @@ public final class TSDB {
       return meta;
     }
     
-    LOG.trace(String.format("Cache miss on [%s]", tsuid));
+    //LOG.trace(String.format("Cache miss on [%s]", tsuid));
     String mid = tsuid.substring(0, 6);
     String metric = null;
     try{
@@ -679,8 +679,7 @@ public final class TSDB {
     }
   }
   
-  public void searchTSMeta(final String field, final Pattern regex, final Map<String, Pattern> custom, 
-      Set<String> matches){  
+  public void searchTSMeta(final SearchQuery query, Set<String> matches){  
     loadAllTSMeta();
 
     // scan!
@@ -691,33 +690,33 @@ public final class TSDB {
         continue;
 
       // otherwise, we need to check all or one field
-      if (regex != null){
+      if (query.getQueryRegex() != null){
 
-//        if ((field.compareTo("all") == 0 || field.compareTo("description") == 0)
+//        if ((query.getField().compareTo("all") == 0 || query.getField().compareTo("description") == 0)
 //            && meta != null && regex.matcher(meta.getDescription()).find()){
 //          LOG.trace(String.format("Matched [%s] UID [%s] description [%s]", fromBytes(kind),
 //             uid, meta.getDescription()));
 //          match = true;
 //        }
         
-        if ((field.compareTo("all") == 0 || field.compareTo("notes") == 0)
-            && meta != null && regex.matcher(meta.getNotes()).find()){
+        if ((query.getField().compareTo("all") == 0 || query.getField().compareTo("notes") == 0)
+            && meta != null && query.getQueryRegex().matcher(meta.getNotes()).find()){
           LOG.trace(String.format("Matched [timeseries] UID [%s] notes [%s]",
              tsuid, meta.getNotes()));
           match = true;
         }
         
         // customs
-        if (field.compareTo("all") == 0 && meta.getCustom() != null){
+        if (query.getField().compareTo("all") == 0 && meta.getCustom() != null){
           Map<String, String> custom_tags = meta.getCustom();
           for (Map.Entry<String, String> tag : custom_tags.entrySet()){
-            if (regex.matcher(tag.getKey()).find()){
+            if (query.getQueryRegex().matcher(tag.getKey()).find()){
               LOG.trace(String.format("Matched custom tag [%s] for uid [%s]",
                   tag.getKey(), tsuid));
               match = true;
               break;
             }
-            if (regex.matcher(tag.getValue()).find()){
+            if (query.getQueryRegex().matcher(tag.getValue()).find()){
               LOG.trace(String.format("Matched custom tag value [%s] for uid [%s]",
                   tag.getValue(), tsuid));
               match = true;
@@ -728,12 +727,12 @@ public final class TSDB {
       }
 
       // filter if we're provided customer info
-      if (custom != null && custom.size() > 0 && meta != null){
+      if (query.getCustomCompiled() != null && query.getCustomCompiled().size() > 0 && meta != null){
         match = false;
         Map<String, String> custom_tags = meta.getCustom();
         if (custom_tags != null && custom_tags.size() > 0){
           int matched = 0;
-          for (Map.Entry<String, Pattern> entry : custom.entrySet()){
+          for (Map.Entry<String, Pattern> entry : query.getCustomCompiled().entrySet()){
             for (Map.Entry<String, String> tag : custom_tags.entrySet()){
               if (tag.getKey().toLowerCase().compareTo(entry.getKey().toLowerCase()) == 0
                   && entry.getValue().matcher(tag.getValue()).find()){
@@ -743,7 +742,7 @@ public final class TSDB {
               }
             }
           }
-          if (matched != custom.size()){
+          if (matched != query.getCustomCompiled().size()){
             LOG.trace(String.format("timeseries UID [%s] did not match all of the custom tag filters", 
                 tsuid));
           }else

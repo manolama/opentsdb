@@ -28,6 +28,7 @@ import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 
+import net.opentsdb.cache.Cache;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
 
@@ -50,7 +51,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   /** Commands we serve on the HTTP interface. */
   private final HashMap<String, HttpRpc> http_commands;
   /** Cache for HTTP commands */
-  private final HttpCache cache;
+  private final Cache cache;
   
   /** The TSDB to use. */
   private final TSDB tsdb;
@@ -61,7 +62,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
    */
   public RpcHandler(final TSDB tsdb) {
     this.tsdb = tsdb;
-    cache = new HttpCache(tsdb);
+    cache = new Cache(tsdb);
 
     telnet_commands = new HashMap<String, TelnetRpc>(6);
     http_commands = new HashMap<String, HttpRpc>(10);
@@ -96,7 +97,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     http_commands.put("q", new QueryHandler());
     http_commands.put("suggest", new SuggestRPC());
     http_commands.put("put", new PutDataPointRpc());
-    http_commands.put("cache", cache);
+    http_commands.put("cache", new CacheRPC());
     http_commands.put("metrics", new MetricsRpc());
     http_commands.put("meta", new MetaRPC());
     http_commands.put("map", new MapRPC());

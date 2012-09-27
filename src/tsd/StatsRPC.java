@@ -14,6 +14,7 @@ package net.opentsdb.tsd;
 
 import java.util.ArrayList;
 
+import net.opentsdb.cache.Cache;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
 
@@ -87,7 +88,7 @@ final class StatsRPC implements TelnetRpc, HttpRpc {
   private void doCollectStats(final TSDB tsdb, final StatsCollector collector) {
     collector.addHostTag();
     ConnectionManager.collectStats(collector);
-    HttpCache.collectStats(collector);
+    Cache.collectStats(collector);
     RpcHandler.collectStats(collector);
     tsdb.collectStats(collector);
   }

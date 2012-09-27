@@ -13,9 +13,9 @@
 package net.opentsdb.uid;
 
 import java.nio.charset.Charset;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.Arrays;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -28,7 +28,8 @@ import java.util.regex.Pattern;
 import javax.xml.bind.DatatypeConverter;
 
 import net.opentsdb.core.JSON;
-import net.opentsdb.core.TSDB;
+import net.opentsdb.core.SearchQuery;
+import net.opentsdb.core.SearchQuery.SearchOperator;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaData;
 import net.opentsdb.storage.TsdbScanner;
@@ -1048,18 +1049,15 @@ public final class UniqueId implements UniqueIdInterface {
    * be used to filter on the tsuids. 
    * 
    * NOTE: If the field is set, then the metadata will be loaded
-   * @param field The field to match on. 
-   * @param regex The regex to match with
-   * @param custom A list of metadata custom tags to filter on
+   * @param query The search query to process 
    * @param matches Set of UID or UID pairs that had data matching the regex
    */
-  public void search(final String field, final Pattern regex, final Map<String, Pattern> custom, 
-      Set<String> matches){  
+  public void search(final SearchQuery query, Set<String> matches){  
     // load all metrics so we can scan
     this.loadAllUIDs();
     this.loadAllMaps();
     Boolean load_meta = false;
-    if (field.compareTo(fromBytes(kind)) != 0 || custom.size() > 0){
+    if (query.getField().compareTo(fromBytes(kind)) != 0 || query.getCustom().size() > 0){
       this.LoadAllMeta();
       load_meta = true;
     }
@@ -1075,49 +1073,49 @@ public final class UniqueId implements UniqueIdInterface {
       
       // if the regex is null AND we don't have a custom filter, just return the data 
       // since we don't have to do any processing
-      if (regex == null && custom.size() < 1)
+      if (query.getQueryRegex() == null && query.getCustom() == null && query.getNumerics() != null)
         match = true;      
       else{ 
         // otherwise, we need to check all or one field
-        if (regex != null){
-          if ((field.compareTo("all") == 0 || field.compareTo(fromBytes(kind)) == 0)
-              && regex.matcher(name).find()){
+        if (query.getQueryRegex() != null){
+          if ((query.getField().compareTo("all") == 0 || query.getField().compareTo(fromBytes(kind)) == 0)
+              && query.getQueryRegex().matcher(name).find()){
             LOG.trace(String.format("Matched [%s] UID [%s] name [%s]", fromBytes(kind),
                uid, name));
             match = true;
           }
 
-          if ((field.compareTo("all") == 0 || field.compareTo("display_name") == 0)
-              && meta != null && regex.matcher(meta.getDisplay_name()).find()){
+          if ((query.getField().compareTo("all") == 0 || query.getField().compareTo("display_name") == 0)
+              && meta != null && query.getQueryRegex().matcher(meta.getDisplay_name()).find()){
             LOG.trace(String.format("Matched [%s] UID [%s] display name [%s]", fromBytes(kind),
                uid, meta.getDisplay_name()));
             match = true;
           }
           
-          if ((field.compareTo("all") == 0 || field.compareTo("description") == 0)
-              && meta != null && regex.matcher(meta.getDescription()).find()){
+          if ((query.getField().compareTo("all") == 0 || query.getField().compareTo("description") == 0)
+              && meta != null && query.getQueryRegex().matcher(meta.getDescription()).find()){
             LOG.trace(String.format("Matched [%s] UID [%s] description [%s]", fromBytes(kind),
                uid, meta.getDescription()));
             match = true;
           }
           
-          if ((field.compareTo("all") == 0 || field.compareTo("notes") == 0)
-              && meta != null && regex.matcher(meta.getNotes()).find()){
+          if ((query.getField().compareTo("all") == 0 || query.getField().compareTo("notes") == 0)
+              && meta != null && query.getQueryRegex().matcher(meta.getNotes()).find()){
             LOG.trace(String.format("Matched [%s] UID [%s] notes [%s]", fromBytes(kind),
                uid, meta.getNotes()));
             match = true;
           }
           
-          if (field.compareTo("all") == 0 && meta.getCustom() != null){
+          if (query.getField().compareTo("all") == 0 && meta.getCustom() != null){
             Map<String, String> custom_tags = meta.getCustom();
             for (Map.Entry<String, String> tag : custom_tags.entrySet()){
-              if (regex.matcher(tag.getKey()).find()){
+              if (query.getQueryRegex().matcher(tag.getKey()).find()){
                 LOG.trace(String.format("Matched [%s] custom tag [%s] for uid [%s]",
                     fromBytes(kind), tag.getKey(), uid));
                 match = true;
                 break;
               }
-              if (regex.matcher(tag.getValue()).find()){
+              if (query.getQueryRegex().matcher(tag.getValue()).find()){
                 LOG.trace(String.format("Matched [%s] custom tag value [%s] for uid [%s]",
                     fromBytes(kind), tag.getKey(), uid));
                 match = true;
@@ -1127,12 +1125,13 @@ public final class UniqueId implements UniqueIdInterface {
           }
         }
 
-        if (custom != null && custom.size() > 0 && meta != null){
+        // filter on compiled
+        if (query.getCustomCompiled() != null && query.getCustomCompiled().size() > 0 && meta != null){
           match = false;
           Map<String, String> custom_tags = meta.getCustom();
           if (custom_tags != null && custom_tags.size() > 0){
             int matched = 0;
-            for (Map.Entry<String, Pattern> entry : custom.entrySet()){
+            for (Map.Entry<String, Pattern> entry : query.getCustomCompiled().entrySet()){
               for (Map.Entry<String, String> tag : custom_tags.entrySet()){
                 if (tag.getKey().toLowerCase().compareTo(entry.getKey().toLowerCase()) == 0
                     && entry.getValue().matcher(tag.getValue()).find()){
@@ -1142,11 +1141,31 @@ public final class UniqueId implements UniqueIdInterface {
                 }
               }
             }
-            if (matched != custom.size()){
+            if (matched != query.getCustom().size()){
               LOG.trace(String.format("%s UID [%s] did not match all of the custom tag filters", 
                   fromBytes(kind), uid));
             }else
               match = true;
+          }
+        }
+        
+        // filter on created
+        if (query.getNumerics().size() > 0 && meta != null){
+          final SimpleEntry<SearchOperator, Double> created = query.getNumerics().get("created");
+          if (created != null){
+            // get comparator and value
+            final SearchOperator operator = created.getKey();
+            final Double comparisson = created.getValue();
+            if (operator == null || comparisson == null){
+              LOG.warn("Found a null operator or comparisson value");
+            }else{
+              if (query.compare(operator, (double)meta.getCreated(), comparisson)){
+                match = true;
+                LOG.trace(String.format("%s UID [%s] matched created numeric", 
+                  fromBytes(kind), uid));
+              }else
+                match = false;
+            }
           }
         }
       }

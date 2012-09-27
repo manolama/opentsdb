@@ -15,6 +15,7 @@ package net.opentsdb.tsd;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.Aggregators;
 import net.opentsdb.core.TSDB;
 
@@ -33,7 +34,7 @@ final class AggregatorsRPC implements HttpRpc {
   public void execute(final TSDB tsdb, final HttpQuery query) {
     final boolean nocache = query.hasQueryStringParam("nocache");
     final int query_hash = query.getQueryStringHash();
-    if (!nocache && query.getCache().readCache(query_hash, query)){
+    if (!nocache && query.getCacheAndReturn(query_hash)){
       return;
     }
     
@@ -41,13 +42,11 @@ final class AggregatorsRPC implements HttpRpc {
     final JSON_HTTP response = new JSON_HTTP(Aggregators.set());
  
     // build our cache object, store and reply
-    HttpCacheEntry entry = new HttpCacheEntry(query_hash, 
+    CacheEntry entry = new CacheEntry(query_hash, 
         jsonp.isEmpty() ? response.getJsonString().getBytes() 
             : response.getJsonPString(jsonp).getBytes(),
-            "", /* don't bother persisting these */
-            false,
             86400);
-    if (!nocache && !query.getCache().storeCache(entry)){
+    if (!nocache && !query.putCache(entry)){
       LOG.warn("Unable to cache emitter for key [" + query_hash + "]");
     }
     query.sendReply(entry.getData());

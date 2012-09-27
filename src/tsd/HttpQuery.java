@@ -50,6 +50,8 @@ import org.jboss.netty.handler.codec.http.HttpVersion;
 import org.jboss.netty.handler.codec.http.QueryStringDecoder;
 import org.jboss.netty.util.CharsetUtil;
 
+import net.opentsdb.cache.Cache;
+import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.graph.Plot;
@@ -99,7 +101,7 @@ public class HttpQuery {
   protected final TSDB tsdb;
   
   /** HTTP cache to store/read from */
-  protected final HttpCache cache;
+  protected final Cache cache;
   
   protected String jsonp = "";
   
@@ -113,7 +115,7 @@ public class HttpQuery {
    * @param chan The channel on which the request was received.
    */
   public HttpQuery(final TSDB tsdb, final HttpRequest request, 
-      final Channel chan, final HttpCache cache) {
+      final Channel chan, final Cache cache) {
     this.tsdb = tsdb;
     this.request = request;
     this.chan = chan;
@@ -455,8 +457,20 @@ public class HttpQuery {
    * Accessor for the cache object
    * @return Cache reference
    */
-  public HttpCache getCache(){
-    return this.cache;
+  public CacheEntry getCache(final int id){
+    return this.cache.getCache(id);
+  }
+  
+  public final boolean putCache(final CacheEntry entry){
+    return this.cache.putCache(entry);
+  }
+  
+  public boolean getCacheAndReturn(final int id){
+    final CacheEntry entry = this.cache.getCache(id);
+    if (entry == null)
+      return false;
+    this.sendReply(entry.getData());
+    return true;
   }
   
   /**

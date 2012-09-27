@@ -64,7 +64,7 @@ public class QueryHandler implements HttpRpc {
     
     LOG.trace(String.format("HTTP Start [%d] End [%d]", start_time, end_time));
     // first, see if we can satisfy the request from cache
-    if (!nocache && query.getCache().readCache(query_hash, query)){
+    if (!nocache && query.getCacheAndReturn(query_hash)){
       // satisfied from cache!!
       return;
     }

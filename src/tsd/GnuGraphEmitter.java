@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.graph.Plot;
 import net.opentsdb.stats.Histogram;
 
@@ -181,17 +182,15 @@ public class GnuGraphEmitter extends DataEmitter {
    * to the cache directory
    * @return Returns a new cache entry object
    */
-  public final HttpCacheEntry getCacheData(){
+  public final CacheEntry getCacheData(){
  // now we have all the metrics stored, serialize and return
     JSON_HTTP json = new JSON_HTTP(this.results);
     String response = jsonp.isEmpty() ? json.getJsonString() : json
         .getJsonPString(jsonp);
     
-    return new HttpCacheEntry(
+    return new CacheEntry(
         query_hash,
-        (response.isEmpty() ? json.getError().getBytes() : response.getBytes()),
         basepath + ".json",
-        false,
         computeExpire()
     );
   }

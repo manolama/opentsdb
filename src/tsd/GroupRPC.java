@@ -14,21 +14,20 @@ package net.opentsdb.tsd;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
-import java.util.regex.Pattern;
 
+import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueIdMap;
 
-import org.jboss.netty.handler.codec.http.HttpMethod;
+import org.codehaus.jackson.type.TypeReference;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,9 +36,6 @@ public class GroupRPC implements HttpRpc {
   private static final Logger LOG = LoggerFactory.getLogger(GroupRPC.class);
   
   public void execute(final TSDB tsdb, final HttpQuery query) {
-    if (query.getMethod() == HttpMethod.POST){
-      // todo - handle me!!!
-    }
     
     String grouping_tagk = "host";
     long limit = 25;
@@ -65,106 +61,143 @@ public class GroupRPC implements HttpRpc {
       }
     }
 
-    // todo hash and cache it so we don't reload stuff
+    TsdbGroup results = null;
+    JSON codec;
     
+    // build a hash
+    int hash = ("group" + grouping_tagk).hashCode();
     
-    byte[] uid;
-    try{
-     uid = tsdb.tag_names.getId(grouping_tagk);
-    } catch (NoSuchUniqueId nsui){
-      LOG.debug(String.format("No tagk UID for [%s]", grouping_tagk));
-      query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to locate tag name");
-      return;
+    // try retrieving/parsing the cache
+    CacheEntry cached = query.getCache(hash);
+    if (cached != null){
+      final TypeReference<TsdbGroup> respTypeRef = 
+        new TypeReference<TsdbGroup>() {}; 
+      codec = new JSON(results);
+      if (!codec.parseObject(
+          (cached.getDataSize() > 0 ? cached.getData() : cached.getFileData()), respTypeRef))
+        cached = null;
+      else
+        results = (TsdbGroup)codec.getObject();
     }
-    String tagk = UniqueId.IDtoString(uid);
-    
-    UniqueIdMap map = tsdb.tag_names.getMap(tagk);
-    if (map == null){
-      query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to load map");
-      return;
-    }
-    
-    Set<String> tagvs = map.getTags("tagv", (short)3);
-    if (tagvs == null){
-      query.sendError(HttpResponseStatus.BAD_REQUEST, "Error fetching tagv set");
-      return;
-    }
-    
-    // sort em!
-    SortedMap<String, String> sorted_tagvs = new TreeMap<String, String>();
-    for (String tagvid : tagvs){
+
+    if (cached == null){
+      byte[] uid;
       try{
-        sorted_tagvs.put(tsdb.tag_values.getName(UniqueId.StringtoID(tagvid)), tagvid);
-       }catch (NoSuchUniqueId nsui){
-         LOG.trace(String.format("No tagv UID for [%s]", tagvid));
-         //query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to locate tag name");
-         continue;
-       }
-    }
-    if (sorted_tagvs.size() < 1){
-      query.sendError(HttpResponseStatus.BAD_REQUEST, "Failed to sort tag values");
-      return;
-    }
-    
-    Map<String, String> metric_names = new HashMap<String, String>();
-    SortedMap<String, List<Map<String, Object>>> results = new TreeMap<String, List<Map<String, Object>>>();
-    
-    // fetch TSUIDs for each pair
-    long total_uids = 0;
-    for (Map.Entry<String, String> entry : sorted_tagvs.entrySet()){
-      List<Map<String, Object>> entries = new ArrayList<Map<String, Object>>();
-      for (String tsuid : tsdb.ts_uids){
-        if (tsuid.substring(6).contains(tagk + entry.getValue())){
-          //LOG.trace(String.format("Matched [%s] with [%s]", tagk + entry.getValue(), tsuid));
-          try{
-            entries.add(tsdb.getTSUIDShortMeta(tsuid));
-            total_uids++;
-          } catch (NoSuchUniqueId nsui){
-            LOG.trace(nsui.getMessage());
+       uid = tsdb.tag_names.getId(grouping_tagk);
+      } catch (NoSuchUniqueId nsui){
+        LOG.debug(String.format("No tagk UID for [%s]", grouping_tagk));
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to locate tag name");
+        return;
+      }
+      String tagk = UniqueId.IDtoString(uid);
+      
+      UniqueIdMap map = tsdb.tag_names.getMap(tagk);
+      if (map == null){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to load map");
+        return;
+      }
+      
+      Set<String> tagvs = map.getTags("tagv", (short)3);
+      if (tagvs == null){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Error fetching tagv set");
+        return;
+      }
+      
+      // sort em!
+      SortedMap<String, String> sorted_tagvs = new TreeMap<String, String>();
+      for (String tagvid : tagvs){
+        try{
+          sorted_tagvs.put(tsdb.tag_values.getName(UniqueId.StringtoID(tagvid)), tagvid);
+         }catch (NoSuchUniqueId nsui){
+           LOG.trace(String.format("No tagv UID for [%s]", tagvid));
+           //query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to locate tag name");
+           continue;
+         }
+      }
+      if (sorted_tagvs.size() < 1){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Failed to sort tag values");
+        return;
+      }
+      
+      results = new TsdbGroup();
+      results.groups = new TreeMap<String, List<Map<String, Object>>>();
+      
+      // fetch TSUIDs for each pair
+      results.total_uids = 0;
+      for (Map.Entry<String, String> entry : sorted_tagvs.entrySet()){
+        List<Map<String, Object>> entries = new ArrayList<Map<String, Object>>();
+        for (String tsuid : tsdb.ts_uids){
+          if (tsuid.substring(6).contains(tagk + entry.getValue())){
+            //LOG.trace(String.format("Matched [%s] with [%s]", tagk + entry.getValue(), tsuid));
+            try{
+              entries.add(tsdb.getTSUIDShortMeta(tsuid));
+              results.total_uids++;
+            } catch (NoSuchUniqueId nsui){
+              LOG.trace(nsui.getMessage());
+            }
           }
         }
+        if (entries.size() > 0){
+          results.groups.put(entry.getKey(), entries);
+          //LOG.trace(String.format("Put [%s]", entry.getKey()));
+          if (entries.size() > results.largest_group)
+            results.largest_group = entries.size();
+        }
       }
-      if (entries.size() > 0){
-        results.put(entry.getKey(), entries);
-        //LOG.trace(String.format("Put [%s]", entry.getKey()));
-      }
+      
+      // cache me
+      codec = new JSON(results);
+      CacheEntry ce = new CacheEntry(hash, codec.getJsonBytes());
+      query.putCache(ce);
+    }
+    
+    // if one group is larger than the limit, we need to reset the limit
+    if (results.largest_group > limit){
+      LOG.warn(String.format("Resetting limit from [%d] to largest group size [%d]", limit, results.largest_group));
+      limit = results.largest_group;
     }
     
     // build a response map
     Map<String, Object> response = new HashMap<String, Object>();
     response.put("limit", limit);
     response.put("page", page);
-    response.put("total_uids", total_uids);
-    response.put("total_groups", results.size());
+    response.put("total_uids", results.total_uids);
+    response.put("total_groups", results.groups.size());
     response.put("tagk", grouping_tagk);
-    response.put("total_pages", ((total_uids / limit) + 1));
+    response.put("total_pages", ((results.total_uids / limit) + 1));
     
     // limit and page calculations    
-    if (limit < 1 || total_uids <= limit){
-      response.put("results", results);
+    if (limit < 1 || results.total_uids <= limit){
+      response.put("results", results.groups);
     }else{
-      LOG.trace(String.format("Limiting to [%d] uids on page [%d]", limit, page));
       SortedMap<String, Object> limited_results = new TreeMap<String, Object>();
       long start = (page > 0 ? page * limit : 0);
       long end = (page + 1) * limit;
-      long uids = 0;
-      for (Map.Entry<String, List<Map<String, Object>>> entry : results.entrySet()){
+      long total_uids = 0;
+      LOG.trace(String.format("Limiting to [%d] uids on page [%d] w start [%d] end [%d]", limit, page, start, end));
+      for (Map.Entry<String, List<Map<String, Object>>> entry : results.groups.entrySet()){
         long size = entry.getValue().size();
-        if (uids + size > end){
-          LOG.trace(String.format("Next group with [%d] would hit limit [%d] since we have [%d]", 
-              size, end, uids));
+        if (total_uids + size > end){
+          LOG.trace(String.format("[%d] Next group with [%d] would hit limit [%d] since we have [%d]", 
+              total_uids, size, end, total_uids));
           break;
         }
-        if (uids >= start && uids <= end){
+        if ((total_uids + size) >= start && (total_uids + size) <= end)
           limited_results.put(entry.getKey(), entry.getValue());
-        }
-        uids += size;
+
+        total_uids += size;
       }
       response.put("results", limited_results);
     }   
     
-    JSON codec = new JSON(response);
+    codec = new JSON(response);
     query.sendReply(codec.getJsonBytes());
     return;
+  }
+  
+  private static class TsdbGroup{
+    public SortedMap<String, List<Map<String, Object>>> groups;
+    public long total_uids = 0;
+    public long largest_group = 0;
   }
 }

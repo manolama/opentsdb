@@ -15,6 +15,7 @@ package net.opentsdb.tsd;
 import java.util.HashMap;
 
 import net.opentsdb.BuildData;
+import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.TSDB;
 
 import org.jboss.netty.channel.Channel;
@@ -53,7 +54,7 @@ final class VersionRPC implements TelnetRpc, HttpRpc {
   public void execute(final TSDB tsdb, final HttpQuery query) {
     final boolean nocache = query.hasQueryStringParam("nocache");
     final int query_hash = query.getQueryStringHash();
-    if (!nocache && query.getCache().readCache(query_hash, query)) {
+    if (!nocache && query.getCacheAndReturn(query_hash)) {
       return;
     }
 
@@ -71,14 +72,10 @@ final class VersionRPC implements TelnetRpc, HttpRpc {
       final JSON_HTTP response = new JSON_HTTP(version);
 
       // build our cache object, store and reply
-      HttpCacheEntry entry = new HttpCacheEntry(query_hash,
+      CacheEntry entry = new CacheEntry(query_hash,
           jsonp.isEmpty() ? response.getJsonString().getBytes() : response
-              .getJsonPString(jsonp).getBytes(), "", /*
-                                                      * don't bother persisting
-                                                      * these
-                                                      */
-          false, 86400);
-      if (!nocache && !query.getCache().storeCache(entry)) {
+              .getJsonPString(jsonp).getBytes(), 86400);
+      if (!nocache && !query.putCache(entry)) {
         LOG.warn("Unable to cache emitter for key [" + query_hash + "]");
       }
       query.sendReply(entry.getData());
@@ -91,10 +88,9 @@ final class VersionRPC implements TelnetRpc, HttpRpc {
       buf.append(revision).append('\n').append(build).append('\n');
 
       // build our cache object, store and reply
-      HttpCacheEntry entry = new HttpCacheEntry(query_hash, buf.toString()
-          .getBytes(), "", /* don't bother persisting these */
-      false, 86400);
-      if (!nocache && !query.getCache().storeCache(entry)) {
+      CacheEntry entry = new CacheEntry(query_hash, buf.toString()
+          .getBytes(), 86400);
+      if (!nocache && !query.putCache(entry)) {
         LOG.warn("Unable to cache emitter for key [" + query_hash + "]");
       }
       query.sendReply(entry.getData());

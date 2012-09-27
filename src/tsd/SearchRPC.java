@@ -12,26 +12,26 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
-import java.util.ArrayList;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.codehaus.jackson.map.annotate.JsonSerialize;
+import org.codehaus.jackson.type.TypeReference;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.JSON;
+import net.opentsdb.core.SearchQuery.SearchOperator;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.core.SearchQuery;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
@@ -46,16 +46,8 @@ import net.opentsdb.uid.UniqueIdMap;
  */
 public class SearchRPC implements HttpRpc {  
   private static final Logger LOG = LoggerFactory.getLogger(SearchRPC.class);
-  
-  private enum SearchOperator {
-    GT,
-    LT,
-    GE,
-    LE,
-    EQ,
-    NE
-  }
-  
+    
+  @SuppressWarnings("unchecked")
   public void execute(final TSDB tsdb, final HttpQuery query) {
     // don't bother if we don't have any tsuids to work with
     if (tsdb.ts_uids.isEmpty()){
@@ -73,214 +65,185 @@ public class SearchRPC implements HttpRpc {
         return;
       }
       search_query = (SearchQuery)codec.getObject();
-      LOG.trace(codec.getJsonString());
     }else{
       LOG.trace("Parsing query string data");
       search_query = this.parseQueryString(query);
       // error already sent
       if (search_query == null)
         return;
-      JSON codec = new JSON(search_query);
-      LOG.trace(codec.getJsonString());
     }
     
     // validate the query first
-    if (!search_query.validateQuery(query))
+    if (!search_query.validateQuery()){
+      query.sendError(HttpResponseStatus.BAD_REQUEST, search_query.getError());
       return;
-     
-    // results will be stored by UID and object to avoid duplication
-    Set<String> tag_pairs = new HashSet<String>();
-    Set<String> metrics = new HashSet<String>();
-    
-    // compile the search query if we have one
-    Pattern reg_query = null;
-    if (search_query.query != null && !search_query.query.isEmpty()){
-      reg_query = Pattern.compile(search_query.query);
-      LOG.trace(String.format("Compiled query on [%s]", search_query.query));
     }
     
-    // compile the tag regs if we have them
-    Map<String, Pattern> tags = new HashMap<String, Pattern>();
-    if (search_query.tags != null){
-      for (Map.Entry<String, String> entry : search_query.tags.entrySet()){
-        Pattern tagv_pattern = Pattern.compile(entry.getValue());
-        tags.put(entry.getKey(), tagv_pattern);
-      }
+    JSON codec = new JSON(search_query);
+    LOG.trace(codec.getJsonString());
+    
+    Map<String, Object> results = null;
+    
+    // try retrieving/parsing the cache
+    CacheEntry cached = query.getCache(search_query.hashCode());
+    if (cached != null){
+      final TypeReference<Map<String, Object>> respTypeRef = 
+        new TypeReference<Map<String, Object>>() {}; 
+      codec = new JSON(results);
+      if (!codec.parseObject(
+          (cached.getDataSize() > 0 ? cached.getData() : cached.getFileData()), respTypeRef))
+        cached = null;
+      else
+        results = (Map<String, Object>)codec.getObject();
     }
     
-    // compile the custom regs if we have them
-    Map<String, Pattern> custom = new HashMap<String, Pattern>();
-    if (search_query.custom != null){
-      for (Map.Entry<String, String> entry : search_query.custom.entrySet()){
-        Pattern custom_pattern = Pattern.compile(entry.getValue());
-        custom.put(entry.getKey(), custom_pattern);
-      }
-    }
-    
-    // only search the metrics and tags we need to so we save some CPU time
-    if (search_query.searchingGeneralMeta() || 
-        search_query.field.compareTo("metrics") == 0)
-      tsdb.metrics.search(search_query.field, reg_query, custom, metrics);
-    if (search_query.searchingGeneralMeta() || 
-        search_query.field.compareTo("tagk") == 0)
-      tsdb.tag_names.search(search_query.field, reg_query, custom, tag_pairs);
-    if (search_query.searchingGeneralMeta() || 
-        search_query.field.compareTo("tagv") == 0)
-      tsdb.tag_values.search(search_query.field, reg_query, custom, tag_pairs);
-    
-    // with the list of tagpairs, we can get a list of matching tsuids from the master
-    Set<String> tsuids = UniqueIdMap.getTSUIDs(tag_pairs, tsdb.ts_uids, (short)3);
-    LOG.trace(String.format("Found [%d] tsuids with [%d] tag pairs", 
-        tsuids.size(), tag_pairs.size()));
-    
-    // match metrics against the timeseries list and add to the tsuids set
-    if (metrics.size() > 0){
-      for (String tsuid : tsdb.ts_uids){
-        for (String metric : metrics){
-          if (tsuid.substring(0, 6).compareTo(metric) == 0)
-            tsuids.add(tsuid);
+    if (cached == null){
+      // results will be stored by UID and object to avoid duplication
+      Set<String> tag_pairs = new HashSet<String>();
+      Set<String> metrics = new HashSet<String>();
+  
+      // only search the metrics and tags we need to so we save some CPU time
+      if (search_query.searchingGeneralMeta() || 
+          search_query.getField().compareTo("metrics") == 0)
+        tsdb.metrics.search(search_query, metrics);
+      if (search_query.searchingGeneralMeta() || 
+          search_query.getField().compareTo("tagk") == 0)
+        tsdb.tag_names.search(search_query, tag_pairs);
+      if (search_query.searchingGeneralMeta() || 
+          search_query.getField().compareTo("tagv") == 0)
+        tsdb.tag_values.search(search_query, tag_pairs);
+      
+      // with the list of tagpairs, we can get a list of matching tsuids from the master
+      Set<String> tsuids = UniqueIdMap.getTSUIDs(tag_pairs, tsdb.ts_uids, (short)3);
+      LOG.trace(String.format("Found [%d] tsuids with [%d] tag pairs", 
+          tsuids.size(), tag_pairs.size()));
+      
+      // match metrics against the timeseries list and add to the tsuids set
+      if (metrics.size() > 0){
+        for (String tsuid : tsdb.ts_uids){
+          for (String metric : metrics){
+            if (tsuid.substring(0, 6).compareTo(metric) == 0)
+              tsuids.add(tsuid);
+          }
         }
       }
-    }
-
-    // store a quick flag for efficiency
-    boolean searching_meta = search_query.searchingAnyMeta();
-    
-    // if we're searching meta, we need to process timeseries meta as well
-    if (searching_meta)
-      tsdb.searchTSMeta(search_query.field, reg_query, custom, tsuids);
-
-    // loop through the tsuids, load meta if applicable, load short_meta, and then filter
-    // and store the results in the results hash
-    Map<String, Object> results = new HashMap<String, Object>();
-    for (String tsuid : tsuids){
-      TimeSeriesMeta ts_meta = null;
-      Map<String, Object> short_meta = null;
-      try{
-        // load the meta if we're returning or searching
-        if (search_query.return_meta || searching_meta)
-          ts_meta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
-        // always load the short meta since we'll likely return this only and it has tags
-        short_meta = tsdb.getTSUIDShortMeta(tsuid);
-        
-      } catch (NoSuchUniqueId nsui){
-        LOG.trace(nsui.getMessage());
-        continue;
-      }
+  
+      // store a quick flag for efficiency
+      boolean searching_meta = search_query.searchingAnyMeta();
       
-      // FILTER - TAG
-      if (tags.size() > 0){
-        LOG.trace("Filtering tags...");
-        @SuppressWarnings("unchecked")
-        Map<String, String> sm_tags = (Map<String, String>)short_meta.get("tags");
-        int matched = 0;
-        for (Map.Entry<String, Pattern> entry : tags.entrySet()){
-          for (Map.Entry<String, String> tag : sm_tags.entrySet()){
-            if (tag.getKey().toLowerCase().compareTo(entry.getKey().toLowerCase()) == 0
-                && entry.getValue().matcher(tag.getValue()).find()){
-              LOG.trace(String.format("Matched tag [%s] on filter [%s] with value [%s]",
-                  tag.getKey(), entry.getValue().toString(), tag.getValue()));
-              matched++;
+      // if we're searching meta, we need to process timeseries meta as well
+      if (searching_meta)
+        tsdb.searchTSMeta(search_query, tsuids);
+  
+      // loop through the tsuids, load meta if applicable, load short_meta, and then filter
+      // and store the results in the results hash
+      results = new HashMap<String, Object>();
+      for (String tsuid : tsuids){
+        TimeSeriesMeta ts_meta = null;
+        Map<String, Object> short_meta = null;
+        try{
+          // load the meta if we're returning or searching
+          if (search_query.getReturnMeta() || searching_meta)
+            ts_meta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
+          // always load the short meta since we'll likely return this only and it has tags
+          short_meta = tsdb.getTSUIDShortMeta(tsuid);
+          
+        } catch (NoSuchUniqueId nsui){
+          LOG.trace(nsui.getMessage());
+          continue;
+        }
+        
+        // FILTER - TAG
+        if (search_query.getTagsCompiled() != null){
+          LOG.trace("Filtering tags...");
+          Map<String, String> sm_tags = (Map<String, String>)short_meta.get("tags");
+          int matched = 0;
+          for (Map.Entry<String, Pattern> entry : search_query.getTagsCompiled().entrySet()){
+            for (Map.Entry<String, String> tag : sm_tags.entrySet()){
+              if (tag.getKey().toLowerCase().compareTo(entry.getKey().toLowerCase()) == 0
+                  && entry.getValue().matcher(tag.getValue()).find()){
+                LOG.trace(String.format("Matched tag [%s] on filter [%s] with value [%s]",
+                    tag.getKey(), entry.getValue().toString(), tag.getValue()));
+                matched++;
+              }
             }
           }
+          if (matched != search_query.getTagsCompiled().size()){
+            LOG.trace(String.format("UID [%s] did not match all of the tag filters", tsuid));
+            continue;
+          }
         }
-        if (matched != tags.size()){
-          LOG.trace(String.format("UID [%s] did not match all of the tag filters", tsuid));
-          continue;
+        
+        // FILTER - Numerics
+        if (search_query.getNumerics() != null && ts_meta != null){
+          int matched = 0;
+          for (Map.Entry<String, SimpleEntry<SearchOperator, Double>> entry : 
+            search_query.getNumerics().entrySet()){
+            Double meta_value;
+            if (entry.getKey().compareTo("retention") == 0)
+              meta_value = (double) ts_meta.getRetention();
+            else if (entry.getKey().compareTo("max") == 0)
+              meta_value = (double) ts_meta.getMax();
+            else if (entry.getKey().compareTo("min") == 0)
+              meta_value = (double) ts_meta.getMin();
+            else if (entry.getKey().compareTo("interval") == 0)
+              meta_value = (double) ts_meta.getInterval();
+            else if (entry.getKey().compareTo("created") == 0)
+              meta_value = (double) ts_meta.getFirstReceived();
+            else if (entry.getKey().compareTo("last_received") == 0)
+              meta_value = (double) ts_meta.getLastReceived();
+            else{
+              LOG.warn(String.format("Invalid field type [%s]", entry.getKey()));
+              continue;
+            }
+            
+            // get comparator and value
+            SearchOperator operator = entry.getValue().getKey();
+            Double comparisson = entry.getValue().getValue();
+            if (operator == null || comparisson == null){
+              LOG.warn("Found a null operator or comparisson value");
+              continue;
+            }
+            
+            // compare
+            if (search_query.compare(operator, meta_value, comparisson))
+              matched++;
+          }
+          if (matched != search_query.getNumerics().size()){
+            //LOG.trace(String.format("UID [%s] did not match all of the numeric filters", tsuid));
+            continue;
+          }
         }
+  
+        // Put the result!
+        if (search_query.getReturnMeta())
+          results.put(tsuid, ts_meta);
+        else
+          results.put(tsuid, short_meta);
       }
       
-      // FILTER - Numerics
-      if (search_query.numerics.size() > 0 && ts_meta != null){
-        int matched = 0;
-        for (Map.Entry<String, Map<SearchOperator, Double>> entry : search_query.numerics.entrySet()){
-          Double meta_value;
-          if (entry.getKey().compareTo("retention") == 0)
-            meta_value = (double) ts_meta.getRetention();
-          else if (entry.getKey().compareTo("max") == 0)
-            meta_value = (double) ts_meta.getMax();
-          else if (entry.getKey().compareTo("min") == 0)
-            meta_value = (double) ts_meta.getMin();
-          else if (entry.getKey().compareTo("interval") == 0)
-            meta_value = (double) ts_meta.getInterval();
-          else if (entry.getKey().compareTo("created") == 0)
-            meta_value = (double) ts_meta.getFirstReceived();
-          else if (entry.getKey().compareTo("last_received") == 0)
-            meta_value = (double) ts_meta.getLastReceived();
-          else{
-            LOG.warn(String.format("Invalid field type [%s]", entry.getKey()));
-            continue;
-          }
-          
-          // get comparator and value
-          SearchOperator operator = null;
-          Double comparisson = null;
-          for (Map.Entry<SearchOperator, Double> num : entry.getValue().entrySet()){
-            operator = num.getKey();
-            comparisson = num.getValue();
-          }
-          if (operator == null || comparisson == null){
-            LOG.warn("Found a null operator or comparisson value");
-            continue;
-          }
-          
-          // compare
-          switch (operator){
-          case GT:
-            if (meta_value > comparisson)
-              matched++;
-            break;
-          case LT:
-            if (meta_value < comparisson)
-              matched++;
-            break;
-          case GE:
-            if (meta_value >= comparisson)
-              matched++;
-            break;
-          case LE:
-            if (meta_value <= comparisson)
-              matched++;
-            break;
-          case EQ:
-            if (meta_value.equals(comparisson))
-              matched++;
-            break;
-          case NE:
-            if (!meta_value.equals(comparisson))
-              matched++;
-            break;
-          }
-        }
-        if (matched != search_query.numerics.size()){
-          LOG.trace(String.format("UID [%s] did not match all of the numeric filters", tsuid));
-          continue;
-        }
-      }
-
-      // Put the result!
-      if (search_query.return_meta)
-        results.put(tsuid, ts_meta);
-      else
-        results.put(tsuid, short_meta);
+      // cache me
+      codec = new JSON(results);
+      CacheEntry ce = new CacheEntry(search_query.hashCode(), codec.getJsonBytes());
+      query.putCache(ce);
     }
-    
+
     // build a response map and send away!
     Map<String, Object> response = new HashMap<String, Object>();
-    response.put("limit", search_query.limit);
-    response.put("page", search_query.page);
+    response.put("limit", search_query.getLimit());
+    response.put("page", search_query.getPage());
     response.put("total_uids", results.size());
     response.put("total_pages", results.size() > 0 ? 
-        ((results.size() / search_query.limit) + 1) : 0);
+        ((results.size() / search_query.getLimit()) + 1) : 0);
     
     // limit and page calculations    
-    if (search_query.limit < 1 || results.size() <= search_query.limit){
+    if (search_query.getLimit() < 1 || results.size() <= search_query.getLimit()){
       response.put("results", results.values());
     }else{
-      LOG.trace(String.format("Limiting to [%d] uids on page [%d]", search_query.limit, search_query.page));
+      LOG.trace(String.format("Limiting to [%d] uids on page [%d]", search_query.getLimit(), search_query.getPage()));
       SortedMap<String, Object> limited_results = new TreeMap<String, Object>();
-      long start = (search_query.page > 0 ? search_query.page * search_query.limit : 0);
-      long end = (search_query.page + 1) * search_query.limit;
+      long start = (search_query.getPage() > 0 ? search_query.getPage() * search_query.getLimit() : 0);
+      long end = (search_query.getPage() + 1) * search_query.getLimit();
       long uids = 0;
       for (Map.Entry<String, Object> entry : results.entrySet()){
         if (uids >= end){
@@ -295,7 +258,7 @@ public class SearchRPC implements HttpRpc {
       }
       response.put("results", limited_results);
     }   
-    JSON codec = new JSON(response);
+    codec = new JSON(response);
     query.sendReply(codec.getJsonBytes());
     return;
   }
@@ -309,22 +272,24 @@ public class SearchRPC implements HttpRpc {
   private SearchQuery parseQueryString(final HttpQuery query){
     SearchQuery sq = new SearchQuery();
     
-    // todo - tags and custom
+    if (query.hasQueryStringParam("tags"))
+      sq.setTags(this.parseQueryStringList(query.getQueryStringParam("tags")));
     
-    sq.created = query.getQueryStringParam("created");
-    sq.retention = query.getQueryStringParam("retention");
-    sq.max = query.getQueryStringParam("max");
-    sq.min = query.getQueryStringParam("min");
-    sq.interval = query.getQueryStringParam("interval");
-    sq.last_received = query.getQueryStringParam("last_received");
-    sq.field = query.getQueryStringParam("field");
-    if (sq.field != null)
-      sq.field = sq.field.toLowerCase();
-    sq.query = query.getQueryStringParam("query");
-    sq.return_meta = query.parseBoolean(query.getQueryStringParam("return_meta"));
+    if (query.hasQueryStringParam("custom"))
+      sq.setCustom(this.parseQueryStringList(query.getQueryStringParam("custom")));
+    
+    sq.setCreated(query.getQueryStringParam("created"));
+    sq.setRetention(query.getQueryStringParam("retention"));
+    sq.setMax(query.getQueryStringParam("max"));
+    sq.setMin(query.getQueryStringParam("min"));
+    sq.setInterval(query.getQueryStringParam("interval"));
+    sq.setLast_received(query.getQueryStringParam("last_received"));
+    sq.setField(query.getQueryStringParam("field"));
+    sq.setQuery(query.getQueryStringParam("query"));
+    sq.setReturnMeta(query.parseBoolean(query.getQueryStringParam("return_meta")));
     if (query.hasQueryStringParam("limit")){
       try{
-        sq.limit = Long.parseLong(query.getQueryStringParam("limit"));
+        sq.setLimit(Long.parseLong(query.getQueryStringParam("limit")));
       } catch (NumberFormatException nfe){
         query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the limit value");
         return null;
@@ -332,237 +297,54 @@ public class SearchRPC implements HttpRpc {
     }
     if (query.hasQueryStringParam("page")){
       try{
-        sq.page = Long.parseLong(query.getQueryStringParam("page"));
+        sq.setPage(Long.parseLong(query.getQueryStringParam("page")));
       } catch (NumberFormatException nfe){
         query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the page value");
         return null;
       }
     }
     
-    
     return sq;
   }
-  
+ 
   /**
-   * This is a helper class used for de/serializing query information and 
-   * checking for valid data
+   * Parses a query string parameter for key/value pairs, used for the tags and custom
+   * The string should be in the format {tag1=val1,tag2=val2}
+   * @param query Value of the query string to parse
+   * @return Null if there was an error, a map if kvs were parsed successfully
    */
-  @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
-  private static class SearchQuery{
-    public Map<String, String> tags;
-    public Map<String, String> custom;
-    public String created;
-    public String retention;
-    public String max;
-    public String min;
-    public String interval;
-    public String last_received;
-    public String field = "all";
-    public String query;
-    public long limit = 25;
-    public long page = 0;
-    public Boolean return_meta = false;
+  private Map<String, String> parseQueryStringList(final String query){
+    if (query == null || query.isEmpty())
+      return null;
     
-    // field -> operator -> value
-    // if no operator was passed in, then we save it as eq
-    public Map<String, Map<SearchOperator, Double>> numerics = 
-      new HashMap<String, Map<SearchOperator, Double>>();
-        
-    private static Pattern operation = Pattern.compile("^([a-zA-Z]{2})\\s*?([\\d\\.-]+)");
+    final int curly = query.indexOf('{');
+    String list = (curly >= 0 ? query.substring(curly+1) : query);
+    list = list.replaceAll("}", "");
     
-    /**
-     * Determines if this query needs to check GeneralMeta fields
-     * Used to help cut down CPU so we don't load or process metadata unnecessarily
-     * @return True if it does need to check, false if not
-     */
-    public final Boolean searchingGeneralMeta(){
-      final String lc_field = field.toLowerCase();
-      if (lc_field.compareTo("all") == 0)
-        return true;
-      if (lc_field.compareTo("description") == 0)
-        return true;
-      if (lc_field.compareTo("display_name") == 0)
-        return true;
-      if (lc_field.compareTo("notes") == 0)
-        return true;
-      if (lc_field.compareTo("custom") == 0)
-        return true;
-      return false;
+    String[] pairs = null;
+    if (list.indexOf(",") < 0)
+      pairs = new String[]{list};
+    else
+      pairs = list.split(",");
+    if (pairs == null){
+      LOG.warn("Unable to extract any pairs from the query string");
+      return null;
     }
     
-    /**
-     * Determines if we're looking at any metadata fields, including timeseries metdata
-     * @return True if it does need metadata, false if not
-     */
-    public final Boolean searchingAnyMeta(){
-      if (custom != null && custom.size() > 0)
-        return true;
-      if (created != null && !created.isEmpty())
-        return true;
-      if (retention != null && !retention.isEmpty())
-        return true;
-      if (max != null && !max.isEmpty())
-        return true;
-      if (min != null && !min.isEmpty())
-        return true;
-      if (interval != null && !interval.isEmpty())
-        return true;
-      if (last_received != null && !last_received.isEmpty())
-        return true;
-      if (field != null){
-        final String lc_field = field.toLowerCase();
-        if (lc_field.compareTo("all") == 0)
-          return true;
-        if (lc_field.compareTo("description") == 0)
-          return true;
-        if (lc_field.compareTo("display_name") == 0)
-          return true;
-        if (lc_field.compareTo("notes") == 0)
-          return true;
-        if (lc_field.compareTo("custom") == 0)
-          return true;
+    Map<String, String> kvs = new HashMap<String, String>();
+    for (String pair : pairs){
+      if (pair.indexOf("=") < 0){
+        LOG.warn("Missing = sign");
+        continue;
       }
-      return false;
+      
+      String[] kv = pair.split("=");
+      if (kv.length != 2){
+        LOG.warn("Invalid tag pair, wrong number of values [" + kv.length + "]");
+        continue;
+      }
+      kvs.put(kv[0], kv[1]);
     }
-    
-    /**
-     * Checks the given query to make sure the parameters are valid and builds the numeric map
-     * 
-     * Note that this function will return an error to the HTTP caller so if this
-     * returns false, you should stop processing and return
-     * 
-     * @param query Http query to return errors to
-     * @return True if the query is valid, false if there was an error
-     */
-    public final Boolean validateQuery(final HttpQuery query){
-      if (field == null || field.isEmpty())
-        field = "all";
-      else
-        field = field.toLowerCase();
-      
-      // check for a valid field
-      if (field.compareTo("all") != 0 &&
-          field.compareTo("metrics") != 0 &&
-          field.compareTo("tagk") != 0 &&
-          field.compareTo("tagv") != 0 &&
-          field.compareTo("display_name") != 0 &&
-          field.compareTo("description") != 0 &&
-          field.compareTo("notes") != 0){
-        LOG.warn(String.format("Invalid field [%s]", field));
-        query.sendError(HttpResponseStatus.BAD_REQUEST, "Invalid [field] value");
-        return false;
-      }
-      
-      // run through the numerics and parse them
-      Map<SearchOperator, Double> search_number;
-      if (created != null && !created.isEmpty()){
-        search_number = this.parseNumeric(created);
-        if (search_number == null){
-          query.sendError(HttpResponseStatus.BAD_REQUEST, "Invalid [created] value");
-          return false;
-        }
-        numerics.put("created", search_number);
-      }
-      
-      if (retention != null && !retention.isEmpty()){
-        search_number = this.parseNumeric(retention);
-        if (search_number == null){
-          query.sendError(HttpResponseStatus.BAD_REQUEST, "Invalid [retention] value");
-          return false;
-        }
-        numerics.put("retention", search_number);
-      }
-      
-      if (max != null && !max.isEmpty()){
-        search_number = this.parseNumeric(max);
-        if (search_number == null){
-          query.sendError(HttpResponseStatus.BAD_REQUEST, "Invalid [max] value");
-          return false;
-        }
-        numerics.put("max", search_number);
-      }
-      
-      if (min != null && !min.isEmpty()){
-        search_number = this.parseNumeric(min);
-        if (search_number == null){
-          query.sendError(HttpResponseStatus.BAD_REQUEST, "Invalid [min] value");
-          return false;
-        }
-        numerics.put("min", search_number);
-      }
-      
-      if (interval != null && !interval.isEmpty()){
-        search_number = this.parseNumeric(interval);
-        if (search_number == null){
-          query.sendError(HttpResponseStatus.BAD_REQUEST, "Invalid [interval] value");
-          return false;
-        }
-        numerics.put("interval", search_number);
-      }
-      
-      if (last_received != null && !last_received.isEmpty()){
-        search_number = this.parseNumeric(last_received);
-        if (search_number == null){
-          query.sendError(HttpResponseStatus.BAD_REQUEST, "Invalid [last_received] value");
-          return false;
-        }
-        numerics.put("last_received", search_number);
-      }
-      
-      return true;
-    }
-    
-    public final SearchOperator getOperator(final String op){
-      if (op.toLowerCase().compareTo("gt") == 0)
-        return SearchOperator.GT;
-      if (op.toLowerCase().compareTo("tt") == 0)
-        return SearchOperator.LT;
-      if (op.toLowerCase().compareTo("ge") == 0)
-        return SearchOperator.GE;
-      if (op.toLowerCase().compareTo("le") == 0)
-        return SearchOperator.LE;
-      if (op.toLowerCase().compareTo("eq") == 0)
-        return SearchOperator.EQ;
-      if (op.toLowerCase().compareTo("ne") == 0)
-        return SearchOperator.NE;
-      LOG.warn(String.format("Invalid operator [%s], defaulting to EQ", op));
-      return SearchOperator.EQ;
-    }
-  
-    /**
-     * Attempts to parse the numeric value with an optional operator
-     * 
-     * If there's an operator at the front of the string, we attempt to parse it. If it's
-     * an invalid operator, we default to eq.
-     * 
-     * Then we try to parse the number (or the whole thing if there wasn't an operator)
-     * and if it parses nicely, we return a map. Otherwise we return null and the caller
-     * should return an error to the user
-     * 
-     * @param number The number to parse with an operator at the front
-     * @return An operator and value if successful, null if not
-     */
-    private final Map<SearchOperator, Double> parseNumeric(final String number){   
-      SearchOperator operator = SearchOperator.EQ;
-      String parsed_number = number; 
-      
-      // if we have an operator, parse it out
-      Matcher groups = operation.matcher(number);
-      if (groups.find() && groups.groupCount() >= 2){
-        operator = this.getOperator(groups.group(1));
-        parsed_number = groups.group(2);
-      }
-      
-      // try to parse the number
-      try{
-        Double val = Double.parseDouble(parsed_number);
-        Map<SearchOperator, Double> result = new HashMap<SearchOperator, Double>();
-        result.put(operator, val);
-        return result;
-      } catch (NumberFormatException nfe){
-        LOG.warn(String.format("Unable to parse number [%s]", parsed_number));
-        return null;
-      }
-    }
+    return kvs;
   }
 }
