@@ -93,10 +93,11 @@ final class MapSync {
     try {
       
       // TEMP ---------------     
-      cellKiller(storage, "id", "ts_uids");
-      cellKiller(storage, "id", "metrics_map");
-      cellKiller(storage, "id", "tagk_map");
-      cellKiller(storage, "id", "tagv_map");
+//      cellKiller(storage, "id", "ts_uids");
+//      cellKiller(storage, "id", "metrics_map");
+//      cellKiller(storage, "id", "tagk_map");
+//      cellKiller(storage, "id", "tagv_map");
+      cellKiller(storage, "name", "name_meta");
       System.exit(0);
       
       TsdbScanner scanner = new TsdbScanner();

@@ -293,8 +293,16 @@ public final class UniqueId implements UniqueIdInterface {
   }
 
   /** Returns the number of elements stored in the internal cache. */
-  public int cacheSize() {
-    return nameCache.size() + idCache.size();
+  public int cacheSizeName() {
+    return nameCache.size();
+  }
+  
+  public int cacheSizeID() {
+    return idCache.size();
+  }
+  
+  public int cacheSizeMeta(){
+    return this.metadata.size();
   }
 
   public String kind() {

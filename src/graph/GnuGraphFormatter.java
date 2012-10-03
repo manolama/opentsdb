@@ -10,7 +10,7 @@
 // General Public License for more details.  You should have received a copy
 // of the GNU Lesser General Public License along with this program.  If not,
 // see <http://www.gnu.org/licenses/>.
-package net.opentsdb.tsd;
+package net.opentsdb.graph;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
@@ -28,18 +28,25 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.cache.CacheEntry;
-import net.opentsdb.graph.Plot;
+import net.opentsdb.core.Const;
+import net.opentsdb.core.JSON;
+import net.opentsdb.core.TSDB;
+import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.stats.Histogram;
+import net.opentsdb.tsd.BadRequestException;
+import net.opentsdb.tsd.HttpQuery;
+import net.opentsdb.tsd.JSON_HTTP;
 
 /**
  * Refactors/Replaces the previous GraphHandler class
  */
-public class GnuGraphEmitter extends DataEmitter {
-  private static final Logger LOG = LoggerFactory.getLogger(GnuGraphEmitter.class);
+public class GnuGraphFormatter extends TSDFormatter {
+  private static final Logger LOG = LoggerFactory.getLogger(GnuGraphFormatter.class);
   
   /** Number of times we had to do all the work up to running Gnuplot. */
   private static final AtomicInteger graphs_generated
@@ -54,36 +61,45 @@ public class GnuGraphEmitter extends DataEmitter {
     new Histogram(16000, (short) 2, 100);
 
   /** Executor to run Gnuplot in separate bounded thread pool. */
-  private final ThreadPoolExecutor gnuplot;
+  private ThreadPoolExecutor gnuplot;
 
+  /** Start time (UNIX timestamp in seconds) on 32 bits ("unsigned" int). */
+  private long start_time;
+
+  /** End time (UNIX timestamp in seconds) on 32 bits ("unsigned" int). */
+  private long end_time;
+  
+  private Map<String, List<String>> query_string;
+  
   /** Plot object that handles graph verification and script creation */
   private Plot plot = null;
-  
-  /** JSONP function if the user requests it */
-  String jsonp = "";
+  private String error = "";
+  private String basepath = "";
+  private int query_hash = 0;
   
   /** Name of the wrapper script we use to execute Gnuplot.  */
   private static final String WRAPPER = 
     System.getProperty("os.name").contains("Windows") ? "mygnuplot.bat" : "mygnuplot.sh";
   /** Path to the wrapper script.  */
-  private static final String GNUPLOT;
-  static {
-    GNUPLOT = findGnuplotHelperScript();
-  }
+  private static String GNUPLOT;
+//  static {
+//    GNUPLOT = findGnuplotHelperScript();
+//  }
 
   /** Stores metadata about the graph generation */
   private Map<String, Object> results = new HashMap<String, Object>();
   
   /**
    * Default constructor
-   * @param start_time Timestamp of the start time of the result.
-   * @param end_time Timestamp of the end time of the graph.
-   * @param queryString Map of query parameters
-   * @param queryHash Hash code of the original query
+   * @param tsdb
    */
-  public GnuGraphEmitter(long start_time, long end_time, 
-      final Map<String, List<String>> queryString, final int queryHash) {
-    super(start_time, end_time, queryString, queryHash);
+  public GnuGraphFormatter(final TSDB tsdb){
+    super(tsdb);
+    if (GNUPLOT == null)
+      GNUPLOT = findGnuplotHelperScript();
+  }
+  
+  public boolean init(){
     // Gnuplot is mostly CPU bound and does only a little bit of IO at the
     // beginning to read the input data and at the end to write its output.
     // We want to avoid running too many Gnuplot instances concurrently as
@@ -100,8 +116,29 @@ public class GnuGraphEmitter extends DataEmitter {
     // ArrayBlockingQueue does not scale as much as LinkedBlockingQueue in terms
     // of throughput but we don't need high throughput here.  We use ABQ instead
     // of LBQ because it creates far fewer references.
+    return true;
   }
 
+  public void setStartTime(final long start){
+    this.start_time = start;
+  }
+  
+  public void setEndTime(final long end){
+    this.end_time = end;
+  }
+  
+  public void setQueryString(final Map<String, List<String>> qs){
+    this.query_string = qs;
+  }
+  
+  public void setBasePath(final String path){
+    this.basepath = path;
+  }
+  
+  public void setQueryHash(final int hash){
+    this.query_hash = hash;
+  }
+  
   /**
    * Creates the plotting script and data, then runs Gnuplot in a thread pool
    * and blocks until we get a result. Gnuplot will write the PNG file to our
@@ -109,7 +146,7 @@ public class GnuGraphEmitter extends DataEmitter {
    * generation process. Then the GUI will parse the JSON data and request
    * the PNG image directly from disk
    */
-  public final boolean processData() {
+  public final boolean handleHTTPGet(final HttpQuery query) {
     if (datapoints.size() < 1) {
       error = "No data to process";
       LOG.error(error);
@@ -163,12 +200,32 @@ public class GnuGraphEmitter extends DataEmitter {
         return false;
       }
       
-      // set our results
-      results.put("plotted", run.getNPlotted());
-      results.put("points", npoints);
-      results.put("etags", aggregated_tags);
-      results.put("image", Integer.toHexString(this.query_hash) + ".png");
-      
+      LOG.trace("Base path: " + basepath  + ".png");
+      File f = new File(basepath + ".png");
+      if (f.exists()){
+        
+        String image = "";
+        if (basepath.lastIndexOf("\\") != -1){
+          image = basepath.substring(basepath.lastIndexOf("\\")+1) + ".png";
+        }else if (basepath.lastIndexOf("/") != -1){
+          image = basepath.substring(basepath.lastIndexOf("/")+1) + ".png";
+        }
+        
+        // set our results
+        results.put("plotted", run.getNPlotted());
+        results.put("points", npoints);
+        results.put("etags", aggregated_tags);
+        results.put("image", image);
+        
+        JSON codec = new JSON(results);
+        query.sendReply(codec.getJsonBytes());
+        LOG.trace("Send graph request reply [" + codec.getJsonString() + "]");
+        return true;
+      }else{
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Unable to find the graph");
+        LOG.trace("Failed to fetch the graph");
+        return false;
+      }
     } catch (RejectedExecutionException e) {
       this.error = "Too many requests pending, please try again later";
       LOG.error(error);
@@ -185,14 +242,39 @@ public class GnuGraphEmitter extends DataEmitter {
   public final CacheEntry getCacheData(){
  // now we have all the metrics stored, serialize and return
     JSON_HTTP json = new JSON_HTTP(this.results);
-    String response = jsonp.isEmpty() ? json.getJsonString() : json
-        .getJsonPString(jsonp);
+    String response = json.getJsonString();
     
     return new CacheEntry(
         query_hash,
         basepath + ".json",
         computeExpire()
     );
+  }
+  
+  /**
+   * Default method to compute the amount of time before the
+   * emitted data should expire from the local and client's cache
+   * @return 0 if the data should not be cached, or a positive integer
+   * reflecting how many seconds this data should be cached for
+   */
+  protected Long computeExpire(){
+    // If the end time is in the future (1), make the graph uncacheable.
+    // Otherwise, if the end time is far enough in the past (2) such that
+    // no TSD can still be writing to rows for that time span and it's not
+    // specified in a relative fashion (3) (e.g. "1d-ago"), make the graph
+    // cacheable for a day since it's very unlikely that any data will change
+    // for this time span.
+    // Otherwise (4), allow the client to cache the graph for ~0.1% of the
+    // time span covered by the request e.g., for 1h of data, it's OK to
+    // serve something 3s stale, for 1d of data, 84s stale.
+    final long now = System.currentTimeMillis() / 1000L;
+    if (end_time > now) {                            // (1)
+      return 0L;
+    } else if (end_time < now - Const.MAX_TIMESPAN) { // (2)(3)
+      return 86400L;
+    } else {                                         // (4)
+      return (long) ((end_time - start_time) >> 10);
+    }
   }
   
   /**
@@ -362,7 +444,7 @@ public class GnuGraphEmitter extends DataEmitter {
    * @return The path to the wrapper script.
    */
   private static String findGnuplotHelperScript() {
-    final URL url = GnuGraphEmitter.class.getClassLoader().getResource(WRAPPER);
+    final URL url = GnuGraphFormatter.class.getClassLoader().getResource(WRAPPER);
     if (url == null) {
       throw new RuntimeException("Couldn't find " + WRAPPER + " on the"
         + " CLASSPATH: " + System.getProperty("java.class.path"));

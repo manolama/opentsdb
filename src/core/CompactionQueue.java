@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -116,17 +117,21 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
    * @param collector The collector to use.
    */
   void collectStats(final StatsCollector collector) {
-    collector.record("compaction.count", trivial_compactions, "type=trivial");
-    collector.record("compaction.count", complex_compactions, "type=complex");
+    collector.record("compaction.count", trivial_compactions, 
+        new SimpleEntry<String, String>("type", "trivial"));
+    collector.record("compaction.count", complex_compactions, 
+        new SimpleEntry<String, String>("type", "complex"));
     if (!TSDB.enable_compactions) {
       return;
     }
     // The remaining stats only make sense with compactions enabled.
     collector.record("compaction.queue.size", size);
-    collector.record("compaction.errors", handle_read_error.errors, "rpc=read");
-    collector.record("compaction.errors", handle_write_error.errors, "rpc=put");
+    collector.record("compaction.errors", handle_read_error.errors, 
+        new SimpleEntry<String, String>("rpc", "read"));
+    collector.record("compaction.errors", handle_write_error.errors, 
+        new SimpleEntry<String, String>("rpc", "put"));
     collector.record("compaction.errors", handle_delete_error.errors,
-                     "rpc=delete");
+        new SimpleEntry<String, String>("rpc", "delete"));
     collector.record("compaction.writes", written_cells);
     collector.record("compaction.deletes", deleted_cells);
   }

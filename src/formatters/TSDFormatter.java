@@ -5,8 +5,10 @@ import java.util.List;
 
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.tsd.HttpQuery;
 
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,7 +19,7 @@ import org.slf4j.LoggerFactory;
 public abstract class TSDFormatter {
   private static final Logger LOG = LoggerFactory.getLogger(TSDFormatter.class);
   
-  List<DataPoints> datapoints = new ArrayList<DataPoints>();
+  protected List<DataPoints> datapoints = new ArrayList<DataPoints>();
   final TSDB tsdb;
   
   public TSDFormatter(final TSDB tsdb){
@@ -38,8 +40,9 @@ public abstract class TSDFormatter {
    * @param query The HTTP query to work with
    * @return True if the method completed successfully, false if there was an error
    */
-  public Boolean handleHTTPGet(final HttpQuery query){
+  public boolean handleHTTPGet(final HttpQuery query){
     LOG.warn("Method has not been implemented");
+    query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Not implemented");
     return false;
   }
   
@@ -52,8 +55,9 @@ public abstract class TSDFormatter {
    * @param query The HTTP query to work with
    * @return True if the method completed successfully, false if there was an error
    */
-  public Boolean handleHTTPPut(final HttpQuery query){
+  public boolean handleHTTPPut(final HttpQuery query){
     LOG.warn("Method has not been implemented");
+    query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Not implemented");
     return false;
   }
   
@@ -65,5 +69,9 @@ public abstract class TSDFormatter {
   public Boolean handleTelnetPut(String[] command){
     LOG.warn("Method has not been implemented");
     return false;
+  }
+
+  public static void collectStats(final StatsCollector collector){
+    LOG.warn("Method has not been implemented");
   }
 }

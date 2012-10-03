@@ -23,6 +23,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.AbstractMap.SimpleEntry;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
@@ -184,12 +185,17 @@ public class Cache {
   * @param collector The collector to use.
   */
   public static void collectStats(final StatsCollector collector) {
-   collector.record("http.cache", cache_ram_hit, "type=memory");
-   collector.record("http.cache", cache_disk_hit, "type=disk");
-   collector.record("http.cache", cache_miss, "cache=miss");
-   collector.record("http.cache.size", cache_ram_size, "cache=memory");
+   collector.record("http.cache", cache_ram_hit, 
+       new SimpleEntry<String, String>("type", "memory"));
+   collector.record("http.cache", cache_disk_hit, 
+       new SimpleEntry<String, String>("type", "disk"));
+   collector.record("http.cache", cache_miss, 
+       new SimpleEntry<String, String>("cache", "miss"));
+   collector.record("http.cache.size", cache_ram_size, 
+       new SimpleEntry<String, String>("cache", "memory"));
    //collector.record("http.cache.size", cache.size(), "cache=objects");
-   collector.record("http.cache.size", 0, "cache=disk");
+   collector.record("http.cache.size", 0, 
+       new SimpleEntry<String, String>("cache", "disk"));
   }
  
   

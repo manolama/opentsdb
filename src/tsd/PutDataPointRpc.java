@@ -13,6 +13,7 @@
 package net.opentsdb.tsd;
 
 import java.util.HashMap;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.stumbleupon.async.Callback;
@@ -118,11 +119,16 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
    * @param collector The collector to use.
    */
   public static void collectStats(final StatsCollector collector) {
-    collector.record("rpc.received", requests, "type=put");
-    collector.record("rpc.errors", hbase_errors, "type=hbase_errors");
-    collector.record("rpc.errors", invalid_values, "type=invalid_values");
-    collector.record("rpc.errors", illegal_arguments, "type=illegal_arguments");
-    collector.record("rpc.errors", unknown_metrics, "type=unknown_metrics");
+    collector.record("rpc.received", requests, 
+        new SimpleEntry<String, String>("type", "put"));
+    collector.record("rpc.errors", hbase_errors, 
+        new SimpleEntry<String, String>("type", "storage_errors"));
+    collector.record("rpc.errors", invalid_values, 
+        new SimpleEntry<String, String>("type", "invalid_values"));
+    collector.record("rpc.errors", illegal_arguments, 
+        new SimpleEntry<String, String>("type", "illegal_arguments"));
+    collector.record("rpc.errors", unknown_metrics, 
+        new SimpleEntry<String, String>("type", "unknown_metrics"));
   }
 
   /**

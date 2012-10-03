@@ -13,10 +13,16 @@
 package net.opentsdb.tsd;
 
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import net.opentsdb.cache.Cache;
+import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.formatters.CollectdJSON;
+import net.opentsdb.formatters.TsdbJSON;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.stats.StatsCollector.StatsDP;
 
 import org.jboss.netty.channel.Channel;
 
@@ -38,8 +44,8 @@ final class StatsRPC implements TelnetRpc, HttpRpc {
     final StringBuilder buf = new StringBuilder(1024);
     final StatsCollector collector = new StatsCollector("tsd") {
       @Override
-      public final void emit(final String line) {
-        buf.append(line);
+      public final void emit(StatsDP dp) {
+        buf.append(StatsCollector.getAscii(dp));
       }
     };
     doCollectStats(tsdb, collector);
@@ -54,29 +60,17 @@ final class StatsRPC implements TelnetRpc, HttpRpc {
    * @param query HTTP query to respond to
    */
   public void execute(final TSDB tsdb, final HttpQuery query) {
-    final boolean json = JSON_HTTP.getJsonRequested(query);
-    final StringBuilder buf = json ? null : new StringBuilder(2048);
-    final ArrayList<String> stats = json ? new ArrayList<String>(64) : null;
+    final List<Object> datapoints = new ArrayList<Object>();
     final StatsCollector collector = new StatsCollector("tsd") {
       @Override
-      public final void emit(final String line) {
-        if (json) {
-          stats.add(line.substring(0, line.length() - 1)); // strip the '\n'
-        } else {
-          buf.append(line);
-        }
+      public final void emit(final StatsDP dp) {
+        datapoints.add(dp);
       }
     };
     doCollectStats(tsdb, collector);
-    // handle JSON
-    if (json) {
-      final String jsonp = JSON_HTTP.getJsonPFunction(query);
-      final JSON_HTTP response = new JSON_HTTP(stats);
-      query.sendReply(jsonp.isEmpty() ? response.getJsonString() : response
-          .getJsonPString(jsonp));
-    } else {
-      query.sendReply(buf);
-    }
+
+    JSON codec = new JSON(datapoints);
+    query.sendReply(codec.getJsonBytes());
   }
 
   /**
@@ -91,5 +85,8 @@ final class StatsRPC implements TelnetRpc, HttpRpc {
     Cache.collectStats(collector);
     RpcHandler.collectStats(collector);
     tsdb.collectStats(collector);
+    //PipelineFactory.collectStats(collector);
+    CollectdJSON.collectStats(collector);
+    TsdbJSON.collectStats(collector);
   }
 }

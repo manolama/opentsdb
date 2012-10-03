@@ -27,6 +27,8 @@ nodist_bin_SCRIPTS = tsdb
 dist_noinst_SCRIPTS = src/create_table.sh
 dist_pkgdata_SCRIPTS = src/mygnuplot.sh
 tsdb_SRC := \
+  src/cache/Cache.java	\
+  src/cache/CacheEntry.java	\
 	src/core/Aggregator.java	\
 	src/core/Aggregators.java	\
 	src/core/CompactionQueue.java	\
@@ -43,6 +45,7 @@ tsdb_SRC := \
 	src/core/Query.java	\
 	src/core/RowKey.java	\
 	src/core/RowSeq.java	\
+	src/core/SearchQuery.java	\
 	src/core/SeekableView.java	\
 	src/core/Span.java	\
 	src/core/SpanGroup.java	\
@@ -54,6 +57,8 @@ tsdb_SRC := \
 	src/formatters/CollectdJSON.java	\
 	src/formatters/TSDFormatter.java	\
 	src/formatters/TsdbJSON.java	\
+	src/graph/GnuGraphFormatter.java	\
+	src/graph/GnuplotException.java	\
 	src/graph/Plot.java	\
 	src/meta/GeneralMeta.java	\
 	src/meta/MetaData.java	\
@@ -64,6 +69,7 @@ tsdb_SRC := \
 	src/storage/TsdbStorageException.java	\
 	src/storage/TsdbStore.java	\
 	src/storage/TsdbStoreHBase.java	\
+	src/storage/TsdbStoreCass.java	\
 	src/tools/ArgP.java	\
 	src/tools/CliOptions.java	\
 	src/tools/CliQuery.java	\
@@ -75,13 +81,10 @@ tsdb_SRC := \
 	src/tools/UidManager.java	\
 	src/tsd/AggregatorsRPC.java	\
 	src/tsd/BadRequestException.java	\
+	src/tsd/CacheRPC.java	\
 	src/tsd/ConnectionManager.java	\
 	src/tsd/DataEmitter.java	\
-	src/tsd/GnuGraphEmitter.java	\
-	src/tsd/GnuplotException.java	\
 	src/tsd/GroupRPC.java	\
-	src/tsd/HttpCache.java	\
-	src/tsd/HttpCacheEntry.java	\
 	src/tsd/HttpQuery.java	\
 	src/tsd/HttpRpc.java	\
 	src/tsd/JSON_HTTP.java	\
@@ -118,7 +121,10 @@ tsdb_DEPS = \
 	$(SUASYNC)	\
 	$(ZOOKEEPER) \
 	$(JACKSON_CORE) \
-	$(JACKSON_MAPPER)
+	$(JACKSON_MAPPER) \
+	$(GUAVA_CORE) \
+	$(CASSANDRA_CORE) \
+	$(CASSANDRA_THRIFT)
 
 # Install all the .jar files in pkgdatadir.
 pkgdata_DATA = $(tsdb_DEPS) $(jar)

@@ -14,6 +14,7 @@ package net.opentsdb.tsd;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.stumbleupon.async.Callback;
@@ -221,8 +222,10 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
    * @param collector The collector to use.
    */
   public static void collectStats(final StatsCollector collector) {
-    collector.record("rpc.received", telnet_rpcs_received, "type=telnet");
-    collector.record("rpc.received", http_rpcs_received, "type=http");
+    collector.record("rpc.requests.received", telnet_rpcs_received, 
+        new SimpleEntry<String, String>("type", "telnet"));
+    collector.record("rpc.requests.received", http_rpcs_received, 
+        new SimpleEntry<String, String>("type", "http"));
     collector.record("rpc.exceptions", exceptions_caught);
     HttpQuery.collectStats(collector);
     PutDataPointRpc.collectStats(collector);

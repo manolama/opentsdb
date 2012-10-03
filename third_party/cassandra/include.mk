@@ -13,11 +13,20 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this library.  If not, see <http://www.gnu.org/licenses/>.
 
-ASYNCHBASE_VERSION := 1.4.0-SNAPSHOT
-ASYNCHBASE := third_party/hbase/asynchbase-$(ASYNCHBASE_VERSION).jar
-ASYNCHBASE_BASE_URL := http://www.euphoriaaudio.com/downloads
+CASSANDRA_VERSION := 0.7.6
 
-$(ASYNCHBASE): $(ASYNCHBASE).md5
-	set dummy "$(ASYNCHBASE_BASE_URL)" "$(ASYNCHBASE)"; shift; $(FETCH_DEPENDENCY)
+CASSANDRA_CORE_VERSION = $(CASSANDRA_VERSION)
+CASSANDRA_CORE := third_party/cassandra/apache-cassandra-$(CASSANDRA_VERSION).jar
+CASSANDRA_CORE_BASE_URL := http://www.euphoriaaudio.com/downloads
 
-THIRD_PARTY += $(ASYNCHBASE)
+$(CASSANDRA_CORE): $(CASSANDRA_CORE).md5
+	set dummy "$(CASSANDRA_CORE_BASE_URL)" "$(CASSANDRA_CORE)"; shift; $(FETCH_DEPENDENCY)
+
+CASSANDRA_THRIFT := third_party/cassandra/libthrift.jar
+CASSANDRA_THRIFT_BASE_URL := http://www.euphoriaaudio.com/downloads
+
+$(CASSANDRA_THRIFT): $(CASSANDRA_THRIFT).md5
+	set dummy "$(CASSANDRA_THRIFT_BASE_URL)" "$(CASSANDRA_THRIFT)"; shift; $(FETCH_DEPENDENCY)
+
+
+THIRD_PARTY += $(CASSANDRA_CORE) $(CASSANDRA_THRIFT)

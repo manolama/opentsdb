@@ -14,8 +14,10 @@ package net.opentsdb.storage;
 
 import java.util.ArrayList;
 
+import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.uid.UniqueId;
 
+import org.hbase.async.ClientStats;
 import org.hbase.async.DeleteRequest;
 import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseClient;
@@ -306,6 +308,26 @@ public class TsdbStoreHBase extends TsdbStore {
     return client.flush();
   }
 
+  public void collectStats(final StatsCollector collector){
+    ClientStats stats = this.client.stats();
+    if (stats == null)
+      return;
+    collector.record("hbase.connections.created", stats.connectionsCreated());
+    collector.record("hbase.root_lookups", stats.rootLookups());
+    collector.record("hbase.gets", stats.gets());
+    collector.record("hbase.deletes", stats.deletes());
+    collector.record("hbase.puts", stats.puts());
+    collector.record("hbase.flushes", stats.flushes());
+    collector.record("hbase.increments", stats.atomicIncrements());
+    collector.record("hbase.meta_lookups.contended", stats.contendedMetaLookups());
+    collector.record("hbase.nsr.exceptions", stats.noSuchRegionExceptions());
+    collector.record("hbase.rpc.batched.sent", stats.numBatchedRpcSent());
+    collector.record("hbase.rpc.delayed_nsre", stats.numRpcDelayedDueToNSRE());
+    collector.record("hbase.locks.row", stats.rowLocks());
+    collector.record("hbase.scanners.opened", stats.scannersOpened());
+    collector.record("hbase.scans", stats.scans());    
+  }
+  
   // GETTERS AND SETTERS ------------------------------------------------
 
   public final void setTable(String table){

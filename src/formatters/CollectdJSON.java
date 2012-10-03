@@ -16,9 +16,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.tsd.HttpQuery;
 
 import org.codehaus.jackson.annotate.JsonAnySetter;
@@ -42,6 +44,9 @@ import org.slf4j.LoggerFactory;
 public class CollectdJSON extends TSDFormatter {
   private static final Logger LOG = LoggerFactory.getLogger(CollectdJSON.class);
   
+  private static final AtomicLong puts_success = new AtomicLong();
+  private static final AtomicLong puts_fail = new AtomicLong();
+  
   /** Used for deserializing the Collectd JSON data */
   private static final TypeReference<ArrayList<CollectdJSONdps>> dpsTypeRef = 
     new TypeReference<ArrayList<CollectdJSONdps>>() {
@@ -61,7 +66,7 @@ public class CollectdJSON extends TSDFormatter {
    * @return Returns true if successful, false if there was an error
    */
   @SuppressWarnings("unchecked")
-  public Boolean handleHTTPPut(final HttpQuery query){
+  public boolean handleHTTPPut(final HttpQuery query){
     Boolean details = query.hasQueryStringParam("error_details") ?
         query.parseBoolean(query.getQueryStringParam("error_details")) : false;
     Boolean fault = query.hasQueryStringParam("fault_on_any") ?
@@ -194,16 +199,17 @@ public class CollectdJSON extends TSDFormatter {
         LOG.error(String.format("Unable to convert metric at [%d]: %s", 
             total, iae.getMessage()));
       }
-      
-      total++;
     }
     
+    puts_success.addAndGet(success);
+    if (total != success)
+      puts_fail.addAndGet(total - success);
     Map<String, Object> results = new HashMap<String, Object>();
     results.put("success", success);
     results.put("fail", total - success);
     if (details)
       results.put("errors", errors);
-    
+    LOG.trace(String.format("Success [%d] fail [%d]", success, (total - success)));
     if (!return_json){
       if (success < 1 || (fault && total != success))
         query.sendReply(HttpResponseStatus.BAD_REQUEST, "");
@@ -218,6 +224,11 @@ public class CollectdJSON extends TSDFormatter {
     }
     
     return true;
+  }
+  
+  public static void collectStats(final StatsCollector collector){
+    collector.record("http.formatter.collectdjson.put.success", puts_success.get());
+    collector.record("http.formatter.collectdjson.put.fail", puts_fail.get());
   }
   
 // ---------------- PRIVATES ------------------------------

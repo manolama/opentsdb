@@ -36,6 +36,7 @@ import net.opentsdb.core.Tags;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.WritableDataPoints;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.stats.StatsCollector.StatsDP;
 import net.opentsdb.storage.TsdbStoreHBase;
 
 final class TextImporter {
@@ -84,8 +85,8 @@ final class TextImporter {
       // TODO(tsuna): Figure out something better than just writing to stderr.
       tsdb.collectStats(new StatsCollector("tsd") {
         @Override
-        public final void emit(final String line) {
-          System.err.print(line);
+        public final void emit(StatsDP dp) {
+          System.err.print(StatsCollector.getAscii(dp));
         }
       });
     } finally {

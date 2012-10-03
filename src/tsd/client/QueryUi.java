@@ -637,7 +637,7 @@ public class QueryUi implements EntryPoint {
       }
     }
     final StringBuilder url = new StringBuilder();
-    url.append("/q?start=").append(FULLDATE.format(start));
+    url.append("/q/gnugraph?start=").append(FULLDATE.format(start));
     if (end != null && !autoreoload.getValue()) {
       url.append("&end=").append(FULLDATE.format(end));
     } else {

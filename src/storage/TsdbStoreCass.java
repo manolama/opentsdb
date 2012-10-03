@@ -4,6 +4,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.opentsdb.stats.StatsCollector;
+
 import org.apache.thrift.TException;
 import org.apache.cassandra.thrift.*;
 import org.hbase.async.KeyValue;
@@ -223,6 +225,10 @@ public class TsdbStoreCass extends TsdbStore {
     return Deferred.fromResult(null);
   }
 
+  public void collectStats(final StatsCollector collector){
+    LOG.warn("Not implemented");
+  }
+  
   @Override
   public void setTable(String table) {
     this.table = toBytes(table);

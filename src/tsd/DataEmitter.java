@@ -148,29 +148,4 @@ class DataEmitter {
     return null;
   }
 
-  /**
-   * Default method to compute the amount of time before the
-   * emitted data should expire from the local and client's cache
-   * @return 0 if the data should not be cached, or a positive integer
-   * reflecting how many seconds this data should be cached for
-   */
-  protected Long computeExpire(){
-    // If the end time is in the future (1), make the graph uncacheable.
-    // Otherwise, if the end time is far enough in the past (2) such that
-    // no TSD can still be writing to rows for that time span and it's not
-    // specified in a relative fashion (3) (e.g. "1d-ago"), make the graph
-    // cacheable for a day since it's very unlikely that any data will change
-    // for this time span.
-    // Otherwise (4), allow the client to cache the graph for ~0.1% of the
-    // time span covered by the request e.g., for 1h of data, it's OK to
-    // serve something 3s stale, for 1d of data, 84s stale.
-    final long now = System.currentTimeMillis() / 1000L;
-    if (end_time > now) {                            // (1)
-      return 0L;
-    } else if (end_time < now - Const.MAX_TIMESPAN) { // (2)(3)
-      return 86400L;
-    } else {                                         // (4)
-      return (long) ((end_time - start_time) >> 10);
-    }
-  }
 }

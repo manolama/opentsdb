@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.stumbleupon.async.Deferred;
 
@@ -25,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.stats.Histogram;
+import net.opentsdb.stats.StatsCollector;
 
 /**
  * Receives new data points and stores them in HBase.
@@ -42,7 +44,8 @@ final class IncomingDataPoints implements WritableDataPoints {
    * after we which we switch to exponential buckets.
    */
   static final Histogram putlatency = new Histogram(16000, (short) 2, 100);
-
+  static final AtomicLong put_counter = new AtomicLong();
+  
   /** The {@code TSDB} instance we belong to. */
   private final TSDB tsdb;
 
@@ -79,6 +82,10 @@ final class IncomingDataPoints implements WritableDataPoints {
     this.values = new long[3];
   }
 
+  public static void collectStats(final StatsCollector collector){
+    collector.record("datapoints.put", put_counter.get());
+  }
+  
   /**
    * Validates the given metric and tags.
    * @throws IllegalArgumentException if any of the arguments aren't valid.
@@ -249,6 +256,7 @@ final class IncomingDataPoints implements WritableDataPoints {
 
     // TODO(tsuna): Add an errback to handle some error cases here.
     //point.setDurable(!batch_import);
+    put_counter.incrementAndGet();
     return tsdb.data_storage.putWithRetry(row, TSDB.FAMILY, Bytes.fromShort(qualifier), value,
         null, !batch_import, true)/*.addBoth(cb)*/;
   }
@@ -296,12 +304,14 @@ final class IncomingDataPoints implements WritableDataPoints {
     }
     final long current_interval = tsdb.data_storage.getFlushInterval();
     if (batchornot) {
+      LOG.debug("Batch import set to [true]");
       batch_import = true;
       // If we already were given a larger interval, don't override it.
       if (DEFAULT_BATCH_IMPORT_BUFFER_INTERVAL > current_interval) {
         setBufferingTime(DEFAULT_BATCH_IMPORT_BUFFER_INTERVAL);
       }
     } else {
+      LOG.debug("Batch import set to [false]");
       batch_import = false;
       // If we're using the default batch import buffer interval,
       // revert back to 0.

@@ -204,6 +204,9 @@ public class MetaData {
     this.cache.put(UniqueId.IDtoString(id), meta);
   }
   
+  public int size(){
+    return this.cache.size();
+  }
   // STATICS ---------------------------------------------------------
 
   public static byte[] getMetricID(final byte[] id) {

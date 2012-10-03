@@ -13,13 +13,9 @@
 package net.opentsdb.tsd;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.TreeMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
@@ -27,7 +23,6 @@ import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.Aggregator;
 import net.opentsdb.core.Aggregators;
-import net.opentsdb.core.DataPoint;
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
@@ -36,8 +31,8 @@ import net.opentsdb.formatters.Ascii;
 import net.opentsdb.formatters.CollectdJSON;
 import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.formatters.TsdbJSON;
+import net.opentsdb.graph.GnuGraphFormatter;
 import net.opentsdb.uid.NoSuchUniqueName;
-import net.opentsdb.uid.UniqueId;
 
 /**
  * Used to be the GraphHandler, but we won't always be requesting graphs. Instead we'll
@@ -123,6 +118,15 @@ public class QueryHandler implements HttpRpc {
         formatter = new Ascii(tsdb);
       }else if (endpoint.compareTo("collectdjson") == 0){
         formatter = new CollectdJSON(tsdb);
+      }else if (endpoint.compareTo("gnugraph") == 0){
+        formatter = new GnuGraphFormatter(tsdb);
+        // gnugraph needs more cruft set
+        ((GnuGraphFormatter)formatter).init();
+        ((GnuGraphFormatter)formatter).setBasePath(basepath);
+        ((GnuGraphFormatter)formatter).setStartTime(start_time);
+        ((GnuGraphFormatter)formatter).setEndTime(end_time);
+        ((GnuGraphFormatter)formatter).setQueryString(query.querystring);
+        ((GnuGraphFormatter)formatter).setQueryHash(query.hashCode());
       }else{
         formatter = new TsdbJSON(tsdb);
       }

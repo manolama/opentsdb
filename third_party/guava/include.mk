@@ -13,11 +13,13 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this library.  If not, see <http://www.gnu.org/licenses/>.
 
-ASYNCHBASE_VERSION := 1.4.0-SNAPSHOT
-ASYNCHBASE := third_party/hbase/asynchbase-$(ASYNCHBASE_VERSION).jar
-ASYNCHBASE_BASE_URL := http://www.euphoriaaudio.com/downloads
+GUAVA_VERSION := 13.0.1
 
-$(ASYNCHBASE): $(ASYNCHBASE).md5
-	set dummy "$(ASYNCHBASE_BASE_URL)" "$(ASYNCHBASE)"; shift; $(FETCH_DEPENDENCY)
+GUAVA_CORE_VERSION = $(GUAVA_VERSION)
+GUAVA_CORE := third_party/guava/guava-$(GUAVA_CORE_VERSION).jar
+GUAVA_CORE_BASE_URL := http://www.euphoriaaudio.com/downloads/
 
-THIRD_PARTY += $(ASYNCHBASE)
+$(GUAVA_CORE): $(GUAVA_CORE).md5
+	set dummy "$(GUAVA_CORE_BASE_URL)" "$(GUAVA_CORE)"; shift; $(FETCH_DEPENDENCY)
+
+THIRD_PARTY += $(GUAVA_CORE) 

@@ -14,6 +14,7 @@ package net.opentsdb.tsd;
 
 import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
@@ -55,10 +56,18 @@ final class ConnectionManager extends SimpleChannelHandler {
    * @param collector The collector to use.
    */
   public static void collectStats(final StatsCollector collector) {
-    collector.record("connectionmgr.connections", connections_established);
-    collector.record("connectionmgr.exceptions", exceptions_caught);
+    collector.record("netty.connections", connections_established, 
+        new SimpleEntry<String, String>("type", "total"));
+    collector.record("netty.connections", channels.size(), 
+        new SimpleEntry<String, String>("type", "open"));
+    collector.record("netty.connections", exceptions_caught, 
+        new SimpleEntry<String, String>("type", "exception"));
   }
 
+  /**
+   * Simply adds the connection to the group for tracking and increments
+   * the total number of connections
+   */
   @Override
   public void channelOpen(final ChannelHandlerContext ctx,
                           final ChannelStateEvent e) {
@@ -70,7 +79,7 @@ final class ConnectionManager extends SimpleChannelHandler {
   public void handleUpstream(final ChannelHandlerContext ctx,
                              final ChannelEvent e) throws Exception {
     if (e instanceof ChannelStateEvent) {
-      LOG.info(e.toString());
+      LOG.trace(e.toString());
     }
     super.handleUpstream(ctx, e);
   }

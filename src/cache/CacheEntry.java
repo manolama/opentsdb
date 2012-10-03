@@ -21,7 +21,6 @@ import java.io.InputStream;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.codehaus.jackson.annotate.JsonIgnore;
-import org.mortbay.log.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -253,7 +252,7 @@ public class CacheEntry {
     try {
       InputStream stream = new FileInputStream(file);
       if (this.file_size > Integer.MAX_VALUE) {
-        Log.warn(String.format("File is too large for byte array [%d]",
+        LOG.warn(String.format("File is too large for byte array [%d]",
             this.file_size));
         return null;
       }
@@ -271,7 +270,7 @@ public class CacheEntry {
 
       // Ensure all the bytes have been read in
       if (offset < bytes.length) {
-        Log.warn("Could not completely read file");
+        LOG.warn("Could not completely read file");
         return null;
       }
 

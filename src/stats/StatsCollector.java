@@ -17,7 +17,10 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -40,8 +43,9 @@ public abstract class StatsCollector {
   /** Extra tags to add to every data point emitted. */
   private HashMap<String, String> extratags;
 
-  /** Buffer used to build lines emitted. */
-  private final StringBuilder buf = new StringBuilder();
+//  /** Buffer used to build lines emitted. */
+//  //private final StringBuilder buf = new StringBuilder();
+//  private final List<StatsDP> datapoints = new ArrayList<StatsDP>();
 
   /**
    * Constructor.
@@ -52,12 +56,9 @@ public abstract class StatsCollector {
     this.prefix = prefix;
   }
 
-  /**
-   * Method to override to actually emit a data point.
-   * @param datapoint A data point in a format suitable for a text
-   * import.
-   */
-  public abstract void emit(String datapoint);
+  public void emit(StatsDP object){
+    LOG.warn("Not implemented");
+  }
 
   /**
    * Records a data point.
@@ -88,8 +89,16 @@ public abstract class StatsCollector {
    */
   public final void record(final String name,
                            final Number value,
-                           final String xtratag) {
-    record(name, value.longValue(), xtratag);
+                           final Map<String, String> tags) {
+    record(name, value.longValue(), tags);
+  }
+  
+  public final void record(final String name,
+                           final Number value,
+                           final SimpleEntry<String, String> tag){
+    Map<String, String> tags = new HashMap<String, String>();
+    tags.put(tag.getKey(), tag.getValue());
+    record(name, value.longValue(), tags);
   }
 
   /**
@@ -103,11 +112,22 @@ public abstract class StatsCollector {
    */
   public final void record(final String name,
                            final Histogram histo,
-                           final String xtratag) {
-    record(name + "_50pct", histo.percentile(50), xtratag);
-    record(name + "_75pct", histo.percentile(75), xtratag);
-    record(name + "_90pct", histo.percentile(90), xtratag);
-    record(name + "_95pct", histo.percentile(95), xtratag);
+                           final Map<String, String> tags) {
+    record(name + "_50pct", histo.percentile(50), tags);
+    record(name + "_75pct", histo.percentile(75), tags);
+    record(name + "_90pct", histo.percentile(90), tags);
+    record(name + "_95pct", histo.percentile(95), tags);
+  }
+  
+  public final void record(final String name,
+      final Histogram histo,
+      final SimpleEntry<String, String> tag){
+    Map<String, String> tags = new HashMap<String, String>();
+    tags.put(tag.getKey(), tag.getValue());
+    record(name + "_50pct", histo.percentile(50), tags);
+    record(name + "_75pct", histo.percentile(75), tags);
+    record(name + "_90pct", histo.percentile(90), tags);
+    record(name + "_95pct", histo.percentile(95), tags);
   }
 
   /**
@@ -121,34 +141,49 @@ public abstract class StatsCollector {
    */
   public final void record(final String name,
                            final long value,
-                           final String xtratag) {
-    buf.setLength(0);
-    buf.append(prefix).append(".")
-       .append(name)
-       .append(' ')
-       .append(System.currentTimeMillis() / 1000)
-       .append(' ')
-       .append(value);
-
-    if (xtratag != null) {
-      if (xtratag.indexOf('=') != xtratag.lastIndexOf('=')) {
-        throw new IllegalArgumentException("invalid xtratag: " + xtratag
-            + " (multiple '=' signs), name=" + name + ", value=" + value);
-      } else if (xtratag.indexOf('=') < 0) {
-        throw new IllegalArgumentException("invalid xtratag: " + xtratag
-            + " (missing '=' signs), name=" + name + ", value=" + value);
-      }
-      buf.append(' ').append(xtratag);
-    }
-
-    if (extratags != null) {
-      for (final Map.Entry<String, String> entry : extratags.entrySet()) {
-        buf.append(' ').append(entry.getKey())
-           .append('=').append(entry.getValue());
+                           final Map<String, String> tags) {
+//    buf.setLength(0);
+//    buf.append(prefix).append(".")
+//       .append(name)
+//       .append(' ')
+//       .append(System.currentTimeMillis() / 1000)
+//       .append(' ')
+//       .append(value);
+    
+    StatsDP dp = new StatsDP();
+    dp.metric = (prefix.isEmpty() ? name : prefix + "." + name);
+    dp.timestamp = System.currentTimeMillis() / 1000L;
+    dp.value = value;
+    dp.tags = tags;
+    
+    if (extratags != null){
+      for (final Map.Entry<String, String> entry : extratags.entrySet()){
+        if (dp.tags == null)
+          dp.tags = new HashMap<String, String>();
+        dp.tags.put(entry.getKey(), entry.getValue());
       }
     }
-    buf.append('\n');
-    emit(buf.toString());
+    
+    //this.datapoints.add(dp);
+//    if (xtratag != null) {
+//      if (xtratag.indexOf('=') != xtratag.lastIndexOf('=')) {
+//        throw new IllegalArgumentException("invalid xtratag: " + xtratag
+//            + " (multiple '=' signs), name=" + name + ", value=" + value);
+//      } else if (xtratag.indexOf('=') < 0) {
+//        throw new IllegalArgumentException("invalid xtratag: " + xtratag
+//            + " (missing '=' signs), name=" + name + ", value=" + value);
+//      }
+//      buf.append(' ').append(xtratag);
+//    }
+//
+//    if (extratags != null) {
+//      for (final Map.Entry<String, String> entry : extratags.entrySet()) {
+//        buf.append(' ').append(entry.getKey())
+//           .append('=').append(entry.getValue());
+//      }
+//    }
+//    buf.append('\n');
+    emit(dp);
   }
 
   /**
@@ -220,4 +255,33 @@ public abstract class StatsCollector {
     extratags.remove(name);
   }
 
+  public static final String getAscii(final StatsDP dp){
+    StringBuffer buf = new StringBuffer(1024);
+    buf.append(dp.metric)
+    .append(' ')
+    .append(dp.timestamp)
+    .append(' ')
+    .append(dp.value);
+    buf.append(' ');
+    if (dp.tags != null){
+      int count = 0;
+      for (Map.Entry<String, String> tag : dp.tags.entrySet()){
+        if (count>0)
+          buf.append(" ");
+        buf.append(tag.getKey()).append("=").append(tag.getValue());
+        count++;
+      }
+    }
+    return buf.toString();
+  }
+  
+  /**
+   * Represents a single data point collected from the system
+   */
+  public static final class StatsDP {
+    public String metric;
+    public double value;
+    public long timestamp;
+    public Map<String, String> tags;
+  }
 }

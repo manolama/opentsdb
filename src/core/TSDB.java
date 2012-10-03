@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
+import java.util.AbstractMap.SimpleEntry;
 
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
@@ -247,8 +248,8 @@ public final class TSDB {
 
   /** Number of cache entries currently in RAM for lookups involving UIDs. */
   public int uidCacheSize() {
-    return (metrics.cacheSize() + tag_names.cacheSize()
-            + tag_values.cacheSize());
+    return (metrics.cacheSizeName() + tag_names.cacheSizeName()
+            + tag_values.cacheSizeName());
   }
 
   /**
@@ -259,7 +260,9 @@ public final class TSDB {
     collectUidStats(metrics, collector);
     collectUidStats(tag_names, collector);
     collectUidStats(tag_values, collector);
-
+    collector.record("uid.cache.size.tsuid", this.ts_uids.size());
+    collector.record("uid.cache.size.tsuid.meta", this.timeseries_meta.size());
+    IncomingDataPoints.collectStats(collector);
     {
       final Runtime runtime = Runtime.getRuntime();
       collector.record("jvm.ramfree", runtime.freeMemory());
@@ -268,17 +271,20 @@ public final class TSDB {
 
     collector.addExtraTag("class", "IncomingDataPoints");
     try {
-      collector.record("hbase.latency", IncomingDataPoints.putlatency, "method=put");
+      collector.record("hbase.latency", IncomingDataPoints.putlatency, 
+        new SimpleEntry<String, String>("method", "put"));
     } finally {
       collector.clearExtraTag("class");
     }
 
     collector.addExtraTag("class", "TsdbQuery");
     try {
-      collector.record("hbase.latency", TsdbQuery.scanlatency, "method=scan");
+      collector.record("hbase.latency", TsdbQuery.scanlatency, 
+          new SimpleEntry<String, String>("method", "scan"));
     } finally {
       collector.clearExtraTag("class");
     }
+    this.data_storage.collectStats(collector);
 //    collector.record("hbase.root_lookups", client.rootLookupCount());
 //    collector.record("hbase.meta_lookups",
 //                     client.uncontendedMetaLookupCount(), "type=uncontended");
@@ -305,9 +311,16 @@ public final class TSDB {
    */
   private static void collectUidStats(final UniqueId uid,
                                       final StatsCollector collector) {
-    collector.record("uid.cache-hit", uid.cacheHits(), "kind=" + uid.kind());
-    collector.record("uid.cache-miss", uid.cacheMisses(), "kind=" + uid.kind());
-    collector.record("uid.cache-size", uid.cacheSize(), "kind=" + uid.kind());
+    collector.record("uid.cache.hits", uid.cacheHits(), 
+        new SimpleEntry<String, String>("kind", uid.kind()));
+    collector.record("uid.cache.miss", uid.cacheMisses(), 
+        new SimpleEntry<String, String>("kind", uid.kind()));
+    collector.record("uid.cache.size.name", uid.cacheSizeName(), 
+        new SimpleEntry<String, String>("kind", uid.kind()));
+    collector.record("uid.cache.size.id", uid.cacheSizeID(), 
+        new SimpleEntry<String, String>("kind", uid.kind()));
+    collector.record("uid.cache.size.meta", uid.cacheSizeMeta(), 
+        new SimpleEntry<String, String>("kind", uid.kind()));
   }
 
   /**

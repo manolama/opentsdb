@@ -147,7 +147,7 @@ final class TSDMain {
     argp.overloadConfigs(config);
     
     // dump the configuration 
-    log.debug(config.dumpConfiguration(false));
+    //log.debug(config.dumpConfiguration(false));
 
     // check to make sure the directories are read/writable where appropriate
     String error = checkDirectory(
@@ -176,7 +176,7 @@ final class TSDMain {
 
       final TsdbStore uid_storage;
       final TsdbStore data_storage;
-      final Boolean use_cass = true;
+      final Boolean use_cass = false;
       if (use_cass){
         Cassandra.Client cass_uid = null;
         Cassandra.Client cass_data = null;

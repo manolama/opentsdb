@@ -15,6 +15,8 @@ package net.opentsdb.storage;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 
+import net.opentsdb.stats.StatsCollector;
+
 import org.hbase.async.KeyValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -288,6 +290,12 @@ public abstract class TsdbStore {
    */
   abstract public Deferred<Object> flush() throws TsdbStorageException;
 
+  /**
+   * Allows the tsd to fetch statistics about the underlying storage system.
+   * @param collector Collector where stats will be written
+   */
+  abstract public void collectStats(final StatsCollector collector);
+  
   // STATIC METHODS ----------------------------------------------------------
   /**
    * Uses the configured character set to convert the given string to a byte

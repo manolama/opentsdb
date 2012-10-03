@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -129,7 +130,8 @@ public class HttpQuery {
    * @param collector The collector to use.
    */
   public static void collectStats(final StatsCollector collector) {
-    collector.record("http.latency", httplatency, "type=all");
+    collector.record("http.latency", httplatency, 
+        new SimpleEntry<String, String>("type", "all"));
   }
 
   /**
@@ -936,7 +938,7 @@ public class HttpQuery {
   private void done() {
     final int processing_time = processingTimeMillis();
     httplatency.add(processing_time);
-    logInfo("HTTP " + request.getUri() + " done in " + processing_time + "ms");
+    //logInfo("HTTP " + request.getUri() + " done in " + processing_time + "ms");
     deferred.callback(null);
   }
 

@@ -10,22 +10,21 @@
 // General Public License for more details.  You should have received a copy
 // of the GNU Lesser General Public License along with this program.  If not,
 // see <http://www.gnu.org/licenses/>.
-package net.opentsdb.tsd;
+package net.opentsdb.graph;
 
 /**
- * Exception thrown by the HTTP handlers when presented with a bad request.
+ * Exception thrown when Gnuplot fails.
  */
-public final class BadRequestException extends RuntimeException {
+final class GnuplotException extends RuntimeException {
 
-  public BadRequestException(final String message) {
-    super(message);
+  public GnuplotException(final int gnuplot_return_value) {
+    super("Gnuplot returned " + gnuplot_return_value);
   }
 
-  public static BadRequestException missingParameter(final String paramname) {
-    return new BadRequestException("Missing parameter <code>" + paramname
-                                   + "</code>");
+  public GnuplotException(final String gnuplot_stderr) {
+    super("Gnuplot stderr:\n" + gnuplot_stderr);
   }
 
-  static final long serialVersionUID = 1276251669;
+  static final long serialVersionUID = 1287770642;
 
 }

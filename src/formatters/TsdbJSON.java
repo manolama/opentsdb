@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.codehaus.jackson.map.annotate.JsonSerialize;
 import org.codehaus.jackson.type.TypeReference;
@@ -16,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.tsd.HttpQuery;
 
 /**
@@ -27,6 +29,9 @@ public class TsdbJSON extends TSDFormatter {
   /** Typeref for Jackson to properly deserialize incoming data points */
   private final static TypeReference<ArrayList<TsdbJSONdp>> dpTypeRef = 
     new TypeReference<ArrayList<TsdbJSONdp>>() {};
+  
+  private static final AtomicLong puts_success = new AtomicLong();
+  private static final AtomicLong puts_fail = new AtomicLong();
   
   /**
    * Default constructor
@@ -42,7 +47,7 @@ public class TsdbJSON extends TSDFormatter {
    * @param query The HTTPQuery to parse
    * @return Returns true
    */
-  public Boolean handleHTTPGet(final HttpQuery query){  
+  public boolean handleHTTPGet(final HttpQuery query){  
     List<TsdbJSONOutput> timeseries = new ArrayList<TsdbJSONOutput>();
     Boolean return_basic_meta = query.hasQueryStringParam("meta") ?
         query.parseBoolean(query.getQueryStringParam("meta")) : true;
@@ -95,7 +100,7 @@ public class TsdbJSON extends TSDFormatter {
    * @return Returns true
    */
   @SuppressWarnings("unchecked")
-  public Boolean handleHTTPPut(final HttpQuery query){
+  public boolean handleHTTPPut(final HttpQuery query){
     Boolean details = query.hasQueryStringParam("error_details") ?
         query.parseBoolean(query.getQueryStringParam("error_details")) : false;
     Boolean fault = query.hasQueryStringParam("fault_on_any") ?
@@ -104,7 +109,7 @@ public class TsdbJSON extends TSDFormatter {
         query.parseBoolean(query.getQueryStringParam("json_return")) : true;  
         
     String json = query.getPostData();
-    if (json == null){
+    if (json == null || json.isEmpty()){
       query.sendError(HttpResponseStatus.BAD_REQUEST, "Post data was empty");
       return false;
     }
@@ -194,6 +199,9 @@ public class TsdbJSON extends TSDFormatter {
       }
     }
     
+    this.puts_success.addAndGet(success);
+    if (datapoints.size() != success)
+      this.puts_fail.addAndGet(datapoints.size() - success);
     Map<String, Object> results = new HashMap<String, Object>();
     results.put("success", success);
     results.put("fail", datapoints.size() - success);
@@ -216,6 +224,10 @@ public class TsdbJSON extends TSDFormatter {
     return true;
   }
   
+  public static void collectStats(final StatsCollector collector){
+    collector.record("http.formatter.tsdbjson.put.success", puts_success.get());
+    collector.record("http.formatter.tsdbjson.put.fail", puts_fail.get());
+  }
 //---------------- PRIVATES ------------------------------
   
   /**
