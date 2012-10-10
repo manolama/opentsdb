@@ -17,10 +17,13 @@ import java.util.AbstractMap.SimpleEntry;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -154,134 +157,6 @@ public final class UniqueId implements UniqueIdInterface {
     return DatatypeConverter.parseHexBinary(sid);
   }
 
-  /**
-   * Extracts the metric UID from the row key
-   * @param key The row key to parse
-   * @param metric_width The width of the metric tag in bytes
-   * @return The metric UID
-   */
-  public static byte[] getMetricFromKey(final byte[] key,
-      final short metric_width) {
-    byte[] metric = new byte[metric_width];
-    for (int i = 0; i < metric_width; i++) {
-      metric[i] = key[i];
-    }
-    return metric;
-  }
-
-  /**
-   * Extracts the timestamp from a row key
-   * @param key The row key to parse
-   * @param metric_width The width of the metric tag in bytes
-   * @param timestamp_width The width of the timestamp in bytes
-   * @return The timestamp as a byte array to be converted by the caller
-   */
-  public static byte[] getTimestampFromKey(final byte[] key,
-      final short metric_width, final short timestamp_width) {
-    int x = 0;
-    byte[] timestamp = new byte[timestamp_width];
-    for (int i = metric_width; i < timestamp_width + metric_width; i++) {
-      timestamp[x] = key[i];
-      x++;
-    }
-    return timestamp;
-  }
-
-  /**
-   * Extracts a list of tagk/tagv pairs from a row key
-   * @param key The row key to parse
-   * @param metric_width The width of the metric tag in bytes
-   * @param tag_width The width of the tags in bytes
-   * @param timestamp_width The width of the timestamp in bytes
-   * @return A list of tagk/tagv pairs as a single byte array
-   */
-  public static List<byte[]> getTagPairsFromKey(final byte[] key,
-      final short metric_width, final short tag_width, final short timestamp_width) {
-    int x = 0;
-    List<byte[]> tags = new ArrayList<byte[]>();
-    byte[] tag = new byte[tag_width * 2];
-    for (int i = metric_width + timestamp_width; i < key.length; i++) {
-      tag[x] = key[i];
-      x++;
-      if (x == tag_width * 2) {
-        tags.add(tag);
-        tag = new byte[tag_width * 2];
-        x = 0;
-      }
-    }
-    return tags;
-  }
-
-  /**
-   * Extracts a list of tagk names from the tagk/tagv pair list of byte arrays
-   * See getTagPairsFromKey
-   * @param tags List of tagk/tagv pairs to parse
-   * @param tag_width Width of a single tag in bytes
-   * @return A list of tagk UIDs
-   */
-  public static List<byte[]> getTagksFromTagPairs(final List<byte[]> tags,
-      final short tag_width) {
-    List<byte[]> tagks = new ArrayList<byte[]>();
-    for (byte[] pair : tags) {
-      byte[] tagk = new byte[tag_width];
-      for (int i = 0; i < tag_width; i++) {
-        tagk[i] = pair[i];
-      }
-      tagks.add(tagk);
-    }
-
-    return tagks;
-  }
-
-  /**
-   * Extracts a list of tagv names from the tagk/tagv pair list of byte arrays
-   * See getTagPairsFromKey
-   * @param tags List of tagk/tagv pairs to parse
-   * @param tag_width Width of a single tag in bytes
-   * @return A list of tagv UIDs
-   */
-  public static List<byte[]> getTagvsFromTagPairs(final List<byte[]> tags,
-      final short tag_width) {
-    
-    List<byte[]> tagvs = new ArrayList<byte[]>();
-    for (byte[] pair : tags) {
-      if (pair.length < tag_width * 2 || pair.length < 1){
-        LOG.error(String.format("Improper tag pair, length expected [%d], got [%d]",
-            tag_width, pair.length));
-        return null;
-      }
-
-      int x = 0;
-      byte[] tagv = new byte[tag_width];
-      for (int i = tag_width; i < pair.length; i++) {
-        tagv[x] = pair[i];
-        x++;
-      }
-      tagvs.add(tagv);
-    }
-    return tagvs;
-  }
-
-  /**
-   * Extracts the timestamp UID from the key, basically just strips the timestamp
-   * @param key The row key to parse
-   * @param metric_width The width of the metric tag in bytes
-   * @param timestamp_width The width of the timestamp in bytes
-   * @return The Timestamp UID
-   */
-  public static byte[] getTSUIDFromKey(final byte[] key, final short metric_width, 
-      final short timestamp_width){
-    int x=0;
-    byte[] uid = new byte[key.length - timestamp_width];
-    for (int i = 0; i < key.length; i++) {
-      if (i < metric_width || i >= metric_width + timestamp_width){
-        uid[x] = key[i];
-        x++;
-      }
-    }
-    return uid;
-  }
-  
   /** The number of times we avoided reading from HBase thanks to the cache. */
   public int cacheHits() {
     return cacheHits;
@@ -373,7 +248,12 @@ public final class UniqueId implements UniqueIdInterface {
             + " which is != " + idWidth + " required for '" + kind() + '\'');
       }
       addIdToCache(name, id);
-      addNameToCache(id, name);
+      try{
+        addNameToCache(id, name);
+      }catch (IllegalStateException ise){
+        // todo - if the name already exists, we need to fix it
+        LOG.error(ise.getMessage());
+      }
     }
     return id;
   }
@@ -439,8 +319,8 @@ public final class UniqueId implements UniqueIdInterface {
     }
   }
 
-  public Boolean putMeta(final GeneralMeta meta) {
-    return this.metadata.putMeta(meta);
+  public Boolean putMeta(final GeneralMeta meta, final boolean flush) {
+    return this.metadata.putMeta(meta, flush);
   }
 
   public Boolean putMap(final String uid, final String value, final String type){
@@ -459,7 +339,7 @@ public final class UniqueId implements UniqueIdInterface {
     }
     
     // see if a map exists, if not, create a new one
-    UniqueIdMap map = getMap(uid);
+    UniqueIdMap map = getMap(uid, false);
     if (map == null){
       map = new UniqueIdMap(uid);
     }
@@ -471,98 +351,20 @@ public final class UniqueId implements UniqueIdInterface {
   /**
    * Runs through the maps and flushes any to the storage system that have updates
    */
-  public void flushMaps(final Boolean use_local){
+  public void flushMaps(){
     long changed = 0;
     try{
-      for (Map.Entry<String, UniqueIdMap> entry : this.uid_map.entrySet()){
+      Iterator<Entry<String, UniqueIdMap>> map_it = this.uid_map.entrySet().iterator();
+      while (map_it.hasNext()){
+        Map.Entry<String, UniqueIdMap> entry = map_it.next();
         UniqueIdMap map = entry.getValue();
-        if (!map.getHasChanged())
-          continue;
-        
-        String uid_str = map.getUid();
-        if (uid_str == null){
-          LOG.error(String.format("Null UID for %s map ID [%s]", fromBytes(kind), entry.getKey()));
+        if (!map.getHasChanged()){
+          map_it.remove();
           continue;
         }
         
-        // lock, fetch, merge, put
-        byte[] uid = StringtoID(uid_str);
-        byte[] qualifier = toBytes(fromBytes(kind) + "_map");
-        short attempt = 3;
-        Object lock = null;
-        try{
-          while(attempt-- > 0){
-            LOG.debug(String.format("Attempting to sync map for %s [%s]", 
-                fromBytes(kind), map.getUid()));
-            // first, we need to lock the row for exclusive access on the set
-            try {
-              lock = storage.getRowLock(uid);          
-              if (lock == null) {
-                LOG.error("Received null for row lock");
-                continue;
-              }
-              LOG.debug(String.format("Successfully locked UID row [%s]", map.getUid()));
-              
-              UniqueIdMap temp_map = new UniqueIdMap(map.getUid());
-              JSON codec = new JSON(temp_map);
-              
-              // get the current value from storage so we don't overwrite other TSDs changes
-              byte[] smap = storage.getValue(uid, NAME_FAMILY, qualifier, lock);
-              if (smap == null){
-                LOG.warn(String.format("UID map for [%s] was not found in the storage system", 
-                    fromBytes(kind)));
-              }else{
-                if (!codec.parseObject(TsdbStore.fromBytes(smap))){
-                  LOG.error("Unable to parse UID map from the storage system");
-                  return;
-                }
-                temp_map = (UniqueIdMap)codec.getObject();
-                LOG.debug("Successfully loaded UID map from the storage system");
-                
-                // now we compare the newly loaded list and the old one, if there are any differences,
-                // we need to update storage
-                if (map.equals(temp_map)){
-                  LOG.debug("No changes from stored data");
-                  return;
-                }
-              }          
-              
-              // there was a difference so merge the two sets, then write to storage
-              if (!use_local)
-                map.merge(temp_map);
-              LOG.trace(String.format("%s UID [%s] requires updating",
-                  fromBytes(kind), map.getUid()));            
-              
-              codec = new JSON(map);
-              storage.putWithRetry(uid, NAME_FAMILY, qualifier, codec.getJsonBytes(), lock)
-                  .joinUninterruptibly();
-              LOG.info("Successfully updated UID map in storage");
-              // do NOT forget to unlock
-              LOG.trace("Releasing lock");
-              if (storage.releaseRowLock(lock))
-                lock = null;
-              changed++;
-            } catch (TsdbStorageException e) {
-              try {
-                Thread.sleep(61000 / 3);
-              } catch (InterruptedException ie) {
-                return;
-              }
-              continue;
-            } catch (Exception e){
-              LOG.error(String.format("Unhandled exception [%s]", e));
-              e.printStackTrace();
-              return;
-            }
-          }
-        }catch (TsdbStorageException tex){
-          LOG.warn(String.format("Exception from storage [%s]", tex.getMessage()));
-          return;
-        } finally {
-          LOG.trace("Releasing lock");
-          if (storage.releaseRowLock(lock))
-            lock = null;
-        }
+        map.flush(storage, fromBytes(kind));
+        map_it.remove();
       }
     }catch (Exception e){
       e.printStackTrace();
@@ -572,16 +374,23 @@ public final class UniqueId implements UniqueIdInterface {
         uid_map.size(), fromBytes(kind)));
   }
 
+  public void flushMeta(){
+    this.metadata.flush();
+  }
   /**
    * Attempts to return the map for a UID from cache, then storage
    * @param id The ID of the object to retrieve as a hex encoded uid
+   * @param hit_store Whether or not to bother hitting storage for retrieval
    * @return A UniqueIdMap if successful, null if it wasn't found
    */
-  public UniqueIdMap getMap(final String id) {
+  public UniqueIdMap getMap(final String id, final boolean hit_store) {
     UniqueIdMap map = this.uid_map.get(id);
     if (map != null)
       return map;
-    return getMapFromStorage(id);
+    if (hit_store)
+      return getMapFromStorage(id);
+    else
+      return null;
   }
 
   public byte[] getOrCreateId(String name) throws HBaseException {
@@ -733,7 +542,7 @@ public final class UniqueId implements UniqueIdInterface {
           meta.setUID(UniqueId.IDtoString(row));
           meta.setCreated(System.currentTimeMillis() / 1000L);
           meta.setName(name);
-          this.metadata.putMeta(meta);
+          this.metadata.putMeta(meta, false);
         }
 
         return row;
@@ -943,15 +752,15 @@ public final class UniqueId implements UniqueIdInterface {
    * display in the HTTP API
    * @return A sorted map of UIDs and their numeric IDs
    */
-  public final TreeMap<String, Long> getMap() {
+  public final SortedMap<String, byte[]> getMap() {
     loadAllUIDs();
-    final TreeMap<String, Long> sorted = new TreeMap<String, Long>();
+    final TreeMap<String, byte[]> sorted = new TreeMap<String, byte[]>();
     for (Map.Entry<String, byte[]> entry : this.nameCache.entrySet()) {
       // TODO fix this, it's not returning the actual numeric ID
       if (entry.getValue() == null || entry.getValue().length != 8)
-        sorted.put(entry.getKey(), 0L);
+        sorted.put(entry.getKey(), new byte[] {0});
       else
-        sorted.put(entry.getKey(), Bytes.getLong(entry.getValue()) + 1);
+        sorted.put(entry.getKey(), entry.getValue());
     }
     if (sorted.size() < 1)
       LOG.warn("No metrics found in HBase");
@@ -1186,7 +995,7 @@ public final class UniqueId implements UniqueIdInterface {
       if (fromBytes(kind).compareTo("metrics") == 0)
         matches.add(uid);
       else{
-        UniqueIdMap map = this.getMap(uid);
+        UniqueIdMap map = this.getMap(uid, true);
         if (map == null)
           continue;
         

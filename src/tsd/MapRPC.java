@@ -1,5 +1,6 @@
 package net.opentsdb.tsd;
 
+import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -20,16 +21,16 @@ public class MapRPC implements HttpRpc {
     String endpoint = query.getEndpoint();
 
     // if they didn't choose an endpoint, dump the timeseries UIDs
-    if (endpoint.length() < 1 ||
+    if (endpoint == null || endpoint.length() < 1 ||
         endpoint.toLowerCase().compareTo("timeseries") == 0) {
       // return the tsd list
-      Set<String> ts_uids = tsdb.ts_uids;
-      if (ts_uids == null){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, "Timestamp UIDs have not been loaded yet");
-        return;
-      }
-      JSON codec = new JSON(ts_uids);
-      query.sendReply(codec.getJsonString());
+//      HashSet<String> ts_uids = tsdb.ts_uids.get();
+//      if (ts_uids == null){
+//        query.sendError(HttpResponseStatus.BAD_REQUEST, "Timestamp UIDs have not been loaded yet");
+//        return;
+//      }
+//      JSON codec = new JSON(ts_uids);
+//      query.sendReply(codec.getJsonString());
       return;
     }
     
@@ -50,11 +51,11 @@ public class MapRPC implements HttpRpc {
     // try to fetch the map
     UniqueIdMap map = null;
     if (endpoint.toLowerCase().compareTo("metric") == 0)
-      map = tsdb.metrics.getMap(uid);
+      map = tsdb.metrics.getMap(uid, true);
     else if (endpoint.toLowerCase().compareTo("tagk") == 0)
-      map = tsdb.tag_names.getMap(uid);
+      map = tsdb.tag_names.getMap(uid, true);
     else if (endpoint.toLowerCase().compareTo("tagv") == 0)
-      map = tsdb.tag_values.getMap(uid);
+      map = tsdb.tag_values.getMap(uid, true);
     else {
       query.sendError(HttpResponseStatus.BAD_REQUEST, "Unsupported endpoint");
       return;
@@ -73,22 +74,22 @@ public class MapRPC implements HttpRpc {
     
     // determine what the user wants from the map and give it to them
     Set<String> uids = null;
-    if (map_type.toLowerCase().compareTo("metric") == 0)
-      uids = map.getMetrics(tsdb.ts_uids, (short) 3);
-    else if (map_type.toLowerCase().compareTo("tagk") == 0)
-      uids = map.getTags("tagk", (short) 3);
-    else if (map_type.toLowerCase().compareTo("tagv") == 0)
-      uids = map.getTags("tagv", (short) 3);
-    else if (map_type.toLowerCase().compareTo("tags") == 0)
-      uids = map.getTags();
-    else if (map_type.toLowerCase().compareTo("timeseries") == 0)
-      uids = map.getTSUIDs(tsdb.ts_uids, (short) 3);
-
-    if (uids == null) {
-      query.sendError(HttpResponseStatus.BAD_REQUEST,
-          "Unable to find map matching requested type");
-      return;
-    }
+//    if (map_type.toLowerCase().compareTo("metric") == 0)
+//      uids = map.getMetrics(tsdb.ts_uids.get(), (short) 3);
+//    else if (map_type.toLowerCase().compareTo("tagk") == 0)
+//      uids = map.getTags("tagk", (short) 3);
+//    else if (map_type.toLowerCase().compareTo("tagv") == 0)
+//      uids = map.getTags("tagv", (short) 3);
+//    else if (map_type.toLowerCase().compareTo("tags") == 0)
+//      uids = map.getTags();
+//    else if (map_type.toLowerCase().compareTo("timeseries") == 0)
+//      uids = map.getTSUIDs(tsdb.ts_uids.get(), (short) 3);
+//
+//    if (uids == null) {
+//      query.sendError(HttpResponseStatus.BAD_REQUEST,
+//          "Unable to find map matching requested type");
+//      return;
+//    }
 
     // serialize
     JSON codec = new JSON(uids);

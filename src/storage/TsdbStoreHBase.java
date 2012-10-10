@@ -27,6 +27,7 @@ import org.hbase.async.PutRequest;
 import org.hbase.async.RowLock;
 import org.hbase.async.RowLockRequest;
 import org.hbase.async.Scanner;
+import org.hbase.async.UnknownRowLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -231,6 +232,8 @@ public class TsdbStoreHBase extends TsdbStore {
     try {
       try {
         client.unlockRow((RowLock) lock).joinUninterruptibly();
+      } catch (UnknownRowLockException urle){
+        LOG.warn("Lock was already released or invalid");
       } catch (Exception e) {
         // TODO Auto-generated catch block
         e.printStackTrace();

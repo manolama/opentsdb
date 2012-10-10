@@ -106,7 +106,7 @@ public class TsdbJSON extends TSDFormatter {
     Boolean fault = query.hasQueryStringParam("fault_on_any") ?
         query.parseBoolean(query.getQueryStringParam("fault_on_any")) : false;
     Boolean return_json = query.hasQueryStringParam("json_return") ?
-        query.parseBoolean(query.getQueryStringParam("json_return")) : true;  
+        query.parseBoolean(query.getQueryStringParam("json_return")) : false;  
         
     String json = query.getPostData();
     if (json == null || json.isEmpty()){
@@ -228,6 +228,7 @@ public class TsdbJSON extends TSDFormatter {
     collector.record("http.formatter.tsdbjson.put.success", puts_success.get());
     collector.record("http.formatter.tsdbjson.put.fail", puts_fail.get());
   }
+
 //---------------- PRIVATES ------------------------------
   
   /**

@@ -1,6 +1,9 @@
 package net.opentsdb.meta;
 
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 
 import net.opentsdb.core.JSON;
@@ -76,7 +79,7 @@ public class MetaData {
       return null;
   }
 
-  public Boolean putMeta(final Object meta) {
+  public Boolean putMeta(final Object meta, final boolean flush) {
     if (meta == null) {
       LOG.error("Null value for meta object");
       return false;
@@ -98,106 +101,22 @@ public class MetaData {
       return false;
     }
 
-    final byte[] id = UniqueId.StringtoID(uid);
-
-    short attempt = 5;
-    while (attempt-- > 0) {
-      // lock and get the latest from Hbase
-      Object lock;
-      try {
-        lock = storage.getRowLock(id);
-      } catch (HBaseException e) {
-        try {
-          Thread.sleep(61000 / 5);
-        } catch (InterruptedException ie) {
-          break; // We've been asked to stop here, let's bail out.
-        }
-        continue;
-      } catch (Exception e) {
-        throw new RuntimeException("Should never be here", e);
-      }
-      if (lock == null) { // Should not happen.
-        LOG.error("WTF, got a null pointer as a RowLock!");
-        continue;
-      }
-
-      try {
-        Object new_meta = meta;
-        // fetch from hbase so we know we have the latest value
-        final String cell = this.kind + "_meta";
-        final byte[] raw = storage.getValue(id, TsdbStore.toBytes("name"),
-            TsdbStore.toBytes(cell), lock);
-
-        String json = "";
-        if (raw == null) {
-          // if nothing existed before, we'll store the user provided data
-          if (this.is_ts) {
-            json = ((TimeSeriesMeta) meta).getJSON();
-          } else {
-            LOG.trace("New metadata...");
-            ((GeneralMeta) meta).setCreated(System.currentTimeMillis() / 1000L);
-            ((GeneralMeta) meta).setType(Meta_Type.INVALID);
-            json = ((GeneralMeta) meta).getJSON();
-          }
-        } else {
-          // otherwise, we will copy changes to the new meta entry
-          if (this.is_ts) {
-            TimeSeriesMeta m = new TimeSeriesMeta();
-            JSON codec = new JSON(m);
-            if (!codec.parseObject(TsdbStore.fromBytes(raw))) {
-              LOG.warn("Error parsing JSON from Hbase for ID [" + uid
-                  + "], replacing");
-              json = ((TimeSeriesMeta) meta).getJSON();
-            } else {
-              m = (TimeSeriesMeta) codec.getObject();
-              m = ((TimeSeriesMeta) meta).CopyChanges(m);
-              json = m.getJSON();
-            }
-            new_meta = m;
-          } else {
-            GeneralMeta m = new GeneralMeta();
-            JSON codec = new JSON(m);
-            if (!codec.parseObject(TsdbStore.fromBytes(raw))) {
-              LOG.warn("Error parsing JSON from Hbase for ID [" + uid
-                  + "], replacing");
-              // don't want to store the type field
-              ((GeneralMeta) meta).setType(Meta_Type.INVALID);
-              json = ((GeneralMeta) meta).getJSON();
-            } else {
-              LOG.trace("Copying metadata...");
-              m = (GeneralMeta) codec.getObject();
-              m = ((GeneralMeta) meta).CopyChanges(m);
-              // don't want to store the type field
-              ((GeneralMeta) m).setType(Meta_Type.INVALID);
-              json = m.getJSON();
-              LOG.trace("GMO [" + ((GeneralMeta) meta).getName() + "] new [" + 
-                  m.getName() + "]");
-            }
-            new_meta = m;
-          }
-        }
-
-        // put me
-        try {
-          storage.putWithRetry(id, TsdbStore.toBytes("name"),
-              TsdbStore.toBytes(this.kind + "_meta"), TsdbStore.toBytes(json),
-              lock);
-          LOG.debug("Updated meta in storage for [" + this.kind + "] on UID [" + UniqueId.IDtoString(id) + "]");
-        } catch (HBaseException e) {
-          LOG.error("Failed to Put Meta Data [" + uid + "]", e);
-          continue;
-        }
-
-        // cache me
-        this.cache.put(UniqueId.IDtoString(id), new_meta);
-        return true;
-      } finally {
-        storage.releaseRowLock(lock);
-      }
+    // if we're not flushing, just merge and cache
+    if (!flush){
+      if (this.cache.contains(uid)){
+        if (this.is_ts)
+          this.cache.put(uid, ((TimeSeriesMeta)this.cache.get(uid)).CopyChanges((TimeSeriesMeta)meta));
+        else
+          this.cache.put(uid, ((GeneralMeta)this.cache.get(uid)).CopyChanges((GeneralMeta)meta));
+      }else
+        this.cache.put(uid, meta);
+      return true;
     }
 
-    LOG.error("Failed to put the meta data");
-    return false;
+    Object new_meta = this.flushMeta(meta);
+    if (new_meta != null)
+      this.cache.put(uid, new_meta);
+    return true;
   }
 
   public void putCache(final byte[] id, final Object meta){
@@ -207,6 +126,23 @@ public class MetaData {
   public int size(){
     return this.cache.size();
   }
+  
+  /**
+   * Runs through the cache, flushes anything to disk that exists, and then wipes the cache
+   */
+  public final void flush(){
+    
+    long count = 0;
+    Iterator<Entry<String, Object>> cache_it = this.cache.entrySet().iterator();
+    while (cache_it.hasNext()){
+      Map.Entry<String, Object> pair = cache_it.next();
+      this.flushMeta(pair.getValue());     
+      cache_it.remove();
+      count++;
+    }
+    LOG.debug(String.format("Flushed [%d] metadata entries", count));
+  }
+  
   // STATICS ---------------------------------------------------------
 
   public static byte[] getMetricID(final byte[] id) {
@@ -302,4 +238,120 @@ public class MetaData {
     return new GeneralMeta(id, type);
   }
 
+  private final Object flushMeta(final Object meta){
+    final String uid;
+    // check for uid
+    if (this.is_ts)
+      uid = ((TimeSeriesMeta) meta).getUID();
+    else{
+      uid = ((GeneralMeta) meta).getUID();
+      if (((GeneralMeta) meta).getName().isEmpty()){
+        LOG.error("Missing name");
+        return null;
+      }
+    }
+    if (uid.length() < 1) {
+      LOG.error("Missing UID");
+      return null;
+    }
+
+    final byte[] id = UniqueId.StringtoID(uid);
+
+    short attempt = 5;
+    while (attempt-- > 0) {
+      // lock and get the latest from Hbase
+      Object lock;
+      try {
+        lock = storage.getRowLock(id);
+      } catch (HBaseException e) {
+        try {
+          Thread.sleep(61000 / 5);
+        } catch (InterruptedException ie) {
+          break; // We've been asked to stop here, let's bail out.
+        }
+        continue;
+      } catch (Exception e) {
+        throw new RuntimeException("Should never be here", e);
+      }
+      if (lock == null) { // Should not happen.
+        LOG.error("WTF, got a null pointer as a RowLock!");
+        continue;
+      }
+
+      try {
+        Object new_meta = meta;
+        // fetch from hbase so we know we have the latest value
+        final String cell = this.kind + "_meta";
+        final byte[] raw = storage.getValue(id, TsdbStore.toBytes("name"),
+            TsdbStore.toBytes(cell), lock);
+
+        String json = "";
+        if (raw == null) {
+          // if nothing existed before, we'll store the user provided data
+          if (this.is_ts) {
+            json = ((TimeSeriesMeta) meta).getJSON();
+          } else {
+            LOG.trace("New metadata...");
+            ((GeneralMeta) meta).setCreated(System.currentTimeMillis() / 1000L);
+            ((GeneralMeta) meta).setType(Meta_Type.INVALID);
+            json = ((GeneralMeta) meta).getJSON();
+          }
+        } else {
+          // otherwise, we will copy changes to the new meta entry
+          if (this.is_ts) {
+            TimeSeriesMeta m = new TimeSeriesMeta();
+            JSON codec = new JSON(m);
+            if (!codec.parseObject(TsdbStore.fromBytes(raw))) {
+              LOG.warn("Error parsing JSON from Hbase for ID [" + uid
+                  + "], replacing");
+              json = ((TimeSeriesMeta) meta).getJSON();
+            } else {
+              m = (TimeSeriesMeta) codec.getObject();
+              m = ((TimeSeriesMeta) meta).CopyChanges(m);
+              json = m.getJSON();
+            }
+            new_meta = m;
+          } else {
+            GeneralMeta m = new GeneralMeta();
+            JSON codec = new JSON(m);
+            if (!codec.parseObject(TsdbStore.fromBytes(raw))) {
+              LOG.warn("Error parsing JSON from Hbase for ID [" + uid
+                  + "], replacing");
+              // don't want to store the type field
+              ((GeneralMeta) meta).setType(Meta_Type.INVALID);
+              json = ((GeneralMeta) meta).getJSON();
+            } else {
+              LOG.trace("Copying metadata...");
+              m = (GeneralMeta) codec.getObject();
+              m = ((GeneralMeta) meta).CopyChanges(m);
+              // don't want to store the type field
+              ((GeneralMeta) m).setType(Meta_Type.INVALID);
+              json = m.getJSON();
+              LOG.trace("GMO [" + ((GeneralMeta) meta).getName() + "] new [" + 
+                  m.getName() + "]");
+            }
+            new_meta = m;
+          }
+        }
+
+        // put me
+        try {
+          storage.putWithRetry(id, TsdbStore.toBytes("name"),
+              TsdbStore.toBytes(this.kind + "_meta"), TsdbStore.toBytes(json),
+              lock);
+          LOG.info("Updated meta in storage for [" + this.kind + "] on UID [" + UniqueId.IDtoString(id) + "]");
+        } catch (HBaseException e) {
+          LOG.error("Failed to Put Meta Data [" + uid + "]", e);
+          continue;
+        }
+
+        return new_meta;
+      } finally {
+        storage.releaseRowLock(lock);
+      }
+    }
+
+    LOG.error("Failed to put the meta data");
+    return null;
+  }
 }

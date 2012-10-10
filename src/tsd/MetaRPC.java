@@ -182,7 +182,7 @@ public class MetaRPC implements HttpRpc {
       switch (type) {
       case METRICS:
         meta.setName(tsdb.metrics.getName(UniqueId.StringtoID(meta.getUID())));
-        if (!tsdb.metrics.putMeta(meta)) {
+        if (!tsdb.metrics.putMeta(meta, true)) {
           query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
               "Error saving data");
           return;
@@ -192,7 +192,7 @@ public class MetaRPC implements HttpRpc {
         break;
       case TAGK:
         meta.setName(tsdb.tag_names.getName(UniqueId.StringtoID(meta.getUID())));
-        if (!tsdb.tag_names.putMeta(meta)) {
+        if (!tsdb.tag_names.putMeta(meta, true)) {
           query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
               "Error saving data");
           return;
@@ -202,7 +202,7 @@ public class MetaRPC implements HttpRpc {
         break;
       case TAGV:
         meta.setName(tsdb.tag_values.getName(UniqueId.StringtoID(meta.getUID())));
-        if (!tsdb.tag_values.putMeta(meta)) {
+        if (!tsdb.tag_values.putMeta(meta, true)) {
           query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
               "Error saving data");
           return;

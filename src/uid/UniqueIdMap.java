@@ -16,6 +16,8 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import net.opentsdb.core.JSON;
+import net.opentsdb.storage.TsdbStorageException;
+import net.opentsdb.storage.TsdbStore;
 
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
@@ -241,19 +243,92 @@ public class UniqueIdMap {
     }
     return ids;
   }
-  
-  public static final Set<String> getTSUIDs(final Set<String> tags, final Set<String> ts_uids, 
-      final short metric_width){
-    Set<String> ids = new TreeSet<String>();
-    // todo(CL) - there MUST be a better way. This could take ages
-    for (String pair : tags){
-      for (String tsuid : ts_uids){
-        // need to start AFTER the metric
-        if (tsuid.substring(metric_width*2).contains(pair))
-          ids.add(tsuid);
-      }
+
+  public final boolean flush(final TsdbStore storage, final String kind){
+    if (uid == null){
+      LOG.error(String.format("Null UID in %s map", kind));
+      return false;
     }
-    return ids;
+    
+    // lock, fetch, merge, put
+    byte[] map_uid = UniqueId.StringtoID(uid);
+    byte[] qualifier = TsdbStore.toBytes(kind + "_map");
+    short attempt = 3;
+    Object lock = null;
+    try{
+      while(attempt-- > 0){
+        LOG.debug(String.format("Attempting to sync map for %s [%s]", 
+            kind, uid));
+        // first, we need to lock the row for exclusive access on the set
+        try {
+          lock = storage.getRowLock(map_uid);          
+          if (lock == null) {
+            LOG.error("Received null for row lock");
+            continue;
+          }
+          LOG.debug(String.format("Successfully locked UID row [%s]", uid));
+          
+          UniqueIdMap temp_map = new UniqueIdMap(uid);
+          JSON codec = new JSON(temp_map);
+          
+          // get the current value from storage so we don't overwrite other TSDs changes
+          byte[] smap = storage.getValue(map_uid, TsdbStore.toBytes("name"), qualifier, lock);
+          if (smap == null){
+            LOG.warn(String.format("%s UID map [%s] was not found in the storage system", 
+                kind, uid));
+          }else{
+            if (!codec.parseObject(TsdbStore.fromBytes(smap))){
+              LOG.error(String.format("Unable to parse %S UID map [%s] from the storage system",
+                  kind, uid));
+              return false;
+            }
+            temp_map = (UniqueIdMap)codec.getObject();
+            LOG.debug(String.format("Successfully loaded UID map %s [%s] from the storage system",
+                kind, uid));
+            
+            // now we compare the newly loaded list and the old one, if there are any differences,
+            // we need to update storage
+            if (this.tags.equals(temp_map)){
+              LOG.debug(String.format("%s map [%s] has no changes from stored data",
+                  kind, uid));
+              return false;
+            }
+          }          
+          
+          // there was a difference so merge the two sets, then write to storage
+          temp_map.merge(this);
+          LOG.trace(String.format("%s UID [%s] requires updating",
+              kind, uid));            
+          
+          codec = new JSON(temp_map);
+          storage.putWithRetry(map_uid, TsdbStore.toBytes("name"), qualifier, codec.getJsonBytes(), lock)
+              .joinUninterruptibly();
+          LOG.debug(String.format("Successfully updated %s UID map [%s] in storage", kind, uid));
+          // do NOT forget to unlock
+          if (storage.releaseRowLock(lock))
+            lock = null;
+        } catch (TsdbStorageException e) {
+          try {
+            Thread.sleep(61000 / 3);
+          } catch (InterruptedException ie) {
+            return false;
+          }
+          continue;
+        } catch (Exception e){
+          LOG.error(String.format("Unhandled exception [%s]", e));
+          e.printStackTrace();
+          return false;
+        }
+        return true;
+      }
+    }catch (TsdbStorageException tex){
+      LOG.warn(String.format("Exception from storage [%s]", tex.getMessage()));
+      return false;
+    } finally {
+      if (storage.releaseRowLock(lock))
+        lock = null;
+    }
+    return false;
   }
   
   // GETTERS AND SETTERS

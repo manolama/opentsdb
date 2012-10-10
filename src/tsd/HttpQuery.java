@@ -1022,7 +1022,7 @@ public class HttpQuery {
    */
   private String guessMimeTypeFromContents(final ChannelBuffer buf) {
     if (!buf.readable()) {
-      logWarn("Sending an empty result?! buf=" + buf);
+      //logWarn("Sending an empty result?! buf=" + buf);
       return "text/plain";
     }
     final int firstbyte = buf.getUnsignedByte(buf.readerIndex());

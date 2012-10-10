@@ -50,7 +50,7 @@ public class SearchRPC implements HttpRpc {
   @SuppressWarnings("unchecked")
   public void execute(final TSDB tsdb, final HttpQuery query) {
     // don't bother if we don't have any tsuids to work with
-    if (tsdb.ts_uids.isEmpty()){
+    if (tsdb.ts_uids.stringSize() < 1){
       query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Timeseries UID list is empty");
       return;
     }
@@ -114,19 +114,21 @@ public class SearchRPC implements HttpRpc {
         tsdb.tag_values.search(search_query, tag_pairs);
       
       // with the list of tagpairs, we can get a list of matching tsuids from the master
-      Set<String> tsuids = UniqueIdMap.getTSUIDs(tag_pairs, tsdb.ts_uids, (short)3);
+      Set<String> tsuids = null;/*tsdb.ts_uids.getTSUIDs(tag_pairs, tsdb.ts_uids.get(), (short)3);
       LOG.trace(String.format("Found [%d] tsuids with [%d] tag pairs", 
           tsuids.size(), tag_pairs.size()));
       
       // match metrics against the timeseries list and add to the tsuids set
       if (metrics.size() > 0){
-        for (String tsuid : tsdb.ts_uids){
+        HashSet<String> uids = tsdb.ts_uids.get();
+        for (String tsuid : uids){
           for (String metric : metrics){
             if (tsuid.substring(0, 6).compareTo(metric) == 0)
               tsuids.add(tsuid);
           }
         }
       }
+      */
   
       // store a quick flag for efficiency
       boolean searching_meta = search_query.searchingAnyMeta();

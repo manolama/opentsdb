@@ -75,6 +75,9 @@ case $1 in
   (uid)
     MAINCLASS=UidManager
     ;;
+  (mapsync)
+    MAINCLASS=MapSync
+    ;;
   (*)
     echo >&2 "$me: error: unknown command '$1'"
     usage
@@ -83,6 +86,6 @@ esac
 shift
 
 JAVA=${JAVA-'java'}
-JVMARGS=${JVMARGS-'-enableassertions -enablesystemassertions'}
+JVMARGS=${JVMARGS-'-enableassertions -enablesystemassertions -Dcom.sun.management.jmxremote.port=4243 -Dcom.sun.management.jmxremote.authenticate=false -Djava.net.preferIPv4Stack=true -Dcom.sun.management.jmxremote.ssl=false'}
 test -r "$localdir/tsdb.local" && . "$localdir/tsdb.local"
 exec $JAVA $JVMARGS -classpath "$CLASSPATH" net.opentsdb.tools.$MAINCLASS "$@"

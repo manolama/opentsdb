@@ -14,6 +14,7 @@ package net.opentsdb.tsd;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -91,7 +92,7 @@ public class GroupRPC implements HttpRpc {
       }
       String tagk = UniqueId.IDtoString(uid);
       
-      UniqueIdMap map = tsdb.tag_names.getMap(tagk);
+      UniqueIdMap map = tsdb.tag_names.getMap(tagk, true);
       if (map == null){
         query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to load map");
         return;
@@ -124,9 +125,11 @@ public class GroupRPC implements HttpRpc {
       
       // fetch TSUIDs for each pair
       results.total_uids = 0;
+      Set<String> uids = tsdb.ts_uids.matchTSUIDs(tsdb, null, (short)3, true);
       for (Map.Entry<String, String> entry : sorted_tagvs.entrySet()){
         List<Map<String, Object>> entries = new ArrayList<Map<String, Object>>();
-        for (String tsuid : tsdb.ts_uids){
+        
+        for (String tsuid : uids){
           if (tsuid.substring(6).contains(tagk + entry.getValue())){
             //LOG.trace(String.format("Matched [%s] with [%s]", tagk + entry.getValue(), tsuid));
             try{

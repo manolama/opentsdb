@@ -106,6 +106,7 @@ tsdb_SRC := \
 	src/tsd/WordSplitter.java	\
 	src/uid/NoSuchUniqueId.java	\
 	src/uid/NoSuchUniqueName.java	\
+	src/uid/TimeseriesUID.java	\
 	src/uid/UniqueId.java	\
 	src/uid/UniqueIdInterface.java \
 	src/uid/UniqueIdMap.java
