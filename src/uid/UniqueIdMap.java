@@ -12,13 +12,18 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.uid;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
 import net.opentsdb.core.JSON;
+import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
 
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.NumericField;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
@@ -329,6 +334,27 @@ public class UniqueIdMap {
         lock = null;
     }
     return false;
+  }
+  
+  public final Document getLuceneDoc(){
+    if (this.uid == null || this.uid.length() < 1)
+      return null;
+    if (this.tags.size() < 1)
+      return null;
+
+    Document doc = new Document();
+    doc.add(new Field("uid", this.uid, Field.Store.YES, Field.Index.NOT_ANALYZED));
+
+    StringBuilder pairs = new StringBuilder();
+    int count = 0;
+    for (String pair : this.tags){
+      if (count > 0)
+        pairs.append(" ");
+      pairs.append(pair);
+      count++;
+    }
+    doc.add(new Field("tags", pairs.toString(), Field.Store.NO, Field.Index.ANALYZED));
+    return doc;
   }
   
   // GETTERS AND SETTERS

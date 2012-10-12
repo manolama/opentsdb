@@ -31,10 +31,10 @@ import java.util.regex.Pattern;
 import javax.xml.bind.DatatypeConverter;
 
 import net.opentsdb.core.JSON;
-import net.opentsdb.core.SearchQuery;
-import net.opentsdb.core.SearchQuery.SearchOperator;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaData;
+import net.opentsdb.search.SearchQuery;
+import net.opentsdb.search.SearchQuery.SearchOperator;
 import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
@@ -59,7 +59,8 @@ public final class UniqueId implements UniqueIdInterface {
   private enum ScanType {
     NAME,
     MAP,
-    META
+    META,
+    ID
   }
   
   /** Charset used to convert Strings to byte arrays and back. */
@@ -137,6 +138,12 @@ public final class UniqueId implements UniqueIdInterface {
     this.metadata = new MetaData(client, table, false, kind);
   }
 
+  /** Returns a human readable string representation of the object. */
+  public String toString() {
+    return "UniqueId(" + fromBytes(table) + ", " + kind() + ", " + idWidth
+        + ")";
+  }
+  
   // we need to pad so that we have a 3 byte ID
   public static String IDtoString(final byte[] id) {
     String sid = DatatypeConverter.printHexBinary(id);
@@ -198,7 +205,7 @@ public final class UniqueId implements UniqueIdInterface {
       cacheHits++;
     } else {
       cacheMisses++;
-      name = getNameFromHBase(id);
+      name = getNameFromStorage(id);
       if (name == null) {
         throw new NoSuchUniqueId(kind(), id);
       }
@@ -212,7 +219,7 @@ public final class UniqueId implements UniqueIdInterface {
     return idCache.get(fromBytes(id));
   }
 
-  private String getNameFromHBase(final byte[] id) throws HBaseException {
+  private String getNameFromStorage(final byte[] id) throws HBaseException {
 //    LOG.trace(String.format("ID as string [%s] from byte [%s] kind [%s] fam [%s]", 
 //        IDtoString(id), Arrays.toString(id), fromBytes(kind), fromBytes(NAME_FAMILY)));
     final byte[] name = storage.getValue(id, NAME_FAMILY, kind);
@@ -226,7 +233,7 @@ public final class UniqueId implements UniqueIdInterface {
       found = idCache.putIfAbsent(key, name);
     }
     if (found != null && !found.equals(name)) {
-      throw new IllegalStateException("id=" + Arrays.toString(id) + " => name="
+      throw new IllegalStateException("id=" + IDtoString(id) + " => name="
           + name + ", already mapped to " + found);
     }
   }
@@ -347,6 +354,104 @@ public final class UniqueId implements UniqueIdInterface {
     uid_map.put(uid, map);
     return true;
   }
+  
+  /**
+   * Call this to fix a specific UID forward mapping
+   * 
+   * NOTE: this will fetch values directly from storage
+   * @param uid
+   * @return
+   */
+//  public boolean fixStorage(final byte[] uid, final boolean recursing){
+//    
+//    final String name_from_id = this.getNameFromStorage(uid);
+//    byte[] id_from_name = null;
+//    if (name_from_id != null)
+//      id_from_name = this.getIdFromStorage(name_from_id);
+//    
+//    // we have a forward mapping error, so see if we can find a matching ID with a name
+//    if (name_from_id == null && id_from_name != null){
+//      
+//    }
+//  }
+  
+  /**
+   * Attempts to fix a reverse mapping error
+   * @param name
+   * @return
+   */
+//  public boolean fixStorage(final String name, final boolean recursing){
+//    byte[] id_from_name = this.getIdFromStorage(name);
+//    String name_from_id = null;
+//    if (id_from_name != null)
+//      name_from_id = this.getNameFromStorage(id_from_name);
+//    
+//    List<byte[]> uids = this.searchStorageForName(name);
+//    
+//    // if the name wasn't found, scan for it
+//    if (name_from_id == null && id_from_name == null){
+//      if (uids.size() < 1){
+//        LOG.error(String.format("Unable to locate %s name [%s] in storage", fromBytes(kind), name));
+//        return false;
+//      }
+//      LOG.debug(String.format("Found %s [%d] UIDs matching name [%s]", fromBytes(kind), 
+//          uids.size(), name));
+//      
+//      // we have one or more IDs! so see what their name is
+//      for (byte[] uid : uids){
+//        final String store_name = this.getNameFromStorage(uid);
+//        if (store_name == null){
+//          LOG.warn(String.format("Unable to find matching name in storage for %s UID [%s]", 
+//              fromBytes(kind), IDtoString(uid)));
+//          
+//          // WARNING - This could potentially cause an infinite recursion!
+//          if (!recursing)
+//            this.fixStorage(uid, true);
+//        }
+//        
+//        if (store_name.compareTo(name) == 0){
+//          LOG.info(String.format("Matched %s UID [%s] to name [%s]", fromBytes(kind), 
+//              IDtoString(uid), store_name));
+//          
+//          // store forward map
+//          if (!putFix(toBytes(store_name), uid, ID_FAMILY)){
+//            LOG.warn(String.format("Unable to store %s UID [%s] forward map for [%s]", 
+//                fromBytes(kind), IDtoString(uid), store_name));
+//          }else{
+//            LOG.info(String.format("Successfully stored %s UID [%s] forward map for [%s]", 
+//                fromBytes(kind), IDtoString(uid), store_name));
+//            this.nameCache.put(store_name, uid);
+//            this.idCache.put(fromBytes(uid), store_name);
+//          }
+//        }
+//      }
+//      return true;
+//    }
+//    
+//    // we have a forward mapping error, so see if we can find a matching ID with a name
+//    if (name_from_id == null && id_from_name != null){
+//      LOG.warn(String.format("%s UID [%s] was missing forward mapping for [%s]", fromBytes(kind),
+//          IDtoString(id_from_name), name));
+//      
+//      // store forward map
+//      if (!putFix(toBytes(name), id_from_name, ID_FAMILY)){
+//        LOG.warn(String.format("Unable to store %s UID [%s] forward map for [%s]", 
+//            fromBytes(kind), IDtoString(id_from_name), name));
+//      }else{
+//        LOG.info(String.format("Successfully stored %s UID [%s] forward map for [%s]", 
+//            fromBytes(kind), IDtoString(id_from_name), name));
+//        this.nameCache.put(name, id_from_name);
+//        this.idCache.put(fromBytes(id_from_name), name);
+//      }
+//      
+//      
+//    }
+//    
+//    // fix a name miss-match
+//    if (name_from_id != null && name_from_id.compareTo(name) != 0){
+//      
+//    }
+//  }  
   
   /**
    * Runs through the maps and flushes any to the storage system that have updates
@@ -1013,33 +1118,235 @@ public final class UniqueId implements UniqueIdInterface {
       }
     }
   }
+
+// PRIVATES -----------------------------------
+  
+  private final boolean putFix(final byte[] row, final byte[] value, final byte[] family){
+    short attempt = 3;
+    Object lock = null;
+    
+    try{
+      while(attempt-- > 0){
+        // first, we need to lock the row for exclusive access on the set
+        try {
+          lock = this.storage.getRowLock(row);          
+          if (lock == null) {  // Should not happen.
+            LOG.error("Received null for row lock");
+            continue;
+          }
+
+          this.storage.putWithRetry(row, family, kind, value, lock)
+              .joinUninterruptibly();
+
+          // do NOT forget to unlock
+          this.storage.releaseRowLock(lock);
+          return true;
+        } catch (TsdbStorageException e) {
+          try {
+            Thread.sleep(61000 / 3);
+          } catch (InterruptedException ie) {
+            return false;
+          }
+          continue;
+        } catch (Exception e){
+          LOG.error(String.format("Unhandled exception [%s]", e));
+          e.printStackTrace();
+          return false;
+        }
+      }
+    }catch (TsdbStorageException tex){
+      LOG.warn(String.format("Exception from storage [%s]", tex.getMessage()));
+      return false;
+    } catch (NullPointerException npe) {
+      npe.printStackTrace();
+      return false;
+    } catch (Exception e){
+      e.printStackTrace();
+      return false;
+    }finally {
+      LOG.trace("Releasing lock");
+      this.storage.releaseRowLock(lock);
+    }
+    return false;
+  }
   
   /**
-   * Scans the entire ID cf to see if a name has the matching ID
-   * @param id UID to search for
-   * @return null if the ID wasn't found, a string with the name of the 
-   * metric, tag or value
+   * Scans through storage for an UID matching the given name
    */
-  public String findMissingID(final byte[] id){
-    final TsdbScanner scanner = getFullScanner(ScanType.NAME);
+  private final List<byte[]> searchStorageForName(final String name){
+    final TsdbScanner scanner = this.getFullScanner(ScanType.NAME);
+    List<byte[]> uids = new ArrayList<byte[]>();
+    
     try {
       ArrayList<ArrayList<KeyValue>> rows;
       while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
         for (final ArrayList<KeyValue> row : rows) {
-          if (Arrays.equals(id, row.get(0).value())){
-            return fromBytes(row.get(0).key());
+          if (row.size() != 1) {
+            LOG.error("WTF shouldn't happen!  Scanner " + scanner + " returned"
+                + " a row that doesn't have exactly 1 KeyValue: " + row);
+            if (row.isEmpty()) {
+              continue;
+            }
+          }
+          final byte[] key = row.get(0).key();
+          final String uid_name = fromBytes(row.get(0).value());
+          
+          if (name.compareTo(uid_name) == 0){
+            LOG.debug(String.format("Matched name [%s] to %s UID [%s]", name, 
+                fromBytes(kind), IDtoString(key)));
+            uids.add(key);
           }
         }
       }
-      LOG.trace(String.format("Could not find a matching ID for [%s] in [%s]", 
-          IDtoString(id), fromBytes(kind)));
-      return null;
-    } catch (HBaseException e) {
+    } catch (TsdbStorageException e) {
       throw e;
     } catch (Exception e) {
       e.printStackTrace();
       throw new RuntimeException("Should never be here", e);
     }
+    return uids;
+  }
+  
+  /**
+   * Scans through storage for a name matching the given ID
+   * @param uid
+   * @return
+   */
+  private final List<String> searchStorageForID(final byte[] uid){
+    final TsdbScanner scanner = this.getFullScanner(ScanType.ID);
+    List<String> names = new ArrayList<String>();
+    
+    try {
+      ArrayList<ArrayList<KeyValue>> rows;
+      while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
+        for (final ArrayList<KeyValue> row : rows) {
+          if (row.size() != 1) {
+            LOG.error("WTF shouldn't happen!  Scanner " + scanner + " returned"
+                + " a row that doesn't have exactly 1 KeyValue: " + row);
+            if (row.isEmpty()) {
+              continue;
+            }
+          }
+          final String uid_name = fromBytes(row.get(0).key());
+          final byte[] name_uid = row.get(0).value();
+          
+          if (Arrays.equals(uid, name_uid)){
+            LOG.debug(String.format("Matched UID [%s] to %s name [%s]", IDtoString(name_uid), 
+                fromBytes(kind), uid_name));
+            names.add(uid_name);
+          }
+        }
+      }
+    } catch (TsdbStorageException e) {
+      throw e;
+    } catch (Exception e) {
+      e.printStackTrace();
+      throw new RuntimeException("Should never be here", e);
+    }
+    return names;
+  }
+  
+  /**
+   * Scans the ID AND the Name families for the given type to find out what
+   * the actual max ID is that has been recorded
+   * @return NULL if invalid, a UID for the local kind if found
+   */
+  private final byte[] getMaxUsedID(){
+    
+    long max_id = 0;
+    
+    try{
+      TsdbScanner scanner = new TsdbScanner(new byte[] {0, 0, 0}, 
+          new byte[] {127, 127, 127}, table);
+      scanner = this.storage.openScanner(scanner);
+      
+      ArrayList<ArrayList<KeyValue>> rows;
+      while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
+        for (final ArrayList<KeyValue> row : rows) {
+          for (final KeyValue kv : row) {  
+            final String family = fromBytes(kv.family());
+
+            // skip cells that aren't of this kind
+            if (!Arrays.equals(kind, kv.qualifier()))
+              continue;
+            
+            long current_id = 0;
+            if (family.compareTo("id") == 0){
+              current_id = Bytes.getLong(kv.value());
+            }else if (family.compareTo("name") == 0){
+              current_id = Bytes.getLong(kv.key());
+            }else{
+              LOG.warn(String.format("Unrecognized column family [%s]", family));
+              continue;
+            }
+            
+            if (current_id > max_id)
+              max_id = current_id;
+          }
+        }
+      }     
+    }catch (TsdbStorageException e) {
+      throw e;
+    } catch (Exception e){
+      e.printStackTrace();
+      throw new RuntimeException("Should never be here", e);
+    }
+    return max_id > 0 ? Bytes.fromLong(max_id) : null;
+  }
+
+  private final boolean fixMaxID(final byte[] max){
+    if (max == null){
+      LOG.error("Given max ID was null");
+      return false;
+    }
+    
+    short attempt = 3;
+    Object lock = null;
+    
+    try{
+      while(attempt-- > 0){
+        // first, we need to lock the row for exclusive access on the set
+        try {
+          lock = this.storage.getRowLock(MAXID_ROW);          
+          if (lock == null) {  // Should not happen.
+            LOG.error("Received null for row lock");
+            continue;
+          }
+
+          this.storage.putWithRetry(MAXID_ROW, ID_FAMILY, kind, max, lock)
+              .joinUninterruptibly();
+
+          LOG.info(String.format("Updated MAX ID for %s to [%d]", fromBytes(kind), Bytes.getLong(max)));
+          // do NOT forget to unlock
+          this.storage.releaseRowLock(lock);
+          return true;
+        } catch (TsdbStorageException e) {
+          try {
+            Thread.sleep(61000 / 3);
+          } catch (InterruptedException ie) {
+            return false;
+          }
+          continue;
+        } catch (Exception e){
+          LOG.error(String.format("Unhandled exception [%s]", e));
+          e.printStackTrace();
+          return false;
+        }
+      }
+    }catch (TsdbStorageException tex){
+      LOG.warn(String.format("Exception from storage [%s]", tex.getMessage()));
+      return false;
+    } catch (NullPointerException npe) {
+      npe.printStackTrace();
+      return false;
+    } catch (Exception e){
+      e.printStackTrace();
+      return false;
+    }finally {
+      LOG.trace("Releasing lock");
+      this.storage.releaseRowLock(lock);
+    }
+    return false;
   }
   
   /**
@@ -1132,6 +1439,10 @@ public final class UniqueId implements UniqueIdInterface {
     case META:
       scanner.setFamily(NAME_FAMILY);
       scanner.setQualifier(toBytes(fromBytes(kind) + "_meta"));
+      break;
+    case ID:
+      scanner.setFamily(NAME_FAMILY);
+      scanner.setQualifier(kind);
     }
     return storage.openScanner(scanner);
   }
@@ -1143,11 +1454,4 @@ public final class UniqueId implements UniqueIdInterface {
   private static String fromBytes(final byte[] b) {
     return new String(b, CHARSET);
   }
-
-  /** Returns a human readable string representation of the object. */
-  public String toString() {
-    return "UniqueId(" + fromBytes(table) + ", " + kind() + ", " + idWidth
-        + ")";
-  }
-
 }

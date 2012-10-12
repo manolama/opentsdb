@@ -5,11 +5,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 import net.opentsdb.core.JSON;
+import net.opentsdb.meta.GeneralMeta.Meta_Type;
 import net.opentsdb.uid.UniqueId;
 
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.NumericField;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Metadata pertaining to a specific time-series of metric values. This encompasses
@@ -18,12 +24,14 @@ import org.codehaus.jackson.map.annotate.JsonSerialize;
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
 final public class TimeSeriesMeta {
+  private static final Logger LOG = LoggerFactory.getLogger(TimeSeriesMeta.class);
+  
   // stored values
   private String uid = "";
   private int retention = 0;
   private double max = 0;
   private double min = 0;
-  private int interval = 0;
+  private double interval = 0;
   private long first_received = 0;
   private long last_received = 0;
   private String notes = "";
@@ -99,6 +107,69 @@ final public class TimeSeriesMeta {
     return m;
   }
   
+  public final Document buildLuceneDoc(){
+    if (this.uid == null || this.uid.length() < 1)
+      return null;
+    if (this.tags == null || this.tags.size() < 1){
+      LOG.warn(String.format("Missing tag meta for TSUID [%s]", uid));
+      return null;
+    }
+    if (this.metric == null){
+      LOG.warn(String.format("Missing metric meta for TSUID [%s]", uid));
+      return null;
+    }
+    
+    StringBuilder flatten = new StringBuilder();
+
+    // build the document
+    Document doc = new Document();
+    doc.add(new Field("tsuid", this.uid, Field.Store.YES, Field.Index.NOT_ANALYZED));
+    doc.add(new Field("metric", this.metric.getName(), Field.Store.YES, Field.Index.NOT_ANALYZED));
+    doc.add(new Field("metric_uid", this.uid.substring(0, 6), Field.Store.NO, Field.Index.NOT_ANALYZED));
+    doc.add(new NumericField("retention").setIntValue(this.retention));
+    doc.add(new NumericField("max").setDoubleValue(this.max));
+    doc.add(new NumericField("min").setDoubleValue(this.min));
+    doc.add(new NumericField("interval").setDoubleValue(this.interval));
+    doc.add(new NumericField("created").setLongValue(this.first_received));
+    doc.add(new NumericField("last_received").setLongValue(this.last_received));
+    doc.add(new Field("notes", this.notes, Field.Store.NO, Field.Index.ANALYZED));
+    flatten.append(this.notes + " ");
+    doc.add(new Field("units", this.units, Field.Store.NO, Field.Index.ANALYZED));
+    flatten.append(this.units + " ");
+    if (this.custom != null){
+      for (Map.Entry<String, String> entry : this.custom.entrySet()){
+        doc.add(new Field(entry.getKey(), entry.getValue(), Field.Store.NO, Field.Index.ANALYZED));
+        flatten.append(entry.getKey() + " ");
+        flatten.append(entry.getValue()+ " ");
+      }
+    }
+    
+    // add the metric metadata
+    this.metric.appendFields(doc, flatten);
+    
+    String tag_pairs = "";
+    String uid_pairs = "";
+    for (GeneralMeta tag : this.tags){
+      tag.appendFields(doc, flatten);
+      if (tag.getType() == Meta_Type.TAGK){
+        tag_pairs = tag.getName();
+        uid_pairs = tag.getUID();
+        doc.add(new Field("tagk_uid", tag.getUID(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+      }else{
+        tag_pairs += " " + tag.getName();
+        doc.add(new Field("tags", tag_pairs, Field.Store.YES, Field.Index.ANALYZED));
+        uid_pairs += tag.getUID();
+        doc.add(new Field("tag_pairs", uid_pairs, Field.Store.NO, Field.Index.NOT_ANALYZED));
+        doc.add(new Field("tagv_uid", tag.getUID(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+      }
+    }
+    
+    // flatten all text 
+    doc.add(new Field("content", flatten.toString(), Field.Store.NO, Field.Index.ANALYZED));
+    
+    return doc;
+  }
+  
   // **** GETTERS AND SETTERS ****
   public String getUID(){
     return this.uid;
@@ -116,7 +187,7 @@ final public class TimeSeriesMeta {
     return this.min;
   }
   
-  public int getInterval(){
+  public double getInterval(){
     return this.interval;
   }
 

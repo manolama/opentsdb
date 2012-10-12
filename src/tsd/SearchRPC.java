@@ -13,6 +13,7 @@
 package net.opentsdb.tsd;
 
 import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -29,10 +30,10 @@ import org.slf4j.LoggerFactory;
 
 import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.JSON;
-import net.opentsdb.core.SearchQuery.SearchOperator;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.core.SearchQuery;
 import net.opentsdb.meta.TimeSeriesMeta;
+import net.opentsdb.search.SearchQuery;
+import net.opentsdb.search.SearchQuery.SearchOperator;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueIdMap;
@@ -49,12 +50,6 @@ public class SearchRPC implements HttpRpc {
     
   @SuppressWarnings("unchecked")
   public void execute(final TSDB tsdb, final HttpQuery query) {
-    // don't bother if we don't have any tsuids to work with
-    if (tsdb.ts_uids.stringSize() < 1){
-      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Timeseries UID list is empty");
-      return;
-    }
-    
     // parse the search query
     SearchQuery search_query = new SearchQuery();
     if (query.getMethod() == HttpMethod.POST){
@@ -81,185 +76,20 @@ public class SearchRPC implements HttpRpc {
     
     JSON codec = new JSON(search_query);
     LOG.trace(codec.getJsonString());
-    
-    Map<String, Object> results = null;
-    
-    // try retrieving/parsing the cache
-    CacheEntry cached = query.getCache(search_query.hashCode());
-    if (cached != null){
-      final TypeReference<Map<String, Object>> respTypeRef = 
-        new TypeReference<Map<String, Object>>() {}; 
-      codec = new JSON(results);
-      if (!codec.parseObject(
-          (cached.getDataSize() > 0 ? cached.getData() : cached.getFileData()), respTypeRef))
-        cached = null;
-      else
-        results = (Map<String, Object>)codec.getObject();
+ 
+    ArrayList<Map<String, Object>> results = tsdb.meta_searcher.searchShortMeta(search_query);
+    if (results == null){
+      query.sendError(HttpResponseStatus.BAD_REQUEST, search_query.getError());
+      return;
     }
     
-    if (cached == null){
-      // results will be stored by UID and object to avoid duplication
-      Set<String> tag_pairs = new HashSet<String>();
-      Set<String> metrics = new HashSet<String>();
-  
-      // only search the metrics and tags we need to so we save some CPU time
-      if (search_query.searchingGeneralMeta() || 
-          search_query.getField().compareTo("metrics") == 0)
-        tsdb.metrics.search(search_query, metrics);
-      if (search_query.searchingGeneralMeta() || 
-          search_query.getField().compareTo("tagk") == 0)
-        tsdb.tag_names.search(search_query, tag_pairs);
-      if (search_query.searchingGeneralMeta() || 
-          search_query.getField().compareTo("tagv") == 0)
-        tsdb.tag_values.search(search_query, tag_pairs);
-      
-      // with the list of tagpairs, we can get a list of matching tsuids from the master
-      Set<String> tsuids = null;/*tsdb.ts_uids.getTSUIDs(tag_pairs, tsdb.ts_uids.get(), (short)3);
-      LOG.trace(String.format("Found [%d] tsuids with [%d] tag pairs", 
-          tsuids.size(), tag_pairs.size()));
-      
-      // match metrics against the timeseries list and add to the tsuids set
-      if (metrics.size() > 0){
-        HashSet<String> uids = tsdb.ts_uids.get();
-        for (String tsuid : uids){
-          for (String metric : metrics){
-            if (tsuid.substring(0, 6).compareTo(metric) == 0)
-              tsuids.add(tsuid);
-          }
-        }
-      }
-      */
-  
-      // store a quick flag for efficiency
-      boolean searching_meta = search_query.searchingAnyMeta();
-      
-      // if we're searching meta, we need to process timeseries meta as well
-      if (searching_meta)
-        tsdb.searchTSMeta(search_query, tsuids);
-  
-      // loop through the tsuids, load meta if applicable, load short_meta, and then filter
-      // and store the results in the results hash
-      results = new HashMap<String, Object>();
-      for (String tsuid : tsuids){
-        TimeSeriesMeta ts_meta = null;
-        Map<String, Object> short_meta = null;
-        try{
-          // load the meta if we're returning or searching
-          if (search_query.getReturnMeta() || searching_meta)
-            ts_meta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
-          // always load the short meta since we'll likely return this only and it has tags
-          short_meta = tsdb.getTSUIDShortMeta(tsuid);
-          
-        } catch (NoSuchUniqueId nsui){
-          LOG.trace(nsui.getMessage());
-          continue;
-        }
-        
-        // FILTER - TAG
-        if (search_query.getTagsCompiled() != null){
-          LOG.trace("Filtering tags...");
-          Map<String, String> sm_tags = (Map<String, String>)short_meta.get("tags");
-          int matched = 0;
-          for (Map.Entry<String, Pattern> entry : search_query.getTagsCompiled().entrySet()){
-            for (Map.Entry<String, String> tag : sm_tags.entrySet()){
-              if (tag.getKey().toLowerCase().compareTo(entry.getKey().toLowerCase()) == 0
-                  && entry.getValue().matcher(tag.getValue()).find()){
-                LOG.trace(String.format("Matched tag [%s] on filter [%s] with value [%s]",
-                    tag.getKey(), entry.getValue().toString(), tag.getValue()));
-                matched++;
-              }
-            }
-          }
-          if (matched != search_query.getTagsCompiled().size()){
-            LOG.trace(String.format("UID [%s] did not match all of the tag filters", tsuid));
-            continue;
-          }
-        }
-        
-        // FILTER - Numerics
-        if (search_query.getNumerics() != null && ts_meta != null){
-          int matched = 0;
-          for (Map.Entry<String, SimpleEntry<SearchOperator, Double>> entry : 
-            search_query.getNumerics().entrySet()){
-            Double meta_value;
-            if (entry.getKey().compareTo("retention") == 0)
-              meta_value = (double) ts_meta.getRetention();
-            else if (entry.getKey().compareTo("max") == 0)
-              meta_value = (double) ts_meta.getMax();
-            else if (entry.getKey().compareTo("min") == 0)
-              meta_value = (double) ts_meta.getMin();
-            else if (entry.getKey().compareTo("interval") == 0)
-              meta_value = (double) ts_meta.getInterval();
-            else if (entry.getKey().compareTo("created") == 0)
-              meta_value = (double) ts_meta.getFirstReceived();
-            else if (entry.getKey().compareTo("last_received") == 0)
-              meta_value = (double) ts_meta.getLastReceived();
-            else{
-              LOG.warn(String.format("Invalid field type [%s]", entry.getKey()));
-              continue;
-            }
-            
-            // get comparator and value
-            SearchOperator operator = entry.getValue().getKey();
-            Double comparisson = entry.getValue().getValue();
-            if (operator == null || comparisson == null){
-              LOG.warn("Found a null operator or comparisson value");
-              continue;
-            }
-            
-            // compare
-            if (search_query.compare(operator, meta_value, comparisson))
-              matched++;
-          }
-          if (matched != search_query.getNumerics().size()){
-            //LOG.trace(String.format("UID [%s] did not match all of the numeric filters", tsuid));
-            continue;
-          }
-        }
-  
-        // Put the result!
-        if (search_query.getReturnMeta())
-          results.put(tsuid, ts_meta);
-        else
-          results.put(tsuid, short_meta);
-      }
-      
-      // cache me
-      codec = new JSON(results);
-      CacheEntry ce = new CacheEntry(search_query.hashCode(), codec.getJsonBytes());
-      query.putCache(ce);
-    }
-
     // build a response map and send away!
     Map<String, Object> response = new HashMap<String, Object>();
     response.put("limit", search_query.getLimit());
     response.put("page", search_query.getPage());
-    response.put("total_uids", results.size());
-    response.put("total_pages", results.size() > 0 ? 
-        ((results.size() / search_query.getLimit()) + 1) : 0);
-    
-    // limit and page calculations    
-    if (search_query.getLimit() < 1 || results.size() <= search_query.getLimit()){
-      response.put("results", results.values());
-    }else{
-      LOG.trace(String.format("Limiting to [%d] uids on page [%d]", search_query.getLimit(), search_query.getPage()));
-      SortedMap<String, Object> limited_results = new TreeMap<String, Object>();
-      long start = (search_query.getPage() > 0 ? search_query.getPage() * search_query.getLimit() : 0);
-      long end = (search_query.getPage() + 1) * search_query.getLimit();
-      long uids = 0;
-      for (Map.Entry<String, Object> entry : results.entrySet()){
-        if (uids >= end){
-          LOG.trace(String.format("Hit the limit [%d] with [%d] uids", 
-              end, uids));
-          break;
-        }
-        if (uids >= start && uids <= end){
-          limited_results.put(entry.getKey(), entry.getValue());
-        }
-        uids++;
-      }
-      response.put("results", limited_results);
-    }   
+    response.put("total_uids", search_query.getTotal_hits());
+    response.put("total_pages", search_query.getPages());
+    response.put("results", results);
     codec = new JSON(response);
     query.sendReply(codec.getJsonBytes());
     return;
@@ -291,7 +121,7 @@ public class SearchRPC implements HttpRpc {
     sq.setReturnMeta(query.parseBoolean(query.getQueryStringParam("return_meta")));
     if (query.hasQueryStringParam("limit")){
       try{
-        sq.setLimit(Long.parseLong(query.getQueryStringParam("limit")));
+        sq.setLimit(Integer.parseInt(query.getQueryStringParam("limit")));
       } catch (NumberFormatException nfe){
         query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the limit value");
         return null;
@@ -299,13 +129,12 @@ public class SearchRPC implements HttpRpc {
     }
     if (query.hasQueryStringParam("page")){
       try{
-        sq.setPage(Long.parseLong(query.getQueryStringParam("page")));
+        sq.setPage(Integer.parseInt(query.getQueryStringParam("page")));
       } catch (NumberFormatException nfe){
         query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the page value");
         return null;
       }
     }
-    
     return sq;
   }
  

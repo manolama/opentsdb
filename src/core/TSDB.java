@@ -42,6 +42,9 @@ import net.opentsdb.uid.UniqueIdMap;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaData;
 import net.opentsdb.meta.TimeSeriesMeta;
+import net.opentsdb.search.SearchIndexer;
+import net.opentsdb.search.SearchQuery;
+import net.opentsdb.search.Searcher;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.storage.TsdbScanner;
@@ -110,6 +113,9 @@ public final class TSDB {
    */
   private final CompactionQueue compactionq;
   
+  public final SearchIndexer meta_search_writer;
+  public final Searcher meta_searcher;
+  
   /**
    * DEPRECATED Constructor
    * Please use the constructor with the Config class instead
@@ -138,6 +144,8 @@ public final class TSDB {
     compactionq = new CompactionQueue(this);
     timeseries_meta = new MetaData(uid_storage, uidtable, true, "ts");
     ts_uids = new TimeseriesUID(this.uid_storage);
+    meta_search_writer = new SearchIndexer("C:\\programming\\opentsdb\\search\\tsmeta");
+    meta_searcher = new Searcher("C:\\programming\\opentsdb\\search\\tsmeta");
   }
   
   /**
@@ -164,6 +172,8 @@ public final class TSDB {
     compactionq = new CompactionQueue(this);
     timeseries_meta = new MetaData(uid_storage, uidtable, true, "ts");
     ts_uids = new TimeseriesUID(this.uid_storage);
+    meta_search_writer = new SearchIndexer("C:\\programming\\opentsdb\\search\\tsmeta");
+    meta_searcher = new Searcher("C:\\programming\\opentsdb\\search\\tsmeta");
   }
 
   /**
@@ -172,10 +182,10 @@ public final class TSDB {
    * utilities.
    */
   public void startManagementThreads(){
-    uid_manager = new UIDManager(config.tsdUIDTable());
+    uid_manager = new UIDManager();
     uid_manager.start();
-    tsuid_manager = new TSUIDManager(config.tsdUIDTable());
-    tsuid_manager.start();
+//    tsuid_manager = new TSUIDManager();
+//    tsuid_manager.start();
   }
   
   /**
@@ -272,6 +282,7 @@ public final class TSDB {
     collectUidStats(tag_values, collector);
     collector.record("uid.cache.size.tsuid.hashes", this.ts_uids.intSize());
     collector.record("uid.cache.size.tsuid.strings", this.ts_uids.stringSize());
+    collector.record("uid.cache.size.tsuid.queue", this.ts_uids.queueSize());
     collector.record("uid.cache.size.tsuid.meta", this.timeseries_meta.size());
     IncomingDataPoints.collectStats(collector);
     {
@@ -827,58 +838,32 @@ public final class TSDB {
    *
    */
   private final class UIDManager extends Thread {
-
-    private final TsdbStore local_store = uid_storage;
-    private long last_ts_uid_load = 0;
-    
-    /**
-     * Constructor requires the UID table name to overload the table stored
-     * in the storage client
-     * @param uid_table UID table name
-     */
-    public UIDManager(String uid_table){
-      local_store.setTable(uid_table);
-    }    
-    
     /**
      * Runs the thread that handles the UID tasks
      */
     public void run(){
-      int last_tsuid_size = 0;
-
       while(true){
-        
-        // update the TS UIDs
-        if (ts_uids.stringSize() != last_tsuid_size || 
-            ((System.currentTimeMillis() / 1000) - last_ts_uid_load) >= 15){
-          LOG.trace("Triggering TS UID sync");
-          ts_uids.flush();
-          metrics.flushMaps();
-          metrics.flushMeta();
-          tag_names.flushMaps();
-          tag_names.flushMeta();
-          tag_values.flushMaps();
-          tag_values.flushMeta();
-          last_tsuid_size = ts_uids.stringSize();
-          last_ts_uid_load = System.currentTimeMillis() / 1000;
-        }
-        
         try {
           Thread.sleep(60000);
         } catch (InterruptedException e) {
           break;
         }
+        LOG.debug("Flushing all TS/UID maps and meta...");
+        // update the UIDs
+        metrics.flushMaps();
+        metrics.flushMeta();
+        tag_names.flushMaps();
+        tag_names.flushMeta();
+        tag_values.flushMaps();
+        tag_values.flushMeta();
+        ts_uids.flush();
+        ts_uids.processMapsAndMeta(metrics, tag_names, tag_values, timeseries_meta, true, meta_search_writer);
+        LOG.debug("Flushed all TS/UID maps and meta");
       }
     }
   }
   
   private final class TSUIDManager extends Thread {
-    private final TsdbStore local_store = uid_storage;
-    
-    public TSUIDManager(String uid_table){
-      local_store.setTable(uid_table);
-    } 
-    
     public void run(){
       while(true){
         try {
@@ -888,25 +873,11 @@ public final class TSDB {
           e.printStackTrace();
         }
         
-        ts_uids.processMaps(metrics, tag_names, tag_values, timeseries_meta, true);
+        LOG.info("Processing TSUID maps and meta");
+        ts_uids.flush();
+        ts_uids.processMapsAndMeta(metrics, tag_names, tag_values, timeseries_meta, true, meta_search_writer);
+        LOG.info("Processed TSUID maps and meta");
       }
-    }
-  }
-  
-  @SuppressWarnings("unused")
-  private final class TSUID {
-    public String uid;
-    public byte[] row;
-    public long ts;
-    
-    TSUID (final byte[] row, final String uid, final long ts){
-      this.uid = uid;
-      this.row = row;
-      this.ts = ts;
-    }
-    
-    public int hashCode(){
-      return uid.hashCode();
     }
   }
 }

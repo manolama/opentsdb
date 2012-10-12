@@ -58,7 +58,6 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
    * @param query The query from Netty
    */
   public void execute(final TSDB tsdb, final HttpQuery query) {
-    LOG.trace(String.format("HTTP Thread ID [%d]", Thread.currentThread().getId()));
     String endpoint = query.getEndpoint();
     final TSDFormatter formatter;
     if (endpoint != null){

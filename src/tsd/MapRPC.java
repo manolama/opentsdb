@@ -74,22 +74,22 @@ public class MapRPC implements HttpRpc {
     
     // determine what the user wants from the map and give it to them
     Set<String> uids = null;
-//    if (map_type.toLowerCase().compareTo("metric") == 0)
-//      uids = map.getMetrics(tsdb.ts_uids.get(), (short) 3);
-//    else if (map_type.toLowerCase().compareTo("tagk") == 0)
-//      uids = map.getTags("tagk", (short) 3);
-//    else if (map_type.toLowerCase().compareTo("tagv") == 0)
-//      uids = map.getTags("tagv", (short) 3);
-//    else if (map_type.toLowerCase().compareTo("tags") == 0)
-//      uids = map.getTags();
+    if (map_type.toLowerCase().compareTo("metric") == 0){
+      //uids = map.getMetrics(tsdb.ts_uids.get(), (short) 3);
+    }else if (map_type.toLowerCase().compareTo("tagk") == 0)
+      uids = map.getTags("tagk", (short) 3);
+    else if (map_type.toLowerCase().compareTo("tagv") == 0)
+      uids = map.getTags("tagv", (short) 3);
+    else if (map_type.toLowerCase().compareTo("tags") == 0)
+      uids = map.getTags();
 //    else if (map_type.toLowerCase().compareTo("timeseries") == 0)
 //      uids = map.getTSUIDs(tsdb.ts_uids.get(), (short) 3);
-//
-//    if (uids == null) {
-//      query.sendError(HttpResponseStatus.BAD_REQUEST,
-//          "Unable to find map matching requested type");
-//      return;
-//    }
+
+    if (uids == null) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST,
+          "Unable to find map matching requested type");
+      return;
+    }
 
     // serialize
     JSON codec = new JSON(uids);

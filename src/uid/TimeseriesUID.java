@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import net.opentsdb.core.JSON;
@@ -16,10 +17,12 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaData;
 import net.opentsdb.meta.TimeSeriesMeta;
+import net.opentsdb.search.SearchIndexer;
 import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
 
+import org.apache.lucene.document.Document;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.slf4j.Logger;
@@ -39,10 +42,10 @@ public class TimeseriesUID {
   private final Lock read_lock  = locker.readLock();
   private final Lock write_lock = locker.writeLock();
   
-  
   private final TsdbStore uid_storage;
   
   private final Set<String> tsuid_queue;
+  private final Lock queue_lock = new ReentrantLock();
   
   public TimeseriesUID(final TsdbStore store){
     ts_uids = new HashMap<String, HashSet<String>>();
@@ -61,8 +64,8 @@ public class TimeseriesUID {
   }
   
   public final void add(final String uid){
-    this.write_lock.lock();
     try{
+      this.write_lock.lock();
       final String metric = getMetric(uid);
       //LOG.debug(String.format("Processing tsuid for metric [%s]", metric));
       if (!this.ts_uids.containsKey(metric)){
@@ -87,6 +90,15 @@ public class TimeseriesUID {
 //    }
   }
   
+  public final int queueSize(){
+//  this.read_lock.lock();
+//  try{
+    return this.tsuid_queue.size();
+//  }finally{
+//    this.read_lock.unlock();
+//  }
+}
+  
   public final int intSize(){
     this.read_lock.lock();
     try{
@@ -100,28 +112,53 @@ public class TimeseriesUID {
    * Writes any changes in the tsuids to storage
    */
   public final boolean flush(){
-//    this.write_lock.lock();
-//    try{
+    if (this.ts_uids.size() < 1){
+      LOG.trace("No ts_uid maps to flush");
+      return true;
+    }
+
+    Map<String, HashSet<String>> queue = new HashMap<String, HashSet<String>>();
+    
+    // we want to lock the TSUID maps as short as possible to avoid impacting write performance
+    // so we'll remove the reference for each map from the main ts_uids map, move it to the 
+    // local queue map, then flush to storage after releaseing the lock on the main map.
+    try{
+      this.write_lock.lock();
       Iterator<Entry<String, HashSet<String>>> it = this.ts_uids.entrySet().iterator();
       while (it.hasNext()) {
         Map.Entry<String, HashSet<String>> uids = (Map.Entry<String, HashSet<String>>)it.next();
-        this.flushSet(uids.getKey());
+        queue.put(uids.getKey(), uids.getValue());
         it.remove();
       }
-//    }finally{
-//      this.write_lock.unlock();
-//    }
-    LOG.debug("Completed flush of TSUIDs");  
+    } finally{
+      this.write_lock.unlock();
+    }
+    
+    // now run through our hash
+    for (Map.Entry<String, HashSet<String>> uids : queue.entrySet()){
+      this.flushSet(uids.getKey(), uids.getValue());
+    }
+    
+    LOG.info("Completed flush of TSUIDs");  
     return true;
   }
   
-  public final boolean processMaps(final UniqueId metrics, final UniqueId tag_names, 
-      final UniqueId tag_values, final MetaData timeseries_meta, final boolean update_meta){
+  public final boolean processMapsAndMeta(final UniqueId metrics, final UniqueId tag_names, 
+      final UniqueId tag_values, final MetaData timeseries_meta, final boolean update_meta, 
+      final SearchIndexer idx){
     try{
+      if (this.tsuid_queue.size() < 1){
+        LOG.trace("No new TSUIDs to process");
+        return true;
+      }
       
+      ArrayList<Document> index_queue = new ArrayList<Document>();
+      
+      long count = 0;
       Iterator<String> queue_iterator = this.tsuid_queue.iterator();
       while (queue_iterator.hasNext()){
         final String tsuid = queue_iterator.next();
+        final ArrayList<GeneralMeta> tag_metas = new ArrayList<GeneralMeta>();
         
         // update maps
         String metric = tsuid.substring(0, 6);
@@ -152,6 +189,8 @@ public class TimeseriesUID {
               meta.setCreated(timestamp);
               tag_names.putMeta(meta, false);
             }
+            meta = tag_names.getGeneralMeta(tagk);
+            tag_metas.add(meta);
           }
         }
         
@@ -172,6 +211,8 @@ public class TimeseriesUID {
               meta.setCreated(timestamp);
               tag_values.putMeta(meta, false);
             }
+            meta = tag_values.getGeneralMeta(tagv);
+            tag_metas.add(meta);
           }
         }
         
@@ -187,6 +228,7 @@ public class TimeseriesUID {
             meta.setCreated(timestamp);
             metrics.putMeta(meta, false);
           }
+          meta = metrics.getGeneralMeta(UniqueId.StringtoID(metric));
           
           // TS meta data
           TimeSeriesMeta tsmd = timeseries_meta.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
@@ -198,11 +240,29 @@ public class TimeseriesUID {
             tsmd.setFirstReceived(timestamp);
             timeseries_meta.putMeta(tsmd, false);
           }
+          
+          tsmd = timeseries_meta.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
+          if (tsmd != null){
+            tsmd.setMetric(meta);
+            tsmd.setTags(tag_metas);
+            index_queue.add(tsmd.buildLuceneDoc());
+          }
         }
         
         // delete the entry now that we're done
         queue_iterator.remove();
+        count++;
       }
+      
+      if (index_queue.size() > 0){
+        if (idx.index(index_queue, "tsuid")){
+          LOG.debug(String.format("Successfully added [%d] TSUIDs to search index", index_queue.size()));
+        }else{
+          LOG.warn(String.format("Error adding [%d] TSUID to search index", index_queue.size()));
+        }
+      }
+      
+      LOG.info(String.format("Processed [%d] new TSUIDs", count));
       return true;
     }catch (NullPointerException npe){
       npe.printStackTrace();
@@ -302,7 +362,6 @@ public class TimeseriesUID {
    return tags;
   }
   
-  
   /**
   * Extracts a list of tagk names from the tagk/tagv pair list of byte arrays
   * See getTagPairsFromKey
@@ -323,7 +382,6 @@ public class TimeseriesUID {
   
    return tagks;
   }
-  
   
   /**
   * Extracts a list of tagv names from the tagk/tagv pair list of byte arrays
@@ -384,14 +442,8 @@ public class TimeseriesUID {
     
     return uid.substring(0, 6);
   }
-  
-  
-  public final boolean flushSet(final String metric_uid){
-    if (!this.ts_uids.containsKey(metric_uid)){
-      LOG.error(String.format("Metric uid [%s] not found in hash table", metric_uid));
-      return false;
-    }
-    HashSet<String> metric_uids = this.ts_uids.get(metric_uid);
+    
+  public final boolean flushSet(final String metric_uid, final HashSet<String> metric_uids){
     if (metric_uids.size() < 1){
       LOG.warn(String.format("Uids for metric [%s] were empty", metric_uid));
       return false;

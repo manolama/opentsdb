@@ -10,7 +10,7 @@
 // General Public License for more details.  You should have received a copy
 // of the GNU Lesser General Public License along with this program.  If not,
 // see <http://www.gnu.org/licenses/>.
-package net.opentsdb.core;
+package net.opentsdb.search;
 
 import java.util.AbstractMap.SimpleEntry;
 import java.util.HashMap;
@@ -45,13 +45,15 @@ public class SearchQuery {
   private String last_received;
   private String field = "all";
   private String query;
-  private long limit = 25;
-  private long page = 0;
+  private int limit = 25;
+  private int page = 0;
   private Boolean return_meta = false;
   private String error;
   private Pattern query_regex = null;
   private Map<String, Pattern> tags_compiled;
   private Map<String, Pattern> custom_compiled;
+  private int total_hits = 0;
+  private int pages = 0;
   
   // field -> operator -> value
   // if no operator was passed in, then we save it as eq
@@ -461,19 +463,19 @@ public class SearchQuery {
     return this.query_regex;
   }
 
-  public long getLimit() {
+  public int getLimit() {
     return limit;
   }
 
-  public void setLimit(long limit) {
+  public void setLimit(int limit) {
     this.limit = limit;
   }
 
-  public long getPage() {
+  public int getPage() {
     return page;
   }
 
-  public void setPage(long page) {
+  public void setPage(int page) {
     this.page = page;
   }
 
@@ -487,6 +489,24 @@ public class SearchQuery {
 
   public String getError() {
     return error;
+  }
+  
+  public void setError(String err){
+    this.error = err;
+  }
+  
+  public int getTotal_hits() {
+    return total_hits;
+  }
+
+  public void setTotal_hits(int total_hits) {
+    this.total_hits = total_hits;
+    if (total_hits > 0)
+      this.pages = (total_hits / this.limit) + 1;
+  }
+
+  public int getPages(){
+    return pages;
   }
 
   public Map<String, SimpleEntry<SearchOperator, Double>> getNumerics() {

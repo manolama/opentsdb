@@ -5,6 +5,9 @@ import java.util.Map;
 import net.opentsdb.core.JSON;
 import net.opentsdb.uid.UniqueId;
 
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.NumericField;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
 import org.slf4j.Logger;
@@ -78,6 +81,29 @@ public class GeneralMeta {
     if (this.c_custom)
       m.custom = this.custom;
     return m;
+  }
+  
+  public final boolean appendFields(Document doc, StringBuilder flatten){
+    doc.add(new Field("uid", this.uid, Field.Store.NO, Field.Index.NOT_ANALYZED));
+    doc.add(new Field("type", this.type.toString(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+    doc.add(new Field("name", this.name, Field.Store.NO, Field.Index.NOT_ANALYZED));
+    flatten.append(this.name + " ");
+    doc.add(new Field("display_name", this.display_name, Field.Store.NO, Field.Index.ANALYZED));
+    flatten.append(this.display_name + " ");
+    doc.add(new Field("description", this.description, Field.Store.NO, Field.Index.ANALYZED));
+    flatten.append(this.description + " ");
+    doc.add(new Field("notes", this.notes, Field.Store.NO, Field.Index.ANALYZED));
+    flatten.append(this.notes + " ");
+    doc.add(new NumericField("created").setLongValue(this.created));    
+    
+    if (this.custom != null){
+      for (Map.Entry<String, String> entry : this.custom.entrySet()){
+        doc.add(new Field(entry.getKey(), entry.getValue(), Field.Store.NO, Field.Index.ANALYZED));
+        flatten.append(entry.getKey() + " ");
+        flatten.append(entry.getValue()+ " ");
+      }
+    }
+    return true;
   }
   
   // **** GETTERS AND SETTERS ****

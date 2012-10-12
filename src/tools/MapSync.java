@@ -23,6 +23,7 @@ import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
 import net.opentsdb.storage.TsdbStoreHBase;
+import net.opentsdb.uid.TimeseriesUID;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueIdMap;
 
@@ -87,29 +88,34 @@ final class MapSync {
 
     // setup hbase client
     final HBaseClient client = CliOptions.clientFromOptions(config);
-    final TsdbStore storage = new TsdbStoreHBase(TsdbStore.toBytes(config.tsdTable()), client);
-    final TSDB tsdb = new TSDB(storage, storage, config);
+    final TsdbStore uid_storage = new TsdbStoreHBase(config.tsdUIDTable().getBytes(), client);
+    final TsdbStore data_storage = new TsdbStoreHBase(config.tsdTable().getBytes(), client);
+    final TSDB tsdb = new TSDB(uid_storage, data_storage, config);
     argp = null;
     try {
       
       // TEMP ---------------     
-//      cellKiller(storage, "id", "ts_uids");
-//      cellKiller(storage, "id", "metrics_map");
-//      cellKiller(storage, "id", "tagk_map");
-//      cellKiller(storage, "id", "tagv_map");
-      cellKiller(storage, "name", "name_meta");
+      cellKiller(uid_storage, "id", "ts_uids");
+      cellKiller(uid_storage, "id", "metrics_map");
+      cellKiller(uid_storage, "id", "tagk_map");
+      cellKiller(uid_storage, "id", "tagv_map");
+      cellKiller(uid_storage, "name", "name_meta");
+      cellKiller(uid_storage, "name", "metrics_meta");
+      cellKiller(uid_storage, "name", "tagk_meta");
+      cellKiller(uid_storage, "name", "tagv_meta");
+      cellKiller(uid_storage, "name", "ts_meta");
       System.exit(0);
       
       TsdbScanner scanner = new TsdbScanner();
       scanner.setFamily(TsdbStore.toBytes("t"));
-      scanner = storage.openScanner(scanner);
+      scanner = data_storage.openScanner(scanner);
       long rowcount = 0;
       final short metric_width = Internal.metricWidth(tsdb);
       
       ArrayList<ArrayList<KeyValue>> rows;
       String last_key = "";
       long last_time = 0;
-      while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
+      while ((rows = data_storage.nextRows(scanner).joinUninterruptibly()) != null) {
         //LOG.debug("Processing next set of rows");
         for (final ArrayList<KeyValue> row : rows) {
           rowcount++;
@@ -122,7 +128,7 @@ final class MapSync {
           final long base_time = Bytes.getUnsignedInt(temp, metric_width);
           
           int x=0;
-          String ts_uid = UniqueId.IDtoString(UniqueId.getTSUIDFromKey(temp, (short)3, (short)4));
+          String ts_uid = UniqueId.IDtoString(TimeseriesUID.getTSUIDFromKey(temp, (short)3, (short)4));
           
           // store in the ts_uids if it's different
           if (last_key == "" || !last_key.equals(ts_uid)){
@@ -130,7 +136,7 @@ final class MapSync {
             tsdb.ts_uids.add(ts_uid);
             
             // update maps and metadata
-            tsdb.processNewTSUID(temp, false);
+            //tsdb.processNewTSUID(ts_uid, false);
             
             // update metadata
             
@@ -162,7 +168,10 @@ final class MapSync {
   private static void cellKiller(final TsdbStore storage, final String cf, final String qualifier){
     storage.setTable("tsdb-uid");
     TsdbScanner scanner = new TsdbScanner();
+//    scanner.setStartRow(new byte[] {0, 0, 0});
+//    scanner.setEndRow(new byte[] {127, 127, 127});
     scanner.setFamily(TsdbStore.toBytes(cf));
+    scanner.setQualifier(TsdbStore.toBytes(qualifier));
     scanner = storage.openScanner(scanner);
     
     long rowcount=0;

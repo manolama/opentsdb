@@ -370,9 +370,12 @@ final class UidManager {
       ArrayList<ArrayList<KeyValue>> rows;
       while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
         for (final ArrayList<KeyValue> row : rows) {
-          for (final KeyValue kv : row) {
-            kvcount++;
+          for (final KeyValue kv : row) {            
             final String kind = fromBytes(kv.qualifier());
+            if (kind.compareTo("metrics") != 0 && kind.compareTo("tagk") != 0 &&
+                kind.compareTo("tagv") != 0)
+              continue;
+            kvcount++;
             Uids uids = name2uids.get(kind);
             if (uids == null) {
               uids = new Uids();
@@ -394,7 +397,8 @@ final class UidManager {
               if (Bytes.equals(family, ID_FAMILY)) {
                 idwidth = (short) value.length;
                 final String skey = fromBytes(key);
-                final String svalue = Arrays.toString(value);
+                //final String svalue = Arrays.toString(value);
+                final String svalue = UniqueId.IDtoString(value);
                 final String id = uids.name2id.put(skey, svalue);
                 if (id != null) {
                   uids.error(kv, "Duplicate forward " + kind + " mapping: "
@@ -402,7 +406,8 @@ final class UidManager {
                              + " and " + skey + " -> " + svalue);
                 }
               } else if (Bytes.equals(family, NAME_FAMILY)) {
-                final String skey = Arrays.toString(key);
+                final String skey = UniqueId.IDtoString(key);
+                //final String svalue = fromBytes(value);
                 final String svalue = fromBytes(value);
                 idwidth = (short) key.length;
                 final String name = uids.id2name.put(skey, svalue);
