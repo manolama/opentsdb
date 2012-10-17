@@ -25,7 +25,6 @@ import net.opentsdb.storage.TsdbStore;
 import net.opentsdb.storage.TsdbStoreHBase;
 import net.opentsdb.uid.TimeseriesUID;
 import net.opentsdb.uid.UniqueId;
-import net.opentsdb.uid.UniqueIdMap;
 
 import org.hbase.async.Bytes;
 import org.hbase.async.HBaseClient;
@@ -88,8 +87,8 @@ final class MapSync {
 
     // setup hbase client
     final HBaseClient client = CliOptions.clientFromOptions(config);
-    final TsdbStore uid_storage = new TsdbStoreHBase(config.tsdUIDTable().getBytes(), client);
-    final TsdbStore data_storage = new TsdbStoreHBase(config.tsdTable().getBytes(), client);
+    final TsdbStore uid_storage = new TsdbStoreHBase(config, config.tsdUIDTable().getBytes(), client);
+    final TsdbStore data_storage = new TsdbStoreHBase(config, config.tsdTable().getBytes(), client);
     final TSDB tsdb = new TSDB(uid_storage, data_storage, config);
     argp = null;
     try {

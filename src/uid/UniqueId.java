@@ -26,13 +26,17 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
 
 import javax.xml.bind.DatatypeConverter;
 
 import net.opentsdb.core.JSON;
 import net.opentsdb.meta.GeneralMeta;
-import net.opentsdb.meta.MetaData;
+import net.opentsdb.meta.MetaDataCache;
 import net.opentsdb.search.SearchQuery;
 import net.opentsdb.search.SearchQuery.SearchOperator;
 import net.opentsdb.storage.TsdbScanner;
@@ -109,11 +113,11 @@ public final class UniqueId implements UniqueIdInterface {
   private long last_full_meta_load = 0;
 
   /** Metadata associated with this UID */
-  private final MetaData metadata;
+  private final MetaDataCache metadata;
 
-  /** UID map associated with this object */
-  private final ConcurrentHashMap<String, UniqueIdMap> uid_map = new ConcurrentHashMap<String, UniqueIdMap>();
-
+  private final ReentrantLock locker = new ReentrantLock();
+  private long last_uid = 0;
+  
   /**
    * Constructor.
    * @param client The HBase client to use.
@@ -135,7 +139,7 @@ public final class UniqueId implements UniqueIdInterface {
       throw new IllegalArgumentException("Invalid width: " + width);
     }
     this.idWidth = (short) width;
-    this.metadata = new MetaData(client, table, false, kind);
+    this.metadata = new MetaDataCache(client, table, false, kind);
   }
 
   /** Returns a human readable string representation of the object. */
@@ -227,7 +231,7 @@ public final class UniqueId implements UniqueIdInterface {
   }
 
   private void addNameToCache(final byte[] id, final String name) {
-    final String key = fromBytes(id);
+    final String key = fromBytes(id).intern();
     String found = idCache.get(key);
     if (found == null) {
       found = idCache.putIfAbsent(key, name);
@@ -329,31 +333,6 @@ public final class UniqueId implements UniqueIdInterface {
   public Boolean putMeta(final GeneralMeta meta, final boolean flush) {
     return this.metadata.putMeta(meta, flush);
   }
-
-  public Boolean putMap(final String uid, final String value, final String type){
-    if (uid == null || uid.length() < 1){
-      LOG.error("Missing or null UID");
-      return false;
-    }
-    
-    // first, see if the UID exists
-    try{
-      String name = this.getName(StringtoID(uid));
-    } catch (NoSuchUniqueId nid){
-      LOG.error(String.format("Unable to find UID [%s] for type [%s]", 
-          uid, fromBytes(kind)));
-      return false;
-    }
-    
-    // see if a map exists, if not, create a new one
-    UniqueIdMap map = getMap(uid, false);
-    if (map == null){
-      map = new UniqueIdMap(uid);
-    }
-    map.putMap(value, type);
-    uid_map.put(uid, map);
-    return true;
-  }
   
   /**
    * Call this to fix a specific UID forward mapping
@@ -452,64 +431,25 @@ public final class UniqueId implements UniqueIdInterface {
 //      
 //    }
 //  }  
-  
-  /**
-   * Runs through the maps and flushes any to the storage system that have updates
-   */
-  public void flushMaps(){
-    long changed = 0;
-    try{
-      Iterator<Entry<String, UniqueIdMap>> map_it = this.uid_map.entrySet().iterator();
-      while (map_it.hasNext()){
-        Map.Entry<String, UniqueIdMap> entry = map_it.next();
-        UniqueIdMap map = entry.getValue();
-        if (!map.getHasChanged()){
-          map_it.remove();
-          continue;
-        }
-        
-        map.flush(storage, fromBytes(kind));
-        map_it.remove();
-      }
-    }catch (Exception e){
-      e.printStackTrace();
-      return;
-    }
-    LOG.trace(String.format("Updated [%d] out of [%d] %s maps", changed, 
-        uid_map.size(), fromBytes(kind)));
-  }
 
   public void flushMeta(){
     this.metadata.flush();
   }
-  /**
-   * Attempts to return the map for a UID from cache, then storage
-   * @param id The ID of the object to retrieve as a hex encoded uid
-   * @param hit_store Whether or not to bother hitting storage for retrieval
-   * @return A UniqueIdMap if successful, null if it wasn't found
-   */
-  public UniqueIdMap getMap(final String id, final boolean hit_store) {
-    UniqueIdMap map = this.uid_map.get(id);
-    if (map != null)
-      return map;
-    if (hit_store)
-      return getMapFromStorage(id);
-    else
-      return null;
-  }
 
   public byte[] getOrCreateId(String name) throws HBaseException {
+    try {
+      return getId(name);
+    } catch (NoSuchUniqueName e) {
+      LOG.info("Creating an ID for kind='" + kind() + "' name='" + name
+          + '\'');
+    }
+    
     short attempt = MAX_ATTEMPTS_ASSIGN_ID;
     TsdbStorageException hbe = null;
-
+    long id = 0; // The ID.
+    byte row[] = null; // The same ID, as a byte array.
+    
     while (attempt-- > 0) {
-      try {
-        return getId(name);
-      } catch (NoSuchUniqueName e) {
-        LOG.info("Creating an ID for kind='" + kind() + "' name='" + name
-            + '\'');
-      }
-
       // The dance to assign an ID.
       Object lock;
       try {
@@ -533,81 +473,110 @@ public final class UniqueId implements UniqueIdInterface {
         // Verify that the row still doesn't exist (to avoid re-creating it if
         // it got created before we acquired the lock due to a race condition).
         try {
-          final byte[] id = getId(name);
-          LOG.info("Race condition, found ID for kind='" + kind() + "' name='"
+          final byte[] uid = getId(name);
+          LOG.warn("Race condition, found ID for kind='" + kind() + "' name='"
               + name + '\'');
-          return id;
+          return uid;
         } catch (NoSuchUniqueName e) {
           // OK, the row still doesn't exist, let's create it now.
         }
-
-        // Assign an ID.
-        long id; // The ID.
-        byte row[]; // The same ID, as a byte array.
-        try {
-          // We want to send an ICV with our explicit RowLock, but HBase's RPC
-          // interface doesn't expose this interface. Since an ICV would
-          // attempt to lock the row again, and we already locked it, we can't
-          // use ICV here, we have to do it manually while we hold the RowLock.
-          // To be fixed by HBASE-2292.
-          { // HACK HACK HACK
-            {
-              final byte[] current_maxid = storage.getValue(MAXID_ROW,
-                  ID_FAMILY, kind, lock);
-              if (current_maxid != null) {
-                if (current_maxid.length == 8) {
-                  id = Bytes.getLong(current_maxid) + 1;
+        
+        // since external locking can take a while, we need to use an internal lock when
+        // creating the ID
+        try{
+          if (!this.locker.tryLock(250, TimeUnit.MILLISECONDS)){
+            LOG.error("Unable to acquire lock in 250 ms");
+            continue;
+          }
+          // Assign an ID.
+          try {
+            // We want to send an ICV with our explicit RowLock, but HBase's RPC
+            // interface doesn't expose this interface. Since an ICV would
+            // attempt to lock the row again, and we already locked it, we can't
+            // use ICV here, we have to do it manually while we hold the RowLock.
+            // To be fixed by HBASE-2292.
+            { // HACK HACK HACK
+              this.last_uid++;
+              {
+                final byte[] current_maxid = storage.getValue(MAXID_ROW,
+                    ID_FAMILY, kind, lock);
+                if (current_maxid != null) {
+                  if (current_maxid.length == 8) {
+                    id = Bytes.getLong(current_maxid) + 1;
+                  } else {
+                    throw new IllegalStateException("invalid current_maxid="
+                        + Arrays.toString(current_maxid));
+                  }
                 } else {
-                  throw new IllegalStateException("invalid current_maxid="
-                      + Arrays.toString(current_maxid));
+                  id = 1;
                 }
-              } else {
-                id = 1;
+                row = Bytes.fromLong(id);
+                
+                // NOTE: Older versions of HBase may screw up if you are incrementing the 
+                // UID very fast in that it may return a cached or stale value from a different
+                // region. The solution is to use a local counter as a sanity check.
+                if (Bytes.getLong(row) > this.last_uid){
+                  LOG.debug("Storage UID [" + Bytes.getLong(row) + 
+                      "] was greater than local [" + this.last_uid + "]");
+                  this.last_uid = Bytes.getLong(row);
+                }else if (Bytes.getLong(row) < this.last_uid){
+                  LOG.warn("Storage UID [" + Bytes.getLong(row) + 
+                      "] was less than local [" + this.last_uid + "]");
+                  row = Bytes.fromLong(this.last_uid);
+                }
+                
               }
-              row = Bytes.fromLong(id);
+              // final PutRequest update_maxid = new PutRequest(
+              // table, MAXID_ROW, ID_FAMILY, kind, row, lock);
+              // hbasePutWithRetry(update_maxid, MAX_ATTEMPTS_PUT,
+              // INITIAL_EXP_BACKOFF_DELAY);
+              storage.putWithRetry(MAXID_ROW, ID_FAMILY, kind, row, lock);
+            } // end HACK HACK HACK.
+            LOG.info("Got ID=" + id + " for kind='" + kind() + "' name='" + name
+                + "'");
+            // row.length should actually be 8.
+            if (row.length < idWidth) {
+              throw new IllegalStateException("OMG, row.length = " + row.length
+                  + " which is less than " + idWidth + " for id=" + id + " row="
+                  + Arrays.toString(row));
             }
-            // final PutRequest update_maxid = new PutRequest(
-            // table, MAXID_ROW, ID_FAMILY, kind, row, lock);
-            // hbasePutWithRetry(update_maxid, MAX_ATTEMPTS_PUT,
-            // INITIAL_EXP_BACKOFF_DELAY);
-            storage.putWithRetry(MAXID_ROW, ID_FAMILY, kind, row, lock);
-          } // end HACK HACK HACK.
-          LOG.info("Got ID=" + id + " for kind='" + kind() + "' name='" + name
-              + "'");
-          // row.length should actually be 8.
-          if (row.length < idWidth) {
-            throw new IllegalStateException("OMG, row.length = " + row.length
-                + " which is less than " + idWidth + " for id=" + id + " row="
-                + Arrays.toString(row));
-          }
-          // Verify that we're going to drop bytes that are 0.
-          for (int i = 0; i < row.length - idWidth; i++) {
-            if (row[i] != 0) {
-              final String message = "All Unique IDs for " + kind() + " on "
-                  + idWidth + " bytes are already assigned!";
-              LOG.error("OMG " + message);
-              throw new IllegalStateException(message);
+            // Verify that we're going to drop bytes that are 0.
+            for (int i = 0; i < row.length - idWidth; i++) {
+              if (row[i] != 0) {
+                final String message = "All Unique IDs for " + kind() + " on "
+                    + idWidth + " bytes are already assigned!";
+                LOG.error("OMG " + message);
+                throw new IllegalStateException(message);
+              }
             }
+            // Shrink the ID on the requested number of bytes.
+            row = Arrays.copyOfRange(row, row.length - idWidth, row.length);
+          } catch (TsdbStorageException e) {
+            LOG.error(
+                "Failed to assign an ID, ICV on row="
+                    + Arrays.toString(MAXID_ROW) + " column='"
+                    + fromBytes(ID_FAMILY) + ':' + kind() + '\'', e);
+            hbe = e;
+            continue;
+          } catch (IllegalStateException e) {
+            throw e; // To avoid handling this exception in the next `catch'.
+          } catch (Exception e) {
+            LOG.error("WTF?  Unexpected exception type when assigning an ID,"
+                + " ICV on row=" + Arrays.toString(MAXID_ROW) + " column='"
+                + fromBytes(ID_FAMILY) + ':' + kind() + '\'', e);
+            continue;
           }
-          // Shrink the ID on the requested number of bytes.
-          row = Arrays.copyOfRange(row, row.length - idWidth, row.length);
-        } catch (TsdbStorageException e) {
-          LOG.error(
-              "Failed to assign an ID, ICV on row="
-                  + Arrays.toString(MAXID_ROW) + " column='"
-                  + fromBytes(ID_FAMILY) + ':' + kind() + '\'', e);
-          hbe = e;
-          continue;
-        } catch (IllegalStateException e) {
-          throw e; // To avoid handling this exception in the next `catch'.
-        } catch (Exception e) {
-          LOG.error("WTF?  Unexpected exception type when assigning an ID,"
-              + " ICV on row=" + Arrays.toString(MAXID_ROW) + " column='"
-              + fromBytes(ID_FAMILY) + ':' + kind() + '\'', e);
-          continue;
-        }
-        // If we die before the next PutRequest succeeds, we just waste an ID.
+          // If we die before the next PutRequest succeeds, we just waste an ID.
+          addIdToCache(name, row);
+          addNameToCache(row, name);
 
+        } catch (InterruptedException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }finally{
+          this.locker.unlock();
+        }
+        
         // Create the reverse mapping first, so that if we die before creating
         // the forward mapping we don't run the risk of "publishing" a
         // partially assigned ID. The reverse mapping on its own is harmless
@@ -636,19 +605,14 @@ public final class UniqueId implements UniqueIdInterface {
           hbe = e;
           continue;
         }
-
-        addIdToCache(name, row);
-        addNameToCache(row, name);
-
+        
+        // todo - CL This could be slowing us way the hell down
         // if we are a tag name or metrics ID, add a meta entry
-        if (this.kind().compareTo("metrics") == 0
-            || this.kind().compareTo("tagk") == 0) {
-          GeneralMeta meta = new GeneralMeta();
-          meta.setUID(UniqueId.IDtoString(row));
-          meta.setCreated(System.currentTimeMillis() / 1000L);
-          meta.setName(name);
-          this.metadata.putMeta(meta, false);
-        }
+        GeneralMeta meta = new GeneralMeta();
+        meta.setUID(UniqueId.IDtoString(row));
+        meta.setCreated(System.currentTimeMillis() / 1000L);
+        meta.setName(name);
+        this.metadata.putMeta(meta, false);
 
         return row;
       } finally {
@@ -808,50 +772,7 @@ public final class UniqueId implements UniqueIdInterface {
       throw new RuntimeException("Should never be here", e);
     }
   }
-
-  public boolean loadAllMaps() {
- // determine if we need to load yet
-    if ((System.currentTimeMillis() / 1000) < this.last_full_map_load
-        + RELOAD_INTERVAL)
-      return true;
-
-    this.last_full_map_load = System.currentTimeMillis() / 1000;
-
-    UniqueIdMap map = new UniqueIdMap("");
-    JSON codec = new JSON(map);
-    final TsdbScanner scanner = getFullScanner(ScanType.MAP);
-    try {
-      long count=0;
-      ArrayList<ArrayList<KeyValue>> rows;
-      while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
-        for (final ArrayList<KeyValue> row : rows) {
-          if (row.size() != 1) {
-            LOG.error("WTF shouldn't happen!  Scanner " + scanner + " returned"
-                + " a row that doesn't have exactly 1 KeyValue: " + row);
-            if (row.isEmpty()) {
-              continue;
-            }
-          }
-          final byte[] key = row.get(0).key();
-          map = new UniqueIdMap("");
-          if (!codec.parseObject(row.get(0).value())){
-            LOG.error(String.format("Unable to parse map for [%s]", IDtoString(key)));
-            continue;
-          }
-          this.uid_map.put(IDtoString(key), (UniqueIdMap)codec.getObject());
-          count++;
-        }
-      }
-      LOG.trace(String.format("Loaded [%d] maps for [%s]", count, fromBytes(kind)));
-      return true;
-    } catch (HBaseException e) {
-      throw e;
-    } catch (Exception e) {
-      e.printStackTrace();
-      throw new RuntimeException("Should never be here", e);
-    }
-  }
-  
+ 
   /**
    * Retrieves the entire list of entries in the cache as a sorted map for
    * display in the HTTP API
@@ -962,161 +883,6 @@ public final class UniqueId implements UniqueIdInterface {
       throw new RuntimeException(msg, e);
     }
     // Success!
-  }
-
-  /**
-   * Loads all UIDs, Maps (and if applicable, meta) for this type, then scans for matches.
-   * If a match is made on the proper field, it will put the metric UID (if this is a 
-   * metrics cache) or tag/value pair (if tagk or tagv) in the "matches" set. The set will
-   * be used to filter on the tsuids. 
-   * 
-   * NOTE: If the field is set, then the metadata will be loaded
-   * @param query The search query to process 
-   * @param matches Set of UID or UID pairs that had data matching the regex
-   */
-  public void search(final SearchQuery query, Set<String> matches){  
-    // load all metrics so we can scan
-    this.loadAllUIDs();
-    this.loadAllMaps();
-    Boolean load_meta = false;
-    if (query.getField().compareTo(fromBytes(kind)) != 0 || query.getCustom().size() > 0){
-      this.LoadAllMeta();
-      load_meta = true;
-    }
-    GeneralMeta meta = null;
-    
-    // scan!
-    for (String name : this.nameCache.keySet()){
-      Boolean match = false;
-      String uid = IDtoString(this.nameCache.get(name));
-      if (load_meta){
-        meta = this.metadata.getGeneralMeta(this.nameCache.get(name));
-      }
-      
-      // if the regex is null AND we don't have a custom filter, just return the data 
-      // since we don't have to do any processing
-      if (query.getQueryRegex() == null && query.getCustom() == null && query.getNumerics() != null)
-        match = true;      
-      else{ 
-        // otherwise, we need to check all or one field
-        if (query.getQueryRegex() != null){
-          if ((query.getField().compareTo("all") == 0 || query.getField().compareTo(fromBytes(kind)) == 0)
-              && query.getQueryRegex().matcher(name).find()){
-            LOG.trace(String.format("Matched [%s] UID [%s] name [%s]", fromBytes(kind),
-               uid, name));
-            match = true;
-          }
-
-          if ((query.getField().compareTo("all") == 0 || query.getField().compareTo("display_name") == 0)
-              && meta != null && query.getQueryRegex().matcher(meta.getDisplay_name()).find()){
-            LOG.trace(String.format("Matched [%s] UID [%s] display name [%s]", fromBytes(kind),
-               uid, meta.getDisplay_name()));
-            match = true;
-          }
-          
-          if ((query.getField().compareTo("all") == 0 || query.getField().compareTo("description") == 0)
-              && meta != null && query.getQueryRegex().matcher(meta.getDescription()).find()){
-            LOG.trace(String.format("Matched [%s] UID [%s] description [%s]", fromBytes(kind),
-               uid, meta.getDescription()));
-            match = true;
-          }
-          
-          if ((query.getField().compareTo("all") == 0 || query.getField().compareTo("notes") == 0)
-              && meta != null && query.getQueryRegex().matcher(meta.getNotes()).find()){
-            LOG.trace(String.format("Matched [%s] UID [%s] notes [%s]", fromBytes(kind),
-               uid, meta.getNotes()));
-            match = true;
-          }
-          
-          if (query.getField().compareTo("all") == 0 && meta.getCustom() != null){
-            Map<String, String> custom_tags = meta.getCustom();
-            for (Map.Entry<String, String> tag : custom_tags.entrySet()){
-              if (query.getQueryRegex().matcher(tag.getKey()).find()){
-                LOG.trace(String.format("Matched [%s] custom tag [%s] for uid [%s]",
-                    fromBytes(kind), tag.getKey(), uid));
-                match = true;
-                break;
-              }
-              if (query.getQueryRegex().matcher(tag.getValue()).find()){
-                LOG.trace(String.format("Matched [%s] custom tag value [%s] for uid [%s]",
-                    fromBytes(kind), tag.getKey(), uid));
-                match = true;
-                break;
-              }
-            }
-          }
-        }
-
-        // filter on compiled
-        if (query.getCustomCompiled() != null && query.getCustomCompiled().size() > 0 && meta != null){
-          match = false;
-          Map<String, String> custom_tags = meta.getCustom();
-          if (custom_tags != null && custom_tags.size() > 0){
-            int matched = 0;
-            for (Map.Entry<String, Pattern> entry : query.getCustomCompiled().entrySet()){
-              for (Map.Entry<String, String> tag : custom_tags.entrySet()){
-                if (tag.getKey().toLowerCase().compareTo(entry.getKey().toLowerCase()) == 0
-                    && entry.getValue().matcher(tag.getValue()).find()){
-                  LOG.trace(String.format("Matched custom tag [%s] on filter [%s] with value [%s]",
-                      tag.getKey(), entry.getValue().toString(), tag.getValue()));
-                  matched++;
-                }
-              }
-            }
-            if (matched != query.getCustom().size()){
-              LOG.trace(String.format("%s UID [%s] did not match all of the custom tag filters", 
-                  fromBytes(kind), uid));
-            }else
-              match = true;
-          }
-        }
-        
-        // filter on created
-        if (query.getNumerics().size() > 0 && meta != null){
-          final SimpleEntry<SearchOperator, Double> created = query.getNumerics().get("created");
-          if (created != null){
-            // get comparator and value
-            final SearchOperator operator = created.getKey();
-            final Double comparisson = created.getValue();
-            if (operator == null || comparisson == null){
-              LOG.warn("Found a null operator or comparisson value");
-            }else{
-              if (query.compare(operator, (double)meta.getCreated(), comparisson)){
-                match = true;
-                LOG.trace(String.format("%s UID [%s] matched created numeric", 
-                  fromBytes(kind), uid));
-              }else
-                match = false;
-            }
-          }
-        }
-      }
-      
-      // if no match, just move on
-      if (!match)
-        continue;
-
-      // only return the metric OR tag/value pairs
-      if (fromBytes(kind).compareTo("metrics") == 0)
-        matches.add(uid);
-      else{
-        UniqueIdMap map = this.getMap(uid, true);
-        if (map == null)
-          continue;
-        
-        Set<String> pairs = map.getTags();
-        if (pairs == null)
-          continue;
-        for (String pair : pairs){
-          if (fromBytes(kind).compareTo("tagk") == 0
-              && pair.substring(0, 6).compareTo(uid) == 0)
-            matches.add(pair);
-          else if (fromBytes(kind).compareTo("tagv") == 0
-              && pair.substring(6).compareTo(uid) == 0)
-            matches.add(pair);
-        }
-      }
-    }
   }
 
 // PRIVATES -----------------------------------
@@ -1347,42 +1113,6 @@ public final class UniqueId implements UniqueIdInterface {
       this.storage.releaseRowLock(lock);
     }
     return false;
-  }
-  
-  /**
-   * Attempts to retrieve the map from storage This method will also add the map
-   * to the cache if it's found
-   * @param id The ID of the object to retrieve as a hex encoded uid
-   * @return A UniqueIdMap if successful, null if it wasn't found
-   */
-  private final UniqueIdMap getMapFromStorage(final String id) {
-    String qualifier = fromBytes(kind) + "_map";
-    try {
-      final byte[] raw = storage.getValue(StringtoID(id), NAME_FAMILY,
-          toBytes(qualifier));
-      if (raw == null){
-        LOG.trace(String.format("Couldn't find %s UID [%s]'s map in storage",
-            fromBytes(kind), id));
-        return null;
-      }
-      UniqueIdMap map = new UniqueIdMap(id);
-      if (!map.deserialize(raw))
-        return null;
-      // fix missing uid
-      if (map.getUid() == null)
-        map.setUid(id);
-      
-      // cache
-      this.uid_map.put(id, map);
-      return map;
-    } catch (TsdbStorageException ex) {
-      LOG.error(String.format("Storage Exception [%s]", ex.getMessage()));
-      return null;
-    } catch (Exception e) {
-      LOG.error(String.format("Unhandled exception occurred [%s]",
-          e.getMessage()));
-      return null;
-    }
   }
 
   /** The start row to scan on empty search strings. `!' = first ASCII char. */

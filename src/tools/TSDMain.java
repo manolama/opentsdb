@@ -194,18 +194,23 @@ final class TSDMain {
         log.info("Running with Casandra");
         config.tsdUIDTable("tsdbuid");
         config.tsdTable("tsdb");
-        uid_storage = new TsdbStoreCass(config.tsdUIDTable().getBytes(), cass_uid);
-        data_storage = new TsdbStoreCass(config.tsdTable().getBytes(), cass_data);
+        uid_storage = new TsdbStoreCass(config, config.tsdUIDTable().getBytes(), cass_uid);
+        data_storage = new TsdbStoreCass(config, config.tsdTable().getBytes(), cass_data);
         data_storage.setTable("tsdb");
       }else{
         log.info("Running with HBase");
-        uid_storage = new TsdbStoreHBase(config.tsdUIDTable().getBytes(), client);
-        data_storage = new TsdbStoreHBase(config.tsdTable().getBytes(), client);
+        uid_storage = new TsdbStoreHBase(config, config.tsdUIDTable().getBytes(), client);
+        data_storage = new TsdbStoreHBase(config, config.tsdTable().getBytes(), client);
       }
       final TSDB tsdb = new TSDB(uid_storage, data_storage, config);
-      log.info("Setup tsdb");
+      log.info("Setup tsdb");   
       registerShutdownHook(tsdb);
       log.info("Registered shutdown hook");
+      
+      
+      // load the tsuid hashes first!
+      tsdb.ts_uids.loadAllHashes();
+      
       tsdb.startManagementThreads();
       final ServerBootstrap server = new ServerBootstrap(factory);
 

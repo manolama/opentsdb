@@ -290,7 +290,7 @@ final class UidManager {
                             final byte[] table,
                             final short idwidth,
                             final String[] args) {
-    final UniqueId uid = new UniqueId(new TsdbStoreHBase(table, client), 
+    final UniqueId uid = new UniqueId(new TsdbStoreHBase(null, table, client), 
         table, args[1], (int) idwidth);
     for (int i = 2; i < args.length; i++) {
       try {
@@ -320,7 +320,7 @@ final class UidManager {
     final String kind = args[1];
     final String oldname = args[2];
     final String newname = args[3];
-    final UniqueId uid = new UniqueId(new TsdbStoreHBase(table, client), 
+    final UniqueId uid = new UniqueId(new TsdbStoreHBase(null, table, client), 
         table, kind, (int) idwidth);
     try {
       uid.rename(oldname, newname);
@@ -585,7 +585,7 @@ final class UidManager {
                                     final short idwidth,
                                     final String kind,
                                     final byte[] id) {
-    final UniqueId uid = new UniqueId(new TsdbStoreHBase(table, client), 
+    final UniqueId uid = new UniqueId(new TsdbStoreHBase(null, table, client), 
         table, kind, (int) idwidth);
     try {
       final String name = uid.getName(id);
@@ -652,7 +652,7 @@ final class UidManager {
                                       final short idwidth,
                                       final String kind,
                                       final String name) {
-    final UniqueId uid = new UniqueId(new TsdbStoreHBase(table, client), 
+    final UniqueId uid = new UniqueId(new TsdbStoreHBase(null, table, client), 
         table, kind, (int) idwidth);
     try {
       final byte[] id = uid.getId(name);

@@ -45,7 +45,6 @@ tsdb_SRC := \
 	src/core/Query.java	\
 	src/core/RowKey.java	\
 	src/core/RowSeq.java	\
-	src/core/SearchQuery.java	\
 	src/core/SeekableView.java	\
 	src/core/Span.java	\
 	src/core/SpanGroup.java	\
@@ -62,7 +61,11 @@ tsdb_SRC := \
 	src/graph/Plot.java	\
 	src/meta/GeneralMeta.java	\
 	src/meta/MetaData.java	\
+  src/meta/MetaDataCache.java	\
 	src/meta/TimeSeriesMeta.java	\
+	src/search/Searcher.java	\
+	src/search/SearchIndexer.java	\
+	src/search/SearchQuery.java	\
 	src/stats/Histogram.java	\
 	src/stats/StatsCollector.java	\
 	src/storage/TsdbScanner.java	\
@@ -90,7 +93,6 @@ tsdb_SRC := \
 	src/tsd/JSON_HTTP.java	\
 	src/tsd/JsonRpcError.java	\
 	src/tsd/LogsRpc.java	\
-	src/tsd/MapRPC.java	\
 	src/tsd/MetaRPC.java	\
 	src/tsd/MetricsRpc.java	\
 	src/tsd/PipelineFactory.java	\
@@ -108,8 +110,7 @@ tsdb_SRC := \
 	src/uid/NoSuchUniqueName.java	\
 	src/uid/TimeseriesUID.java	\
 	src/uid/UniqueId.java	\
-	src/uid/UniqueIdInterface.java \
-	src/uid/UniqueIdMap.java
+	src/uid/UniqueIdInterface.java
 
 tsdb_DEPS = \
 	$(ASYNCHBASE)	\
@@ -125,7 +126,12 @@ tsdb_DEPS = \
 	$(JACKSON_MAPPER) \
 	$(GUAVA_CORE) \
 	$(CASSANDRA_CORE) \
-	$(CASSANDRA_THRIFT)
+	$(CASSANDRA_THRIFT) \
+	$(LUCENE) \
+	$(CURATOR_CLIENT) \
+	$(CURATOR_FRAMEWORK) \
+	$(CURATOR_RECIPES) \
+	$(COMMONS_MATH)
 
 # Install all the .jar files in pkgdatadir.
 pkgdata_DATA = $(tsdb_DEPS) $(jar)

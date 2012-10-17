@@ -36,7 +36,6 @@ import net.opentsdb.search.SearchQuery;
 import net.opentsdb.search.SearchQuery.SearchOperator;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
-import net.opentsdb.uid.UniqueIdMap;
 
 /**
  * Handles search requests for different timeseries metadata.

@@ -80,6 +80,9 @@ public class CollectdJSON extends TSDFormatter {
       return false;
     }
     
+    // fix "nan" values
+    json = json.replace("nan", "NaN");
+    
     List<CollectdJSONdps> datapoints = new ArrayList<CollectdJSONdps>();
     JSON codec = new JSON(datapoints);
     if (!codec.parseObject(json, dpsTypeRef)){

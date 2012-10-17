@@ -12,23 +12,21 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.SortedMap;
-import java.util.TreeSet;
 import java.util.regex.Pattern;
 import java.util.AbstractMap.SimpleEntry;
 
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.hbase.async.Bytes;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
@@ -38,9 +36,8 @@ import org.slf4j.LoggerFactory;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.TimeseriesUID;
 import net.opentsdb.uid.UniqueId;
-import net.opentsdb.uid.UniqueIdMap;
 import net.opentsdb.meta.GeneralMeta;
-import net.opentsdb.meta.MetaData;
+import net.opentsdb.meta.MetaDataCache;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.search.SearchIndexer;
 import net.opentsdb.search.SearchQuery;
@@ -100,7 +97,7 @@ public final class TSDB {
   /** Unique IDs for the tag values. */
   public final UniqueId tag_values;
 
-  private final MetaData timeseries_meta;
+  private final MetaDataCache timeseries_meta;
   /** Thread that synchronizes UID maps */
   private UIDManager uid_manager;
   private TSUIDManager tsuid_manager;
@@ -142,10 +139,15 @@ public final class TSDB {
     tag_values = new UniqueId(uid_storage, uidtable, TAG_VALUE_QUAL,
                               TAG_VALUE_WIDTH);
     compactionq = new CompactionQueue(this);
-    timeseries_meta = new MetaData(uid_storage, uidtable, true, "ts");
+    timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts");
     ts_uids = new TimeseriesUID(this.uid_storage);
-    meta_search_writer = new SearchIndexer("C:\\programming\\opentsdb\\search\\tsmeta");
-    meta_searcher = new Searcher("C:\\programming\\opentsdb\\search\\tsmeta");
+    if (System.getProperty("os.name").contains("Windows")){
+      meta_search_writer = new SearchIndexer("C:\\programming\\opentsdb\\search\\tsmeta");
+      meta_searcher = new Searcher("C:\\programming\\opentsdb\\search\\tsmeta");
+    }else{
+      meta_search_writer = new SearchIndexer("/home/clarsen/opentsdb/idx");
+      meta_searcher = new Searcher("/home/clarsen/opentsdb/idx");
+    }
   }
   
   /**
@@ -170,10 +172,15 @@ public final class TSDB {
     tag_values = new UniqueId(uid_storage, uidtable, TAG_VALUE_QUAL,
                               TAG_VALUE_WIDTH);
     compactionq = new CompactionQueue(this);
-    timeseries_meta = new MetaData(uid_storage, uidtable, true, "ts");
+    timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts");
     ts_uids = new TimeseriesUID(this.uid_storage);
-    meta_search_writer = new SearchIndexer("C:\\programming\\opentsdb\\search\\tsmeta");
-    meta_searcher = new Searcher("C:\\programming\\opentsdb\\search\\tsmeta");
+    if (System.getProperty("os.name").contains("Windows")){
+      meta_search_writer = new SearchIndexer("C:\\programming\\opentsdb\\search\\tsmeta");
+      meta_searcher = new Searcher("C:\\programming\\opentsdb\\search\\tsmeta");
+    }else{
+      meta_search_writer = new SearchIndexer("/home/clarsen/opentsdb/idx");
+      meta_searcher = new Searcher("/home/clarsen/opentsdb/idx");
+    }
   }
 
   /**
@@ -284,6 +291,7 @@ public final class TSDB {
     collector.record("uid.cache.size.tsuid.strings", this.ts_uids.stringSize());
     collector.record("uid.cache.size.tsuid.queue", this.ts_uids.queueSize());
     collector.record("uid.cache.size.tsuid.meta", this.timeseries_meta.size());
+    this.ts_uids.collectStats(collector);
     IncomingDataPoints.collectStats(collector);
     {
       final Runtime runtime = Runtime.getRuntime();
@@ -317,7 +325,7 @@ public final class TSDB {
   }
 
   /** Returns a latency histogram for Put RPCs used to store data points. */
-  public Histogram getPutLatencyHistogram() {
+  public DescriptiveStatistics getPutLatencyHistogram() {
     return IncomingDataPoints.putlatency;
   }
 
@@ -470,7 +478,7 @@ public final class TSDB {
 
     IncomingDataPoints.checkMetricAndTags(metric, tags);
     final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);
-    final String tsuid = UniqueId.IDtoString(TimeseriesUID.getTSUIDFromKey(row, (short)3, (short)4));
+    final String tsuid = UniqueId.IDtoString(TimeseriesUID.getTSUIDFromKey(row, (short)3, (short)4)).intern();
     if (!this.ts_uids.contains(tsuid)){
       this.ts_uids.add(tsuid);
     }
@@ -484,8 +492,21 @@ public final class TSDB {
 //    // TODO(tsuna): Add a callback to time the latency of HBase and store the
 //    // timing in a moving Histogram (once we have a class for this).
 //    return client.put(point);
+    final long start_put = System.nanoTime();
+    final Callback<Object, Object> cb = new Callback<Object, Object>() {
+      public Object call(final Object arg) {
+        final float t = (float)((float)(System.nanoTime() - start_put) / (float)1000000);
+        //LOG.debug(String.format("TSDB: Recording put time of [%f] ms", t));
+        IncomingDataPoints.putlatency.addValue(t);
+        return arg;
+      }
+      public String toString() {
+        return "time put request";
+      }
+    };
+    
     return data_storage.putWithRetry(row, FAMILY, Bytes.fromShort(qualifier), value,
-        null, false, true);
+        null, false, true).addCallback(cb);
   }
 
   /**
@@ -511,14 +532,17 @@ public final class TSDB {
       LOG.trace("Flushing TS UIDs");
       this.ts_uids.flush();
       
+      LOG.trace("Flushing TS Meta");
+      this.timeseries_meta.flush();
+      
       LOG.trace("Flushing metric maps");
-      this.metrics.flushMaps();
+      this.metrics.flushMeta();
       
       LOG.trace("Flushing tagk maps");
-      this.tag_names.flushMaps();
+      this.tag_names.flushMeta();
       
       LOG.trace("Flushing tagv maps");
-      this.tag_values.flushMaps();
+      this.tag_values.flushMeta();
       
       data_storage.flush();
       return uid_storage.flush();
@@ -628,7 +652,7 @@ public final class TSDB {
         meta = new TimeSeriesMeta(id);
       
       // otherwise we need to get the general metas for metrics and tags
-      byte[] metricID = MetaData.getMetricID(id);
+      byte[] metricID = MetaDataCache.getMetricID(id);
       //LOG.trace(String.format("Metric ID %s", Arrays.toString(metricID)));
       if (metricID == null){
         LOG.debug(String.format("Unable to get metric meta data for ID [%s]", 
@@ -641,7 +665,7 @@ public final class TSDB {
       }
       
       // tags
-      ArrayList<byte[]> tags = MetaData.getTagIDs(id);
+      ArrayList<byte[]> tags = MetaDataCache.getTagIDs(id);
       if (tags == null || tags.size() < 1)
         LOG.debug(String.format("Unable to get tag and value metadata for ID [%s]",
             UniqueId.IDtoString(id)));
@@ -667,131 +691,6 @@ public final class TSDB {
   
   public Boolean putMeta(final TimeSeriesMeta meta){
     return this.timeseries_meta.putMeta(meta, false);
-  }
-  
-  /**
-   * Loads all general meta and then compiles a timeseries meta list
-   * todo - if we store general meta in the TS list, that would SUCK cause it
-   * eats up a crap load of duplicate space
-   * @return
-   */
-  public Boolean loadAllTSMeta(){
-    final TsdbScanner scanner = new TsdbScanner(null, null, TsdbStore.toBytes("tsdb-uid"));
-    scanner.setFamily(TsdbStore.toBytes("name"));
-    scanner.setQualifier(TsdbStore.toBytes("ts_meta"));
-    this.uid_storage.openScanner(scanner);
-    
-    try {
-      long count=0;
-      ArrayList<ArrayList<KeyValue>> rows;
-      TimeSeriesMeta meta = new TimeSeriesMeta(new byte[] {0});
-      JSON codec = new JSON(meta);
-      while ((rows = uid_storage.nextRows(scanner).joinUninterruptibly()) != null) {
-        for (final ArrayList<KeyValue> row : rows) {
-          if (row.size() != 1) {
-            LOG.error("WTF shouldn't happen!  Scanner " + scanner + " returned"
-                + " a row that doesn't have exactly 1 KeyValue: " + row);
-            if (row.isEmpty()) {
-              continue;
-            }
-          }
-          meta = new TimeSeriesMeta(row.get(0).key());
-          if (!codec.parseObject(row.get(0).value())){
-            LOG.error(String.format("Unable to parse metadata for [%s]", 
-                UniqueId.IDtoString(row.get(0).key())));
-            continue;
-          }
-          meta = (TimeSeriesMeta)codec.getObject();
-          this.timeseries_meta.putCache(row.get(0).key(), meta);
-          count++;
-        }
-      }
-      LOG.trace(String.format("Loaded [%d] metadata entries for [timeseries]", count));
-      return true;
-    } catch (HBaseException e) {
-      throw e;
-    } catch (Exception e) {
-      e.printStackTrace();
-      throw new RuntimeException("Should never be here", e);
-    }
-  }
-  
-  public void searchTSMeta(final SearchQuery query, Set<String> matches){  
-    loadAllTSMeta();
-
-    // scan!
-    HashSet<String> uids = null;//this.ts_uids.get();
-    for (String tsuid : uids){
-      boolean match = false;
-      TimeSeriesMeta meta = this.timeseries_meta.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
-      if (meta == null)
-        continue;
-
-      // otherwise, we need to check all or one field
-      if (query.getQueryRegex() != null){
-
-//        if ((query.getField().compareTo("all") == 0 || query.getField().compareTo("description") == 0)
-//            && meta != null && regex.matcher(meta.getDescription()).find()){
-//          LOG.trace(String.format("Matched [%s] UID [%s] description [%s]", fromBytes(kind),
-//             uid, meta.getDescription()));
-//          match = true;
-//        }
-        
-        if ((query.getField().compareTo("all") == 0 || query.getField().compareTo("notes") == 0)
-            && meta != null && query.getQueryRegex().matcher(meta.getNotes()).find()){
-          LOG.trace(String.format("Matched [timeseries] UID [%s] notes [%s]",
-             tsuid, meta.getNotes()));
-          match = true;
-        }
-        
-        // customs
-        if (query.getField().compareTo("all") == 0 && meta.getCustom() != null){
-          Map<String, String> custom_tags = meta.getCustom();
-          for (Map.Entry<String, String> tag : custom_tags.entrySet()){
-            if (query.getQueryRegex().matcher(tag.getKey()).find()){
-              LOG.trace(String.format("Matched custom tag [%s] for uid [%s]",
-                  tag.getKey(), tsuid));
-              match = true;
-              break;
-            }
-            if (query.getQueryRegex().matcher(tag.getValue()).find()){
-              LOG.trace(String.format("Matched custom tag value [%s] for uid [%s]",
-                  tag.getValue(), tsuid));
-              match = true;
-              break;
-            }
-          }
-        }
-      }
-
-      // filter if we're provided customer info
-      if (query.getCustomCompiled() != null && query.getCustomCompiled().size() > 0 && meta != null){
-        match = false;
-        Map<String, String> custom_tags = meta.getCustom();
-        if (custom_tags != null && custom_tags.size() > 0){
-          int matched = 0;
-          for (Map.Entry<String, Pattern> entry : query.getCustomCompiled().entrySet()){
-            for (Map.Entry<String, String> tag : custom_tags.entrySet()){
-              if (tag.getKey().toLowerCase().compareTo(entry.getKey().toLowerCase()) == 0
-                  && entry.getValue().matcher(tag.getValue()).find()){
-                LOG.trace(String.format("Matched custom tag [%s] on filter [%s] with value [%s]",
-                    tag.getKey(), entry.getValue().toString(), tag.getValue()));
-                matched++;
-              }
-            }
-          }
-          if (matched != query.getCustomCompiled().size()){
-            LOG.trace(String.format("timeseries UID [%s] did not match all of the custom tag filters", 
-                tsuid));
-          }else
-            match = true;
-        }
-      }
-      
-      // if no match, just move on
-      if (match)
-        matches.add(tsuid);
-    }
   }
   
   public static Boolean isInteger(Object dp){
@@ -844,22 +743,25 @@ public final class TSDB {
     public void run(){
       while(true){
         try {
-          Thread.sleep(60000);
+          Thread.sleep(5000);
+          
+          LOG.debug("Flushing all TS/UID maps and meta...");
+          // update the UIDs
+          metrics.flushMeta();
+          tag_names.flushMeta();
+          tag_values.flushMeta();
+          timeseries_meta.flush();
+          ts_uids.flush();
+          ts_uids.processNewMeta(metrics, tag_names, tag_values, timeseries_meta, true, meta_search_writer);
+          LOG.debug("Flushed all TS/UID maps and meta");
         } catch (InterruptedException e) {
           break;
+        } catch (Exception ex){
+          ex.printStackTrace();
         }
-        LOG.debug("Flushing all TS/UID maps and meta...");
-        // update the UIDs
-        metrics.flushMaps();
-        metrics.flushMeta();
-        tag_names.flushMaps();
-        tag_names.flushMeta();
-        tag_values.flushMaps();
-        tag_values.flushMeta();
-        ts_uids.flush();
-        ts_uids.processMapsAndMeta(metrics, tag_names, tag_values, timeseries_meta, true, meta_search_writer);
-        LOG.debug("Flushed all TS/UID maps and meta");
+        
       }
+      LOG.error("UID Manager thread has crashed");
     }
   }
   
@@ -875,7 +777,7 @@ public final class TSDB {
         
         LOG.info("Processing TSUID maps and meta");
         ts_uids.flush();
-        ts_uids.processMapsAndMeta(metrics, tag_names, tag_values, timeseries_meta, true, meta_search_writer);
+        ts_uids.processNewMeta(metrics, tag_names, tag_values, timeseries_meta, true, meta_search_writer);
         LOG.info("Processed TSUID maps and meta");
       }
     }

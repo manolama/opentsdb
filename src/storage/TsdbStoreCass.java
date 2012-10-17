@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.opentsdb.core.Config;
 import net.opentsdb.stats.StatsCollector;
 
 import org.apache.thrift.TException;
@@ -20,8 +21,8 @@ public class TsdbStoreCass extends TsdbStore {
       
   private Cassandra.Client client;
   
-  public TsdbStoreCass(final byte[] table, final Cassandra.Client client) {
-    super(table);
+  public TsdbStoreCass(final Config config, final byte[] table, final Cassandra.Client client) {
+    super(config, table);
     this.client = client;
     try {
       this.client.set_keyspace(fromBytes(table));

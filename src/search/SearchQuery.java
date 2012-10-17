@@ -184,8 +184,8 @@ public class SearchQuery {
     }
     
     // compile the search query once for speed
-    if (this.query != null)
-      this.query_regex = Pattern.compile(this.query);
+    if (this.query == null)
+      this.query = "";
     
     // compile tags and custom
     if (this.tags != null){

@@ -69,7 +69,7 @@ final class TextImporter {
     final HBaseClient client = CliOptions.clientFromOptions(config);
     // Flush more frequently since we read very fast from the files.
     client.setFlushInterval((short) 500);  // ms
-    final TsdbStoreHBase storage = new TsdbStoreHBase(config.tsdTable().getBytes(), client);
+    final TsdbStoreHBase storage = new TsdbStoreHBase(config, config.tsdTable().getBytes(), client);
     final TSDB tsdb = new TSDB(storage, storage, config);
     argp = null;
     try {

@@ -12,6 +12,7 @@ import org.apache.lucene.queryParser.ParseException;
 import org.apache.lucene.queryParser.QueryParser;
 import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
@@ -40,9 +41,6 @@ public class Searcher {
   }
   
   public final ArrayList<String> searchTSUIDs(final SearchQuery query){
-    if (query.getQuery() == null || query.getQuery().isEmpty())
-      return null;
-    
     if (!this.checkSearcher()){
       return null;
     }
@@ -90,9 +88,6 @@ public class Searcher {
   }
   
   public final ArrayList<Map<String, Object>> searchShortMeta(final SearchQuery query){
-    if (query.getQuery() == null || query.getQuery().isEmpty())
-      return null;
-    
     if (!this.checkSearcher()){
       return null;
     }
@@ -260,7 +255,13 @@ public class Searcher {
    */
   private final TopDocs search(final String query, final int limit, final ScoreDoc last_result){
     try {
-      Query q = parser.parse(query);
+      Query q = null;
+      
+      // if we want ALL records, do so
+      if (query.equals("*") || query.isEmpty())
+        q = NumericRangeQuery.newDoubleRange("created", 0d, Double.MAX_VALUE, true, true);
+      else
+        q = parser.parse(query);
       
       if (last_result == null)
         return searcher.search(new ConstantScoreQuery(q), limit);

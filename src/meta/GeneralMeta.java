@@ -3,7 +3,6 @@ package net.opentsdb.meta;
 import java.util.Map;
 
 import net.opentsdb.core.JSON;
-import net.opentsdb.uid.UniqueId;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -23,64 +22,136 @@ import org.slf4j.LoggerFactory;
  * WARN: However ALL custom fields MUST be included in writes as they will be overwritten on
  * each write if anything changes
  */
-public class GeneralMeta {
+public class GeneralMeta extends MetaData {
   public enum Meta_Type { INVALID, METRICS, TAGK, TAGV, TIMESERIES };
   
   protected static final Logger LOG = LoggerFactory.getLogger(GeneralMeta.class);
   
-  protected String uid = "";
   @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
   protected Meta_Type type = Meta_Type.INVALID;
   protected String name = "";
   protected String display_name = "";
   protected String description = "";
-  protected String notes = "";
-  protected long created = 0; 
-  protected Map<String, String> custom = null;
 
   // change flags used to determine what the user wants to modify
   protected Boolean c_display_name = false;
   protected Boolean c_description = false;
-  protected Boolean c_notes = false;
-  protected Boolean c_custom = false;
 
   public GeneralMeta(){
+    super();
   }
   
   public GeneralMeta(byte[] id){
-    this.uid = UniqueId.IDtoString(id);
+    super(id);
   }
   
   public GeneralMeta(byte[] id, Meta_Type type){
-    this.uid = UniqueId.IDtoString(id);
+    super(id);
     this.type = type;
+  }
+  
+  public boolean equals(Object meta){
+    if (meta == null)
+      return false;
+    try{
+      GeneralMeta m = (GeneralMeta)meta;
+      if (this.uid != m.uid)
+        return false;
+      if (this.created != m.created)
+        return false;
+      if (this.notes != m.notes)
+        return false;
+      if (this.custom != m.custom)
+        return false;
+      if (this.type != m.type)
+        return false;
+      if (this.name != m.name)
+        return false;
+      if (this.display_name != m.display_name)
+        return false;
+      if (this.description != m.description)
+        return false;
+      
+      return true;
+    }catch (Exception e){
+      return false;
+    }
   }
   
   // returns the contents as a JSON string
   @JsonIgnore
   public String getJSON(){
-    JSON json = new JSON(this);
-    return json.getJsonString();
+    JSON codec = new JSON(this);
+    return codec.getJsonString();
+  }
+  
+  @JsonIgnore
+  public byte[] getJSONBytes(){
+    JSON codec = new JSON(this);
+    return codec.getJsonBytes();
   }
   
   // copies changed variables from the local object to the incoming object
   // use:
   // stored_data = user_data.CopyChanges(stored_data);
   // write stored_data;
-  public GeneralMeta CopyChanges(GeneralMeta m){
-    LOG.trace("Meta [" + m.getName() + "]");
-    if (m.name.compareTo(this.name) != 0)
-      if (m.name.isEmpty())
-        m.name = this.name;
-    if (this.c_display_name)
-      m.display_name = this.display_name;
-    if (this.c_description)
-      m.description = this.description;
-    if (this.c_notes)
-      m.notes = this.notes;
-    if (this.c_custom)
-      m.custom = this.custom;
-    return m;
+  public MetaData copyChanges(MetaData metadata){
+    try{
+      GeneralMeta m = (GeneralMeta)metadata;
+      if (m.name.compareTo(this.name) != 0)
+        if (m.name.isEmpty())
+          m.name = this.name;
+      if (this.c_display_name)
+        m.display_name = this.display_name;
+      if (this.c_description)
+        m.description = this.description;
+      if (this.c_notes)
+        m.notes = this.notes;
+      if (this.c_custom)
+        m.custom = this.custom;
+      return m;
+    }catch (Exception e){
+      LOG.error("Unable to cast metadata to proper type");
+    }
+    return null;
+  }
+  
+  public void copy(final MetaData metadata){
+    try{
+      GeneralMeta m = (GeneralMeta)metadata;
+      this.uid = m.uid;
+      this.created = m.created;
+      this.notes = m.notes;
+      this.custom = m.custom;
+      this.type = m.type;
+      this.name = m.name;
+      this.display_name = m.display_name;
+      this.description = m.description;
+    }catch(Exception e){
+      LOG.warn("Invalid cast for General Metadata");
+    }
+  }
+  
+  public boolean parseJSON(final String json){
+    try{
+      JSON codec = new JSON(this);
+      if (!codec.parseObject(json)){
+        LOG.warn("Unable to parse JSON");
+        return false;
+      }
+      
+      GeneralMeta meta = (GeneralMeta)codec.getObject();
+      if (meta == null){
+        LOG.error("Error parsing JSON");
+        return false;
+      }
+      
+      this.copy(meta);
+      return true;
+    }catch (Exception e){
+      e.printStackTrace();
+    }
+    return false;
   }
   
   public final boolean appendFields(Document doc, StringBuilder flatten){
@@ -107,10 +178,6 @@ public class GeneralMeta {
   }
   
   // **** GETTERS AND SETTERS ****
-  public String getUID(){
-    return this.uid;
-  }
-
   public Meta_Type getType(){
     return this.type;
   }
@@ -125,22 +192,6 @@ public class GeneralMeta {
   
   public String getDescription(){
     return this.description;
-  }
-  
-  public String getNotes(){
-    return this.notes;
-  }
-  
-  public long getCreated(){
-    return this.created;
-  }
-  
-  public Map<String, String> getCustom(){
-    return this.custom;
-  }
-  
-  public void setUID(final String u){
-    this.uid = u;
   }
   
   public void setType(Meta_Type t){
@@ -160,18 +211,6 @@ public class GeneralMeta {
     this.description = d;
     this.c_description = true;
   }
-  
-  public void setNotes(final String n){
-    this.notes = n;
-    this.c_notes = true;
-  }
-  
-  public void setCreated(final long c){
-    this.created = c;
-  }
-  
-  public void setCustom(final Map<String, String> c){
-    this.custom = c;
-    this.c_custom = true;
-  }
+
+
 }

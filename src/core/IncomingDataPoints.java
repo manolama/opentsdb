@@ -12,6 +12,7 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
@@ -19,8 +20,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.hbase.async.Bytes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +46,10 @@ final class IncomingDataPoints implements WritableDataPoints {
    * want buckets up to 16s, with 2 ms interval between each bucket up to 100 ms
    * after we which we switch to exponential buckets.
    */
-  static final Histogram putlatency = new Histogram(16000, (short) 2, 100);
+  //static final Histogram putlatency = new Histogram(16000, (short) 2, 100);
+  //static final AdaptiveHistogram putlatency = new AdaptiveHistogram();
+  static final DescriptiveStatistics putlatency = new DescriptiveStatistics(1024 * 8);
+
   static final AtomicLong put_counter = new AtomicLong();
   
   /** The {@code TSDB} instance we belong to. */
@@ -243,22 +249,23 @@ final class IncomingDataPoints implements WritableDataPoints {
     // here we access it from a callback that runs in an unknown thread, so
     // we might miss some increments.  So let's comment this out until we
     // have a proper thread-safe moving histogram.
-    //final long start_put = System.nanoTime();
-    //final Callback<Object, Object> cb = new Callback<Object, Object>() {
-    //  public Object call(final Object arg) {
-    //    putlatency.add((int) ((System.nanoTime() - start_put) / 1000000));
-    //    return arg;
-    //  }
-    //  public String toString() {
-    //    return "time put request";
-    //  }
-    //};
+    final long start_put = System.nanoTime();
+    final Callback<Object, Object> cb = new Callback<Object, Object>() {
+      public Object call(final Object arg) {
+        LOG.debug(String.format("IDP: Recording put time of [%f] ms", ((System.nanoTime() - start_put) / 1000000)));
+        putlatency.addValue(((System.nanoTime() - start_put) / 1000000));
+        return arg;
+      }
+      public String toString() {
+        return "time put request";
+      }
+    };
 
     // TODO(tsuna): Add an errback to handle some error cases here.
     //point.setDurable(!batch_import);
     put_counter.incrementAndGet();
     return tsdb.data_storage.putWithRetry(row, TSDB.FAMILY, Bytes.fromShort(qualifier), value,
-        null, !batch_import, true)/*.addBoth(cb)*/;
+        null, !batch_import, true).addCallback(cb);
   }
 
   private void grow() {

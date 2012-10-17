@@ -1,12 +1,10 @@
 package net.opentsdb.meta;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Map;
 
 import net.opentsdb.core.JSON;
 import net.opentsdb.meta.GeneralMeta.Meta_Type;
-import net.opentsdb.uid.UniqueId;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -23,29 +21,23 @@ import org.slf4j.LoggerFactory;
  */
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
-final public class TimeSeriesMeta {
+final public class TimeSeriesMeta extends MetaData {
   private static final Logger LOG = LoggerFactory.getLogger(TimeSeriesMeta.class);
   
   // stored values
-  private String uid = "";
   private int retention = 0;
   private double max = 0;
   private double min = 0;
   private double interval = 0;
-  private long first_received = 0;
   private long last_received = 0;
-  private String notes = "";
   private String units = "";
-  private int data_type = 0;         // type of metric, e.g. counter/rate/something else
-  private Map<String, String> custom = null;   
+  private int data_type = 0;         // type of metric, e.g. counter/rate/something else  
   
   // change variables
   private Boolean c_retention = false;
   private Boolean c_max = false;
   private Boolean c_min = false;
-  private Boolean c_notes = false;
   private Boolean c_units = false;
-  private Boolean c_custom = false;
   private Boolean c_type = false;
   
   // API only
@@ -54,24 +46,58 @@ final public class TimeSeriesMeta {
   private ArrayList<GeneralMeta> tags = null;
  
   public TimeSeriesMeta(){
+    super();
   }
   
   public TimeSeriesMeta(byte[] id){
-    this.uid = UniqueId.IDtoString(id);
+    super(id);
+  }
+  
+  public boolean equals(Object meta){
+    if (meta == null)
+      return false;
+    try{
+      TimeSeriesMeta m = (TimeSeriesMeta)meta;
+      if (this.uid != m.uid)
+        return false;
+      if (this.created != m.created)
+        return false;
+      if (this.notes != m.notes)
+        return false;
+      if (this.custom != m.custom)
+        return false;
+      if (this.retention != m.retention)
+        return false;
+      if (this.max != m.max)
+        return false;
+      if (this.min != m.min)
+        return false;
+      if (this.interval != m.interval)
+        return false;
+      if (this.last_received != m.last_received)
+        return false;
+      if (this.units != m.units)
+        return false;
+      if (this.data_type != m.data_type)
+        return false;
+      
+      return true;
+    }catch (Exception e){
+      return false;
+    }
   }
   
   // returns the entire object as a JSON string
   @JsonIgnore  
   public String getJSON(){
-    JSON json = new JSON(this);
-    return json.getJsonString();
+    JSON codec = new JSON(this);
+    return codec.getJsonString();
   }
   
-//returns the entire object as a JSON string
-  @JsonIgnore  
+  @JsonIgnore
   public byte[] getJSONBytes(){
-    JSON json = new JSON(this);
-    return json.getJsonBytes();
+    JSON codec = new JSON(this);
+    return codec.getJsonBytes();
   }
   
   // returns just the data we should put in storage
@@ -83,28 +109,75 @@ final public class TimeSeriesMeta {
     return json.getJsonString();    
   }
   
+  public boolean parseJSON(final String json){
+    try{
+      JSON codec = new JSON(this);
+      if (!codec.parseObject(json)){
+        LOG.warn("Unable to parse JSON");
+        return false;
+      }
+      
+      TimeSeriesMeta meta = (TimeSeriesMeta)codec.getObject();
+      if (meta == null){
+        LOG.error("Error parsing JSON");
+        return false;
+      }
+      
+      this.copy(meta);
+      return true;
+    }catch (Exception e){
+      e.printStackTrace();
+    }
+    return false;
+  }
+  
   //copies changed variables from the local object to the incoming object
   // use:
   // stored_data = user_data.CopyChanges(stored_data);
   // write stored_data;
-  public TimeSeriesMeta CopyChanges(TimeSeriesMeta m){
-    if (this.c_retention)
-      m.retention = this.retention;
-    if (this.c_max)
-      m.max = this.max;
-    if (this.c_min)
-      m.min = this.min;
-    if (this.c_notes)
-      m.notes = this.notes;
-    if (this.c_units)
-      m.units = this.units;
-    if (this.c_type)
-      m.data_type = this.data_type;
-    if (this.c_custom)
-      m.custom = this.custom;
-    if (this.last_received > m.last_received)
-      m.last_received = this.last_received;
-    return m;
+  public MetaData copyChanges(MetaData metadata){
+    try{
+      TimeSeriesMeta m = (TimeSeriesMeta)metadata;
+      if (this.c_retention)
+        m.retention = this.retention;
+      if (this.c_max)
+        m.max = this.max;
+      if (this.c_min)
+        m.min = this.min;
+      if (this.c_notes)
+        m.notes = this.notes;
+      if (this.c_units)
+        m.units = this.units;
+      if (this.c_type)
+        m.data_type = this.data_type;
+      if (this.c_custom)
+        m.custom = this.custom;
+      if (this.last_received > m.last_received)
+        m.last_received = this.last_received;
+      return m;
+    }catch (Exception e){
+      LOG.error("Unable to cast metadata");
+      return null;
+    }
+  }
+  
+  public void copy(MetaData metadata){
+    try{
+      TimeSeriesMeta m = (TimeSeriesMeta)metadata;
+      this.uid = m.uid;
+      this.created = m.created;
+      this.notes = m.notes;
+      this.custom = m.custom;
+      this.retention = m.retention;
+      this.max = m.max;
+      this.min = m.min;
+      this.interval = m.interval;
+      this.last_received = m.last_received;
+      this.units = m.units;
+      this.data_type = m.data_type;
+    }catch(Exception e){
+      LOG.warn("Invalid cast for TimeSeriesMeta Metadata");
+    }
   }
   
   public final Document buildLuceneDoc(){
@@ -130,7 +203,7 @@ final public class TimeSeriesMeta {
     doc.add(new NumericField("max").setDoubleValue(this.max));
     doc.add(new NumericField("min").setDoubleValue(this.min));
     doc.add(new NumericField("interval").setDoubleValue(this.interval));
-    doc.add(new NumericField("created").setLongValue(this.first_received));
+    doc.add(new NumericField("created").setLongValue(this.created));
     doc.add(new NumericField("last_received").setLongValue(this.last_received));
     doc.add(new Field("notes", this.notes, Field.Store.NO, Field.Index.ANALYZED));
     flatten.append(this.notes + " ");
@@ -171,10 +244,6 @@ final public class TimeSeriesMeta {
   }
   
   // **** GETTERS AND SETTERS ****
-  public String getUID(){
-    return this.uid;
-  }
-  
   public int getRetention(){
     return this.retention;
   }
@@ -191,10 +260,6 @@ final public class TimeSeriesMeta {
     return this.interval;
   }
 
-  public String getNotes(){
-    return this.notes;
-  }
-  
   public String getUnits(){
     return this.units;
   }
@@ -202,21 +267,13 @@ final public class TimeSeriesMeta {
   public int getData_type(){
     return this.data_type;
   }
-  
-  public Map<String, String> getCustom(){
-    return this.custom;
-  }
-  
+
   public GeneralMeta getMetric(){
     return this.metric;
   }
   
   public ArrayList<GeneralMeta> getTags(){
     return this.tags;
-  }
-  
-  public void setUID(final String u){
-    this.uid = u;
   }
   
   public void setRetention(final int r){
@@ -237,20 +294,11 @@ final public class TimeSeriesMeta {
   public void setInterval(final int i){
     this.interval = i;
   }
-  
-  public void setFirst_Received(final long f){
-    this.first_received = f;
-  }
-  
+
   public void setLast_Received(final long l){
     this.last_received = l;
   }
-  
-  public void setNotes(final String n){
-    this.notes = n;
-    this.c_notes = true;
-  }
-  
+
   public void setUnits(final String u){
     this.units = u;
     this.c_units = true;
@@ -260,26 +308,13 @@ final public class TimeSeriesMeta {
     this.data_type = t;
     this.c_type = true;
   }
-  
-  public void setCustom(final Map<String, String> c){
-    this.custom = c;
-    this.c_custom = true;
-  }
-  
+
   public void setMetric(final GeneralMeta m){
     this.metric = m;
   }
   
   public void setTags(final ArrayList<GeneralMeta> t){
     this.tags = t;
-  }
-
-  public long getFirstReceived() {
-    return first_received;
-  }
-
-  public void setFirstReceived(long first_received) {
-    this.first_received = first_received;
   }
 
   public long getLastReceived() {

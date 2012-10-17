@@ -15,6 +15,7 @@ package net.opentsdb.storage;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 
+import net.opentsdb.core.Config;
 import net.opentsdb.stats.StatsCollector;
 
 import org.hbase.async.KeyValue;
@@ -44,7 +45,7 @@ public abstract class TsdbStore {
    * Default Constructor requires a table name When extending this class, be
    * sure to pass in a table name
    */
-  public TsdbStore(final byte[] table) {
+  public TsdbStore(final Config config, final byte[] table) {
     this.table = table;
   }
   

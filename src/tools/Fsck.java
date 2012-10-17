@@ -74,7 +74,7 @@ final class Fsck {
     
     final HBaseClient client = CliOptions.clientFromOptions(config);
     final byte[] table = argp.get("--table", "tsdb").getBytes();
-    final TsdbStoreHBase storage = new TsdbStoreHBase(table, client);
+    final TsdbStoreHBase storage = new TsdbStoreHBase(config, table, client);
     final TSDB tsdb = new TSDB(storage, storage, config);
     final boolean fix = argp.has("--fix");
     argp = null;
@@ -115,7 +115,7 @@ final class Fsck {
     int errors = 0;
     int correctable = 0;
 
-    TsdbStore storage = new TsdbStoreHBase(table, client);
+    TsdbStore storage = new TsdbStoreHBase(null, table, client);
     final short metric_width = Internal.metricWidth(tsdb);
 
     final ArrayList<Query> queries = new ArrayList<Query>();

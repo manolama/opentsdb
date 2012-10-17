@@ -12,8 +12,11 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.storage;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
 
+import net.opentsdb.core.Config;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.uid.UniqueId;
 
@@ -31,6 +34,11 @@ import org.hbase.async.UnknownRowLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.netflix.curator.RetryPolicy;
+import com.netflix.curator.framework.CuratorFramework;
+import com.netflix.curator.framework.CuratorFrameworkFactory;
+import com.netflix.curator.framework.recipes.locks.InterProcessMutex;
+import com.netflix.curator.retry.ExponentialBackoffRetry;
 import com.stumbleupon.async.Deferred;
 
 /**
@@ -43,15 +51,20 @@ public class TsdbStoreHBase extends TsdbStore {
 
   /** HBase client to use. */
   private HBaseClient client;
+  private final Config config;
+  private RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+  private CuratorFramework zk_client = null;
+  private boolean use_zk_locks = false;
 
   /**
    * Initializes the TsdbStore class, sets the table and the HBase client object
    * @param table Default table to use for connections
    * @param client HBase async client
    */
-  public TsdbStoreHBase(final byte[] table, final HBaseClient client) {
-    super(table);
+  public TsdbStoreHBase(final Config config, final byte[] table, final HBaseClient client) {
+    super(config, table);
     this.client = client;
+    this.config = config;
   }
   
   public void copy(final TsdbStore store){
@@ -77,7 +90,7 @@ public class TsdbStoreHBase extends TsdbStore {
 //        UniqueId.IDtoString(key), fromBytes(family), fromBytes(qualifier),
 //        rowLock == null ? "no" : "yes"));
     final GetRequest get = new GetRequest(table, key);
-    if (rowLock != null)
+    if (rowLock != null && !this.use_zk_locks)
       get.withRowLock((RowLock) rowLock);
     get.family(family).qualifier(qualifier);
     try {
@@ -171,7 +184,7 @@ public class TsdbStoreHBase extends TsdbStore {
     short attempts = MAX_ATTEMPTS_PUT;
     short wait = INITIAL_EXP_BACKOFF_DELAY;
     final PutRequest put;
-    if (rowLock != null)
+    if (rowLock != null && !this.use_zk_locks)
       put = new PutRequest(this.table, key, family, qualifier, data, (RowLock) rowLock);
     else
       put = new PutRequest(this.table, key, family, qualifier, data);
@@ -209,11 +222,37 @@ public class TsdbStoreHBase extends TsdbStore {
    */
   public Object getRowLock(final byte[] key) throws TsdbStorageException {
     try {
-      return client.lockRow(new RowLockRequest(table, key))
-          .joinUninterruptibly();
+      if (this.use_zk_locks){
+        if (this.zk_client == null){
+          LOG.debug("Initializing Zookeeper lock client");
+            this.zk_client = CuratorFrameworkFactory.newClient((config.zookeeperQuorum() + ":2181"), retryPolicy);
+            this.zk_client.start();
+        }
+        
+        final String lock_path = "/locks/opentsdb/" + UniqueId.IDtoString(key);
+        LOG.trace(String.format("Attempting to acquire lock on [%s]", lock_path));
+        
+        InterProcessMutex lock = new InterProcessMutex(this.zk_client, lock_path);
+        if ( lock.acquire(500, TimeUnit.MILLISECONDS) ) 
+        {
+          LOG.trace(String.format("Successfully acquired lock on [%s]", lock_path));
+          return lock;
+        }
+
+        LOG.warn(String.format("Unable to acquire ZK lock [%s] in 500ms", lock_path));
+        lock = null;
+        return null;
+      }else{
+        return client.lockRow(new RowLockRequest(table, key))
+            .joinUninterruptibly();
+      }
     } catch (HBaseException e) {
       LOG.warn("Failed to lock the ____ row", e);
       throw new TsdbStorageException(e.getMessage(), e);
+    } catch (IOException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+      return null;
     } catch (Exception e) {
       throw new TsdbStorageException("Should never be here", e);
     }
@@ -231,7 +270,15 @@ public class TsdbStoreHBase extends TsdbStore {
       return true;
     try {
       try {
-        client.unlockRow((RowLock) lock).joinUninterruptibly();
+        if (this.use_zk_locks){
+          InterProcessMutex zk_lock = (InterProcessMutex)lock;
+          zk_lock.release();
+          LOG.trace(String.format("Successfully released lock on [%s]", zk_lock.toString()));
+          zk_lock = null;
+          return true;
+        }else{
+          client.unlockRow((RowLock) lock).joinUninterruptibly();
+        }
       } catch (UnknownRowLockException urle){
         LOG.warn("Lock was already released or invalid");
       } catch (Exception e) {

@@ -74,7 +74,7 @@ final class DumpSeries {
     
     final HBaseClient client = CliOptions.clientFromOptions(config);
     final byte[] table = argp.get("--table", "tsdb").getBytes();
-    final TsdbStoreHBase storage = new TsdbStoreHBase(table, client);
+    final TsdbStoreHBase storage = new TsdbStoreHBase(config, table, client);
     final TSDB tsdb = new TSDB(storage, storage, config);
     final boolean delete = argp.has("--delete");
     final boolean importformat = delete || argp.has("--import");
@@ -95,7 +95,7 @@ final class DumpSeries {
     final ArrayList<Query> queries = new ArrayList<Query>();
     CliQuery.parseCommandLineQuery(args, tsdb, queries, null, null);
 
-    TsdbStore storage = new TsdbStoreHBase(table, client);
+    TsdbStore storage = new TsdbStoreHBase(null, table, client);
     final StringBuilder buf = new StringBuilder();
     for (final Query query : queries) {
       final TsdbScanner scanner = Internal.getScanner(query);

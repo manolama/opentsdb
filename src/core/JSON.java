@@ -18,6 +18,8 @@ import net.opentsdb.storage.TsdbStore;
 
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
+import org.codehaus.jackson.JsonParser;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +53,7 @@ public class JSON {
    * Default constructor
    */
   public JSON() {
+    JsonMapper.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, true);
   }
 
   /**
@@ -59,6 +62,7 @@ public class JSON {
    * @param o An object to serialize or the type to deserialize
    */
   public JSON(Object o) {
+    JsonMapper.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, true);
     object = o;
   }
 

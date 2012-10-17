@@ -12,6 +12,7 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.stats;
 
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,9 +66,9 @@ public abstract class StatsCollector {
    * @param name The name of the metric.
    * @param value The current value for that metric.
    */
-  public final void record(final String name, final long value) {
-    record(name, value, null);
-  }
+//  public final void record(final String name, final long value) {
+//    record(name, value, null);
+//  }
 
   /**
    * Records a data point.
@@ -75,7 +76,7 @@ public abstract class StatsCollector {
    * @param value The current value for that metric.
    */
   public final void record(final String name, final Number value) {
-    record(name, value.longValue(), null);
+    record(name, value, null);
   }
 
   /**
@@ -87,18 +88,19 @@ public abstract class StatsCollector {
    * @throws IllegalArgumentException if {@code xtratag != null} and it
    * doesn't follow the {@code name=value} format.
    */
-  public final void record(final String name,
-                           final Number value,
-                           final Map<String, String> tags) {
-    record(name, value.longValue(), tags);
-  }
+//  public final void record(final String name,
+//                           final Number value,
+//                           final Map<String, String> tags) {
+//    record(name, value.longValue(), tags);
+//  }
   
   public final void record(final String name,
                            final Number value,
                            final SimpleEntry<String, String> tag){
     Map<String, String> tags = new HashMap<String, String>();
-    tags.put(tag.getKey(), tag.getValue());
-    record(name, value.longValue(), tags);
+    if (tag != null)
+      tags.put(tag.getKey(), tag.getValue());
+    record(name, tags, value.longValue());
   }
 
   /**
@@ -113,10 +115,10 @@ public abstract class StatsCollector {
   public final void record(final String name,
                            final Histogram histo,
                            final Map<String, String> tags) {
-    record(name + "_50pct", histo.percentile(50), tags);
-    record(name + "_75pct", histo.percentile(75), tags);
-    record(name + "_90pct", histo.percentile(90), tags);
-    record(name + "_95pct", histo.percentile(95), tags);
+    record(name + "_50pct", tags, histo.percentile(50));
+    record(name + "_75pct", tags, histo.percentile(75));
+    record(name + "_90pct", tags, histo.percentile(90));
+    record(name + "_95pct", tags, histo.percentile(95));
   }
   
   public final void record(final String name,
@@ -124,12 +126,26 @@ public abstract class StatsCollector {
       final SimpleEntry<String, String> tag){
     Map<String, String> tags = new HashMap<String, String>();
     tags.put(tag.getKey(), tag.getValue());
-    record(name + "_50pct", histo.percentile(50), tags);
-    record(name + "_75pct", histo.percentile(75), tags);
-    record(name + "_90pct", histo.percentile(90), tags);
-    record(name + "_95pct", histo.percentile(95), tags);
+    record(name + "_50pct", tags, histo.percentile(50));
+    record(name + "_75pct", tags, histo.percentile(75));
+    record(name + "_90pct", tags, histo.percentile(90));
+    record(name + "_95pct", tags, histo.percentile(95));
   }
 
+  public final void record(final String name,
+      final DescriptiveStatistics histo,
+      final SimpleEntry<String, String> tag){
+    Map<String, String> tags = new HashMap<String, String>();
+    tags.put(tag.getKey(), tag.getValue());
+    record(name + "_50pct", tags, histo.getPercentile(50));
+    record(name + "_75pct", tags, histo.getPercentile(75));
+    record(name + "_90pct", tags, histo.getPercentile(90));
+    record(name + "_95pct", tags, histo.getPercentile(95));
+    record(name + "_mean", tags, histo.getMean());
+    record(name + "_max", tags, histo.getMax());
+    record(name + "_min", tags, histo.getMin());
+  }
+  
   /**
    * Records a data point.
    * @param name The name of the metric.
@@ -139,9 +155,10 @@ public abstract class StatsCollector {
    * @throws IllegalArgumentException if {@code xtratag != null} and it
    * doesn't follow the {@code name=value} format.
    */
-  public final void record(final String name,
-                           final long value,
-                           final Map<String, String> tags) {
+  private final void record(final String name,
+      final Map<String, String> tags,
+                           final Number value
+                           ) {
 //    buf.setLength(0);
 //    buf.append(prefix).append(".")
 //       .append(name)
@@ -280,7 +297,7 @@ public abstract class StatsCollector {
    */
   public static final class StatsDP {
     public String metric;
-    public double value;
+    public Number value;
     public long timestamp;
     public Map<String, String> tags;
   }
