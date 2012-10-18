@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.Properties;
 
+import net.opentsdb.core.TSDB.TSDRole;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,6 +63,7 @@ public class Config {
   private boolean enable_compactions = false;
   /** Path to write cache files to */
   private String cache_directory = "";
+  private TSDRole role = TSDRole.API;
 
   // -------- Network -------
   /** The default network port */
@@ -91,6 +94,8 @@ public class Config {
   /** Path to override map file */
   private String formatter_collectd_override_path = "";
 
+  private String search_index_path = "";
+  
   // --------- LIMITS -------
   private static final int MAX_FLUSH_INTERVAL = 30 * 60 * 1000; // 30 minutes
   private static final int MAX_CHUNK_SIZE = 100 * 1024 * 1024; // big chunk
@@ -387,6 +392,41 @@ public class Config {
     return this;
   }
   
+  public final TSDRole role(){
+    return this.role;
+  }
+  
+  public final Config role(final String role){
+    if (role.isEmpty())
+      throw new IllegalArgumentException("Role argument was empty, please supply a role name");
+    
+    if (role.toUpperCase().compareTo("INGEST") == 0){
+      this.role = TSDRole.Ingest;
+      return this;
+    }
+    if (role.toUpperCase().compareTo("FORWARDER") == 0){
+      this.role = TSDRole.Forwarder;
+      return this;
+    }
+    if (role.toUpperCase().compareTo("API") == 0){
+      this.role = TSDRole.API;
+      return this;
+    }
+    if (role.toUpperCase().compareTo("ROLLER") == 0){
+      this.role = TSDRole.Roller;
+      return this;
+    }
+    if (role.toUpperCase().compareTo("ESPER") == 0){
+      this.role = TSDRole.Esper;
+      return this;
+    }
+    if (role.toUpperCase().compareTo("TOOL") == 0){
+      this.role = TSDRole.Tool;
+      return this;
+    }
+    throw new IllegalArgumentException("Invalid role argument");
+  }
+  
   // -------- Network -------
   /**
    * The network port for Telnet and HTTP communications
@@ -590,6 +630,17 @@ public class Config {
     return this;
   }
   
+  public final String searchIndexPath(){
+    return this.search_index_path;
+  }
+  
+  public final Config searchIndexPath(final String path){
+    if (path.isEmpty())
+      throw new IllegalArgumentException("Path was empty, please supply a valid directory");
+    this.search_index_path = path;
+    return this;
+  }
+  
 //-------- FORMATTERS --------
   
   /**
@@ -661,6 +712,10 @@ public class Config {
         this.httpStaticRoot(value);
       }else if (key.toLowerCase().equals("formatter_collectd_override")){
         this.formatterCollectdOverride(value);
+      }else if (key.toLowerCase().equals("search_index_path")){
+        this.searchIndexPath(value);
+      }else if (key.toLowerCase().equals("role")){
+        this.role(value);
       }else{
         // unrecognized option
         LOG.warn("Unrecognized configuration key: " + key + " = " + value);

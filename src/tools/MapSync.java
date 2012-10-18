@@ -19,6 +19,7 @@ import net.opentsdb.core.Config;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.Internal;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.core.TSDB.TSDRole;
 import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
@@ -89,20 +90,27 @@ final class MapSync {
     final HBaseClient client = CliOptions.clientFromOptions(config);
     final TsdbStore uid_storage = new TsdbStoreHBase(config, config.tsdUIDTable().getBytes(), client);
     final TsdbStore data_storage = new TsdbStoreHBase(config, config.tsdTable().getBytes(), client);
-    final TSDB tsdb = new TSDB(uid_storage, data_storage, config);
+    final TSDB tsdb = new TSDB(uid_storage, data_storage, config, TSDRole.Tool);
     argp = null;
     try {
       
       // TEMP ---------------     
-      cellKiller(uid_storage, "id", "ts_uids");
-      cellKiller(uid_storage, "id", "metrics_map");
-      cellKiller(uid_storage, "id", "tagk_map");
-      cellKiller(uid_storage, "id", "tagv_map");
-      cellKiller(uid_storage, "name", "name_meta");
-      cellKiller(uid_storage, "name", "metrics_meta");
-      cellKiller(uid_storage, "name", "tagk_meta");
-      cellKiller(uid_storage, "name", "tagv_meta");
-      cellKiller(uid_storage, "name", "ts_meta");
+//      cellKiller(uid_storage, "id", "ts_uids");
+//      cellKiller(uid_storage, "id", "metrics_map");
+//      cellKiller(uid_storage, "id", "tagk_map");
+//      cellKiller(uid_storage, "id", "tagv_map");
+//      cellKiller(uid_storage, "name", "name_meta");
+//      cellKiller(uid_storage, "name", "metrics_meta");
+//      cellKiller(uid_storage, "name", "tagk_meta");
+//      cellKiller(uid_storage, "name", "tagv_meta");
+//      cellKiller(uid_storage, "name", "ts_meta");
+//      System.exit(0);
+      
+      long start = System.currentTimeMillis();
+      LOG.debug("Starting loading of all hashes...");
+      tsdb.ts_uids.loadAllHashes();
+      LOG.debug(String.format("Completed loading of hashes in [%s] ms", (System.currentTimeMillis() - start)));
+      
       System.exit(0);
       
       TsdbScanner scanner = new TsdbScanner();

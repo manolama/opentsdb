@@ -34,6 +34,7 @@ import org.hbase.async.HBaseClient;
 import net.opentsdb.BuildData;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Config;
+import net.opentsdb.core.TSDB.TSDRole;
 import net.opentsdb.storage.TsdbStore;
 import net.opentsdb.storage.TsdbStoreCass;
 import net.opentsdb.storage.TsdbStoreHBase;
@@ -202,14 +203,18 @@ final class TSDMain {
         uid_storage = new TsdbStoreHBase(config, config.tsdUIDTable().getBytes(), client);
         data_storage = new TsdbStoreHBase(config, config.tsdTable().getBytes(), client);
       }
-      final TSDB tsdb = new TSDB(uid_storage, data_storage, config);
+      final TSDB tsdb = new TSDB(uid_storage, data_storage, config, TSDRole.API);
       log.info("Setup tsdb");   
       registerShutdownHook(tsdb);
       log.info("Registered shutdown hook");
       
       
       // load the tsuid hashes first!
-      tsdb.ts_uids.loadAllHashes();
+      //tsdb.ts_uids.loadAllHashes();
+//      log.info("Loaded all hashes, shutting down");
+//      tsdb.shutdown().joinUninterruptibly();
+//      if (true)
+//        return;
       
       tsdb.startManagementThreads();
       final ServerBootstrap server = new ServerBootstrap(factory);

@@ -65,6 +65,7 @@ tsdb_SRC := \
 	src/meta/TimeSeriesMeta.java	\
 	src/search/Searcher.java	\
 	src/search/SearchIndexer.java	\
+	src/search/SearchManager.java	\
 	src/search/SearchQuery.java	\
 	src/stats/Histogram.java	\
 	src/stats/StatsCollector.java	\

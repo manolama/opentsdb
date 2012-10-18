@@ -12,11 +12,13 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.core.TSDB.TSDRole;
 
 /**
  * STUB
@@ -26,6 +28,11 @@ class MetricsRpc implements HttpRpc {
   private static final Logger LOG = LoggerFactory.getLogger(MetricsRpc.class);
 
   public void execute(final TSDB tsdb, final HttpQuery query) {
+    if (tsdb.role != TSDRole.API){
+      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
+      return;
+    }
+    
     final boolean nocache = query.hasQueryStringParam("nocache");
     final int query_hash = query.getQueryStringHash();
     if (!nocache && query.getCacheAndReturn(query_hash)){

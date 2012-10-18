@@ -165,7 +165,8 @@ final public class TimeSeriesMeta extends MetaData {
     try{
       TimeSeriesMeta m = (TimeSeriesMeta)metadata;
       this.uid = m.uid;
-      this.created = m.created;
+      if (this.created >= m.created)
+        this.created = m.created;
       this.notes = m.notes;
       this.custom = m.custom;
       this.retention = m.retention;

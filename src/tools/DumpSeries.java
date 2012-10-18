@@ -27,6 +27,7 @@ import net.opentsdb.core.IllegalDataException;
 import net.opentsdb.core.Internal;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.core.TSDB.TSDRole;
 import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStore;
 import net.opentsdb.storage.TsdbStoreHBase;
@@ -75,7 +76,7 @@ final class DumpSeries {
     final HBaseClient client = CliOptions.clientFromOptions(config);
     final byte[] table = argp.get("--table", "tsdb").getBytes();
     final TsdbStoreHBase storage = new TsdbStoreHBase(config, table, client);
-    final TSDB tsdb = new TSDB(storage, storage, config);
+    final TSDB tsdb = new TSDB(storage, storage, config, TSDRole.Tool);
     final boolean delete = argp.has("--delete");
     final boolean importformat = delete || argp.has("--import");
     argp = null;

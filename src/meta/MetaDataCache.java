@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import net.opentsdb.core.JSON;
 import net.opentsdb.meta.GeneralMeta.Meta_Type;
+import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
 import net.opentsdb.storage.TsdbStoreHBase;
 import net.opentsdb.uid.UniqueId;
@@ -56,23 +57,39 @@ public class MetaDataCache {
     this.kind = kind;
   }
 
-  public TimeSeriesMeta getTimeSeriesMeta(final byte[] id) {
-    TimeSeriesMeta meta = (TimeSeriesMeta) cache.get(UniqueId.IDtoString(id));
+  public TimeSeriesMeta getTimeSeriesMeta(final byte[] id, final boolean cache) {
+    TimeSeriesMeta meta = (TimeSeriesMeta) this.cache.get(UniqueId.IDtoString(id));
     if (meta != null)
       return meta;
-    meta = getTimeSeriesMetaFromHBase(id);
+    meta = getTimeSeriesMetaFromHBase(id, cache);
     if (meta != null) {
       return meta;
     } else
       return null;
   }
 
-  public GeneralMeta getGeneralMeta(final byte[] id) {
+  public boolean haveMeta(final String uid){
+    if (this.cache.get(uid) != null)
+      return true;
+    
+    try{
+      final String cell = this.kind + "_meta";
+      final byte[] raw_meta = storage.getValue(UniqueId.StringtoID(uid), TsdbStore.toBytes("name"),
+          TsdbStore.toBytes(cell));
+      if (raw_meta != null)
+        return true;
+    }catch (TsdbStorageException tse){
+      tse.printStackTrace();
+    }
+    return false;
+  }
+  
+  public GeneralMeta getGeneralMeta(final byte[] id, final boolean cache) {
     GeneralMeta meta = (GeneralMeta) this.cache.get(UniqueId.IDtoString(id));
     if (meta != null){
       return meta;
     }
-    meta = getGeneralMetaFromHBase(id);
+    meta = getGeneralMetaFromHBase(id, cache);
     if (meta != null){
       return meta;
     }
@@ -80,10 +97,10 @@ public class MetaDataCache {
       return null;
   }
 
-  public Boolean putMeta(final MetaData meta, final boolean flush) {
+  public GeneralMeta putMeta(final MetaData meta, final boolean flush) {
     if (meta == null) {
       LOG.error("Null value for meta object");
-      return false;
+      return null;
     }
 
     final String uid = meta.getUID();
@@ -91,12 +108,12 @@ public class MetaDataCache {
     if (!this.is_ts){
       if (((GeneralMeta) meta).getName().isEmpty()){
         LOG.error("Missing name");
-        return false;
+        return null;
       }
     }
     if (uid.length() < 1) {
       LOG.error("Missing UID");
-      return false;
+      return null;
     }
 
     // if we're not flushing, just merge and cache
@@ -105,13 +122,16 @@ public class MetaDataCache {
         this.cache.get(uid).copyChanges(meta);
       }else
         this.cache.put(uid, meta);
-      return true;
+      return (GeneralMeta) this.cache.get(uid);
     }
 
     MetaData new_meta = this.flushMeta(meta);
     if (!flush && new_meta != null)
       this.cache.put(uid, new_meta);
-    return true;
+    if (!this.is_ts){
+      return (GeneralMeta) new_meta;
+    }else
+      return null;
   }
 
   public void putCache(final byte[] id, final MetaData meta){
@@ -179,26 +199,33 @@ public class MetaDataCache {
 
   // PRIVATES ---------------------------------------------------------
 
-  private TimeSeriesMeta getTimeSeriesMetaFromHBase(final byte[] id)
+  private TimeSeriesMeta getTimeSeriesMetaFromHBase(final byte[] id, final boolean cache)
       throws HBaseException {
-    final String cell = this.kind + "_meta";
-    final byte[] raw_meta = storage.getValue(id, TsdbStore.toBytes("name"),
-        TsdbStore.toBytes(cell));
-    final String json = (raw_meta == null ? null : TsdbStore
-        .fromBytes(raw_meta));
-    if (json == null)
-      // todo - log
-      return null;
-
-    JSON codec = new JSON(new TimeSeriesMeta(id));
-    if (codec.parseObject(json)) {
-      return (TimeSeriesMeta) codec.getObject();
+    try{
+      final String cell = this.kind + "_meta";
+      final byte[] raw_meta = storage.getValue(id, TsdbStore.toBytes("name"),
+          TsdbStore.toBytes(cell));
+      final String json = (raw_meta == null ? null : TsdbStore
+          .fromBytes(raw_meta));
+      if (json == null)
+        // todo - log
+        return null;
+  
+      JSON codec = new JSON(new TimeSeriesMeta(id));
+      if (codec.parseObject(json)) {
+        TimeSeriesMeta meta = (TimeSeriesMeta) codec.getObject();
+        if (cache)
+          this.cache.put(UniqueId.IDtoString(id), meta);
+        return meta;
+      }
+    }catch (TsdbStorageException tse){
+      tse.printStackTrace();
     }
     // todo - log
     return null;
   }
 
-  private GeneralMeta getGeneralMetaFromHBase(final byte[] id)
+  private GeneralMeta getGeneralMetaFromHBase(final byte[] id, final boolean cache)
       throws HBaseException {
     final String cell = this.kind + "_meta";
     final Meta_Type type;
@@ -223,7 +250,8 @@ public class MetaDataCache {
           meta.setType(Meta_Type.TAGK);
         else
           meta.setType(Meta_Type.TAGV);
-        this.cache.put(UniqueId.IDtoString(id), meta);
+        if (cache)
+          this.cache.put(UniqueId.IDtoString(id), meta);
         return meta;
       }
     }
@@ -282,7 +310,7 @@ public class MetaDataCache {
           if (this.is_ts) {
             json = ((TimeSeriesMeta) meta).getJSON();
           } else {
-            LOG.trace("New metadata...");
+            LOG.trace("New GMO metadata...");
             ((GeneralMeta) meta).setCreated(System.currentTimeMillis() / 1000L);
             ((GeneralMeta) meta).setType(Meta_Type.INVALID);
             json = ((GeneralMeta) meta).getJSON();

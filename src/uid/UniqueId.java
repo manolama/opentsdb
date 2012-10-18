@@ -296,15 +296,16 @@ public final class UniqueId implements UniqueIdInterface {
     }
   }
 
-  public GeneralMeta getGeneralMeta(final byte[] id) {
+  public GeneralMeta getGeneralMeta(final byte[] id, final boolean cache) {
     try{
       if (this.bad_meta_ids.contains(id)){
         LOG.trace("ID [" + IDtoString(id) + "] was in the bad list");
         return null;
       }
-      GeneralMeta meta = this.metadata.getGeneralMeta(id);
+      
+      GeneralMeta meta = this.metadata.getGeneralMeta(id, cache);
       if (meta.getName().length() < 1 && meta.getCreated() < 1){
-        LOG.trace(String.format("Didn't find %s metatdata for UID [%s]",
+        LOG.trace(String.format("Didn't find %s metadata for UID [%s]",
             fromBytes(kind), IDtoString(id)));
         String name = this.getName(id);
         if (name == null || name.isEmpty()){
@@ -330,8 +331,12 @@ public final class UniqueId implements UniqueIdInterface {
     }
   }
 
-  public Boolean putMeta(final GeneralMeta meta, final boolean flush) {
+  public GeneralMeta putMeta(final GeneralMeta meta, final boolean flush) {
     return this.metadata.putMeta(meta, flush);
+  }
+  
+  public boolean haveMeta(final String uid){
+    return this.metadata.haveMeta(uid);
   }
   
   /**

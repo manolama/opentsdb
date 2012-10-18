@@ -17,6 +17,7 @@ import java.util.Map;
 
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.core.TSDB.TSDRole;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.GeneralMeta.Meta_Type;
 import net.opentsdb.meta.TimeSeriesMeta;
@@ -40,6 +41,11 @@ public class MetaRPC implements HttpRpc {
    * Routes the query to the proper handler
    */
   public void execute(final TSDB tsdb, final HttpQuery query) {
+    if (tsdb.role != TSDRole.API){
+      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
+      return;
+    }
+    
     LOG.trace(query.request.getUri());
     // GET
     if (query.getMethod() == HttpMethod.GET) {
@@ -88,19 +94,19 @@ public class MetaRPC implements HttpRpc {
     GeneralMeta meta = null;
     JSON parser = null;
     if (endpoint == null || endpoint.isEmpty() || endpoint.compareTo("timeseries") == 0){
-      TimeSeriesMeta ts_meta = tsdb.getTimeSeriesMeta(id);
+      TimeSeriesMeta ts_meta = tsdb.getTimeSeriesMeta(id, true);
       if (ts_meta != null)
         parser = new JSON(ts_meta);
     } else if (endpoint.compareTo("metric") == 0){
-      meta = tsdb.metrics.getGeneralMeta(id);
+      meta = tsdb.metrics.getGeneralMeta(id, false);
       if (meta != null)
         parser = new JSON(meta);
     } else if (endpoint.compareTo("tagk") == 0){
-      meta = tsdb.tag_names.getGeneralMeta(id);
+      meta = tsdb.tag_names.getGeneralMeta(id, false);
       if (meta != null)
         parser = new JSON(meta);
     } else if (endpoint.compareTo("tagv") == 0){
-      meta = tsdb.tag_values.getGeneralMeta(id);
+      meta = tsdb.tag_values.getGeneralMeta(id, false);
       if (meta != null)
         parser = new JSON(meta);
     }
@@ -182,33 +188,31 @@ public class MetaRPC implements HttpRpc {
       switch (type) {
       case METRICS:
         meta.setName(tsdb.metrics.getName(UniqueId.StringtoID(meta.getUID())));
-        if (!tsdb.metrics.putMeta(meta, true)) {
+        meta = tsdb.metrics.putMeta(meta, true);
+        if (meta == null) {
           query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
               "Error saving data");
           return;
         }
-        meta = tsdb.metrics.getGeneralMeta(UniqueId.StringtoID(meta
-            .getUID()));
         break;
       case TAGK:
         meta.setName(tsdb.tag_names.getName(UniqueId.StringtoID(meta.getUID())));
-        if (!tsdb.tag_names.putMeta(meta, true)) {
+        meta = tsdb.tag_names.putMeta(meta, true);
+        if (meta == null) {
           query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
               "Error saving data");
           return;
         }
-        meta = tsdb.tag_names.getGeneralMeta(UniqueId.StringtoID(meta
-            .getUID()));
         break;
       case TAGV:
         meta.setName(tsdb.tag_values.getName(UniqueId.StringtoID(meta.getUID())));
-        if (!tsdb.tag_values.putMeta(meta, true)) {
+        meta = tsdb.tag_values.putMeta(meta, true);
+        if (meta == null) {
           query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
               "Error saving data");
           return;
         }
-        meta = tsdb.tag_values.getGeneralMeta(UniqueId.StringtoID(meta
-            .getUID()));
+
         break;
       }
     } catch (NoSuchUniqueId nsui){
@@ -306,7 +310,7 @@ public class MetaRPC implements HttpRpc {
           "Error saving data");
       return;
     }
-    ts_meta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(ts_meta.getUID()));
+    ts_meta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(ts_meta.getUID()), true);
     
     JSON parser = new JSON(ts_meta);
     query.sendReply(parser.getJsonString());

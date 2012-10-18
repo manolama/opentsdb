@@ -40,6 +40,7 @@ import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaDataCache;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.search.SearchIndexer;
+import net.opentsdb.search.SearchManager;
 import net.opentsdb.search.SearchQuery;
 import net.opentsdb.search.Searcher;
 import net.opentsdb.stats.Histogram;
@@ -55,6 +56,15 @@ import net.opentsdb.storage.TsdbStore;
  * points or query the database.
  */
 public final class TSDB {
+  public enum TSDRole{
+    Ingest,     /** Simply accepts incoming data */
+    Forwarder,  /** Stores and forwards data to Ingesters */
+    API,        /** HTTP API server, handles requests but not putting data */
+    Roller,     /** Performs rollups/aggregations */
+    Esper,      /** Esper alert node */
+    Tool        /** CLi tool */
+  }
+  
   private static final Logger LOG = LoggerFactory.getLogger(TSDB.class);
   
   static final byte[] FAMILY = { 't' };
@@ -73,7 +83,7 @@ public final class TSDB {
   }
 
   /** Client for the HBase cluster to use.  */
-  final TsdbStore uid_storage;
+  public final TsdbStore uid_storage;
   final TsdbStore data_storage;
 
   /** Configuration for the TSD and related services */
@@ -101,6 +111,7 @@ public final class TSDB {
   /** Thread that synchronizes UID maps */
   private UIDManager uid_manager;
   private TSUIDManager tsuid_manager;
+  private SearchManager search_manager;
   
   /**
    * Row keys that need to be compacted.
@@ -113,6 +124,8 @@ public final class TSDB {
   public final SearchIndexer meta_search_writer;
   public final Searcher meta_searcher;
   
+  public final TSDRole role;
+  
   /**
    * DEPRECATED Constructor
    * Please use the constructor with the Config class instead
@@ -123,8 +136,8 @@ public final class TSDB {
    * @param uniqueids_table The name of the HBase table where the unique IDs
    * are stored.
    */
-  public TSDB(final TsdbStore uid_store, final TsdbStore data_store, final String timeseries_table,
-              final String uniqueids_table) {
+  public TSDB(final TsdbStore uid_store, final TsdbStore data_store, 
+      final String timeseries_table, final String uniqueids_table, final TSDRole role) {
     //this.client = client;
     this.config = new Config();
     table = timeseries_table.getBytes();
@@ -141,13 +154,18 @@ public final class TSDB {
     compactionq = new CompactionQueue(this);
     timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts");
     ts_uids = new TimeseriesUID(this.uid_storage);
-    if (System.getProperty("os.name").contains("Windows")){
-      meta_search_writer = new SearchIndexer("C:\\programming\\opentsdb\\search\\tsmeta");
-      meta_searcher = new Searcher("C:\\programming\\opentsdb\\search\\tsmeta");
+    if (config.role() != role && role != TSDRole.Tool)
+      this.role = config.role();
+    else
+      this.role = role;
+    if (role == TSDRole.API){
+      meta_search_writer = new SearchIndexer(config.searchIndexPath());
+      meta_searcher = new Searcher(config.searchIndexPath());
     }else{
-      meta_search_writer = new SearchIndexer("/home/clarsen/opentsdb/idx");
-      meta_searcher = new Searcher("/home/clarsen/opentsdb/idx");
+      meta_search_writer = null;
+      meta_searcher = null;
     }
+    
   }
   
   /**
@@ -159,7 +177,8 @@ public final class TSDB {
    * @param uniqueids_table The name of the HBase table where the unique IDs
    * are stored.
    */
-  public TSDB(final TsdbStore uid_store, final TsdbStore data_store, final Config config) {
+  public TSDB(final TsdbStore uid_store, final TsdbStore data_store, final Config config,
+      final TSDRole role) {
     //this.client = client;
     this.config = config;
     table = config.tsdTable().getBytes();
@@ -174,12 +193,16 @@ public final class TSDB {
     compactionq = new CompactionQueue(this);
     timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts");
     ts_uids = new TimeseriesUID(this.uid_storage);
-    if (System.getProperty("os.name").contains("Windows")){
-      meta_search_writer = new SearchIndexer("C:\\programming\\opentsdb\\search\\tsmeta");
-      meta_searcher = new Searcher("C:\\programming\\opentsdb\\search\\tsmeta");
+    if (config.role() != role && role != TSDRole.Tool)
+      this.role = config.role();
+    else
+      this.role = role;
+    if (role == TSDRole.API){
+      meta_search_writer = new SearchIndexer(config.searchIndexPath());
+      meta_searcher = new Searcher(config.searchIndexPath());
     }else{
-      meta_search_writer = new SearchIndexer("/home/clarsen/opentsdb/idx");
-      meta_searcher = new Searcher("/home/clarsen/opentsdb/idx");
+      meta_search_writer = null;
+      meta_searcher = null;
     }
   }
 
@@ -193,6 +216,10 @@ public final class TSDB {
     uid_manager.start();
 //    tsuid_manager = new TSUIDManager();
 //    tsuid_manager.start();
+    if (role == TSDRole.API){
+      search_manager = new SearchManager(this);
+      search_manager.start();
+    }
   }
   
   /**
@@ -287,8 +314,7 @@ public final class TSDB {
     collectUidStats(metrics, collector);
     collectUidStats(tag_names, collector);
     collectUidStats(tag_values, collector);
-    collector.record("uid.cache.size.tsuid.hashes", this.ts_uids.intSize());
-    collector.record("uid.cache.size.tsuid.strings", this.ts_uids.stringSize());
+    collector.record("uid.cache.size.tsuid.hashes", this.ts_uids.hashSize());
     collector.record("uid.cache.size.tsuid.queue", this.ts_uids.queueSize());
     collector.record("uid.cache.size.tsuid.meta", this.timeseries_meta.size());
     this.ts_uids.collectStats(collector);
@@ -530,7 +556,7 @@ public final class TSDB {
         uid_manager = null;
       }
       LOG.trace("Flushing TS UIDs");
-      this.ts_uids.flush();
+      this.ts_uids.processNewMeta(metrics, tag_names, tag_values, timeseries_meta);
       
       LOG.trace("Flushing TS Meta");
       this.timeseries_meta.flush();
@@ -641,13 +667,13 @@ public final class TSDB {
     return this.config;
   }
   
-  public TimeSeriesMeta getTimeSeriesMeta(final byte[] id){
+  public TimeSeriesMeta getTimeSeriesMeta(final byte[] id, final boolean cache){
     if (id.length <= (short)3){
       LOG.debug("ID was too short");
       return null;
     }
     try{
-      TimeSeriesMeta meta = this.timeseries_meta.getTimeSeriesMeta(id);
+      TimeSeriesMeta meta = this.timeseries_meta.getTimeSeriesMeta(id, cache);
       if (meta == null)
         meta = new TimeSeriesMeta(id);
       
@@ -659,7 +685,7 @@ public final class TSDB {
             UniqueId.IDtoString(id)));
         return null;
       }else{
-        meta.setMetric(this.metrics.getGeneralMeta(metricID));
+        meta.setMetric(this.metrics.getGeneralMeta(metricID, cache));
         if (meta.getMetric() == null)
           return null;
       }
@@ -674,9 +700,9 @@ public final class TSDB {
         int index=0;
         for (byte[] tag : tags){
           if ((index % 2) == 0)
-            tm.add(this.tag_names.getGeneralMeta(tag));
+            tm.add(this.tag_names.getGeneralMeta(tag, cache));
           else
-            tm.add(this.tag_values.getGeneralMeta(tag));
+            tm.add(this.tag_values.getGeneralMeta(tag, cache));
           index++;
         }
         meta.setTags(tm);
@@ -690,7 +716,7 @@ public final class TSDB {
   }
   
   public Boolean putMeta(final TimeSeriesMeta meta){
-    return this.timeseries_meta.putMeta(meta, false);
+    return this.timeseries_meta.putMeta(meta, false) != null;
   }
   
   public static Boolean isInteger(Object dp){
@@ -745,15 +771,19 @@ public final class TSDB {
         try {
           Thread.sleep(5000);
           
-          LOG.debug("Flushing all TS/UID maps and meta...");
-          // update the UIDs
-          metrics.flushMeta();
-          tag_names.flushMeta();
-          tag_values.flushMeta();
-          timeseries_meta.flush();
-          ts_uids.flush();
-          ts_uids.processNewMeta(metrics, tag_names, tag_values, timeseries_meta, true, meta_search_writer);
-          LOG.debug("Flushed all TS/UID maps and meta");
+          if (role == TSDRole.Ingest){
+            LOG.debug("Flushing all TS/UID maps and meta...");
+            // update the UIDs
+            metrics.flushMeta();
+            tag_names.flushMeta();
+            tag_values.flushMeta();
+            timeseries_meta.flush();
+
+            //ts_uids.flush();
+            ts_uids.processNewMeta(metrics, tag_names, tag_values, timeseries_meta);
+            LOG.debug("Flushed all TS/UID maps and meta");
+          }
+          
         } catch (InterruptedException e) {
           break;
         } catch (Exception ex){
@@ -776,8 +806,7 @@ public final class TSDB {
         }
         
         LOG.info("Processing TSUID maps and meta");
-        ts_uids.flush();
-        ts_uids.processNewMeta(metrics, tag_names, tag_values, timeseries_meta, true, meta_search_writer);
+        ts_uids.processNewMeta(metrics, tag_names, tag_values, timeseries_meta);
         LOG.info("Processed TSUID maps and meta");
       }
     }

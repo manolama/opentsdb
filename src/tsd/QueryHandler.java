@@ -26,6 +26,7 @@ import net.opentsdb.core.Aggregators;
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.core.TSDB.TSDRole;
 import net.opentsdb.core.Tags;
 import net.opentsdb.formatters.Ascii;
 import net.opentsdb.formatters.CollectdJSON;
@@ -52,12 +53,17 @@ public class QueryHandler implements HttpRpc {
    * @throws IOException 
    */
   public void execute(final TSDB tsdb, final HttpQuery query) throws IOException {
+    if (tsdb.role != TSDRole.API){
+      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
+      return;
+    }
+    
     final long start_time = query.getQueryStringDate("start");
     final boolean nocache = query.hasQueryStringParam("nocache");
     long end_time = query.getQueryStringDate("end");
     final int query_hash = query.getQueryStringHash();
     
-    LOG.trace(String.format("HTTP Start [%d] End [%d]", start_time, end_time));
+    //LOG.trace(String.format("HTTP Start [%d] End [%d]", start_time, end_time));
     // first, see if we can satisfy the request from cache
     if (!nocache && query.getCacheAndReturn(query_hash)){
       // satisfied from cache!!

@@ -24,6 +24,7 @@ import java.util.TreeMap;
 import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.core.TSDB.TSDRole;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
 
@@ -36,6 +37,10 @@ public class GroupRPC implements HttpRpc {
   private static final Logger LOG = LoggerFactory.getLogger(GroupRPC.class);
   
   public void execute(final TSDB tsdb, final HttpQuery query) {
+    if (tsdb.role != TSDRole.API){
+      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
+      return;
+    }
     
     String grouping_tagk = "host";
     long limit = 25;

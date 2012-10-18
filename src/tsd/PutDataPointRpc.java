@@ -20,11 +20,13 @@ import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import org.jboss.netty.channel.Channel;
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Tags;
+import net.opentsdb.core.TSDB.TSDRole;
 import net.opentsdb.formatters.Ascii;
 import net.opentsdb.formatters.CollectdJSON;
 import net.opentsdb.formatters.TSDFormatter;
@@ -58,6 +60,11 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
    * @param query The query from Netty
    */
   public void execute(final TSDB tsdb, final HttpQuery query) {
+    if (tsdb.role != TSDRole.Ingest && tsdb.role != TSDRole.Forwarder){
+      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
+      return;
+    }
+    
     String endpoint = query.getEndpoint();
     final TSDFormatter formatter;
     if (endpoint != null){

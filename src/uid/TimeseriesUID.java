@@ -38,7 +38,6 @@ import org.slf4j.LoggerFactory;
  */
 public class TimeseriesUID {
   private static final Logger LOG = LoggerFactory.getLogger(TimeseriesUID.class);
-  private final Map<String, HashSet<String>> ts_uids;
   
   // these locks should only be used for the hashes
   private final Set<Integer> ts_uid_hashes;
@@ -49,11 +48,9 @@ public class TimeseriesUID {
   private final TsdbStore uid_storage;
   
   private final Set<String> tsuid_queue;
-  private final Lock queue_lock = new ReentrantLock();
   private final AtomicLong new_tsuids = new AtomicLong();
   
   public TimeseriesUID(final TsdbStore store){
-    ts_uids = new HashMap<String, HashSet<String>>();
     ts_uid_hashes = new HashSet<Integer>();
     tsuid_queue = new HashSet<String>();
     this.uid_storage = store;
@@ -80,13 +77,7 @@ public class TimeseriesUID {
   public final void add(final String uid){
     try{
       if (this.write_lock.tryLock(100, TimeUnit.MILLISECONDS)){
-      final String metric = getMetric(uid);   
-        if (!this.ts_uids.containsKey(metric)){
-          LOG.debug(String.format("Queing new TSUID [%s]", uid));
-          HashSet<String> uids = new HashSet<String>();
-          uids.add(uid);
-          this.ts_uids.put(metric, uids);
-        }
+        this.tsuid_queue.add(uid);
         this.ts_uid_hashes.add(uid.hashCode());
       }else{
         LOG.warn(String.format("Failed to acquire lock for tsuid [%s]", uid));
@@ -99,25 +90,11 @@ public class TimeseriesUID {
     }
   }
   
-  public final int stringSize(){
-//    this.read_lock.lock();
-//    try{
-      return this.ts_uids.size();
-//    }finally{
-//      this.read_lock.unlock();
-//    }
-  }
-  
   public final int queueSize(){
-//  this.read_lock.lock();
-//  try{
     return this.tsuid_queue.size();
-//  }finally{
-//    this.read_lock.unlock();
-//  }
 }
   
-  public final int intSize(){
+  public final int hashSize(){
 //    this.read_lock.lock();
 //    try{
       return this.ts_uid_hashes.size();
@@ -125,162 +102,61 @@ public class TimeseriesUID {
 //      this.read_lock.unlock();
 //    }
   }
-  
-  /**
-   * Writes any changes in the tsuids to storage
-   */
-  public final boolean flush(){
-    if (this.ts_uids.size() < 1){
-      LOG.trace("No ts_uid maps to flush");
-      return true;
-    }
 
-    Map<String, HashSet<String>> queue = new HashMap<String, HashSet<String>>();
-    
-    // we want to lock the TSUID maps as short as possible to avoid impacting write performance
-    // so we'll remove the reference for each map from the main ts_uids map, move it to the 
-    // local queue map, then flush to storage after releaseing the lock on the main map.
-    try{
-      this.write_lock.tryLock(5, TimeUnit.SECONDS);
-      Iterator<Entry<String, HashSet<String>>> it = this.ts_uids.entrySet().iterator();
-      while (it.hasNext()) {
-        Map.Entry<String, HashSet<String>> uids = (Map.Entry<String, HashSet<String>>)it.next();
-        queue.put(uids.getKey(), uids.getValue());
-        it.remove();
-      }
-    } catch (InterruptedException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    } finally{
-      this.write_lock.unlock();
-    }
-    
-    // now run through our hash
-    for (Map.Entry<String, HashSet<String>> uids : queue.entrySet()){
-      this.flushSet(uids.getKey(), uids.getValue());
-    }
-    
-    LOG.info("Completed flush of TSUIDs");  
-    return true;
-  }
-  
   public final boolean processNewMeta(final UniqueId metrics, final UniqueId tag_names, 
-      final UniqueId tag_values, final MetaDataCache timeseries_meta, final boolean update_meta, 
-      final SearchIndexer idx){
+      final UniqueId tag_values, final MetaDataCache timeseries_meta){
     try{
       if (this.tsuid_queue.size() < 1){
         LOG.trace("No new TSUIDs to process");
         return true;
       }
       
-      ArrayList<Document> index_queue = new ArrayList<Document>();
+      // lock and copy queue
+      Set<String> local_queue = null;
+      try{
+        if (this.write_lock.tryLock(250, TimeUnit.MILLISECONDS)){
+          try{
+            local_queue = new HashSet<String>(this.tsuid_queue);
+            this.tsuid_queue.clear();
+          }finally {
+            this.write_lock.unlock();
+          }
+        }else{
+          LOG.error("Unable to acquire lock on queue");
+          return false;
+        }
+      }catch (Exception e){
+        e.printStackTrace();
+      }
+
+      LOG.debug(String.format("Processing [%s] new TSUIDs", local_queue.size()));
       
       long count = 0;
-      Iterator<String> queue_iterator = this.tsuid_queue.iterator();
+      Iterator<String> queue_iterator = local_queue.iterator();
       while (queue_iterator.hasNext()){
         final String tsuid = queue_iterator.next();
-        final ArrayList<GeneralMeta> tag_metas = new ArrayList<GeneralMeta>();
-        
-        // update maps
-        String metric = tsuid.substring(0, 6);
-        List<byte[]> pairs = getTagPairsFromTSUID(tsuid, (short)3, (short)3);
-        List<byte[]> tagks = getTagksFromTagPairs(pairs, (short)3);
-        List<byte[]> tagvs = getTagvsFromTagPairs(pairs, (short)3);
-        final long timestamp = System.currentTimeMillis() / 1000;
-        LOG.trace(String.format("Processing new TSUID [%s]", tsuid));
+        // get meta
+        if (timeseries_meta.haveMeta(tsuid)){
+          LOG.trace(String.format("Already have meta for TSUID [%s]", tsuid));
+          continue;
+        }
 
-        // tagk
-        for (byte[] tagk : tagks){
-          // meta data
-          if (update_meta){
-            GeneralMeta meta = tag_names.getGeneralMeta(tagk);
-            if (meta == null){
-              meta = new GeneralMeta(tagk);
-              meta.setName(tag_names.getName(tagk));
-              meta.setCreated(timestamp);
-              tag_names.putMeta(meta, false);
-            }
-//            }else if (meta.getCreated() < 1){
-//              meta.setCreated(timestamp);
-//              tag_names.putMeta(meta, false);
-//            }
-            meta = tag_names.getGeneralMeta(tagk);
-            tag_metas.add(meta);
-          }
-        }
-        
-        // tagv
-        for (byte[] tagv : tagvs){
-          // meta data
-          if (update_meta){
-            GeneralMeta meta = tag_values.getGeneralMeta(tagv);
-            if (meta == null){
-              meta = new GeneralMeta(tagv);
-              meta.setName(tag_values.getName(tagv));
-              meta.setCreated(timestamp);
-              tag_values.putMeta(meta, false);
-            }
-//            }else if (meta.getCreated() < 1){
-//              meta.setCreated(timestamp);
-//              tag_values.putMeta(meta, false);
-//            }
-            meta = tag_values.getGeneralMeta(tagv);
-            tag_metas.add(meta);
-          }
-        }
-        
-        if (update_meta){
-          // metric meta data
-          GeneralMeta meta = metrics.getGeneralMeta(UniqueId.StringtoID(metric));
-          if (meta == null){
-            meta = new GeneralMeta(UniqueId.StringtoID(metric));
-            meta.setName(metrics.getName(UniqueId.StringtoID(metric)));
-            meta.setCreated(timestamp);
-            metrics.putMeta(meta, false);
-          }
-//          }else if (meta.getCreated() < 1){
-//            meta.setCreated(timestamp);
-//            metrics.putMeta(meta, false);
-//          }
-          meta = metrics.getGeneralMeta(UniqueId.StringtoID(metric));
-          
-          // TS meta data
-          TimeSeriesMeta tsmd = timeseries_meta.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
-          if (tsmd == null){
-            tsmd = new TimeSeriesMeta(UniqueId.StringtoID(tsuid));
-            tsmd.setCreated(timestamp);
-            timeseries_meta.putMeta(tsmd, false);
-          }
-//          }else if (tsmd.getCreated() < 1){
-//            tsmd.setCreated(timestamp);
-//            timeseries_meta.putMeta(tsmd, false);
-//          }
-          else
-            tsmd = timeseries_meta.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
-          if (tsmd != null){
-            tsmd.setMetric(meta);
-            tsmd.setTags(tag_metas);
-            index_queue.add(tsmd.buildLuceneDoc());
-          }
-        }
-        
-        // delete the entry now that we're done
-        queue_iterator.remove();
+        LOG.trace(String.format("Processing new TSUID [%s]", tsuid));
+        TimeSeriesMeta tsmd = new TimeSeriesMeta(UniqueId.StringtoID(tsuid));
+        tsmd.setCreated(System.currentTimeMillis() / 1000);
+        timeseries_meta.putMeta(tsmd, true);
+        this.new_tsuids.incrementAndGet();
+
         count++;
       }
-      
-      if (index_queue.size() > 0){
-        if (idx.index(index_queue, "tsuid")){
-          LOG.debug(String.format("Successfully added [%d] TSUIDs to search index", index_queue.size()));
-        }else{
-          LOG.warn(String.format("Error adding [%d] TSUID to search index", index_queue.size()));
-        }
-      }
-      
+
       LOG.info(String.format("Processed [%d] new TSUIDs", count));
       return true;
     }catch (NullPointerException npe){
       npe.printStackTrace();
+      return false;
+    }catch (Exception e){
+      e.printStackTrace();
       return false;
     }
   }
@@ -356,46 +232,35 @@ public class TimeseriesUID {
     }
     return matches;
   }
-  
+
+  /**
+   * Scans the entire tsdb-uid table for ts_meta data and loads the hash code into the 
+   * hashes set for fast lookups on puts
+   * @return
+   */
   public final boolean loadAllHashes(){
     TsdbScanner scanner = new TsdbScanner(null, null, TsdbStore.toBytes("tsdb-uid"));
-    scanner.setFamily(TsdbStore.toBytes("id"));
-    scanner.setQualifier(TsdbStore.toBytes("ts_uids"));
+    //scanner.setStartRow(new byte[] {127, 127, 127});
+    scanner.setFamily(TsdbStore.toBytes("name"));
+    //scanner.setQualifier(TsdbStore.toBytes("ts_meta"));
     
     try {
       scanner = this.uid_storage.openScanner(scanner);
-      
+      LOG.info("Loading list of TSUIDs from UID table");
       long count=0;
       ArrayList<ArrayList<KeyValue>> rows;
       while ((rows = this.uid_storage.nextRows(scanner).joinUninterruptibly()) != null) {
         for (final ArrayList<KeyValue> row : rows) {
-          if (row.size() != 1) {
-            LOG.error("WTF shouldn't happen!  Scanner " + scanner + " returned"
-                + " a row that doesn't have exactly 1 KeyValue: " + row);
-            if (row.isEmpty()) {
-              continue;
+          for (KeyValue cell : row){
+            if (TsdbStore.fromBytes(cell.qualifier()).compareTo("ts_meta") == 0){
+              final String uid = UniqueId.IDtoString(cell.key());
+              this.ts_uid_hashes.add(uid.hashCode());
+              count++;
             }
           }
-          
-          JSON codec = new JSON(new HashSet<String>());
-          if (!codec.parseObject(row.get(0).value())){
-            LOG.error("Unable to parse ts_uids from row ____");
-            continue;
-          }
-          
-          HashSet<String> tsuids = (HashSet<String>)codec.getObject();
-          if (tsuids == null){
-            LOG.error("Row ____ was null");
-            continue;
-          }
-          
-          for (String tsuid : tsuids){
-            this.ts_uid_hashes.add(tsuid.hashCode());
-            count++;
-          }          
         }
       }
-      LOG.trace(String.format("Loaded [%d] tsuid hashes", count));
+      LOG.info(String.format("Loaded [%d] tsuid hashes", count));
       return true;
     } catch (HBaseException e) {
       throw e;
@@ -499,161 +364,5 @@ public class TimeseriesUID {
       }
     }
     return uid;
-  }
-  
-  private final String getMetric(final String uid){
-    if (uid.length() <= 6){
-      LOG.error("UID was less than or equal to metric length");
-      return null;
-    }
-    
-    return uid.substring(0, 6);
-  }
-    
-  public final boolean flushSet(final String metric_uid, final HashSet<String> metric_uids){
-    if (metric_uids.size() < 1){
-      LOG.warn(String.format("Uids for metric [%s] were empty", metric_uid));
-      return false;
-    }
-    
-    short attempt = 3;
-    Object lock = null;
-    byte[] uid = UniqueId.StringtoID(metric_uid);
-    try{
-      while(attempt-- > 0){
-        LOG.trace(String.format("Attempting to sync Timeseries UIDs on metric [%s]", 
-            metric_uid));
-        // first, we need to lock the row for exclusive access on the set
-        try {
-          lock = this.uid_storage.getRowLock(uid);          
-          if (lock == null) {  // Should not happen.
-            LOG.error("Received null for row lock");
-            continue;
-          }
-          LOG.trace(String.format("Successfully locked UID row [%s]", metric_uid));
-          
-          HashSet<String> temp_uids = new HashSet<String>();
-          JSON codec = new JSON(new HashSet<String>());
-          
-          // get the current value from storage so we don't overwrite other TSDs changes
-          byte[] uids = uid_storage.getValue(uid, TsdbStore.toBytes("id"), 
-              TsdbStore.toBytes("ts_uids"), lock);
-          if (uids == null){
-            LOG.warn(String.format("Timeseries UID list was not found in the storage system for metric [%s]",
-                metric_uid));
-          }else{
-            if (!codec.parseObject(uids)){
-              LOG.error(String.format("Unable to parse Timeseries UID list from storage for metric [%s]",
-                  metric_uid));
-              return false;
-            }
-            temp_uids = (HashSet<String>)codec.getObject();
-            if (temp_uids.size() > 0)
-              LOG.trace(String.format("Successfully loaded Timeseries UID list from the storage system [%d] tsuids",
-                temp_uids.size()));
-            
-            // now we compare the newly loaded list and the old one, if there are any differences,
-            // we need to update storage
-            if (metric_uids.equals(temp_uids)){
-              LOG.trace(String.format("No changes from stored data for [%s]", metric_uid));
-              return true;
-            }
-          }          
-          
-          // there was a difference so check for new tsuids that need maps
-          Iterator<String> metric_iterator = metric_uids.iterator();
-          while (metric_iterator.hasNext()){
-            final String muid = metric_iterator.next();
-            if (!temp_uids.contains(muid)){
-              LOG.trace(String.format("Detected new TSUID [%s]", muid));
-              this.tsuid_queue.add(muid);
-            }
-          }
-          
-          // then merge and put
-          int old_size = temp_uids.size();
-          temp_uids.addAll(metric_uids);
-          if (temp_uids.size() < 1){
-            LOG.debug("No UIDs to store");
-            return true;
-          }
-          LOG.trace(String.format("TS UIDs for [%s] requires updating, old size [%d], new [%d]",
-              metric_uid, old_size, temp_uids.size()));  
-          this.new_tsuids.addAndGet(temp_uids.size() - old_size);
-          
-          codec = new JSON(temp_uids);
-          this.uid_storage.putWithRetry(uid, TsdbStore.toBytes("id"), 
-              TsdbStore.toBytes("ts_uids"), codec.getJsonBytes(), lock)
-              .joinUninterruptibly();
-          LOG.debug(String.format("Successfully updated Timeseries UIDs for [%s] in storage", metric_uid));
-          // do NOT forget to unlock
-          //this.uid_storage.releaseRowLock(lock);
-          return true;
-        } catch (TsdbStorageException e) {
-          try {
-            Thread.sleep(61000 / 3);
-          } catch (InterruptedException ie) {
-            return false;
-          }
-          continue;
-        } catch (Exception e){
-          LOG.error(String.format("Unhandled exception [%s]", e));
-          e.printStackTrace();
-          return false;
-        }
-      }
-    }catch (TsdbStorageException tex){
-      LOG.warn(String.format("Exception from storage [%s]", tex.getMessage()));
-      return false;
-    } catch (NullPointerException npe) {
-      npe.printStackTrace();
-      return false;
-    } catch (Exception e){
-      e.printStackTrace();
-      return false;
-    }finally {
-      //LOG.trace("Releasing lock");
-      this.uid_storage.releaseRowLock(lock);
-    }
-    return true;
-  }
-  
-  private final HashSet<String> getTSUIDs(final String metric_uid){
-    byte[] uid = UniqueId.StringtoID(metric_uid);
-    LOG.debug(String.format("Attempting to fetch Timeseries UIDs for metric [%s]", 
-        metric_uid));
-    // first, we need to lock the row for exclusive access on the set
-    try {
-
-      HashSet<String> uids = new HashSet<String>();
-      JSON codec = new JSON(uids);
-      
-      // get the current value from storage so we don't overwrite other TSDs changes
-      byte[] storage_uids = uid_storage.getValue(uid, TsdbStore.toBytes("id"), 
-          TsdbStore.toBytes("ts_uids"));
-      if (storage_uids == null){
-        LOG.warn(String.format("Timeseries UID list was not found in storage for metric [%s]",
-            metric_uid));
-      }else{
-        if (!codec.parseObject(storage_uids)){
-          LOG.error(String.format("Unable to parse Timeseries UID list from storage for metric [%s]",
-              metric_uid));
-          return null;
-        }
-        uids = (HashSet<String>)codec.getObject();
-        if (uids.size() > 0)
-          LOG.debug(String.format("Successfully loaded [%d] Timeseries UIDs from metric [%s]",
-              uids.size(), metric_uid));
-        
-        return uids;
-      }          
-    }catch (TsdbStorageException tex){
-      LOG.warn(String.format("Exception from storage [%s]", tex.getMessage()));
-    } catch (NullPointerException npe) {
-      npe.printStackTrace();
-    } catch (Exception e){
-      e.printStackTrace();
-    }
-    return null;
   }
 }
