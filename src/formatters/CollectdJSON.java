@@ -239,7 +239,6 @@ public class CollectdJSON extends TSDFormatter {
   /**
    * Private class used for deserializing Collectd data from the write_http plugin
    */
-  @SuppressWarnings("unused")
   private static class CollectdJSONdps{
     // each array should have the same number of elements, if not, there was a
     // glitch

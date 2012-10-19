@@ -43,7 +43,8 @@ final public class TimeSeriesMeta extends MetaData {
   // API only
   private GeneralMeta metric = null;
   // <tag name, meta>
-  private ArrayList<GeneralMeta> tags = null;
+  @JsonIgnore
+  private Map<GeneralMeta, GeneralMeta> tags = null;
  
   public TimeSeriesMeta(){
     super();
@@ -221,21 +222,17 @@ final public class TimeSeriesMeta extends MetaData {
     // add the metric metadata
     this.metric.appendFields(doc, flatten);
     
-    String tag_pairs = "";
-    String uid_pairs = "";
-    for (GeneralMeta tag : this.tags){
-      tag.appendFields(doc, flatten);
-      if (tag.getType() == Meta_Type.TAGK){
-        tag_pairs = tag.getName();
-        uid_pairs = tag.getUID();
-        doc.add(new Field("tagk_uid", tag.getUID(), Field.Store.NO, Field.Index.NOT_ANALYZED));
-      }else{
-        tag_pairs += " " + tag.getName();
-        doc.add(new Field("tags", tag_pairs, Field.Store.YES, Field.Index.ANALYZED));
-        uid_pairs += tag.getUID();
-        doc.add(new Field("tag_pairs", uid_pairs, Field.Store.NO, Field.Index.NOT_ANALYZED));
-        doc.add(new Field("tagv_uid", tag.getUID(), Field.Store.NO, Field.Index.NOT_ANALYZED));
-      }
+    for (Map.Entry<GeneralMeta, GeneralMeta> entry : this.tags.entrySet()){
+      entry.getKey().appendFields(doc, flatten);
+      entry.getValue().appendFields(doc, flatten);
+      
+      doc.add(new Field("tagk_uid", entry.getKey().getUID(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+      doc.add(new Field("tagv_uid", entry.getValue().getUID(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+      doc.add(new Field("tag_pairs", entry.getKey().getUID() + entry.getValue().getUID(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+      doc.add(new Field("tags", entry.getKey().getName() + "=" + entry.getValue().getName(), Field.Store.YES, Field.Index.NOT_ANALYZED));
+      
+      // put tagk/v pair
+      doc.add(new Field(entry.getKey().name, entry.getValue().name, Field.Store.NO, Field.Index.NOT_ANALYZED));
     }
     
     // flatten all text 
@@ -273,7 +270,7 @@ final public class TimeSeriesMeta extends MetaData {
     return this.metric;
   }
   
-  public ArrayList<GeneralMeta> getTags(){
+  public Map<GeneralMeta, GeneralMeta> getTags(){
     return this.tags;
   }
   
@@ -314,7 +311,7 @@ final public class TimeSeriesMeta extends MetaData {
     this.metric = m;
   }
   
-  public void setTags(final ArrayList<GeneralMeta> t){
+  public void setTags(final Map<GeneralMeta, GeneralMeta> t){
     this.tags = t;
   }
 

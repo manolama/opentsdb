@@ -110,8 +110,7 @@ tsdb_SRC := \
 	src/uid/NoSuchUniqueId.java	\
 	src/uid/NoSuchUniqueName.java	\
 	src/uid/TimeseriesUID.java	\
-	src/uid/UniqueId.java	\
-	src/uid/UniqueIdInterface.java
+	src/uid/UniqueId.java	
 
 tsdb_DEPS = \
 	$(ASYNCHBASE)	\
@@ -129,6 +128,7 @@ tsdb_DEPS = \
 	$(CASSANDRA_CORE) \
 	$(CASSANDRA_THRIFT) \
 	$(LUCENE) \
+	$(LUCENE_GROUPING) \
 	$(CURATOR_CLIENT) \
 	$(CURATOR_FRAMEWORK) \
 	$(CURATOR_RECIPES) \

@@ -210,13 +210,14 @@ final class TSDMain {
       
       
       // load the tsuid hashes first!
-      //tsdb.ts_uids.loadAllHashes();
+      if (tsdb.role == TSDRole.Ingest)
+        tsdb.ts_uids.loadAllHashes();
 //      log.info("Loaded all hashes, shutting down");
 //      tsdb.shutdown().joinUninterruptibly();
 //      if (true)
 //        return;
       
-      tsdb.startManagementThreads();
+      //tsdb.startManagementThreads();
       final ServerBootstrap server = new ServerBootstrap(factory);
 
       // setup the network sockets

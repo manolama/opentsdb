@@ -20,4 +20,10 @@ LUCENE_BASE_URL := http://www.euphoriaaudio.com/downloads
 $(LUCENE): $(LUCENE).md5
 	set dummy "$(LUCENE_BASE_URL)" "$(LUCENE)"; shift; $(FETCH_DEPENDENCY)
 
-THIRD_PARTY += $(LUCENE)
+LUCENE_GROUPING := third_party/lucene/lucene-grouping-$(LUCENE_VERSION).jar
+LUCENE_BASE_URL := http://www.euphoriaaudio.com/downloads
+
+$(LUCENE_GROUPING): $(LUCENE_GROUPING).md5
+	set dummy "$(LUCENE_BASE_URL)" "$(LUCENE_GROUPING)"; shift; $(FETCH_DEPENDENCY)
+
+THIRD_PARTY += $(LUCENE) $(LUCENE_GROUPING)

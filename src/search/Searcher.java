@@ -3,6 +3,7 @@ package net.opentsdb.search;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -10,12 +11,21 @@ import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.queryParser.ParseException;
 import org.apache.lucene.queryParser.QueryParser;
+import org.apache.lucene.search.CachingCollector;
 import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.grouping.GroupDocs;
+import org.apache.lucene.search.grouping.SearchGroup;
+import org.apache.lucene.search.grouping.TermAllGroupsCollector;
+import org.apache.lucene.search.grouping.TermFirstPassGroupingCollector;
+import org.apache.lucene.search.grouping.TermSecondPassGroupingCollector;
+import org.apache.lucene.search.grouping.TopGroups;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.LockObtainFailedException;
@@ -116,58 +126,117 @@ public class Searcher {
     // return an array of TSUIDs
     ArrayList<Map<String, Object>> metas = new ArrayList<Map<String, Object>>();
     for(int i = (page * limit); i < ((page + 1) * limit); i++) {
-      try {
-        final String tsuid = searcher.doc(hits.scoreDocs[i].doc).get("tsuid");
-        if (tsuid == null){
-          LOG.error(String.format("Unable to find TSUID for doc [%d]", hits.scoreDocs[i].doc));
-          continue;
-        }
-        
-        final String metric = searcher.doc(hits.scoreDocs[i].doc).get("metric");
-        if (metric == null){
-          LOG.error(String.format("Unable to find metric for doc [%d]", hits.scoreDocs[i].doc));
-          continue;
-        }
-        
-        final String[] tags = searcher.doc(hits.scoreDocs[i].doc).getValues("tags");
-        if (tags == null || tags.length < 1){
-          LOG.error(String.format("Unable to find tags for doc [%d]", hits.scoreDocs[i].doc));
-          continue;
-        }
-        
-        Map<String, Object> meta = new HashMap<String, Object>();
-        meta.put("tsuid", tsuid);
-        meta.put("metric", metric);
-        
-        ArrayList<Map<String, String>> tag_list = new ArrayList<Map<String, String>>();
-        for (String tag : tags){
-          final String[] split = tag.split(" ");
-          if (split.length != 2){
-            LOG.error(String.format("Unable to split indexed tag [%s] from doc [%d]", tag, hits.scoreDocs[i].doc));
-            continue;
-          }
-          
-          Map<String, String> t = new HashMap<String, String>();
-          t.put(split[0], split[1]);
-          tag_list.add(t);
-        }
-        meta.put("tags", tag_list);
+      Map<String, Object> meta = this.getMeta(hits.scoreDocs[i].doc);
+      if (meta != null)
         metas.add(meta);
-        
-        // bail if we exceed the bounds
-        if (i+2 > hits.totalHits)
-          break;
-      } catch (CorruptIndexException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
-      } catch (IOException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
-      }
+      // bail if we exceed the bounds
+      if (i+2 > hits.totalHits)
+        break;
     }
     return metas;
   }
 
+  public final Map<String, Object> groupBy(final SearchQuery query){
+    if (!this.checkSearcher()){
+      return null;
+    }
+    
+    SortField group_sort = new SortField(query.getGroup(), SortField.STRING);
+    SortField doc_sort = new SortField(query.getSubGroup(), SortField.STRING);
+    final int page = query.getPage();
+    final int limit = query.getLimit();
+    
+    try {
+      TermFirstPassGroupingCollector c1 = new TermFirstPassGroupingCollector(
+          query.getGroup(), new Sort(group_sort), searcher.maxDoc());
+      
+      boolean cacheScores = true;
+      double maxCacheRAMMB = 256.0;
+      
+      CachingCollector cachedCollector = CachingCollector.create(c1, cacheScores, maxCacheRAMMB);
+      Query q = NumericRangeQuery.newDoubleRange("created", 0d, Double.MAX_VALUE, true, true);
+      searcher.search(q, cachedCollector);
+      
+      Collection<SearchGroup<String>> topGroups = c1.getTopGroups(0, true);
+      
+      if (topGroups == null) {
+        // No groups matched
+        LOG.warn(String.format("No groups matched for field [%s]", query.getGroup()));
+        return null;
+      }
+      System.out.println(String.format("have [%d] groups", topGroups.size()));
+      
+      TermSecondPassGroupingCollector c2 = new TermSecondPassGroupingCollector(
+          "host", topGroups, new Sort(group_sort), 
+          new Sort(doc_sort), 500, false, false, false);
+
+      //Optionally compute total group count
+      TermAllGroupsCollector allGroupsCollector = null;
+      if (true) {
+        allGroupsCollector = new TermAllGroupsCollector("host");
+        //c2 = (TermSecondPassGroupingCollector) MultiCollector.wrap(c2, allGroupsCollector);
+      }
+
+      if (cachedCollector.isCached()) {
+        // Cache fit within maxCacheRAMMB, so we can replay it:
+        cachedCollector.replay(c2);
+      } else {
+        // Cache was too large; must re-execute query:
+        searcher.search(q, c2);
+      }
+
+      TopGroups<String> groupsResult = c2.getTopGroups(0);
+      groupsResult = new TopGroups<String>(groupsResult, allGroupsCollector.getGroupCount());               
+//        System.out.println("Total grouped docs: " + groupsResult.totalGroupedHitCount);
+
+      Map<String, Object> group_map = new HashMap<String, Object>();
+      for(int i = (page * limit); i < ((page + 1) * limit); i++) {
+        GroupDocs<String> doc = groupsResult.groups[i];
+        if (doc.groupValue == null || doc.groupValue.isEmpty()){
+          LOG.warn("Empty group string encountered");
+          continue;
+        }
+        
+        ArrayList<Map<String, Object>> metas = new ArrayList<Map<String, Object>>();
+        for (ScoreDoc sd : doc.scoreDocs){
+          Map<String, Object> meta = this.getMeta(sd.doc);
+          if (meta != null){
+            metas.add(meta);
+          }else{
+            LOG.error(String.format("Unable to get metadata for [%s]", doc.groupValue));
+          }
+        }
+        
+        if (metas.size() < 1){
+          LOG.warn(String.format("No sub-groups found for [%s] docs [%d]", doc.groupValue, doc.scoreDocs.length));
+        }else
+          group_map.put(doc.groupValue, metas);
+        
+        // bail if we exceed the bounds
+        if (i+2 > groupsResult.groups.length)
+          break;
+      }
+      
+      // set query vars
+      query.setTotalGroups(topGroups.size());
+      query.setTotal_hits(groupsResult.totalHitCount);
+      return group_map;
+      
+//        int count = 0;
+//        for (int i = (page * limit); i < ((page  + 1) * limit); i++){
+//          GroupDocs<String> doc = groupsResult.groups[i];
+//          System.out.println("- " + doc.groupValue);
+//          count++;
+//        }
+//        System.out.println("Dumped [" + count + "] groups");
+      
+    } catch (IOException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
+    return null;
+  }
+  
 // PRIVATES -----------------------------------------
   
   /**
@@ -269,6 +338,54 @@ public class Searcher {
         return searcher.searchAfter(last_result, new ConstantScoreQuery(q), limit);
       
     } catch (ParseException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    } catch (IOException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
+    return null;
+  }
+
+  private final Map<String, Object> getMeta(final int doc_id){
+    try{
+      final String tsuid = searcher.doc(doc_id).get("tsuid");
+      if (tsuid == null){
+        LOG.error(String.format("Unable to find TSUID for doc [%d]", doc_id));
+        return null;
+      }
+      
+      final String metric = searcher.doc(doc_id).get("metric");
+      if (metric == null){
+        LOG.error(String.format("Unable to find metric for doc [%d]", doc_id));
+        return null;
+      }
+      
+      final String[] tags = searcher.doc(doc_id).getValues("tags");
+      if (tags == null || tags.length < 1){
+        LOG.error(String.format("Unable to find tags for doc [%d]", doc_id));
+        return null;
+      }
+      
+      Map<String, Object> meta = new HashMap<String, Object>();
+      meta.put("tsuid", tsuid);
+      meta.put("metric", metric);
+      
+      ArrayList<Map<String, String>> tag_list = new ArrayList<Map<String, String>>();
+      for (String tag : tags){
+        final String[] split = tag.split("=");
+        if (split.length != 2){
+          LOG.error(String.format("Unable to split indexed tag [%s] from doc [%d]", tag, doc_id));
+          continue;
+        }
+        
+        Map<String, String> t = new HashMap<String, String>();
+        t.put(split[0], split[1]);
+        tag_list.add(t);
+      }
+      meta.put("tags", tag_list);
+      return meta;
+    } catch (CorruptIndexException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
     } catch (IOException e) {

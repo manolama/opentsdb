@@ -165,7 +165,7 @@ public final class TSDB {
       meta_search_writer = null;
       meta_searcher = null;
     }
-    
+    LOG.info(String.format("Setting TSD role to [%s]", role));
   }
   
   /**
@@ -204,6 +204,7 @@ public final class TSDB {
       meta_search_writer = null;
       meta_searcher = null;
     }
+    LOG.info(String.format("Setting TSD role to [%s]", role));
   }
 
   /**
@@ -696,16 +697,23 @@ public final class TSDB {
         LOG.debug(String.format("Unable to get tag and value metadata for ID [%s]",
             UniqueId.IDtoString(id)));
       else{
-        ArrayList<GeneralMeta> tm = new ArrayList<GeneralMeta>();
+        Map<GeneralMeta, GeneralMeta> tag_metas = new HashMap<GeneralMeta, GeneralMeta>();
+        GeneralMeta tagk = null;
         int index=0;
         for (byte[] tag : tags){
           if ((index % 2) == 0)
-            tm.add(this.tag_names.getGeneralMeta(tag, cache));
-          else
-            tm.add(this.tag_values.getGeneralMeta(tag, cache));
+            tagk = this.tag_names.getGeneralMeta(tag, cache);
+          else{
+            GeneralMeta tagv = this.tag_values.getGeneralMeta(tag, cache);
+            if (tagk != null && tagv != null){
+              tag_metas.put(tagk, tagv);
+            }else{
+              LOG.warn(String.format("Unable to get tagk or tagv for TSUID [%s]", meta.getUID()));
+            }
+          }
           index++;
         }
-        meta.setTags(tm);
+        meta.setTags(tag_metas);
       }
       
       return meta;

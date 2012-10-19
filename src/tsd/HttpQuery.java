@@ -218,7 +218,22 @@ public class HttpQuery {
    * @throws BadRequestException if the date is invalid.
    */
   public long getQueryStringDate(final String paramname) {
-    final String date = getQueryStringParam(paramname);
+    return this.getQueryDate(getQueryStringParam(paramname));
+  }
+  
+  /**
+   * Returns a timestamp from a date specified in the given string
+   * Formats accepted are:
+   *   - Relative: "5m-ago", "1h-ago", etc.  See {@link #parseDuration}.
+   *   - Absolute human readable date: "yyyy/MM/dd-HH:mm:ss".
+   *   - UNIX timestamp (seconds since Epoch): "1234567890".
+   * @param query The HTTP query from which to get the query string parameter.
+   * @param paramname The name of the query string parameter.
+   * @return A UNIX timestamp in seconds (strictly positive 32-bit "unsigned")
+   * or -1 if there was no query string parameter named {@code paramname}.
+   * @throws BadRequestException if the date is invalid.
+   */
+  public long getQueryDate(final String date){
     if (date == null) {
       return -1;
     } else if (date.endsWith("-ago")) {
@@ -235,15 +250,13 @@ public class HttpQuery {
         fmt.setTimeZone(TimeZone.getTimeZone("GMT"));
         timestamp = fmt.parse(date).getTime() / 1000;
       } catch (ParseException e) {
-        throw new BadRequestException("Invalid " + paramname + " date: " + date
-                                      + ". " + e.getMessage());
+        throw new BadRequestException("Invalid date [" + date + "]: " + e.getMessage());
       } catch (NumberFormatException e) {
-        throw new BadRequestException("Invalid " + paramname + " date: " + date
-                                      + ". " + e.getMessage());
+        throw new BadRequestException("Invalid date [" + date + "]: " + e.getMessage());
       }
     }
     if (timestamp < 0) {
-      throw new BadRequestException("Bad " + paramname + " date: " + date);
+      throw new BadRequestException("Bad date: " + date);
     }
     return timestamp;
   }

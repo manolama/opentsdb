@@ -24,6 +24,7 @@ import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
 
+import org.apache.lucene.document.Document;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
@@ -311,6 +312,13 @@ public class MetaRPC implements HttpRpc {
       return;
     }
     ts_meta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(ts_meta.getUID()), true);
+    
+    // update the search index
+    Document doc = ts_meta.buildLuceneDoc();
+    if (doc == null)
+      LOG.warn(String.format("Unable to get Lucene doc for TSUID [%s]", ts_meta.getUID()));
+    else
+      tsdb.meta_search_writer.index(doc, "tsuid");
     
     JSON parser = new JSON(ts_meta);
     query.sendReply(parser.getJsonString());

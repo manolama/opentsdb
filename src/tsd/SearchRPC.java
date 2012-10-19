@@ -67,7 +67,7 @@ public class SearchRPC implements HttpRpc {
       search_query = (SearchQuery)codec.getObject();
     }else{
       LOG.trace("Parsing query string data");
-      search_query = this.parseQueryString(query);
+      search_query.parseQueryString(query);
       // error already sent
       if (search_query == null)
         return;
@@ -82,7 +82,11 @@ public class SearchRPC implements HttpRpc {
     JSON codec = new JSON(search_query);
     LOG.trace(codec.getJsonString());
  
-    ArrayList<Map<String, Object>> results = tsdb.meta_searcher.searchShortMeta(search_query);
+    Object results = null;
+    if (search_query.getReturnTSUIDs())
+      results = tsdb.meta_searcher.searchTSUIDs(search_query);
+    else
+      results = tsdb.meta_searcher.searchShortMeta(search_query);
     if (results == null){
       query.sendError(HttpResponseStatus.BAD_REQUEST, search_query.getError());
       return;
@@ -101,89 +105,5 @@ public class SearchRPC implements HttpRpc {
     codec = new JSON(response);
     query.sendReply(codec.getJsonBytes());
     return;
-  }
-  
-  /**
-   * Parses the HTTP query string for the search query
-   * @param query HTTP query to parse
-   * @return A SearchQuery object if parsed successfully or NULL if there was an error
-   * parsing a numeric field
-   */
-  private SearchQuery parseQueryString(final HttpQuery query){
-    SearchQuery sq = new SearchQuery();
-    
-    if (query.hasQueryStringParam("tags"))
-      sq.setTags(this.parseQueryStringList(query.getQueryStringParam("tags")));
-    
-    if (query.hasQueryStringParam("custom"))
-      sq.setCustom(this.parseQueryStringList(query.getQueryStringParam("custom")));
-    
-    sq.setCreated(query.getQueryStringParam("created"));
-    sq.setRetention(query.getQueryStringParam("retention"));
-    sq.setMax(query.getQueryStringParam("max"));
-    sq.setMin(query.getQueryStringParam("min"));
-    sq.setInterval(query.getQueryStringParam("interval"));
-    sq.setLast_received(query.getQueryStringParam("last_received"));
-    sq.setField(query.getQueryStringParam("field"));
-    sq.setQuery(query.getQueryStringParam("query"));
-    sq.setReturnMeta(query.parseBoolean(query.getQueryStringParam("return_meta")));
-    if (query.hasQueryStringParam("limit")){
-      try{
-        sq.setLimit(Integer.parseInt(query.getQueryStringParam("limit")));
-      } catch (NumberFormatException nfe){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the limit value");
-        return null;
-      }
-    }
-    if (query.hasQueryStringParam("page")){
-      try{
-        sq.setPage(Integer.parseInt(query.getQueryStringParam("page")));
-      } catch (NumberFormatException nfe){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the page value");
-        return null;
-      }
-    }
-    return sq;
-  }
- 
-  /**
-   * Parses a query string parameter for key/value pairs, used for the tags and custom
-   * The string should be in the format {tag1=val1,tag2=val2}
-   * @param query Value of the query string to parse
-   * @return Null if there was an error, a map if kvs were parsed successfully
-   */
-  private Map<String, String> parseQueryStringList(final String query){
-    if (query == null || query.isEmpty())
-      return null;
-    
-    final int curly = query.indexOf('{');
-    String list = (curly >= 0 ? query.substring(curly+1) : query);
-    list = list.replaceAll("}", "");
-    
-    String[] pairs = null;
-    if (list.indexOf(",") < 0)
-      pairs = new String[]{list};
-    else
-      pairs = list.split(",");
-    if (pairs == null){
-      LOG.warn("Unable to extract any pairs from the query string");
-      return null;
-    }
-    
-    Map<String, String> kvs = new HashMap<String, String>();
-    for (String pair : pairs){
-      if (pair.indexOf("=") < 0){
-        LOG.warn("Missing = sign");
-        continue;
-      }
-      
-      String[] kv = pair.split("=");
-      if (kv.length != 2){
-        LOG.warn("Invalid tag pair, wrong number of values [" + kv.length + "]");
-        continue;
-      }
-      kvs.put(kv[0], kv[1]);
-    }
-    return kvs;
   }
 }

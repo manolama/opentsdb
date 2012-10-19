@@ -25,10 +25,12 @@ import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDB.TSDRole;
+import net.opentsdb.search.SearchQuery;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
 
 import org.codehaus.jackson.type.TypeReference;
+import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,151 +44,52 @@ public class GroupRPC implements HttpRpc {
       return;
     }
     
-    String grouping_tagk = "host";
-    long limit = 25;
-    long page = 0;
+    // parse the search query
+    SearchQuery search_query = new SearchQuery();
+    if (query.getMethod() == HttpMethod.POST){
+      LOG.trace("Parsing POST data");
+      JSON codec = new JSON(search_query);
+      if (!codec.parseObject(query.getPostData())){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse JSON data");
+        return;
+      }
+      search_query = (SearchQuery)codec.getObject();
+    }else{
+      LOG.trace("Parsing query string data");
+      search_query.parseQueryString(query);
+      // error already sent
+      if (search_query == null)
+        return;
+    }
     
-    // load query string
-    if (query.hasQueryStringParam("tag"))
-      grouping_tagk = query.getQueryStringParam("tag").toLowerCase();
-    if (query.hasQueryStringParam("limit")){
-      try{
-      limit = Long.parseLong(query.getQueryStringParam("limit"));
-      } catch (NumberFormatException nfe){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the limit value");
-        return;
-      }
+    // validate the query first
+    if (!search_query.validateQuery()){
+      query.sendError(HttpResponseStatus.BAD_REQUEST, search_query.getError());
+      return;
     }
-    if (query.hasQueryStringParam("page")){
-      try{
-        page = Long.parseLong(query.getQueryStringParam("page"));
-      } catch (NumberFormatException nfe){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the page value");
-        return;
-      }
-    }
+    
+    JSON codec = new JSON(search_query);
+    LOG.trace(codec.getJsonString());
 
-    TsdbGroup results = null;
-    JSON codec;
+    Map<String, Object> results = tsdb.meta_searcher.groupBy(search_query);
+    if (results == null){
+      query.sendError(HttpResponseStatus.BAD_REQUEST, search_query.getError());
+      return;
+    }
     
-    // build a hash
-    int hash = ("group" + grouping_tagk).hashCode();
-//    
-//    // try retrieving/parsing the cache
-//    CacheEntry cached = query.getCache(hash);
-//    if (cached != null){
-//      final TypeReference<TsdbGroup> respTypeRef = 
-//        new TypeReference<TsdbGroup>() {}; 
-//      codec = new JSON(results);
-//      if (!codec.parseObject(
-//          (cached.getDataSize() > 0 ? cached.getData() : cached.getFileData()), respTypeRef))
-//        cached = null;
-//      else
-//        results = (TsdbGroup)codec.getObject();
-//    }
-//
-//    if (cached == null){
-//      byte[] uid;
-//      try{
-//       uid = tsdb.tag_names.getId(grouping_tagk);
-//      } catch (NoSuchUniqueId nsui){
-//        LOG.debug(String.format("No tagk UID for [%s]", grouping_tagk));
-//        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to locate tag name");
-//        return;
-//      }
-//      String tagk = UniqueId.IDtoString(uid);
-//      
-//      // sort em!
-//      SortedMap<String, String> sorted_tagvs = new TreeMap<String, String>();
-//      for (String tagvid : tagvs){
-//        try{
-//          sorted_tagvs.put(tsdb.tag_values.getName(UniqueId.StringtoID(tagvid)), tagvid);
-//         }catch (NoSuchUniqueId nsui){
-//           LOG.trace(String.format("No tagv UID for [%s]", tagvid));
-//           //query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to locate tag name");
-//           continue;
-//         }
-//      }
-//      if (sorted_tagvs.size() < 1){
-//        query.sendError(HttpResponseStatus.BAD_REQUEST, "Failed to sort tag values");
-//        return;
-//      }
-//      
-//      results = new TsdbGroup();
-//      results.groups = new TreeMap<String, List<Map<String, Object>>>();
-//      
-//      // fetch TSUIDs for each pair
-//      results.total_uids = 0;
-//      Set<String> uids = tsdb.ts_uids.matchTSUIDs(tsdb, null, (short)3, true);
-//      for (Map.Entry<String, String> entry : sorted_tagvs.entrySet()){
-//        List<Map<String, Object>> entries = new ArrayList<Map<String, Object>>();
-//        
-//        for (String tsuid : uids){
-//          if (tsuid.substring(6).contains(tagk + entry.getValue())){
-//            //LOG.trace(String.format("Matched [%s] with [%s]", tagk + entry.getValue(), tsuid));
-//            try{
-//              entries.add(tsdb.getTSUIDShortMeta(tsuid));
-//              results.total_uids++;
-//            } catch (NoSuchUniqueId nsui){
-//              LOG.trace(nsui.getMessage());
-//            }
-//          }
-//        }
-//        if (entries.size() > 0){
-//          results.groups.put(entry.getKey(), entries);
-//          //LOG.trace(String.format("Put [%s]", entry.getKey()));
-//          if (entries.size() > results.largest_group)
-//            results.largest_group = entries.size();
-//        }
-//      }
-//      
-//      // cache me
-//      codec = new JSON(results);
-//      CacheEntry ce = new CacheEntry(hash, codec.getJsonBytes());
-//      query.putCache(ce);
-//    }
-//    
-//    // if one group is larger than the limit, we need to reset the limit
-//    if (results.largest_group > limit){
-//      LOG.warn(String.format("Resetting limit from [%d] to largest group size [%d]", limit, results.largest_group));
-//      limit = results.largest_group;
-//    }
-//    
-//    // build a response map
-//    Map<String, Object> response = new HashMap<String, Object>();
-//    response.put("limit", limit);
-//    response.put("page", page);
-//    response.put("total_uids", results.total_uids);
-//    response.put("total_groups", results.groups.size());
-//    response.put("tagk", grouping_tagk);
-//    response.put("total_pages", ((results.total_uids / limit) + 1));
-//    
-//    // limit and page calculations    
-//    if (limit < 1 || results.total_uids <= limit){
-//      response.put("results", results.groups);
-//    }else{
-//      SortedMap<String, Object> limited_results = new TreeMap<String, Object>();
-//      long start = (page > 0 ? page * limit : 0);
-//      long end = (page + 1) * limit;
-//      long total_uids = 0;
-//      LOG.trace(String.format("Limiting to [%d] uids on page [%d] w start [%d] end [%d]", limit, page, start, end));
-//      for (Map.Entry<String, List<Map<String, Object>>> entry : results.groups.entrySet()){
-//        long size = entry.getValue().size();
-//        if (total_uids + size > end){
-//          LOG.trace(String.format("[%d] Next group with [%d] would hit limit [%d] since we have [%d]", 
-//              total_uids, size, end, total_uids));
-//          break;
-//        }
-//        if ((total_uids + size) >= start && (total_uids + size) <= end)
-//          limited_results.put(entry.getKey(), entry.getValue());
-//
-//        total_uids += size;
-//      }
-//      response.put("results", limited_results);
-//    }   
-//    
-//    codec = new JSON(response);
-//    query.sendReply(codec.getJsonBytes());
+    double time = ((double)(System.nanoTime() - query.start_time) / (double)1000000);
+    
+    // build a response map and send away!
+    Map<String, Object> response = new HashMap<String, Object>();
+    response.put("limit", search_query.getLimit());
+    response.put("page", search_query.getPage());
+    response.put("total_uids", search_query.getTotal_hits());
+    response.put("total_pages", search_query.getPages());
+    response.put("time", time);
+    response.put("total_groups", search_query.getTotalGroups());
+    response.put("results", results);
+    codec = new JSON(response);
+    query.sendReply(codec.getJsonBytes());
     return;
   }
   

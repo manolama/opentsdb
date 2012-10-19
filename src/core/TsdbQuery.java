@@ -17,6 +17,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -105,6 +106,8 @@ final class TsdbQuery implements Query {
   /** Minimum time interval (in seconds) wanted between each data point. */
   private int sample_interval;
 
+  private ArrayList<String> tsuids;
+  
   /** Constructor. */
   public TsdbQuery(final TSDB tsdb) {
     this.tsdb = tsdb;
@@ -153,6 +156,15 @@ final class TsdbQuery implements Query {
     this.findGroupBys(tags);
     this.metric = tsdb.metrics.getId(metric);
     this.tags = Tags.resolveAll(tsdb, tags);
+    aggregator = function;
+    this.rate = rate;
+  }
+  
+  public void setTimeSeries(final ArrayList<String> tsuids,
+                            final Aggregator function,
+                            final boolean rate) throws NoSuchUniqueName {
+    this.tsuids = tsuids;
+    // todo - resolve
     aggregator = function;
     this.rate = rate;
   }

@@ -56,7 +56,7 @@ import org.hbase.async.KeyValue;
  * Don't attempt to use {@code equals()} or {@code hashCode()} on this class.
  * @see UniqueIdInterface
  */
-public final class UniqueId implements UniqueIdInterface {
+public final class UniqueId {
 
   private static final Logger LOG = LoggerFactory.getLogger(UniqueId.class);
 

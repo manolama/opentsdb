@@ -18,7 +18,10 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import net.opentsdb.tsd.HttpQuery;
+
 import org.codehaus.jackson.map.annotate.JsonSerialize;
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,14 +50,19 @@ public class SearchQuery {
   private String query;
   private int limit = 25;
   private int page = 0;
-  private Boolean return_meta = false;
+  private boolean return_meta = false;
   private String error;
   private Pattern query_regex = null;
   private Map<String, Pattern> tags_compiled;
   private Map<String, Pattern> custom_compiled;
   private int total_hits = 0;
   private int pages = 0;
-  
+  private boolean return_tsuids = false;
+  private String group = "host";
+  private String sub_group = "metric";
+  @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
+  private int total_groups = 0;
+
   // field -> operator -> value
   // if no operator was passed in, then we save it as eq
   private Map<String, SimpleEntry<SearchOperator, Double>> numerics = 
@@ -342,6 +350,93 @@ public class SearchQuery {
   }
   
   /**
+   * Parses the HTTP query string for the search query
+   * @param query HTTP query to parse
+   * @return A SearchQuery object if parsed successfully or NULL if there was an error
+   * parsing a numeric field
+   */
+  public boolean parseQueryString(final HttpQuery query){
+    if (query.hasQueryStringParam("tags"))
+      this.setTags(this.parseQueryStringList(query.getQueryStringParam("tags")));
+    
+    if (query.hasQueryStringParam("custom"))
+      this.setCustom(this.parseQueryStringList(query.getQueryStringParam("custom")));
+    
+    this.setCreated(query.getQueryStringParam("created"));
+    this.setRetention(query.getQueryStringParam("retention"));
+    this.setMax(query.getQueryStringParam("max"));
+    this.setMin(query.getQueryStringParam("min"));
+    this.setInterval(query.getQueryStringParam("interval"));
+    this.setLastReceived(query.getQueryStringParam("last_received"));
+    this.setField(query.getQueryStringParam("field"));
+    this.setQuery(query.getQueryStringParam("query"));
+    if (query.hasQueryStringParam("return_meta"))
+      this.setReturnMeta(query.parseBoolean(query.getQueryStringParam("return_meta")));
+    if (query.hasQueryStringParam("return_tsuids"))
+      this.setReturnTSUIDs(query.parseBoolean(query.getQueryStringParam("return_tsuids")));
+    if (query.hasQueryStringParam("limit")){
+      try{
+        this.setLimit(Integer.parseInt(query.getQueryStringParam("limit")));
+      } catch (NumberFormatException nfe){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the limit value");
+        return false;
+      }
+    }
+    if (query.hasQueryStringParam("page")){
+      try{
+        this.setPage(Integer.parseInt(query.getQueryStringParam("page")));
+      } catch (NumberFormatException nfe){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the page value");
+        return false;
+      }
+    }
+    this.setGroup(query.getQueryStringParam("group"));
+    this.setGroup(query.getQueryStringParam("sub_group"));
+    return true;
+  }
+ 
+  /**
+   * Parses a query string parameter for key/value pairs, used for the tags and custom
+   * The string should be in the format {tag1=val1,tag2=val2}
+   * @param query Value of the query string to parse
+   * @return Null if there was an error, a map if kvs were parsed successfully
+   */
+  private Map<String, String> parseQueryStringList(final String query){
+    if (query == null || query.isEmpty())
+      return null;
+    
+    final int curly = query.indexOf('{');
+    String list = (curly >= 0 ? query.substring(curly+1) : query);
+    list = list.replaceAll("}", "");
+    
+    String[] pairs = null;
+    if (list.indexOf(",") < 0)
+      pairs = new String[]{list};
+    else
+      pairs = list.split(",");
+    if (pairs == null){
+      LOG.warn("Unable to extract any pairs from the query string");
+      return null;
+    }
+    
+    Map<String, String> kvs = new HashMap<String, String>();
+    for (String pair : pairs){
+      if (pair.indexOf("=") < 0){
+        LOG.warn("Missing = sign");
+        continue;
+      }
+      
+      String[] kv = pair.split("=");
+      if (kv.length != 2){
+        LOG.warn("Invalid tag pair, wrong number of values [" + kv.length + "]");
+        continue;
+      }
+      kvs.put(kv[0], kv[1]);
+    }
+    return kvs;
+  }
+  
+  /**
    * Attempts to parse the numeric value with an optional operator
    * 
    * If there's an operator at the front of the string, we attempt to parse it. If it's
@@ -432,11 +527,11 @@ public class SearchQuery {
     this.interval = interval;
   }
 
-  public String getLast_received() {
+  public String getLastReceived() {
     return last_received;
   }
 
-  public void setLast_received(String last_received) {
+  public void setLastReceived(String last_received) {
     this.last_received = last_received;
   }
 
@@ -501,8 +596,12 @@ public class SearchQuery {
 
   public void setTotal_hits(int total_hits) {
     this.total_hits = total_hits;
-    if (total_hits > 0)
-      this.pages = (total_hits / this.limit) + 1;
+    if (this.total_groups > 0){
+      this.pages = (this.total_groups / this.limit) + 1;
+    }else{
+      if (total_hits > 0)
+        this.pages = (total_hits / this.limit) + 1;
+    }
   }
 
   public int getPages(){
@@ -532,4 +631,37 @@ public class SearchQuery {
   public Map<String, Pattern> getCustomCompiled() {
     return this.custom_compiled;
   }
+
+  public String getGroup() {
+    return group;
+  }
+
+  public void setGroup(String group) {
+    this.group = group;
+  }
+
+  public String getSubGroup() {
+    return sub_group;
+  }
+
+  public void setSubGroup(String sub_group) {
+    this.sub_group = sub_group;
+  }
+
+  public int getTotalGroups() {
+    return total_groups;
+  }
+
+  public void setTotalGroups(int total_groups) {
+    this.total_groups = total_groups;
+  }
+  
+  public boolean getReturnTSUIDs() {
+    return return_tsuids;
+  }
+
+  public void setReturnTSUIDs(boolean return_tsuids) {
+    this.return_tsuids = return_tsuids;
+  }
+
 }

@@ -155,7 +155,7 @@ public class SearchIndexer {
       
       // anything leftover, flush it!
       if (docs.size() > 0){
-        LOG.debug(String.format("Flushing [%d] docs to index", docs.size()));
+        LOG.trace(String.format("Flushing [%d] docs to index", docs.size()));
         this.index(docs, "tsuid");
       }
       

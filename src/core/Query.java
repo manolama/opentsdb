@@ -12,6 +12,8 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import org.hbase.async.HBaseException;
@@ -77,6 +79,9 @@ public interface Query {
   void setTimeSeries(String metric, Map<String, String> tags,
                      Aggregator function, boolean rate) throws NoSuchUniqueName;
 
+  void setTimeSeries(ArrayList<String> tsuids, Aggregator function, boolean rate) 
+    throws NoSuchUniqueName;
+  
   /**
    * Downsamples the results by specifying a fixed interval between points.
    * <p>
