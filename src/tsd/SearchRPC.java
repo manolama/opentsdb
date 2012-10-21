@@ -85,7 +85,20 @@ public class SearchRPC implements HttpRpc {
     Object results = null;
     if (search_query.getReturnTSUIDs())
       results = tsdb.meta_searcher.searchTSUIDs(search_query);
-    else
+    else if (search_query.getReturnMeta()){
+      ArrayList<String> tsuids = tsdb.meta_searcher.searchTSUIDs(search_query);
+      ArrayList<Object> metas = new ArrayList<Object>();
+      
+      for (String tsuid : tsuids){
+        TimeSeriesMeta tmeta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(tsuid), false);
+        if (tmeta == null){
+          LOG.warn(String.format("Unable to load metadata for [%s]", tsuid));
+          continue;
+        }
+        metas.add(tmeta);
+      }
+      results = metas;
+    }else
       results = tsdb.meta_searcher.searchShortMeta(search_query);
     if (results == null){
       query.sendError(HttpResponseStatus.BAD_REQUEST, search_query.getError());
