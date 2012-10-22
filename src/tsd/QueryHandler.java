@@ -157,12 +157,13 @@ public class QueryHandler implements HttpRpc {
     String endpoint = query.getEndpoint();
     final TSDFormatter formatter;
     if (endpoint != null){
-      if (endpoint.compareTo("ascii") == 0){
+      formatter = TSDFormatter.getFormatter(endpoint, tsdb);
+      /*if (endpoint.compareTo("ascii") == 0){
         formatter = new Ascii(tsdb);
       }else if (endpoint.compareTo("collectdjson") == 0){
         formatter = new CollectdJSON(tsdb);
-      }else if (endpoint.compareTo("gnugraph") == 0){
-        formatter = new GnuGraphFormatter(tsdb);
+      }else */if (endpoint.compareTo("gnugraph") == 0){
+        //formatter = new GnuGraphFormatter(tsdb);
         // gnugraph needs more cruft set
         ((GnuGraphFormatter)formatter).init();
         ((GnuGraphFormatter)formatter).setBasePath(basepath);
@@ -170,11 +171,18 @@ public class QueryHandler implements HttpRpc {
         ((GnuGraphFormatter)formatter).setEndTime(dq.end_time);
         ((GnuGraphFormatter)formatter).setQueryString(query.querystring);
         ((GnuGraphFormatter)formatter).setQueryHash(query.hashCode());
-      }else{
-        formatter = new TsdbJSON(tsdb);
       }
+//      }else{
+//        formatter = new TsdbJSON(tsdb);
+//      }
     }else
-      formatter = new TsdbJSON(tsdb);
+      formatter = TSDFormatter.getFormatter("tsdbjson", tsdb);
+    
+    if (formatter == null){
+      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, 
+          "Could not find a formatter for endpoint [" + endpoint + "]");
+      return;
+    }
 
     final int nqueries = tsdbqueries.length;
     LOG.trace(String.format("Number of queries [%d]", nqueries));

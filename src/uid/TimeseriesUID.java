@@ -40,7 +40,7 @@ public class TimeseriesUID {
   private static final Logger LOG = LoggerFactory.getLogger(TimeseriesUID.class);
   
   // these locks should only be used for the hashes
-  private final Set<Integer> ts_uid_hashes;
+  private final HashSet<Integer> ts_uid_hashes;
   private final ReentrantReadWriteLock locker = new ReentrantReadWriteLock();
   private final Lock read_lock  = locker.readLock();
   private final Lock write_lock = locker.writeLock();

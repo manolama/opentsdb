@@ -1137,7 +1137,7 @@ public class HttpQuery {
    * @return True only when one of the listed values is parsed, false in every
    * other situation.
    */
-  public Boolean parseBoolean(final String value){
+  public boolean parseBoolean(final String value){
     if (value == null)
       return false;
     if (value.compareTo("1") == 0)
@@ -1153,7 +1153,7 @@ public class HttpQuery {
    * Attempts to extract the final endpoint of the URI from the full URI path
    * E.g. if the path is "/q/opentsdb", this will return "opentsdb"
    * @param query The HttpQuery object to fetch the URI from
-   * @return The endpoint as a string, a null if not found
+   * @return The endpoint as a string, lowercase, a null if not found
    */
   public final String getEndpoint(){
     String path = this.getQueryPath();

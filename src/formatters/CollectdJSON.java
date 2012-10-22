@@ -60,6 +60,10 @@ public class CollectdJSON extends TSDFormatter {
     super(tsdb);
   }
   
+  public String getEndpoint(){
+    return "collectdjson";
+  }
+  
   /**
    * Parses the POST data for datapoints to store.
    * @param query The HTTPQuery to parse
@@ -207,18 +211,19 @@ public class CollectdJSON extends TSDFormatter {
     puts_success.addAndGet(success);
     if (total != success)
       puts_fail.addAndGet(total - success);
-    Map<String, Object> results = new HashMap<String, Object>();
-    results.put("success", success);
-    results.put("fail", total - success);
-    if (details)
-      results.put("errors", errors);
-    LOG.trace(String.format("Success [%d] fail [%d]", success, (total - success)));
+
     if (!return_json){
       if (success < 1 || (fault && total != success))
         query.sendReply(HttpResponseStatus.BAD_REQUEST, "");
       else
         query.sendReply("");
     }else{
+      Map<String, Object> results = new HashMap<String, Object>();
+      results.put("success", success);
+      results.put("fail", total - success);
+      if (details)
+        results.put("errors", errors);
+      
       codec = new JSON(results);
       if (success < 1 || (fault && total != success))
         query.sendReply(HttpResponseStatus.BAD_REQUEST, codec.getJsonString());

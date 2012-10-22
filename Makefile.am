@@ -132,7 +132,7 @@ tsdb_DEPS = \
 	$(CURATOR_CLIENT) \
 	$(CURATOR_FRAMEWORK) \
 	$(CURATOR_RECIPES) \
-	$(COMMONS_MATH)
+	$(COMMONS_MATH) 
 
 # Install all the .jar files in pkgdatadir.
 pkgdata_DATA = $(tsdb_DEPS) $(jar)

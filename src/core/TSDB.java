@@ -15,12 +15,9 @@ package net.opentsdb.core;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.SortedMap;
-import java.util.regex.Pattern;
 import java.util.AbstractMap.SimpleEntry;
 
 import com.stumbleupon.async.Callback;
@@ -41,12 +38,9 @@ import net.opentsdb.meta.MetaDataCache;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.search.SearchIndexer;
 import net.opentsdb.search.SearchManager;
-import net.opentsdb.search.SearchQuery;
 import net.opentsdb.search.Searcher;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
-import net.opentsdb.storage.TsdbScanner;
-import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
 
 /**
@@ -57,12 +51,13 @@ import net.opentsdb.storage.TsdbStore;
  */
 public final class TSDB {
   public enum TSDRole{
+    Full,       /** Does everything, suitable for small installs */
     Ingest,     /** Simply accepts incoming data */
     Forwarder,  /** Stores and forwards data to Ingesters */
     API,        /** HTTP API server, handles requests but not putting data */
     Roller,     /** Performs rollups/aggregations */
     Esper,      /** Esper alert node */
-    Tool        /** CLi tool */
+    Tool        /** CLI tool, only performs a specific task */
   }
   
   private static final Logger LOG = LoggerFactory.getLogger(TSDB.class);
@@ -125,6 +120,7 @@ public final class TSDB {
   public final Searcher meta_searcher;
   
   public final TSDRole role;
+  public final boolean time_puts = true;
   
   /**
    * DEPRECATED Constructor
@@ -505,7 +501,7 @@ public final class TSDB {
 
     IncomingDataPoints.checkMetricAndTags(metric, tags);
     final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);
-    final String tsuid = UniqueId.IDtoString(TimeseriesUID.getTSUIDFromKey(row, (short)3, (short)4)).intern();
+    final String tsuid = UniqueId.IDtoString(TimeseriesUID.getTSUIDFromKey(row, (short)3, (short)4));
     if (!this.ts_uids.contains(tsuid)){
       this.ts_uids.add(tsuid);
     }
@@ -518,22 +514,26 @@ public final class TSDB {
 //                                            Bytes.fromShort(qualifier), value);
 //    // TODO(tsuna): Add a callback to time the latency of HBase and store the
 //    // timing in a moving Histogram (once we have a class for this).
-//    return client.put(point);
-    final long start_put = System.nanoTime();
-    final Callback<Object, Object> cb = new Callback<Object, Object>() {
-      public Object call(final Object arg) {
-        final float t = (float)((float)(System.nanoTime() - start_put) / (float)1000000);
-        //LOG.debug(String.format("TSDB: Recording put time of [%f] ms", t));
-        IncomingDataPoints.putlatency.addValue(t);
-        return arg;
-      }
-      public String toString() {
-        return "time put request";
-      }
-    };
-    
-    return data_storage.putWithRetry(row, FAMILY, Bytes.fromShort(qualifier), value,
-        null, false, true).addCallback(cb);
+    if (!time_puts){
+      return data_storage.putWithRetry(row, FAMILY, Bytes.fromShort(qualifier), value,
+        null, false, true);
+    }else{
+      final long start_put = System.nanoTime();
+      final Callback<Object, Object> cb = new Callback<Object, Object>() {
+        public Object call(final Object arg) {
+          final float t = (float)((float)(System.nanoTime() - start_put) / (float)1000000);
+          //LOG.debug(String.format("TSDB: Recording put time of [%f] ms", t));
+          IncomingDataPoints.putlatency.addValue(t);
+          return arg;
+        }
+        public String toString() {
+          return "time put request";
+        }
+      };
+      
+      return data_storage.putWithRetry(row, FAMILY, Bytes.fromShort(qualifier), value,
+          null, false, true).addCallback(cb);
+    }
   }
 
   /**

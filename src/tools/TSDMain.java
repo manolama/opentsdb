@@ -35,6 +35,7 @@ import net.opentsdb.BuildData;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Config;
 import net.opentsdb.core.TSDB.TSDRole;
+import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.storage.TsdbStore;
 import net.opentsdb.storage.TsdbStoreCass;
 import net.opentsdb.storage.TsdbStoreHBase;
@@ -208,6 +209,10 @@ final class TSDMain {
       registerShutdownHook(tsdb);
       log.info("Registered shutdown hook");
       
+      if (!TSDFormatter.initClassMap(tsdb)){
+        log.error("Unable to initialize the formatter map");
+        System.exit(1);
+      }
       
       // load the tsuid hashes first!
       if (tsdb.role == TSDRole.Ingest)
@@ -217,7 +222,7 @@ final class TSDMain {
 //      if (true)
 //        return;
       
-      //tsdb.startManagementThreads();
+      tsdb.startManagementThreads();
       final ServerBootstrap server = new ServerBootstrap(factory);
 
       // setup the network sockets

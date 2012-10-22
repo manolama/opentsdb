@@ -17,6 +17,10 @@ public class Ascii extends TSDFormatter{
     super(tsdb);
   }
   
+  public String getEndpoint(){
+    return "ascii";
+  }
+  
   public String getOutput(){
     String ascii = "";
     

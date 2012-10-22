@@ -35,3 +35,4 @@ include third_party/jackson/include.mk
 include third_party/curator/include.mk
 include third_party/lucene/include.mk
 include third_party/apache/include.mk
+#include third_party/testing/include.mk

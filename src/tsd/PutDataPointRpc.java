@@ -68,15 +68,21 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
     String endpoint = query.getEndpoint();
     final TSDFormatter formatter;
     if (endpoint != null){
-      if (endpoint.compareTo("ascii") == 0){
-        formatter = new Ascii(tsdb);
-      }else if (endpoint.compareTo("collectdjson") == 0){
-        formatter = new CollectdJSON(tsdb);
-      }else{
-        formatter = new TsdbJSON(tsdb);
-      }
+      formatter = TSDFormatter.getFormatter(endpoint, tsdb);
+//      if (endpoint.compareTo("ascii") == 0){
+//        formatter = new Ascii(tsdb);
+//      }else if (endpoint.compareTo("collectdjson") == 0){
+//        formatter = new CollectdJSON(tsdb);
+//      }else{
+//        formatter = new TsdbJSON(tsdb);
+//      }
     }else
-      formatter = new TsdbJSON(tsdb);
+      formatter = TSDFormatter.getFormatter("tsdbjson", tsdb);
+    if (formatter == null){
+      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, 
+          "Could not find a formatter for endpoint [" + endpoint + "]");
+      return;
+    }
     
     formatter.handleHTTPPut(query);
     return;

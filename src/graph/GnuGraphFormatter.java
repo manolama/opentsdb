@@ -99,6 +99,10 @@ public class GnuGraphFormatter extends TSDFormatter {
       GNUPLOT = findGnuplotHelperScript();
   }
   
+  public String getEndpoint(){
+    return "gnugraph";
+  }
+  
   public boolean init(){
     // Gnuplot is mostly CPU bound and does only a little bit of IO at the
     // beginning to read the input data and at the end to write its output.

@@ -41,6 +41,10 @@ public class TsdbJSON extends TSDFormatter {
     super(tsdb);
   }
   
+  public String getEndpoint(){
+    return "tsdbjson";
+  }
+  
   /**
    * Parses the query string for options and then builds an array of TsdbJSONOutput
    * objects to return to the caller after serializing.
@@ -49,11 +53,11 @@ public class TsdbJSON extends TSDFormatter {
    */
   public boolean handleHTTPGet(final HttpQuery query){  
     List<TsdbJSONOutput> timeseries = new ArrayList<TsdbJSONOutput>();
-    Boolean return_basic_meta = query.hasQueryStringParam("meta") ?
+    boolean return_basic_meta = query.hasQueryStringParam("meta") ?
         query.parseBoolean(query.getQueryStringParam("meta")) : true;
-    Boolean return_stats = query.hasQueryStringParam("stats") ?
+    boolean return_stats = query.hasQueryStringParam("stats") ?
         query.parseBoolean(query.getQueryStringParam("stats")) : true;
-    Boolean return_uids = query.hasQueryStringParam("tsuids") ?
+    boolean return_uids = query.hasQueryStringParam("tsuids") ?
         query.parseBoolean(query.getQueryStringParam("tsuids")) : false;
         
     for (DataPoints dp : this.datapoints){
@@ -101,11 +105,11 @@ public class TsdbJSON extends TSDFormatter {
    */
   @SuppressWarnings("unchecked")
   public boolean handleHTTPPut(final HttpQuery query){
-    Boolean details = query.hasQueryStringParam("error_details") ?
+    boolean details = query.hasQueryStringParam("error_details") ?
         query.parseBoolean(query.getQueryStringParam("error_details")) : false;
-    Boolean fault = query.hasQueryStringParam("fault_on_any") ?
+    boolean fault = query.hasQueryStringParam("fault_on_any") ?
         query.parseBoolean(query.getQueryStringParam("fault_on_any")) : false;
-    Boolean return_json = query.hasQueryStringParam("json_return") ?
+    boolean return_json = query.hasQueryStringParam("json_return") ?
         query.parseBoolean(query.getQueryStringParam("json_return")) : false;  
         
     String json = query.getPostData();
@@ -143,7 +147,7 @@ public class TsdbJSON extends TSDFormatter {
             err.put("datapoint", dp);
             errors.add(err);
           }
-          LOG.error("Empty metric name at [" + total + "]");
+          LOG.warn("Empty metric name at [" + total + "]");
           continue;
         }
         if (dp.timestamp <= 0) {
@@ -153,7 +157,7 @@ public class TsdbJSON extends TSDFormatter {
             err.put("datapoint", dp);
             errors.add(err);
           }
-          LOG.error("Invalid timestamp at [" + total + "]");
+          LOG.warn("Invalid timestamp at [" + total + "]");
           continue;
         }
         if (dp.value == null || dp.value.length() < 1) {
@@ -163,7 +167,7 @@ public class TsdbJSON extends TSDFormatter {
             err.put("datapoint", dp);
             errors.add(err);
           }
-          LOG.error("Invalid value at [" + total + "]");
+          LOG.warn("Invalid value at [" + total + "]");
           continue;
         }
         if (dp.tags == null || dp.tags.size() < 1) {
@@ -173,7 +177,7 @@ public class TsdbJSON extends TSDFormatter {
             err.put("datapoint", dp);
             errors.add(err);
           }
-          LOG.error("Invalid tags at [" + total + "]");
+          LOG.warn("Invalid tags at [" + total + "]");
           continue;
         }
         tsdb.addPoint(dp.metric, dp.timestamp, dp.value, dp.tags);
@@ -185,7 +189,7 @@ public class TsdbJSON extends TSDFormatter {
           err.put("datapoint", dp);
           errors.add(err);
         }
-        LOG.error(String.format("Unable to convert metric [%s] value [%s]: %s", 
+        LOG.warn(String.format("Unable to convert metric [%s] value [%s]: %s", 
             dp.metric, dp.value.toString(), nfe.getMessage()));
       } catch (IllegalArgumentException iae){
         if (details){
@@ -194,26 +198,27 @@ public class TsdbJSON extends TSDFormatter {
           err.put("datapoint", dp);
           errors.add(err);
         }
-        LOG.error(String.format("Unable to convert metric [%s] value [%s]: %s", 
+        LOG.warn(String.format("Unable to convert metric [%s] value [%s]: %s", 
             dp.metric, dp.value.toString(), iae.getMessage()));
       }
     }
     
-    this.puts_success.addAndGet(success);
+    puts_success.addAndGet(success);
     if (datapoints.size() != success)
-      this.puts_fail.addAndGet(datapoints.size() - success);
-    Map<String, Object> results = new HashMap<String, Object>();
-    results.put("success", success);
-    results.put("fail", datapoints.size() - success);
-    if (details)
-      results.put("errors", errors);
-    
+      puts_fail.addAndGet(datapoints.size() - success);
+
     if (!return_json){
       if (success < 1 || (fault && datapoints.size() != success))
         query.sendReply(HttpResponseStatus.BAD_REQUEST, "");
       else
         query.sendReply("");
     }else{
+      Map<String, Object> results = new HashMap<String, Object>();
+      results.put("success", success);
+      results.put("fail", datapoints.size() - success);
+      if (details)
+        results.put("errors", errors);
+      
       codec = new JSON(results);
       if (success < 1 || (fault && datapoints.size() != success))
         query.sendReply(HttpResponseStatus.BAD_REQUEST, codec.getJsonString());
