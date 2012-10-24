@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,8 @@ import net.opentsdb.stats.Histogram;
 import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
+import net.opentsdb.uid.TimeseriesUID;
+import net.opentsdb.uid.UniqueId;
 
 /**
  * Non-synchronized implementation of {@link Query}.
@@ -105,6 +108,8 @@ final class TsdbQuery implements Query {
 
   /** Minimum time interval (in seconds) wanted between each data point. */
   private int sample_interval;
+  
+  private double time_taken;
 
   private ArrayList<String> tsuids;
   
@@ -156,15 +161,88 @@ final class TsdbQuery implements Query {
     this.findGroupBys(tags);
     this.metric = tsdb.metrics.getId(metric);
     this.tags = Tags.resolveAll(tsdb, tags);
+    for (byte[] tag : this.tags){
+      LOG.trace(String.format("Got tag [%s]", UniqueId.IDtoString(tag)));
+    }
     aggregator = function;
     this.rate = rate;
   }
   
+  /**
+   * Eventually we may be able to support multiple TSUIDs, but for now, only one
+   */
   public void setTimeSeries(final ArrayList<String> tsuids,
                             final Aggregator function,
                             final boolean rate) throws NoSuchUniqueName {
     this.tsuids = tsuids;
-    // todo - resolve
+    
+    // TEMP till I can figure out this logic. grr
+    if (tsuids.size() > 1)
+      throw new NoSuchUniqueName("metric", "Only one TSUID per query is allowed");
+    
+    for (String tsuid : tsuids){
+      final byte[] m = TimeseriesUID.getMetric(tsuid);
+      if (this.metric != null){
+        if (!Bytes.equals(this.metric, m))
+          throw new NoSuchUniqueName("metric", "Only one metric per query is allowed");
+      }else{
+        // resolve the name to make sure it exists
+        tsdb.metrics.getName(m);
+        this.metric = m;
+      }
+      
+      tags = new ArrayList<byte[]>();
+      ArrayList<byte[]> pairs = (ArrayList<byte[]>) 
+        TimeseriesUID.getTagPairsFromTSUID(tsuid, (short)3, (short)3);
+      if (pairs == null){
+        throw new NoSuchUniqueName("tsuid", "No tags found in [" + tsuid + "]");
+      }
+      
+//      Map<String, ArrayList<byte[]>> group_map = new HashMap<String, ArrayList<byte[]>>();
+//      if (group_bys == null)
+//        group_bys = new ArrayList<byte[]>();
+//        
+      
+      tags = new ArrayList<byte[]>();
+      for (byte[] pair : pairs){
+        byte[] tagk = new byte[3];
+        for (int i=0; i<3; i++)
+          tagk[i] = pair[i];
+        tsdb.tag_names.getName(tagk);
+        int x=0;
+        byte[] tagv = new byte[3];
+        for (int i=3; i<pair.length; i++){
+          tagv[x] = pair[i];
+          x++;
+        }
+        tsdb.tag_values.getName(tagv);
+        
+        tags.add(pair);
+        
+//        group_bys.add(tagk);
+//        if (group_map.containsKey(UniqueId.IDtoString(tagk)))
+//          group_map.get(UniqueId.IDtoString(tagk)).add(tagv);
+//        else{
+//          ArrayList<byte[]> vals = new ArrayList<byte[]>();
+//          vals.add(tagv);
+//          group_map.put(UniqueId.IDtoString(tagk), vals);
+//        }
+      }
+      
+      // build the group by map now
+//      if (group_by_values == null)
+//        group_by_values = new ByteMap<byte[][]>();
+//      
+//      final short value_width = tsdb.tag_values.width();
+//      for (Map.Entry<String, ArrayList<byte[]>> entry : group_map.entrySet()){
+//        final byte[][] value_ids = new byte[entry.getValue().size()][value_width];
+//        group_by_values.put(UniqueId.StringtoID(entry.getKey()), value_ids);
+//        for (int j = 0; j < entry.getValue().size(); j++) {
+//          final byte[] value_id = entry.getValue().get(j);
+//          System.arraycopy(value_id, 0, value_ids[j], 0, value_width);
+//        }
+//      }
+    }
     aggregator = function;
     this.rate = rate;
   }
@@ -175,6 +253,10 @@ final class TsdbQuery implements Query {
   
   public int getDownsampleInterval(){
     return this.sample_interval;
+  }
+
+  public double getTimeTaken(){
+    return time_taken;
   }
   
   public void downsample(final int interval, final Aggregator downsampler) {
@@ -209,7 +291,9 @@ final class TsdbQuery implements Query {
       final Map.Entry<String, String> tag = i.next();
       final String tagvalue = tag.getValue();
       if (tagvalue.equals("*")  // 'GROUP BY' with any value.
-          || tagvalue.indexOf('|', 1) >= 0) {  // Multiple possible values.
+          || tagvalue.indexOf('|', 1) >= 0
+          || tagvalue.indexOf("/") == 0) {  // Multiple possible values.
+        
         if (group_bys == null) {
           group_bys = new ArrayList<byte[]>();
         }
@@ -218,6 +302,12 @@ final class TsdbQuery implements Query {
         if (tagvalue.charAt(0) == '*') {
           continue;  // For a 'GROUP BY' with any value, we're done.
         }
+        
+        // regex takes precedence over the | or operator
+        // todo - need to use lucene here since we don't have any maps that would
+        // let us say "match /*/ where tagk=name"
+        // regex format would be "tag1=/regex/,tag2=/regex/"
+        
         // 'GROUP BY' with specific values.  Need to split the values
         // to group on and store their IDs in group_by_values.
         final String[] values = Tags.splitString(tagvalue, '|');
@@ -286,6 +376,7 @@ final class TsdbQuery implements Query {
       throw new RuntimeException("Should never be here", e);
     } finally {
       hbase_time += (System.nanoTime() - starttime) / 1000000;
+      time_taken = (double)(System.nanoTime() - starttime) / (double)1000000;
       scanlatency.add(hbase_time);
     }
     LOG.info(this + " matched " + nrows + " rows in " + spans.size() + " spans");
@@ -307,7 +398,12 @@ final class TsdbQuery implements Query {
       return NO_RESULT;
     }
     
+    JSON codec = new JSON(this);
+    LOG.trace("this query");
+    LOG.trace(codec.getJsonString());
+    
     if (this.aggregator.toString() == "none"){
+      LOG.trace("Non aggregator, returning datapoints");
       DataPoints[] dps = new DataPoints[spans.size()];
       int i=0;
       for (Span sp : spans.values()){
@@ -327,6 +423,9 @@ final class TsdbQuery implements Query {
                                             rate,
                                             aggregator,
                                             sample_interval, downsampler);
+      codec = new JSON(group);
+      LOG.trace("no group by found");
+      LOG.trace(codec.getJsonString());
       return new SpanGroup[] { group };
     }
 
@@ -381,6 +480,9 @@ final class TsdbQuery implements Query {
     //for (final Map.Entry<byte[], SpanGroup> entry : groups) {
     //  LOG.info("group for " + Arrays.toString(entry.getKey()) + ": " + entry.getValue());
     //}
+    codec = new JSON(groups);
+    LOG.trace("group bys");
+    LOG.trace(codec.getJsonString());
     return groups.values().toArray(new SpanGroup[groups.size()]);
   }
 
@@ -412,6 +514,8 @@ final class TsdbQuery implements Query {
       createAndSetFilter(scanner);
     }
     scanner.setFamily(TSDB.FAMILY);
+    JSON codec = new JSON(scanner);
+    LOG.trace(codec.getJsonString());
     return tsdb.data_storage.openScanner(scanner);
   }
 

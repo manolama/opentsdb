@@ -12,7 +12,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public License
 # along with this library.  If not, see <http://www.gnu.org/licenses/>.
-
+#
 ONTOPIA_VERSION := 5.2.1
 ONTOPIA := third_party/testing/ontopia-engine-$(ONTOPIA_VERSION).jar
 ONTOPIA_BASE_URL := http://www.euphoriaaudio.com/downloads
@@ -21,3 +21,12 @@ $(ONTOPIA): $(ONTOPIA).md5
 	set dummy "$(ONTOPIA_BASE_URL)" "$(ONTOPIA)"; shift; $(FETCH_DEPENDENCY)
 
 THIRD_PARTY += $(ONTOPIA)
+
+RABBITMQ_VERSION := client
+RABBITMQ := third_party/testing/rabbitmq-$(RABBITMQ_VERSION).jar
+RABBITMQ_BASE_URL := http://www.euphoriaaudio.com/downloads
+
+$(RABBITMQ): $(RABBITMQ).md5
+	set dummy "$(RABBITMQ_BASE_URL)" "$(RABBITMQ)"; shift; $(FETCH_DEPENDENCY)
+  
+THIRD_PARTY += $(RABBITMQ)

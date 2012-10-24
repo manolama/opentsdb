@@ -112,4 +112,6 @@ public interface Query {
   Aggregator getAggregator();
   
   int getDownsampleInterval();
+
+  double getTimeTaken();
 }

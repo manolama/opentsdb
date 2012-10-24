@@ -121,6 +121,8 @@ public final class TSDB {
   
   public final TSDRole role;
   public final boolean time_puts = true;
+  public final MQTest mq;
+  public final boolean use_mq = true;
   
   /**
    * DEPRECATED Constructor
@@ -161,6 +163,7 @@ public final class TSDB {
       meta_search_writer = null;
       meta_searcher = null;
     }
+    mq = new MQTest("localhost");
     LOG.info(String.format("Setting TSD role to [%s]", role));
   }
   
@@ -200,6 +203,7 @@ public final class TSDB {
       meta_search_writer = null;
       meta_searcher = null;
     }
+    mq = new MQTest("wtdb-1-3.phx3.llnw.net");
     LOG.info(String.format("Setting TSD role to [%s]", role));
   }
 
@@ -510,6 +514,16 @@ public final class TSDB {
     scheduleForCompaction(row, (int) base_time);
     final short qualifier = (short) ((timestamp - base_time) << Const.FLAG_BITS
                                      | flags);
+    
+    // MQ publish
+    if (use_mq){
+      StringBuilder msg = new StringBuilder();
+      msg.append(timestamp).append(" ").append(value);
+      for (Map.Entry<String, String> entry : tags.entrySet())
+        msg.append(entry.getKey()).append("=").append(entry.getValue());
+      mq.publish(metric, msg.toString().getBytes());
+    }
+    
 //    final PutRequest point = new PutRequest(table, row, FAMILY,
 //                                            Bytes.fromShort(qualifier), value);
 //    // TODO(tsuna): Add a callback to time the latency of HBase and store the
@@ -675,8 +689,10 @@ public final class TSDB {
     }
     try{
       TimeSeriesMeta meta = this.timeseries_meta.getTimeSeriesMeta(id, cache);
-      if (meta == null)
-        meta = new TimeSeriesMeta(id);
+      if (meta == null){
+        //meta = new TimeSeriesMeta(id);
+        return null;
+      }
       
       // otherwise we need to get the general metas for metrics and tags
       byte[] metricID = MetaDataCache.getMetricID(id);
@@ -713,7 +729,7 @@ public final class TSDB {
           }
           index++;
         }
-        meta.setTags(tag_metas);
+        meta.setTagsMeta(tag_metas);
       }
       
       return meta;

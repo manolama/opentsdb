@@ -268,7 +268,7 @@ public class TsdbJSON extends TSDFormatter {
     /** The number of datapoints actually returned */
     public long aggregated_datapoints;
     /** The amount of time it took to generate the results */
-    public float time_taken;
+    public double time_taken;
     /** The number of unique timeseries IDs in the results */
     public long unique_tsids;
   }

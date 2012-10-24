@@ -60,6 +60,8 @@ public class SearchQuery {
   private boolean return_tsuids = false;
   private String group = "host";
   private String sub_group = "metric";
+  private boolean group_only = false;
+  private boolean terms = false;
   @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
   private int total_groups = 0;
 
@@ -374,6 +376,10 @@ public class SearchQuery {
       this.setReturnMeta(query.parseBoolean(query.getQueryStringParam("return_meta")));
     if (query.hasQueryStringParam("return_tsuids"))
       this.setReturnTSUIDs(query.parseBoolean(query.getQueryStringParam("return_tsuids")));
+    if (query.hasQueryStringParam("group_only"))
+      this.setGroupOnly(query.parseBoolean(query.getQueryStringParam("group_only")));
+    if (query.hasQueryStringParam("terms"))
+      this.setTerms(query.parseBoolean(query.getQueryStringParam("terms")));
     if (query.hasQueryStringParam("limit")){
       try{
         this.setLimit(Integer.parseInt(query.getQueryStringParam("limit")));
@@ -390,8 +396,10 @@ public class SearchQuery {
         return false;
       }
     }
-    this.setGroup(query.getQueryStringParam("group"));
-    this.setGroup(query.getQueryStringParam("sub_group"));
+    if (query.hasQueryStringParam("group"))
+      this.setGroup(query.getQueryStringParam("group"));
+    if (query.hasQueryStringParam("sub_group"))
+      this.setGroup(query.getQueryStringParam("sub_group"));
     return true;
   }
  
@@ -598,6 +606,8 @@ public class SearchQuery {
     this.total_hits = total_hits;
     if (this.total_groups > 0){
       this.pages = (this.total_groups / this.limit) + 1;
+    }else if (this.terms){
+      this.pages = 0;
     }else{
       if (total_hits > 0)
         this.pages = (total_hits / this.limit) + 1;
@@ -664,4 +674,19 @@ public class SearchQuery {
     this.return_tsuids = return_tsuids;
   }
 
+  public boolean getGroupOnly(){
+    return this.group_only;
+  }
+  
+  public void setGroupOnly(boolean group_only){
+    this.group_only = group_only;
+  }
+
+  public boolean getTerms(){
+    return this.terms;
+  }
+  
+  public void setTerms(boolean terms){
+    this.terms = terms;
+  }
 }

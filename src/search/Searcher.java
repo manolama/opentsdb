@@ -5,10 +5,13 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.index.CorruptIndexException;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.index.TermEnum;
 import org.apache.lucene.queryParser.ParseException;
 import org.apache.lucene.queryParser.QueryParser;
 import org.apache.lucene.search.CachingCollector;
@@ -140,9 +143,14 @@ public class Searcher {
     if (!this.checkSearcher()){
       return null;
     }
-    
+    if (query.getGroup() == null){
+      LOG.error("Group value was null");
+      return null;
+    }
     SortField group_sort = new SortField(query.getGroup(), SortField.STRING);
-    SortField doc_sort = new SortField(query.getSubGroup(), SortField.STRING);
+    SortField doc_sort = null;
+    if (query.getSubGroup() != null)
+      doc_sort = new SortField(query.getSubGroup(), SortField.STRING);
     final int page = query.getPage();
     final int limit = query.getLimit();
     
@@ -197,6 +205,12 @@ public class Searcher {
           continue;
         }
         
+        // if the user only wants the groups, give em the groups
+        if (query.getGroupOnly()){
+          group_map.put(doc.groupValue, doc.scoreDocs.length);
+          continue;
+        }
+        
         ArrayList<Map<String, Object>> metas = new ArrayList<Map<String, Object>>();
         for (ScoreDoc sd : doc.scoreDocs){
           Map<String, Object> meta = this.getMeta(sd.doc);
@@ -230,6 +244,36 @@ public class Searcher {
 //        }
 //        System.out.println("Dumped [" + count + "] groups");
       
+    } catch (IOException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
+    return null;
+  }
+  
+  public final HashSet<String> getTerms(final SearchQuery query){
+    if (!this.checkSearcher()){
+      return null;
+    }
+    if (query.getGroup() == null){
+      LOG.error("Group value was null");
+      return null;
+    }
+    
+    TermEnum terms;
+    try {
+      terms = searcher.getIndexReader().terms();
+      HashSet<String> uniqueTerms = new HashSet<String>();
+      while (terms.next()) {
+        final Term term = terms.term();
+        if (term.field().equals(query.getGroup())) {
+          uniqueTerms.add(term.text());
+        }
+      }
+      
+      query.setLimit(0);
+      query.setTotal_hits(uniqueTerms.size());
+      return uniqueTerms;
     } catch (IOException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();

@@ -51,6 +51,7 @@ tsdb_SRC := \
 	src/core/TSDB.java	\
 	src/core/Tags.java	\
 	src/core/TsdbQuery.java	\
+	src/core/MQTest.java	\
 	src/core/WritableDataPoints.java	\
 	src/formatters/Ascii.java	\
 	src/formatters/CollectdJSON.java	\
@@ -132,7 +133,9 @@ tsdb_DEPS = \
 	$(CURATOR_CLIENT) \
 	$(CURATOR_FRAMEWORK) \
 	$(CURATOR_RECIPES) \
-	$(COMMONS_MATH) 
+	$(COMMONS_MATH) \
+	$(RABBITMQ) \ 
+	$(ONTOPIA)
 
 # Install all the .jar files in pkgdatadir.
 pkgdata_DATA = $(tsdb_DEPS) $(jar)

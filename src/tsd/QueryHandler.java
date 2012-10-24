@@ -158,12 +158,7 @@ public class QueryHandler implements HttpRpc {
     final TSDFormatter formatter;
     if (endpoint != null){
       formatter = TSDFormatter.getFormatter(endpoint, tsdb);
-      /*if (endpoint.compareTo("ascii") == 0){
-        formatter = new Ascii(tsdb);
-      }else if (endpoint.compareTo("collectdjson") == 0){
-        formatter = new CollectdJSON(tsdb);
-      }else */if (endpoint.compareTo("gnugraph") == 0){
-        //formatter = new GnuGraphFormatter(tsdb);
+      if (endpoint.compareTo("gnugraph") == 0){
         // gnugraph needs more cruft set
         ((GnuGraphFormatter)formatter).init();
         ((GnuGraphFormatter)formatter).setBasePath(basepath);
@@ -172,9 +167,6 @@ public class QueryHandler implements HttpRpc {
         ((GnuGraphFormatter)formatter).setQueryString(query.querystring);
         ((GnuGraphFormatter)formatter).setQueryHash(query.hashCode());
       }
-//      }else{
-//        formatter = new TsdbJSON(tsdb);
-//      }
     }else
       formatter = TSDFormatter.getFormatter("tsdbjson", tsdb);
     
@@ -349,20 +341,34 @@ public class QueryHandler implements HttpRpc {
         return false;
       }
       
-      final List<String> ms = query.getQueryStringParams("m");
-      if (ms == null) {
-        this.error = "Missing parameter [m]";
-        return false;
-      }
-      
       this.queries = new ArrayList<TSQuery>();
-      for (final String m : ms) {
-        TSQuery mq = new TSQuery();
-        if (!mq.parseQueryString(tsdb, m)){
-          this.error = mq.error;
+      
+      final List<String> tsuids = query.getQueryStringParams("tsuids");
+      if (tsuids == null || tsuids.size() < 1){       
+        final List<String> ms = query.getQueryStringParams("m");
+        if (ms == null) {
+          this.error = "Missing parameter [m]";
           return false;
         }
-        this.queries.add(mq);
+        
+        for (final String m : ms) {
+          TSQuery mq = new TSQuery();
+          if (!mq.parseQueryString(tsdb, m)){
+            this.error = mq.error;
+            return false;
+          }
+          this.queries.add(mq);
+        }
+      }else{
+        for (final String tsuid : tsuids) {
+          LOG.trace("Processing TSUID: " + tsuid);
+          TSQuery mq = new TSQuery();
+          if (! mq.setTSUID(tsdb, tsuid)){
+           this.error = mq.error;
+           return false;
+          }
+          this.queries.add(mq);
+        }
       }
       
       return true;
@@ -403,6 +409,11 @@ public class QueryHandler implements HttpRpc {
       final Aggregator agg = getAggregator(aggregator);
       
       if (this.tsuids != null && this.tsuids.size() > 0){
+        if (tsuids.size() > 1){
+          this.error = "Only one TSUID allowed per query at this time";
+          return false;
+        }
+      
         this.tsd_query = tsdb.newQuery();
         try {
           this.tsd_query.setTimeSeries(this.tsuids, agg, 
@@ -411,25 +422,24 @@ public class QueryHandler implements HttpRpc {
           this.error = e.getMessage();
           return false;
         }
-        return true;
-      }
-      
-      // parse further
-      if (this.metric == null || this.metric.isEmpty()){
-        this.error = "Missing metric value";
-        return false;
-      }
-      
-      if (this.tags == null)
-        this.tags = new HashMap<String, String>();
-      
-      this.tsd_query = tsdb.newQuery();
-      try {
-        this.tsd_query.setTimeSeries(this.metric, this.tags, agg, 
-          (this.type != null && !this.type.isEmpty()));
-      } catch (NoSuchUniqueName e) {
-        this.error = e.getMessage();
-        return false;
+      }else{      
+        // parse further
+        if (this.metric == null || this.metric.isEmpty()){
+          this.error = "Missing metric value";
+          return false;
+        }
+        
+        if (this.tags == null)
+          this.tags = new HashMap<String, String>();
+        
+        this.tsd_query = tsdb.newQuery();
+        try {
+          this.tsd_query.setTimeSeries(this.metric, this.tags, agg, 
+            (this.type != null && !this.type.isEmpty()));
+        } catch (NoSuchUniqueName e) {
+          this.error = e.getMessage();
+          return false;
+        }
       }
       
       if (this.downsample != null && !this.downsample.isEmpty()){
@@ -451,6 +461,63 @@ public class QueryHandler implements HttpRpc {
         this.tsd_query.downsample(interval, downsampler);
       }
       
+      return true;
+    }
+    
+    @JsonIgnore
+    public boolean setTSUID(final TSDB tsdb, final String tsuid){
+      this.tsuids = new ArrayList<String>();
+      final String[] parts = Tags.splitString(tsuid, ':');
+      int i = parts.length;
+      if (i < 2 || i > 4) {
+        this.error = "Invalid parameter tsuids=" + tsuid + " ("
+          + (i < 2 ? "not enough" : "too many") + " :-separated parts)";
+        return false;
+      }
+      final Aggregator agg = getAggregator(parts[0]);
+      i--;  // Move to the last part (the metric name).
+      final String[] split_tsuids = Tags.splitString(parts[i], ',');
+      if (split_tsuids == null || split_tsuids.length < 1){
+        this.error = "Unable to extract Timeseries UID";
+        return false;
+      }
+      final ArrayList<String> tsuids = new ArrayList<String>();
+      for (String ts : split_tsuids)
+        tsuids.add(ts);
+      final boolean rate = "rate".equals(parts[--i]);
+      
+      this.tsd_query = tsdb.newQuery();
+      try {
+        this.tsd_query.setTimeSeries(tsuids, agg, rate);
+      } catch (NoSuchUniqueName e) {
+        this.error = e.getMessage();
+        return false;
+      }
+      if (rate) {
+        i--;  // Move to the next part.
+      }
+      
+      // downsampling function & interval.
+      if (i > 0) {
+        final int dash = parts[1].indexOf('-', 1);  // 1st char can't be `-'.
+        if (dash < 0) {
+          this.error = "Invalid downsampling specifier '"
+            + parts[1] + "' in tsuids=" + tsuid;
+          return false;
+        }
+        Aggregator downsampler;
+        try {
+          downsampler = Aggregators.get(parts[1].substring(dash + 1));
+        } catch (NoSuchElementException e) {
+          this.error = "No such downsampling function: "
+            + parts[1].substring(dash + 1);
+          return false;
+        }
+        final int interval = HttpQuery.parseDuration(parts[1].substring(0, dash));
+        this.tsd_query.downsample(interval, downsampler);
+      }
+      
+      this.tsuids.add(tsuid);
       return true;
     }
     

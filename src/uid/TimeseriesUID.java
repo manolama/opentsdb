@@ -15,6 +15,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import net.ontopia.utils.CompactHashSet;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.GeneralMeta;
@@ -40,7 +41,7 @@ public class TimeseriesUID {
   private static final Logger LOG = LoggerFactory.getLogger(TimeseriesUID.class);
   
   // these locks should only be used for the hashes
-  private final HashSet<Integer> ts_uid_hashes;
+  private final CompactHashSet<Integer> ts_uid_hashes;
   private final ReentrantReadWriteLock locker = new ReentrantReadWriteLock();
   private final Lock read_lock  = locker.readLock();
   private final Lock write_lock = locker.writeLock();
@@ -51,7 +52,7 @@ public class TimeseriesUID {
   private final AtomicLong new_tsuids = new AtomicLong();
   
   public TimeseriesUID(final TsdbStore store){
-    ts_uid_hashes = new HashSet<Integer>();
+    ts_uid_hashes = new CompactHashSet<Integer>();
     tsuid_queue = new HashSet<String>();
     this.uid_storage = store;
   }
@@ -268,6 +269,15 @@ public class TimeseriesUID {
       e.printStackTrace();
       throw new RuntimeException("Should never be here", e);
     }
+  }
+  
+  public static byte[] getMetric(final String tsuid){
+    if (tsuid.length() < 3 * 2){
+      LOG.error("TSUID was too short");
+      return null;
+    }
+    
+    return UniqueId.StringtoID(tsuid.substring(0, 6));
   }
   
   /**

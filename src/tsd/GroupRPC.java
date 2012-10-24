@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.JSON;
@@ -56,9 +57,7 @@ public class GroupRPC implements HttpRpc {
       search_query = (SearchQuery)codec.getObject();
     }else{
       LOG.trace("Parsing query string data");
-      search_query.parseQueryString(query);
-      // error already sent
-      if (search_query == null)
+      if (!search_query.parseQueryString(query))
         return;
     }
     
@@ -71,7 +70,11 @@ public class GroupRPC implements HttpRpc {
     JSON codec = new JSON(search_query);
     LOG.trace(codec.getJsonString());
 
-    Map<String, Object> results = tsdb.meta_searcher.groupBy(search_query);
+    Object results = null;
+    if (search_query.getTerms())
+      results = new TreeSet<String>(tsdb.meta_searcher.getTerms(search_query));
+    else
+      results = tsdb.meta_searcher.groupBy(search_query);
     if (results == null){
       query.sendError(HttpResponseStatus.BAD_REQUEST, search_query.getError());
       return;
@@ -83,19 +86,18 @@ public class GroupRPC implements HttpRpc {
     Map<String, Object> response = new HashMap<String, Object>();
     response.put("limit", search_query.getLimit());
     response.put("page", search_query.getPage());
-    response.put("total_uids", search_query.getTotal_hits());
+    if (search_query.getTerms())
+      response.put("total_terms", search_query.getTotal_hits());
+    else
+      response.put("total_uids", search_query.getTotal_hits());
     response.put("total_pages", search_query.getPages());
     response.put("time", time);
-    response.put("total_groups", search_query.getTotalGroups());
+    if (!search_query.getTerms())
+      response.put("total_groups", search_query.getTotalGroups());
     response.put("results", results);
     codec = new JSON(response);
     query.sendReply(codec.getJsonBytes());
     return;
   }
-  
-  private static class TsdbGroup{
-    public SortedMap<String, List<Map<String, Object>>> groups;
-    public long total_uids = 0;
-    public long largest_group = 0;
-  }
+
 }

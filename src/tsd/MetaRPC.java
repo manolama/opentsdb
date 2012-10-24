@@ -92,31 +92,30 @@ public class MetaRPC implements HttpRpc {
     
     final String endpoint = query.getEndpoint();
 
-    GeneralMeta meta = null;
-    JSON parser = null;
+    byte[] result = null;
     if (endpoint == null || endpoint.isEmpty() || endpoint.compareTo("timeseries") == 0){
       TimeSeriesMeta ts_meta = tsdb.getTimeSeriesMeta(id, true);
       if (ts_meta != null)
-        parser = new JSON(ts_meta);
+        result = ts_meta.getJSONBytes();
     } else if (endpoint.compareTo("metric") == 0){
-      meta = tsdb.metrics.getGeneralMeta(id, false);
+      GeneralMeta meta = tsdb.metrics.getGeneralMeta(id, false);
       if (meta != null)
-        parser = new JSON(meta);
+        result = meta.getJSONBytes();
     } else if (endpoint.compareTo("tagk") == 0){
-      meta = tsdb.tag_names.getGeneralMeta(id, false);
+      GeneralMeta meta = tsdb.tag_names.getGeneralMeta(id, false);
       if (meta != null)
-        parser = new JSON(meta);
+        result = meta.getJSONBytes();
     } else if (endpoint.compareTo("tagv") == 0){
-      meta = tsdb.tag_values.getGeneralMeta(id, false);
+      GeneralMeta meta = tsdb.tag_values.getGeneralMeta(id, false);
       if (meta != null)
-        parser = new JSON(meta);
+        result = meta.getJSONBytes();
     }
 
-    if (parser == null){
+    if (result == null){
       query.sendError(HttpResponseStatus.BAD_REQUEST, "UID object was not found");
       return;
     }
-    query.sendReply(parser.getJsonBytes());
+    query.sendReply(result);
     return;
   }
 

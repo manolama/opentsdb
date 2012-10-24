@@ -11,6 +11,7 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.NumericField;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
+import org.codehaus.jackson.annotate.JsonProperty;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,17 +35,20 @@ final public class TimeSeriesMeta extends MetaData {
   private int data_type = 0;         // type of metric, e.g. counter/rate/something else  
   
   // change variables
-  private Boolean c_retention = false;
-  private Boolean c_max = false;
-  private Boolean c_min = false;
-  private Boolean c_units = false;
-  private Boolean c_type = false;
+  private boolean c_retention = false;
+  private boolean c_max = false;
+  private boolean c_min = false;
+  private boolean c_units = false;
+  private boolean c_type = false;
   
   // API only
   private GeneralMeta metric = null;
   // <tag name, meta>
   @JsonIgnore
-  private Map<GeneralMeta, GeneralMeta> tags = null;
+  private Map<GeneralMeta, GeneralMeta> tag_meta = null;
+  
+  @JsonIgnore
+  private ArrayList<GeneralMeta> tags = null;
  
   public TimeSeriesMeta(){
     super();
@@ -91,12 +95,28 @@ final public class TimeSeriesMeta extends MetaData {
   // returns the entire object as a JSON string
   @JsonIgnore  
   public String getJSON(){
+    if (this.tag_meta != null){
+      this.tags = new ArrayList<GeneralMeta>();
+      for (Map.Entry<GeneralMeta, GeneralMeta> entry : this.tag_meta.entrySet()){
+        this.tags.add(entry.getKey());
+        this.tags.add(entry.getValue());
+      }
+    }
+    
     JSON codec = new JSON(this);
     return codec.getJsonString();
   }
   
   @JsonIgnore
   public byte[] getJSONBytes(){
+    if (this.tag_meta != null){
+      this.tags = new ArrayList<GeneralMeta>();
+      for (Map.Entry<GeneralMeta, GeneralMeta> entry : this.tag_meta.entrySet()){
+        this.tags.add(entry.getKey());
+        this.tags.add(entry.getValue());
+      }
+    }
+    
     JSON codec = new JSON(this);
     return codec.getJsonBytes();
   }
@@ -105,7 +125,7 @@ final public class TimeSeriesMeta extends MetaData {
   @JsonIgnore  
   public String getStorageJSON(){
     this.metric = null;
-    this.tags = null;
+    this.tag_meta = null;
     JSON json = new JSON(this);
     return json.getJsonString();    
   }
@@ -185,7 +205,7 @@ final public class TimeSeriesMeta extends MetaData {
   public final Document buildLuceneDoc(){
     if (this.uid == null || this.uid.length() < 1)
       return null;
-    if (this.tags == null || this.tags.size() < 1){
+    if (this.tag_meta == null || this.tag_meta.size() < 1){
       LOG.warn(String.format("Missing tag meta for TSUID [%s]", uid));
       return null;
     }
@@ -222,7 +242,7 @@ final public class TimeSeriesMeta extends MetaData {
     // add the metric metadata
     this.metric.appendFields(doc, flatten);
     
-    for (Map.Entry<GeneralMeta, GeneralMeta> entry : this.tags.entrySet()){
+    for (Map.Entry<GeneralMeta, GeneralMeta> entry : this.tag_meta.entrySet()){
       entry.getKey().appendFields(doc, flatten);
       entry.getValue().appendFields(doc, flatten);
       
@@ -270,7 +290,13 @@ final public class TimeSeriesMeta extends MetaData {
     return this.metric;
   }
   
-  public Map<GeneralMeta, GeneralMeta> getTags(){
+  @JsonIgnore
+  public Map<GeneralMeta, GeneralMeta> getTagsMeta(){
+    return this.tag_meta;
+  }
+  
+  @JsonProperty("tags")
+  public ArrayList<GeneralMeta> getTags(){
     return this.tags;
   }
   
@@ -311,8 +337,9 @@ final public class TimeSeriesMeta extends MetaData {
     this.metric = m;
   }
   
-  public void setTags(final Map<GeneralMeta, GeneralMeta> t){
-    this.tags = t;
+  @JsonIgnore
+  public void setTagsMeta(final Map<GeneralMeta, GeneralMeta> t){
+    this.tag_meta = t;
   }
 
   public long getLastReceived() {
