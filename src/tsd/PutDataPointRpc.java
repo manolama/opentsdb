@@ -69,13 +69,6 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
     final TSDFormatter formatter;
     if (endpoint != null){
       formatter = TSDFormatter.getFormatter(endpoint, tsdb);
-//      if (endpoint.compareTo("ascii") == 0){
-//        formatter = new Ascii(tsdb);
-//      }else if (endpoint.compareTo("collectdjson") == 0){
-//        formatter = new CollectdJSON(tsdb);
-//      }else{
-//        formatter = new TsdbJSON(tsdb);
-//      }
     }else
       formatter = TSDFormatter.getFormatter("tsdbjson", tsdb);
     if (formatter == null){
@@ -92,7 +85,7 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
    * Handles the Telnet PUT command
    */
   public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
-      final String[] cmd) {
+      final String[] cmd, final TSDFormatter formatter) {
     requests.incrementAndGet();
     String errmsg = null;
     try {

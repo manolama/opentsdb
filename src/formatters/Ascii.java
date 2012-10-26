@@ -1,8 +1,8 @@
 package net.opentsdb.formatters;
 
 import java.util.Map;
-import java.util.Map.Entry;
 
+import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.tsd.DataQuery;
 import net.opentsdb.tsd.HttpQuery;
@@ -20,6 +20,40 @@ public class Ascii extends TSDFormatter{
   
   public String getEndpoint(){
     return "ascii";
+  }
+  
+  /**
+   * Returns rows of complete data points in the format:
+   * <metric> <timestamp> <value> <tag pairs>
+   * @param query The HTTPQuery to parse
+   * @return Returns true
+   */
+  public boolean handleHTTPGet(final HttpQuery query){  
+    StringBuilder output = new StringBuilder(this.datapoints.size() * 1024);
+
+    for (DataPoints dp : this.datapoints){
+      
+      // build the tags once for speed
+      StringBuilder tags = new StringBuilder(dp.getTags().size() * 256);
+      int counter=0;
+      for (Map.Entry<String, String> pair : dp.getTags().entrySet()){
+        if (counter > 0)
+          tags.append(" ");
+        tags.append(pair.getKey()).append("=").append(pair.getValue());
+        counter++;
+      }
+      // now build the individual rows
+      for(int i=0; i<dp.size(); i++){
+        output.append(dp.metricName()).append(" ");
+        output.append(dp.timestamp(i)).append(" ");
+        output.append(dp.isInteger(i) ? dp.longValue(i) : dp.doubleValue(i)).append(" ");
+        output.append(tags);
+        output.append("\n");
+      }
+    }
+    
+    query.sendReply(output.toString());    
+    return true;
   }
   
   public String getOutput(){

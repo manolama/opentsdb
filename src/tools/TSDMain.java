@@ -33,7 +33,7 @@ import org.hbase.async.HBaseClient;
 
 import net.opentsdb.BuildData;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.core.Config;
+import net.opentsdb.core.TsdbConfig;
 import net.opentsdb.core.TSDB.TSDRole;
 import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.storage.TsdbStore;
@@ -106,7 +106,7 @@ final class TSDMain {
     log.info(BuildData.buildString());
 
     // try to load default config
-    Config config = new Config();
+    TsdbConfig config = null;
     
     try {
       System.in.close(); // Release a FD we don't need.
@@ -123,8 +123,7 @@ final class TSDMain {
     argp.addOption("--cachedir", "PATH",
         "Directory under which to cache result of requests.");
     argp.addOption("--flush-interval", "MSEC",
-        "Maximum time for which a new data point can be buffered"
-            + " (default: " + config.flushInterval() + ").");
+        "Maximum time for which a new data point can be buffered.");
     CliOptions.addAutoMetricFlag(argp);
     CliOptions.addVerbose(argp);
     args = CliOptions.parse(argp, args);
@@ -132,9 +131,9 @@ final class TSDMain {
     // load config if the user specified one
     final String config_file = argp.get("--configfile", "");
     if (!config_file.isEmpty())
-      config.loadConfig(config_file);
+      config = new TsdbConfig(config_file);
     else
-      config.loadConfig();
+      config= new TsdbConfig();
     
     if ((config.httpStaticRoot().isEmpty() || config.cacheDirectory().isEmpty())
         && (args == null || !argp.has("--port") || !argp.has("--staticroot") || !argp
@@ -149,7 +148,7 @@ final class TSDMain {
     argp.overloadConfigs(config);
     
     // dump the configuration 
-    //log.debug(config.dumpConfiguration(false));
+    log.debug(config.dumpConfiguration(false));
 
     // check to make sure the directories are read/writable where appropriate
     String error = checkDirectory(
@@ -194,8 +193,8 @@ final class TSDMain {
         
         // temp!
         log.info("Running with Casandra");
-        config.tsdUIDTable("tsdbuid");
-        config.tsdTable("tsdb");
+//        config.tsdUIDTable("tsdbuid");
+//        config.tsdTable("tsdb");
         uid_storage = new TsdbStoreCass(config, config.tsdUIDTable().getBytes(), cass_uid);
         data_storage = new TsdbStoreCass(config, config.tsdTable().getBytes(), cass_data);
         data_storage.setTable("tsdb");

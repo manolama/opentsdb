@@ -20,6 +20,7 @@ import net.opentsdb.cache.Cache;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.formatters.CollectdJSON;
+import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.formatters.TsdbJSON;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.stats.StatsCollector.StatsDP;
@@ -40,7 +41,7 @@ final class StatsRPC implements TelnetRpc, HttpRpc {
    * @return Deferred<Object> async object for the Telnet client to parse
    */
   public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
-      final String[] cmd) {
+      final String[] cmd, final TSDFormatter formatter) {
     final StringBuilder buf = new StringBuilder(1024);
     final StatsCollector collector = new StatsCollector("tsd") {
       @Override

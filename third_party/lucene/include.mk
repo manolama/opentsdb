@@ -25,7 +25,7 @@ LUCENE_GROUPING := third_party/lucene/lucene-grouping-$(LUCENE_VERSION).jar
 $(LUCENE_GROUPING): $(LUCENE_GROUPING).md5
 	set dummy "$(LUCENE_BASE_URL)" "$(LUCENE_GROUPING)"; shift; $(FETCH_DEPENDENCY)
 
-LUCENE_QUERIES := third_party/lucene/lucene-grouping-$(LUCENE_VERSION).jar
+LUCENE_QUERIES := third_party/lucene/lucene-queries-$(LUCENE_VERSION).jar
 
 $(LUCENE_QUERIES): $(LUCENE_QUERIES).md5
 	set dummy "$(LUCENE_BASE_URL)" "$(LUCENE_QUERIES)"; shift; $(FETCH_DEPENDENCY)

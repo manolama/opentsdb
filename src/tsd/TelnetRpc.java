@@ -17,6 +17,7 @@ import com.stumbleupon.async.Deferred;
 import org.jboss.netty.channel.Channel;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.formatters.TSDFormatter;
 
 /** Base interface for all telnet-style RPC handlers. */
 interface TelnetRpc {
@@ -28,6 +29,6 @@ interface TelnetRpc {
    * @param command The command received, split.
    * @return A deferred result.
    */
-  Deferred<Object> execute(TSDB tsdb, Channel chan, String[] command);
+  Deferred<Object> execute(TSDB tsdb, Channel chan, String[] command, TSDFormatter formatter);
 
 }

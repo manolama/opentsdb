@@ -17,6 +17,7 @@ import java.util.HashMap;
 import net.opentsdb.BuildData;
 import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.formatters.TSDFormatter;
 
 import org.jboss.netty.channel.Channel;
 import org.slf4j.Logger;
@@ -37,7 +38,7 @@ final class VersionRPC implements TelnetRpc, HttpRpc {
    * @param cmd Telnet command received
    */
   public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
-      final String[] cmd) {
+      final String[] cmd, final TSDFormatter formatter) {
     if (chan.isConnected()) {
       chan.write(BuildData.revisionString() + '\n' + BuildData.buildString()
           + '\n');

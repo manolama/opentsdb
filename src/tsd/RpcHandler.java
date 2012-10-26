@@ -30,7 +30,9 @@ import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 
 import net.opentsdb.cache.Cache;
+import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.stats.StatsCollector;
 
 /**
@@ -87,6 +89,11 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       telnet_commands.put("version", version);
       http_commands.put("version", version);
     }
+    {
+      final Formatters formatters = new Formatters();
+      telnet_commands.put("formatters", formatters);
+      http_commands.put("formatters", formatters);
+    }
 
     telnet_commands.put("exit", new Exit());
     telnet_commands.put("help", new Help());
@@ -99,7 +106,6 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     http_commands.put("suggest", new SuggestRPC());
     http_commands.put("put", new PutDataPointRpc());
     http_commands.put("cache", new CacheRPC());
-    http_commands.put("metrics", new MetricsRpc());
     http_commands.put("meta", new MetaRPC());
     http_commands.put("search", new SearchRPC());
     http_commands.put("group", new GroupRPC());
@@ -141,7 +147,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       rpc = unknown_cmd;
     }
     telnet_rpcs_received.incrementAndGet();
-    rpc.execute(tsdb, chan, command);
+    rpc.execute(tsdb, chan, command, null);
   }
 
   /**
@@ -237,7 +243,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   /** The "diediedie" command and "/diediedie" endpoint. */
   private final class DieDieDie implements TelnetRpc, HttpRpc {
     public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
-                                    final String[] cmd) {
+                                    final String[] cmd, final TSDFormatter formatter) {
       logWarn(chan, "shutdown requested");
       chan.write("Cleaning up and exiting now.\n");
       return doShutdown(tsdb, chan);
@@ -285,10 +291,27 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     }
   }
 
+  private final class Formatters implements TelnetRpc, HttpRpc {
+    
+    public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
+        final String[] cmd, final TSDFormatter formatter) {
+      chan.disconnect();
+      for (String format : TSDFormatter.listFormatters()){
+        chan.write(format + "\n");
+      }
+      return Deferred.fromResult(null);
+    }
+    
+    public void execute(final TSDB tsdb, final HttpQuery query) {
+      JSON codec = new JSON(TSDFormatter.listFormatters());
+      query.sendReply(codec.getJsonBytes());
+    }
+  }
+  
   /** The "exit" command. */
   private static final class Exit implements TelnetRpc {
     public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
-                                    final String[] cmd) {
+                                    final String[] cmd, final TSDFormatter formatter) {
       chan.disconnect();
       return Deferred.fromResult(null);
     }
@@ -297,7 +320,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   /** The "help" command. */
   private final class Help implements TelnetRpc {
     public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
-                                    final String[] cmd) {
+                                    final String[] cmd, final TSDFormatter formatter) {
       final StringBuilder buf = new StringBuilder();
       buf.append("available commands: ");
       // TODO(tsuna): Maybe sort them?
@@ -329,7 +352,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   /** For unknown commands. */
   private static final class Unknown implements TelnetRpc {
     public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
-                                    final String[] cmd) {
+                                    final String[] cmd, final TSDFormatter formatter) {
       logWarn(chan, "unknown command : " + Arrays.toString(cmd));
       chan.write("unknown command: " + cmd[0] + ".  Try `help'.\n");
       return Deferred.fromResult(null);

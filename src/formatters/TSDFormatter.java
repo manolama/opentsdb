@@ -3,6 +3,7 @@ package net.opentsdb.formatters;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -171,5 +172,9 @@ public abstract class TSDFormatter {
       e.printStackTrace();
     }
     return null;
+  }
+
+  public static Set<String> listFormatters(){
+    return formatter_map.keySet();
   }
 }

@@ -425,7 +425,7 @@ public class Searcher {
       meta.put("tsuid", tsuid.toUpperCase());
       meta.put("metric", metric);
       
-      ArrayList<Map<String, String>> tag_list = new ArrayList<Map<String, String>>();
+      HashMap<String, String> tag_list = new HashMap<String, String>();
       for (String tag : tags){
         final String[] split = tag.split("=");
         if (split.length != 2){
@@ -433,9 +433,7 @@ public class Searcher {
           continue;
         }
         
-        Map<String, String> t = new HashMap<String, String>();
-        t.put(split[0], split[1]);
-        tag_list.add(t);
+        tag_list.put(split[0], split[1]);
       }
       meta.put("tags", tag_list);
       return meta;

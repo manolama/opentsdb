@@ -30,7 +30,7 @@ import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
 
-import net.opentsdb.core.Config;
+import net.opentsdb.core.TsdbConfig;
 import net.opentsdb.storage.TsdbStoreHBase;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
@@ -138,8 +138,7 @@ final class UidManager {
     final boolean ignorecase = argp.has("--ignore-case") || argp.has("-i");
     
     // TODO instantiate config properly
-    Config config = new Config();
-    config.loadConfig();
+    TsdbConfig config = new TsdbConfig();
     
     final HBaseClient client = CliOptions.clientFromOptions(config);
     argp = null;

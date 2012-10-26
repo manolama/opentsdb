@@ -109,7 +109,6 @@ public final class UniqueId {
   
   /** Last time this map was loaded in it's entirety */
   private long last_full_uid_load = 0;
-  private long last_full_map_load = 0;
   private long last_full_meta_load = 0;
 
   /** Metadata associated with this UID */
@@ -314,7 +313,7 @@ public final class UniqueId {
           this.bad_meta_ids.add(id);
           return null;
         }
-        //LOG.trace("Saving " + name);
+        //LOG.trace("New Meta " + name);
         meta.setName(name);
         // todo - do we want to put here?
         //this.metadata.putMeta(meta);

@@ -25,7 +25,7 @@ import org.hbase.async.HBaseClient;
 
 import net.opentsdb.core.Aggregator;
 import net.opentsdb.core.Aggregators;
-import net.opentsdb.core.Config;
+import net.opentsdb.core.TsdbConfig;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.DataPoint;
 import net.opentsdb.core.DataPoints;
@@ -111,8 +111,7 @@ final class CliQuery {
     }
     
     // TODO instantiate config properly
-    Config config = new Config();
-    config.loadConfig();
+    TsdbConfig config = new TsdbConfig();
 
     final HBaseClient client = CliOptions.clientFromOptions(config);
     final TsdbStoreHBase storage = new TsdbStoreHBase(config, config.tsdTable().getBytes(), client);

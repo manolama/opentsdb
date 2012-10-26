@@ -41,6 +41,8 @@ public class TimeseriesUID {
   private static final Logger LOG = LoggerFactory.getLogger(TimeseriesUID.class);
   
   // these locks should only be used for the hashes
+  
+  // Take a look at the Apache.math OpenIntToDoubleHashMap
   private final CompactHashSet<Integer> ts_uid_hashes;
   private final ReentrantReadWriteLock locker = new ReentrantReadWriteLock();
   private final Lock read_lock  = locker.readLock();

@@ -15,7 +15,7 @@ package net.opentsdb.tools;
 import java.util.ArrayList;
 import java.util.List;
 
-import net.opentsdb.core.Config;
+import net.opentsdb.core.TsdbConfig;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.Internal;
 import net.opentsdb.core.TSDB;
@@ -71,14 +71,14 @@ final class MapSync {
     // ^^^^ dunno why that's not working properly
 
     // TODO instantiate config properly
-    Config config = new Config();
+    TsdbConfig config = null;
 
     // load config if the user specified one
     final String config_file = argp.get("--configfile", "");
     if (!config_file.isEmpty())
-      config.loadConfig(config_file);
+      config = new TsdbConfig(config_file);
     else
-      config.loadConfig();
+      config = new TsdbConfig();
 
     // load CLI overloads
     argp.overloadConfigs(config);

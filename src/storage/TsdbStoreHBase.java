@@ -16,7 +16,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 
-import net.opentsdb.core.Config;
+import net.opentsdb.core.TsdbConfig;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.uid.UniqueId;
 
@@ -51,7 +51,7 @@ public class TsdbStoreHBase extends TsdbStore {
 
   /** HBase client to use. */
   private HBaseClient client;
-  private final Config config;
+  private final TsdbConfig config;
   private RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
   private CuratorFramework zk_client = null;
   private boolean use_zk_locks = false;
@@ -61,7 +61,7 @@ public class TsdbStoreHBase extends TsdbStore {
    * @param table Default table to use for connections
    * @param client HBase async client
    */
-  public TsdbStoreHBase(final Config config, final byte[] table, final HBaseClient client) {
+  public TsdbStoreHBase(final TsdbConfig config, final byte[] table, final HBaseClient client) {
     super(config, table);
     this.client = client;
     this.config = config;

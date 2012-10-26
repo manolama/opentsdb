@@ -26,7 +26,7 @@ import org.hbase.async.HBaseClient;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
 
-import net.opentsdb.core.Config;
+import net.opentsdb.core.TsdbConfig;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.IllegalDataException;
 import net.opentsdb.core.Internal;
@@ -70,8 +70,7 @@ final class Fsck {
     }
 
     // TODO instantiate config properly
-    Config config = new Config();
-    config.loadConfig();
+    TsdbConfig config = new TsdbConfig();
     
     final HBaseClient client = CliOptions.clientFromOptions(config);
     final byte[] table = argp.get("--table", "tsdb").getBytes();

@@ -5,6 +5,7 @@ import java.util.Map;
 
 import net.opentsdb.core.JSON;
 import net.opentsdb.meta.GeneralMeta.Meta_Type;
+import net.opentsdb.uid.UniqueId;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -44,10 +45,6 @@ final public class TimeSeriesMeta extends MetaData {
   // API only
   private GeneralMeta metric = null;
   // <tag name, meta>
-  @JsonIgnore
-  private Map<GeneralMeta, GeneralMeta> tag_meta = null;
-  
-  @JsonIgnore
   private ArrayList<GeneralMeta> tags = null;
  
   public TimeSeriesMeta(){
@@ -95,28 +92,12 @@ final public class TimeSeriesMeta extends MetaData {
   // returns the entire object as a JSON string
   @JsonIgnore  
   public String getJSON(){
-    if (this.tag_meta != null){
-      this.tags = new ArrayList<GeneralMeta>();
-      for (Map.Entry<GeneralMeta, GeneralMeta> entry : this.tag_meta.entrySet()){
-        this.tags.add(entry.getKey());
-        this.tags.add(entry.getValue());
-      }
-    }
-    
     JSON codec = new JSON(this);
     return codec.getJsonString();
   }
   
   @JsonIgnore
   public byte[] getJSONBytes(){
-    if (this.tag_meta != null){
-      this.tags = new ArrayList<GeneralMeta>();
-      for (Map.Entry<GeneralMeta, GeneralMeta> entry : this.tag_meta.entrySet()){
-        this.tags.add(entry.getKey());
-        this.tags.add(entry.getValue());
-      }
-    }
-    
     JSON codec = new JSON(this);
     return codec.getJsonBytes();
   }
@@ -125,7 +106,7 @@ final public class TimeSeriesMeta extends MetaData {
   @JsonIgnore  
   public String getStorageJSON(){
     this.metric = null;
-    this.tag_meta = null;
+    this.tags = null;
     JSON json = new JSON(this);
     return json.getJsonString();    
   }
@@ -205,7 +186,7 @@ final public class TimeSeriesMeta extends MetaData {
   public final Document buildLuceneDoc(){
     if (this.uid == null || this.uid.length() < 1)
       return null;
-    if (this.tag_meta == null || this.tag_meta.size() < 1){
+    if (this.tags == null || this.tags.size() < 1){
       LOG.warn(String.format("Missing tag meta for TSUID [%s]", uid));
       return null;
     }
@@ -242,17 +223,27 @@ final public class TimeSeriesMeta extends MetaData {
     // add the metric metadata
     this.metric.appendFields(doc, flatten);
     
-    for (Map.Entry<GeneralMeta, GeneralMeta> entry : this.tag_meta.entrySet()){
-      entry.getKey().appendFields(doc, flatten);
-      entry.getValue().appendFields(doc, flatten);
-      
-      doc.add(new Field("tagk_uid", entry.getKey().getUID().toLowerCase(), Field.Store.NO, Field.Index.NOT_ANALYZED));
-      doc.add(new Field("tagv_uid", entry.getValue().getUID().toLowerCase(), Field.Store.NO, Field.Index.NOT_ANALYZED));
-      doc.add(new Field("tag_pairs", entry.getKey().getUID().toLowerCase() + entry.getValue().getUID(), Field.Store.NO, Field.Index.NOT_ANALYZED));
-      doc.add(new Field("tags", entry.getKey().getName() + "=" + entry.getValue().getName(), Field.Store.YES, Field.Index.NOT_ANALYZED));
-      
-      // put tagk/v pair
-      doc.add(new Field(entry.getKey().name, entry.getValue().name, Field.Store.NO, Field.Index.NOT_ANALYZED));
+    GeneralMeta tagk = null;
+    int index=1;
+    for (GeneralMeta gm : this.tags){
+      gm.appendFields(doc, flatten);
+      if ((index % 2) != 0){
+        tagk = gm;
+      }else{
+        try{
+        doc.add(new Field("tagk_uid", tagk.getUID().toLowerCase(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+        doc.add(new Field("tagv_uid", gm.getUID().toLowerCase(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+        doc.add(new Field("tag_pairs", tagk.getUID().toLowerCase() + gm.getUID().toLowerCase(), 
+            Field.Store.NO, Field.Index.NOT_ANALYZED));
+        doc.add(new Field("tags", tagk.getName() + "=" + gm.getName(), Field.Store.YES, Field.Index.NOT_ANALYZED));
+        
+        // put tagk/v pair
+        doc.add(new Field(tagk.name, gm.name, Field.Store.NO, Field.Index.NOT_ANALYZED));
+        }catch (NullPointerException npe){
+          LOG.error(npe.getMessage());
+        }
+      }
+      index++;
     }
     
     // flatten all text 
@@ -289,17 +280,11 @@ final public class TimeSeriesMeta extends MetaData {
   public GeneralMeta getMetric(){
     return this.metric;
   }
-  
-  @JsonIgnore
-  public Map<GeneralMeta, GeneralMeta> getTagsMeta(){
-    return this.tag_meta;
-  }
-  
-  @JsonProperty("tags")
+
   public ArrayList<GeneralMeta> getTags(){
     return this.tags;
   }
-  
+
   public void setRetention(final int r){
     this.retention = r;
     this.c_retention = true;
@@ -337,9 +322,8 @@ final public class TimeSeriesMeta extends MetaData {
     this.metric = m;
   }
   
-  @JsonIgnore
-  public void setTagsMeta(final Map<GeneralMeta, GeneralMeta> t){
-    this.tag_meta = t;
+  public void setTags(final ArrayList<GeneralMeta> t){
+    this.tags = t;
   }
 
   public long getLastReceived() {

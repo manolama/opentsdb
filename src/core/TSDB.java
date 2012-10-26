@@ -82,7 +82,7 @@ public final class TSDB {
   final TsdbStore data_storage;
 
   /** Configuration for the TSD and related services */
-  final Config config;
+  final TsdbConfig config;
 
   /** Name of the table in which timeseries are stored.  */
   final byte[] table;
@@ -137,10 +137,8 @@ public final class TSDB {
   public TSDB(final TsdbStore uid_store, final TsdbStore data_store, 
       final String timeseries_table, final String uniqueids_table, final TSDRole role) {
     //this.client = client;
-    this.config = new Config();
+    this.config = new TsdbConfig();
     table = timeseries_table.getBytes();
-    this.config.tsdTable(timeseries_table);
-    this.config.tsdUIDTable(uniqueids_table);
     this.uid_storage = uid_store;
     this.data_storage = data_store;
         
@@ -176,7 +174,7 @@ public final class TSDB {
    * @param uniqueids_table The name of the HBase table where the unique IDs
    * are stored.
    */
-  public TSDB(final TsdbStore uid_store, final TsdbStore data_store, final Config config,
+  public TSDB(final TsdbStore uid_store, final TsdbStore data_store, final TsdbConfig config,
       final TSDRole role) {
     //this.client = client;
     this.config = config;
@@ -218,8 +216,10 @@ public final class TSDB {
 //    tsuid_manager = new TSUIDManager();
 //    tsuid_manager.start();
     if (role == TSDRole.API){
-      search_manager = new SearchManager(this);
-      search_manager.start();
+      if (config.searchEnableIndexer()){
+        search_manager = new SearchManager(this);
+        search_manager.start();
+      }
     }
   }
   
@@ -678,7 +678,7 @@ public final class TSDB {
    * Returns the configuration reference
    * @return Config reference
    */
-  public Config getConfig(){
+  public TsdbConfig getConfig(){
     return this.config;
   }
   
@@ -690,7 +690,7 @@ public final class TSDB {
     try{
       TimeSeriesMeta meta = this.timeseries_meta.getTimeSeriesMeta(id, cache);
       if (meta == null){
-        //meta = new TimeSeriesMeta(id);
+        LOG.trace(String.format("Couldn't find an entry for TSUID [%s]", UniqueId.IDtoString(id)));
         return null;
       }
       
@@ -702,9 +702,13 @@ public final class TSDB {
             UniqueId.IDtoString(id)));
         return null;
       }else{
-        meta.setMetric(this.metrics.getGeneralMeta(metricID, cache));
-        if (meta.getMetric() == null)
+        GeneralMeta metric = this.metrics.getGeneralMeta(metricID, cache);
+        if (metric == null){
+          LOG.warn(String.format("Metric meta [%s] for tsuid [%s] was null", 
+              UniqueId.IDtoString(metricID), UniqueId.IDtoString(id)));
           return null;
+        }
+        meta.setMetric(metric);
       }
       
       // tags
@@ -713,23 +717,32 @@ public final class TSDB {
         LOG.debug(String.format("Unable to get tag and value metadata for ID [%s]",
             UniqueId.IDtoString(id)));
       else{
-        Map<GeneralMeta, GeneralMeta> tag_metas = new HashMap<GeneralMeta, GeneralMeta>();
-        GeneralMeta tagk = null;
-        int index=0;
+        ArrayList<GeneralMeta> tag_metas = new ArrayList<GeneralMeta>();
+        int index=1;
         for (byte[] tag : tags){
-          if ((index % 2) == 0)
-            tagk = this.tag_names.getGeneralMeta(tag, cache);
-          else{
-            GeneralMeta tagv = this.tag_values.getGeneralMeta(tag, cache);
-            if (tagk != null && tagv != null){
-              tag_metas.put(tagk, tagv);
-            }else{
-              LOG.warn(String.format("Unable to get tagk or tagv for TSUID [%s]", meta.getUID()));
+          if ((index % 2) != 0){
+            GeneralMeta tagk = this.tag_names.getGeneralMeta(tag, cache);
+            if (tagk == null){
+              LOG.warn(String.format("Unable to get tagk value for [%s]", UniqueId.IDtoString(tag)));
+              break;
             }
+            tag_metas.add(tagk);
+          }else{
+            GeneralMeta tagv = this.tag_values.getGeneralMeta(tag, cache);
+            if (tagv == null){
+              LOG.warn(String.format("Unable to get tagv value for [%s]", UniqueId.IDtoString(tag)));
+              break;
+            }
+            tag_metas.add(tagv);
           }
           index++;
         }
-        meta.setTagsMeta(tag_metas);
+        if (tag_metas.size() % 2 != 0){
+          LOG.warn(String.format("Improper number of tags detected: [%d]", tag_metas.size()));
+          return null;
+        }
+        
+        meta.setTags(tag_metas);
       }
       
       return meta;
@@ -758,6 +771,34 @@ public final class TSDB {
       return true;
     else
       return false;
+  }
+  
+  public static final TSDRole stringToRole(final String role){
+    if (role == null || role.isEmpty())
+      throw new IllegalArgumentException("Role argument was empty, please supply a role name");
+    
+    if (role.toUpperCase().compareTo("FULL") == 0){
+      return TSDRole.Full;
+    }
+    if (role.toUpperCase().compareTo("INGEST") == 0){
+      return TSDRole.Ingest;
+    }
+    if (role.toUpperCase().compareTo("FORWARDER") == 0){
+      return TSDRole.Forwarder;
+    }
+    if (role.toUpperCase().compareTo("API") == 0){
+      return TSDRole.API;
+    }
+    if (role.toUpperCase().compareTo("ROLLER") == 0){
+      return TSDRole.Roller;
+    }
+    if (role.toUpperCase().compareTo("ESPER") == 0){
+      return TSDRole.Esper;
+    }
+    if (role.toUpperCase().compareTo("TOOL") == 0){
+      return TSDRole.Tool;
+    }
+    throw new IllegalArgumentException("Invalid role argument");
   }
   
   // ------------------ //

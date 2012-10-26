@@ -20,7 +20,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.opentsdb.core.Config;
+import net.opentsdb.core.TsdbConfig;
 
 /**
  * A dead simple command-line argument parser.
@@ -279,10 +279,10 @@ public final class ArgP {
   }
 
   /**
-   * Copies the parsed command line options to the {@link Config} class
+   * Copies the parsed command line options to the {@link TsdbConfig} class
    * @param config Configuration instance to override
    */
-  public void overloadConfigs(final Config config){
+  public void overloadConfigs(final TsdbConfig config){
     if (parsed.isEmpty()){
       LOG.debug("No parsed options to copy");
       return;
@@ -298,23 +298,23 @@ public final class ArgP {
       
       // map the overrides
       if (entry.getKey().toLowerCase().equals("--auto_metric")){
-        config.autoMetric(true);
+        config.setConfig("tsd.autometric", "true");
       }else if (entry.getKey().toLowerCase().equals("--table")){
-        config.tsdTable(entry.getValue());
+        config.setConfig("tsd.storage.table.tsd", entry.getValue());
       }else if (entry.getKey().toLowerCase().equals("--uidtable")){
-        config.tsdUIDTable(entry.getValue());
+        config.setConfig("tsd.storage.table.uid", entry.getValue());
       }else if (entry.getKey().toLowerCase().equals("--zkquorum")){
-        config.zookeeperQuorum(entry.getValue());
+        config.setConfig("tsd.storage.hbase.zookeeper.quorum", entry.getValue());
       }else if (entry.getKey().toLowerCase().equals("--zkbasedir")){
-        config.zookeeperQuorum(entry.getValue());
+        config.setConfig("tsd.storage.hbase.zookeeper.basedirectory", entry.getValue());
       }else if (entry.getKey().toLowerCase().equals("--port")){
-        config.networkPort(Integer.parseInt(entry.getValue()));
+        config.setConfig("tsd.network.port", entry.getValue());
       }else if (entry.getKey().toLowerCase().equals("--staticroot")){
-        config.httpStaticRoot(entry.getValue());
+        config.setConfig("tsd.http.staticroot", entry.getValue());
       }else if (entry.getKey().toLowerCase().equals("--cachedir")){
-        config.cacheDirectory(entry.getValue());
+        config.setConfig("tsd.cache.directory", entry.getValue());
       }else if (entry.getKey().toLowerCase().equals("--flush-interval")){
-        config.flushInterval(Integer.parseInt(entry.getValue()));
+        config.setConfig("tsd.storage.flushinterval", entry.getValue());
       }
     }
   }

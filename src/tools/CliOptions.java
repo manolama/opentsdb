@@ -18,7 +18,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 
-import net.opentsdb.core.Config;
+import net.opentsdb.core.TsdbConfig;
 
 import org.slf4j.LoggerFactory;
 
@@ -137,7 +137,7 @@ final class CliOptions {
    * @param config Configuration instance to use
    * @return A reference to an HBaseClient
    */
-  static HBaseClient clientFromOptions(final Config config) {
+  static HBaseClient clientFromOptions(final TsdbConfig config) {
     final String zkbasedir = config.zookeeperBaseDirectory();
 
     if (zkbasedir.isEmpty())

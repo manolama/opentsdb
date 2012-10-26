@@ -33,8 +33,8 @@ tsdb_SRC := \
 	src/core/Aggregators.java	\
 	src/core/CompactionQueue.java	\
 	src/core/Const.java	\
-	src/core/Config.java	\
-	src/core/Configuration.java	\
+	src/core/TsdbConfig.java	\
+	src/core/ConfigLoader.java	\
 	src/core/DataPoint.java	\
 	src/core/DataPoints.java	\
 	src/core/DataPointsIterator.java	\
@@ -88,7 +88,7 @@ tsdb_SRC := \
 	src/tsd/BadRequestException.java	\
 	src/tsd/CacheRPC.java	\
 	src/tsd/ConnectionManager.java	\
-	src/tsd/DataEmitter.java	\
+	src/tsd/DataQuery.java	\
 	src/tsd/GroupRPC.java	\
 	src/tsd/HttpQuery.java	\
 	src/tsd/HttpRpc.java	\
@@ -96,7 +96,6 @@ tsdb_SRC := \
 	src/tsd/JsonRpcError.java	\
 	src/tsd/LogsRpc.java	\
 	src/tsd/MetaRPC.java	\
-	src/tsd/MetricsRpc.java	\
 	src/tsd/PipelineFactory.java	\
 	src/tsd/PutDataPointRpc.java	\
 	src/tsd/QueryHandler.java	\
@@ -130,6 +129,7 @@ tsdb_DEPS = \
 	$(CASSANDRA_THRIFT) \
 	$(LUCENE) \
 	$(LUCENE_GROUPING) \
+	$(LUCENE_QUERIES) \
 	$(CURATOR_CLIENT) \
 	$(CURATOR_FRAMEWORK) \
 	$(CURATOR_RECIPES) \
