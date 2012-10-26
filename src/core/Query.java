@@ -77,9 +77,9 @@ public interface Query {
    * does not exist.
    */
   void setTimeSeries(String metric, Map<String, String> tags,
-                     Aggregator function, boolean rate) throws NoSuchUniqueName;
+                     Aggregator function, boolean rate, boolean agg_all) throws NoSuchUniqueName;
 
-  void setTimeSeries(ArrayList<String> tsuids, Aggregator function, boolean rate) 
+  void setTimeSeries(ArrayList<String> tsuids, Aggregator function, boolean rate, boolean agg_all) 
     throws NoSuchUniqueName;
   
   /**

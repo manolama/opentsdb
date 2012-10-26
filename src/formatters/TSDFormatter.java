@@ -3,12 +3,14 @@ package net.opentsdb.formatters;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.tsd.DataQuery;
 import net.opentsdb.tsd.HttpQuery;
 
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
@@ -31,8 +33,15 @@ public abstract class TSDFormatter {
     private static final long serialVersionUID = 5304450759358216935L;
   };
   
+  protected static final AtomicLong requests = new AtomicLong();
+  protected static final AtomicLong hbase_errors = new AtomicLong();
+  protected static final AtomicLong invalid_values = new AtomicLong();
+  protected static final AtomicLong illegal_arguments = new AtomicLong();
+  protected static final AtomicLong unknown_metrics = new AtomicLong();
+  
   protected List<DataPoints> datapoints = new ArrayList<DataPoints>();
   protected final TSDB tsdb;
+  protected DataQuery query;
   
   public TSDFormatter(final TSDB tsdb){
     this.tsdb = tsdb;
@@ -43,6 +52,8 @@ public abstract class TSDFormatter {
   public final void putDatapoints(final DataPoints dps){
     this.datapoints.add(dps);
   }
+  
+  public abstract boolean validateQuery(final DataQuery query);
   
   /**
    * Method that will format the data points returned from a user's query and push

@@ -890,6 +890,17 @@ public final class UniqueId {
     // Success!
   }
 
+  public final ArrayList<byte[]> matchRegex(final Pattern reg){
+    this.loadAllUIDs();
+    
+    ArrayList<byte[]> matches = new ArrayList<byte[]>();
+    for (Map.Entry<String, byte[]> entry: this.nameCache.entrySet()){
+      if (reg.matcher(entry.getKey()).find())
+        matches.add(entry.getValue());
+    }
+    return matches;
+  }
+  
 // PRIVATES -----------------------------------
   
   private final boolean putFix(final byte[] row, final byte[] value, final byte[] family){

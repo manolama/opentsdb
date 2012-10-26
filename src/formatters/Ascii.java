@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.tsd.DataQuery;
 import net.opentsdb.tsd.HttpQuery;
 
 import org.slf4j.Logger;
@@ -56,4 +57,7 @@ public class Ascii extends TSDFormatter{
     }
   }
   
+  public boolean validateQuery(final DataQuery dataquery){
+    return true;
+  }
 }

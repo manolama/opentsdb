@@ -29,6 +29,7 @@ import org.apache.lucene.search.grouping.TermAllGroupsCollector;
 import org.apache.lucene.search.grouping.TermFirstPassGroupingCollector;
 import org.apache.lucene.search.grouping.TermSecondPassGroupingCollector;
 import org.apache.lucene.search.grouping.TopGroups;
+import org.apache.lucene.search.regex.RegexQuery;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.LockObtainFailedException;
@@ -45,12 +46,14 @@ public class Searcher {
   private final String directory;
   private Directory idx_directory = null;
   private IndexSearcher searcher = null;
-  private final QueryParser parser;
+  // Docs say that the parser isn't thread safe, so we better open one per call
+  //private final QueryParser parser;
   
   public Searcher(final String directory){
     this.directory = directory;
-    this.parser = new QueryParser(Version.LUCENE_36, "content", 
-        new StandardAnalyzer(Version.LUCENE_36));
+//    this.parser = new QueryParser(Version.LUCENE_36, "content", 
+//        new StandardAnalyzer(Version.LUCENE_36));
+//    this.parser.setAllowLeadingWildcard(true);
   }
   
   public final ArrayList<String> searchTSUIDs(final SearchQuery query){
@@ -58,7 +61,7 @@ public class Searcher {
       return null;
     }
     
-    TopDocs hits = this.search(query.getQuery(), Integer.MAX_VALUE, null);
+    TopDocs hits = this.search(query, null);
     
     if (hits == null){
       LOG.error(String.format("Unable to execute query [%s]", query.getQuery()));
@@ -85,7 +88,7 @@ public class Searcher {
       try {
         final String tsuid = searcher.doc(hits.scoreDocs[i].doc).get("tsuid");
         if (tsuid != null)
-          tsuids.add(tsuid);
+          tsuids.add(tsuid.toUpperCase());
         // bail if we exceed the bounds
         if (i+2 > hits.totalHits)
           break;
@@ -105,7 +108,7 @@ public class Searcher {
       return null;
     }
 
-    TopDocs hits = this.search(query.getQuery(), Integer.MAX_VALUE, null);
+    TopDocs hits = this.search(query, null);
     
     if (hits == null){
       LOG.error(String.format("Unable to execute query [%s]", query.getQuery()));
@@ -199,6 +202,9 @@ public class Searcher {
 
       Map<String, Object> group_map = new HashMap<String, Object>();
       for(int i = (page * limit); i < ((page + 1) * limit); i++) {
+        if (i >= groupsResult.groups.length)
+          break;
+        
         GroupDocs<String> doc = groupsResult.groups[i];
         if (doc.groupValue == null || doc.groupValue.isEmpty()){
           LOG.warn("Empty group string encountered");
@@ -225,10 +231,6 @@ public class Searcher {
           LOG.warn(String.format("No sub-groups found for [%s] docs [%d]", doc.groupValue, doc.scoreDocs.length));
         }else
           group_map.put(doc.groupValue, metas);
-        
-        // bail if we exceed the bounds
-        if (i+2 > groupsResult.groups.length)
-          break;
       }
       
       // set query vars
@@ -309,6 +311,7 @@ public class Searcher {
     return this.openSearcher();
   }
   
+  @SuppressWarnings("deprecation")
   private final boolean openSearcher(){
     if (this.directory == null || this.directory.isEmpty()){
       LOG.error("Directory path for the index was empty");
@@ -366,20 +369,27 @@ public class Searcher {
    * @param query
    * @return
    */
-  private final TopDocs search(final String query, final int limit, final ScoreDoc last_result){
+  private final TopDocs search(final SearchQuery query, final ScoreDoc last_result){
     try {
       Query q = null;
+      QueryParser parser = new QueryParser(Version.LUCENE_36, "content", 
+          new StandardAnalyzer(Version.LUCENE_36));
+      parser.setAllowLeadingWildcard(true);
+      parser.setLowercaseExpandedTerms(false);
       
       // if we want ALL records, do so
-      if (query.equals("*") || query.isEmpty())
+      if (query.getQuery().equals("*") || query.getQuery().isEmpty())
         q = NumericRangeQuery.newDoubleRange("created", 0d, Double.MAX_VALUE, true, true);
+      else if (query.getRegex())
+        q = new RegexQuery( new Term(query.getField(), query.getQuery()));
       else
-        q = parser.parse(query);
-      
+        q = parser.parse(query.getQuery().toLowerCase());
+
+      LOG.trace("Query: " + q.toString());
       if (last_result == null)
-        return searcher.search(new ConstantScoreQuery(q), limit);
+        return searcher.search(new ConstantScoreQuery(q), Integer.MAX_VALUE);
       else
-        return searcher.searchAfter(last_result, new ConstantScoreQuery(q), limit);
+        return searcher.searchAfter(last_result, new ConstantScoreQuery(q), Integer.MAX_VALUE);
       
     } catch (ParseException e) {
       // TODO Auto-generated catch block
@@ -412,7 +422,7 @@ public class Searcher {
       }
       
       Map<String, Object> meta = new HashMap<String, Object>();
-      meta.put("tsuid", tsuid);
+      meta.put("tsuid", tsuid.toUpperCase());
       meta.put("metric", metric);
       
       ArrayList<Map<String, String>> tag_list = new ArrayList<Map<String, String>>();

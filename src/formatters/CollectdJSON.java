@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.tsd.DataQuery;
 import net.opentsdb.tsd.HttpQuery;
 
 import org.codehaus.jackson.annotate.JsonAnySetter;
@@ -231,6 +232,13 @@ public class CollectdJSON extends TSDFormatter {
         query.sendReply(codec.getJsonString());
     }
     
+    return true;
+  }
+  
+  @Override
+  public boolean validateQuery(final DataQuery query) {
+    this.query = query;
+    // TODO Auto-generated method stub
     return true;
   }
   

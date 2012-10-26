@@ -287,6 +287,7 @@ public class HttpQuery {
       case 'h': return interval * 3600;             // hours
       case 'd': return interval * 3600 * 24;        // days
       case 'w': return interval * 3600 * 24 * 7;    // weeks
+      case 'n': return interval * 3600 * 24 * 30;   // month
       case 'y': return interval * 3600 * 24 * 365;  // years (screw leap years)
     }
     throw new BadRequestException("Invalid duration (suffix): " + duration);

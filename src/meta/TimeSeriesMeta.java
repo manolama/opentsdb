@@ -218,9 +218,9 @@ final public class TimeSeriesMeta extends MetaData {
 
     // build the document
     Document doc = new Document();
-    doc.add(new Field("tsuid", this.uid, Field.Store.YES, Field.Index.NOT_ANALYZED));
+    doc.add(new Field("tsuid", this.uid.toLowerCase(), Field.Store.YES, Field.Index.NOT_ANALYZED));
     doc.add(new Field("metric", this.metric.getName(), Field.Store.YES, Field.Index.NOT_ANALYZED));
-    doc.add(new Field("metric_uid", this.uid.substring(0, 6), Field.Store.NO, Field.Index.NOT_ANALYZED));
+    doc.add(new Field("metric_uid", this.uid.substring(0, 6).toLowerCase(), Field.Store.NO, Field.Index.NOT_ANALYZED));
     doc.add(new NumericField("retention").setIntValue(this.retention));
     doc.add(new NumericField("max").setDoubleValue(this.max));
     doc.add(new NumericField("min").setDoubleValue(this.min));
@@ -246,9 +246,9 @@ final public class TimeSeriesMeta extends MetaData {
       entry.getKey().appendFields(doc, flatten);
       entry.getValue().appendFields(doc, flatten);
       
-      doc.add(new Field("tagk_uid", entry.getKey().getUID(), Field.Store.NO, Field.Index.NOT_ANALYZED));
-      doc.add(new Field("tagv_uid", entry.getValue().getUID(), Field.Store.NO, Field.Index.NOT_ANALYZED));
-      doc.add(new Field("tag_pairs", entry.getKey().getUID() + entry.getValue().getUID(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+      doc.add(new Field("tagk_uid", entry.getKey().getUID().toLowerCase(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+      doc.add(new Field("tagv_uid", entry.getValue().getUID().toLowerCase(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+      doc.add(new Field("tag_pairs", entry.getKey().getUID().toLowerCase() + entry.getValue().getUID(), Field.Store.NO, Field.Index.NOT_ANALYZED));
       doc.add(new Field("tags", entry.getKey().getName() + "=" + entry.getValue().getName(), Field.Store.YES, Field.Index.NOT_ANALYZED));
       
       // put tagk/v pair

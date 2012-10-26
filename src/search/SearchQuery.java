@@ -46,7 +46,7 @@ public class SearchQuery {
   private String min;
   private String interval;
   private String last_received;
-  private String field = "all";
+  private String field = "content";
   private String query;
   private int limit = 25;
   private int page = 0;
@@ -62,6 +62,7 @@ public class SearchQuery {
   private String sub_group = "metric";
   private boolean group_only = false;
   private boolean terms = false;
+  private boolean regex = false;
   @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
   private int total_groups = 0;
 
@@ -181,17 +182,18 @@ public class SearchQuery {
       field = field.toLowerCase();
     
     // check for a valid field
-    if (field.compareTo("all") != 0 &&
-        field.compareTo("metrics") != 0 &&
-        field.compareTo("tagk") != 0 &&
-        field.compareTo("tagv") != 0 &&
-        field.compareTo("display_name") != 0 &&
-        field.compareTo("description") != 0 &&
-        field.compareTo("notes") != 0){
-      LOG.warn(String.format("Invalid field [%s]", field));
-      this.error = "Invalid [field] value";
-      return false;
-    }
+    // todo - fix this up for lucene
+//    if (field.compareTo("all") != 0 &&
+//        field.compareTo("metrics") != 0 &&
+//        field.compareTo("tagk") != 0 &&
+//        field.compareTo("tagv") != 0 &&
+//        field.compareTo("display_name") != 0 &&
+//        field.compareTo("description") != 0 &&
+//        field.compareTo("notes") != 0){
+//      LOG.warn(String.format("Invalid field [%s]", field));
+//      this.error = "Invalid [field] value";
+//      return false;
+//    }
     
     // compile the search query once for speed
     if (this.query == null)
@@ -359,30 +361,40 @@ public class SearchQuery {
    */
   public boolean parseQueryString(final HttpQuery query){
     if (query.hasQueryStringParam("tags"))
-      this.setTags(this.parseQueryStringList(query.getQueryStringParam("tags")));
+      this.tags =this.parseQueryStringList(query.getQueryStringParam("tags"));
     
     if (query.hasQueryStringParam("custom"))
-      this.setCustom(this.parseQueryStringList(query.getQueryStringParam("custom")));
+      this.custom = this.parseQueryStringList(query.getQueryStringParam("custom"));
     
-    this.setCreated(query.getQueryStringParam("created"));
-    this.setRetention(query.getQueryStringParam("retention"));
-    this.setMax(query.getQueryStringParam("max"));
-    this.setMin(query.getQueryStringParam("min"));
-    this.setInterval(query.getQueryStringParam("interval"));
-    this.setLastReceived(query.getQueryStringParam("last_received"));
-    this.setField(query.getQueryStringParam("field"));
-    this.setQuery(query.getQueryStringParam("query"));
+    if (query.hasQueryStringParam("created"))
+      this.created = query.getQueryStringParam("created");
+    if (query.hasQueryStringParam("retention"))
+      this.retention = query.getQueryStringParam("retention");
+    if (query.hasQueryStringParam("max"))
+      this.max = query.getQueryStringParam("max");
+    if (query.hasQueryStringParam("min"))
+      this.min = query.getQueryStringParam("min");
+    if (query.hasQueryStringParam("interval"))
+      this.interval = query.getQueryStringParam("interval");
+    if (query.hasQueryStringParam("last_received"))
+      this.last_received = query.getQueryStringParam("last_received");
+    if (query.hasQueryStringParam("field"))
+      this.field = query.getQueryStringParam("field");
+    if (query.hasQueryStringParam("query"))
+      this.query = query.getQueryStringParam("query");
     if (query.hasQueryStringParam("return_meta"))
-      this.setReturnMeta(query.parseBoolean(query.getQueryStringParam("return_meta")));
+      this.return_meta = query.parseBoolean(query.getQueryStringParam("return_meta"));
     if (query.hasQueryStringParam("return_tsuids"))
-      this.setReturnTSUIDs(query.parseBoolean(query.getQueryStringParam("return_tsuids")));
+      this.return_tsuids = query.parseBoolean(query.getQueryStringParam("return_tsuids"));
     if (query.hasQueryStringParam("group_only"))
-      this.setGroupOnly(query.parseBoolean(query.getQueryStringParam("group_only")));
+      this.group_only = query.parseBoolean(query.getQueryStringParam("group_only"));
     if (query.hasQueryStringParam("terms"))
-      this.setTerms(query.parseBoolean(query.getQueryStringParam("terms")));
+      this.terms = query.parseBoolean(query.getQueryStringParam("terms"));
+    if (query.hasQueryStringParam("regex"))
+      this.regex = query.parseBoolean(query.getQueryStringParam("regex"));
     if (query.hasQueryStringParam("limit")){
       try{
-        this.setLimit(Integer.parseInt(query.getQueryStringParam("limit")));
+        this.limit = Integer.parseInt(query.getQueryStringParam("limit"));
       } catch (NumberFormatException nfe){
         query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the limit value");
         return false;
@@ -390,16 +402,16 @@ public class SearchQuery {
     }
     if (query.hasQueryStringParam("page")){
       try{
-        this.setPage(Integer.parseInt(query.getQueryStringParam("page")));
+        this.page = Integer.parseInt(query.getQueryStringParam("page"));
       } catch (NumberFormatException nfe){
         query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the page value");
         return false;
       }
     }
     if (query.hasQueryStringParam("group"))
-      this.setGroup(query.getQueryStringParam("group"));
+      this.group = query.getQueryStringParam("group");
     if (query.hasQueryStringParam("sub_group"))
-      this.setGroup(query.getQueryStringParam("sub_group"));
+      this.sub_group = query.getQueryStringParam("sub_group");
     return true;
   }
  
@@ -688,5 +700,13 @@ public class SearchQuery {
   
   public void setTerms(boolean terms){
     this.terms = terms;
+  }
+
+  public boolean getRegex(){
+    return this.regex;
+  }
+  
+  public void setRegex(boolean regex){
+    this.regex = regex;
   }
 }

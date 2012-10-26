@@ -39,6 +39,7 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.tsd.BadRequestException;
+import net.opentsdb.tsd.DataQuery;
 import net.opentsdb.tsd.HttpQuery;
 import net.opentsdb.tsd.JSON_HTTP;
 
@@ -141,6 +142,13 @@ public class GnuGraphFormatter extends TSDFormatter {
   
   public void setQueryHash(final int hash){
     this.query_hash = hash;
+  }
+  
+  @Override
+  public boolean validateQuery(final DataQuery query) {
+    this.query = query;
+    // TODO Auto-generated method stub
+    return true;
   }
   
   /**

@@ -155,8 +155,8 @@ public class GeneralMeta extends MetaData {
   }
   
   public final boolean appendFields(Document doc, StringBuilder flatten){
-    doc.add(new Field("uid", this.uid, Field.Store.NO, Field.Index.NOT_ANALYZED));
-    doc.add(new Field("type", this.type.toString(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+    //doc.add(new Field("uid", this.uid, Field.Store.NO, Field.Index.NOT_ANALYZED));
+    //doc.add(new Field("type", this.type.toString(), Field.Store.NO, Field.Index.NOT_ANALYZED));
     doc.add(new Field("name", this.name, Field.Store.NO, Field.Index.NOT_ANALYZED));
     flatten.append(this.name + " ");
     doc.add(new Field("display_name", this.display_name, Field.Store.NO, Field.Index.ANALYZED));

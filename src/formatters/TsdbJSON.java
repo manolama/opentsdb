@@ -18,6 +18,7 @@ import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.tsd.DataQuery;
 import net.opentsdb.tsd.HttpQuery;
 
 /**
@@ -57,8 +58,8 @@ public class TsdbJSON extends TSDFormatter {
         query.parseBoolean(query.getQueryStringParam("meta")) : true;
     boolean return_stats = query.hasQueryStringParam("stats") ?
         query.parseBoolean(query.getQueryStringParam("stats")) : true;
-    boolean return_uids = query.hasQueryStringParam("tsuids") ?
-        query.parseBoolean(query.getQueryStringParam("tsuids")) : false;
+    boolean return_uids = query.hasQueryStringParam("wtsuids") ?
+        query.parseBoolean(query.getQueryStringParam("wtsuids")) : false;
         
     for (DataPoints dp : this.datapoints){
       TsdbJSONOutput ts = new TsdbJSONOutput();
@@ -234,6 +235,13 @@ public class TsdbJSON extends TSDFormatter {
     collector.record("http.formatter.tsdbjson.put.fail", puts_fail.get());
   }
 
+  @Override
+  public boolean validateQuery(final DataQuery query) {
+    this.query = query;
+    // TODO Auto-generated method stub
+    return true;
+  }
+  
 //---------------- PRIVATES ------------------------------
   
   /**

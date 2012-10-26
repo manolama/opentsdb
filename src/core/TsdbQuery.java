@@ -20,7 +20,10 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.TreeMap;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -110,6 +113,8 @@ final class TsdbQuery implements Query {
   private int sample_interval;
   
   private double time_taken;
+  
+  private boolean agg_all;
 
   private ArrayList<String> tsuids;
   
@@ -157,15 +162,37 @@ final class TsdbQuery implements Query {
   public void setTimeSeries(final String metric,
                             final Map<String, String> tags,
                             final Aggregator function,
-                            final boolean rate) throws NoSuchUniqueName {
+                            final boolean rate,
+                            final boolean agg_all) 
+        throws NoSuchUniqueName, PatternSyntaxException {
     this.findGroupBys(tags);
     this.metric = tsdb.metrics.getId(metric);
     this.tags = Tags.resolveAll(tsdb, tags);
-    for (byte[] tag : this.tags){
-      LOG.trace(String.format("Got tag [%s]", UniqueId.IDtoString(tag)));
-    }
     aggregator = function;
     this.rate = rate;
+    this.agg_all = agg_all;
+    
+    // debug
+    if (this.tags != null){
+      for (byte[] pair : this.tags)
+        LOG.trace("Tag Pair: " + UniqueId.IDtoString(pair));
+    }
+    
+    if (this.group_bys != null){
+      for (byte[] group : this.group_bys)
+        LOG.trace("Group By: " + UniqueId.IDtoString(group));
+    }
+    
+    if (this.group_by_values != null){
+      Iterator it = this.group_by_values.iterator();
+      while (it.hasNext()){
+        Map.Entry<byte[], byte[][]> entry = (Entry<byte[], byte[][]>) it.next();
+        LOG.trace("Group Val Key: " + UniqueId.IDtoString(entry.getKey()));
+        for (final byte[] value_id : entry.getValue()) {
+          LOG.trace("Group Val Val: " + UniqueId.IDtoString(value_id));
+        }
+      }
+    }
   }
   
   /**
@@ -173,14 +200,19 @@ final class TsdbQuery implements Query {
    */
   public void setTimeSeries(final ArrayList<String> tsuids,
                             final Aggregator function,
-                            final boolean rate) throws NoSuchUniqueName {
+                            final boolean rate,
+                            final boolean agg_all) throws NoSuchUniqueName {
     this.tsuids = tsuids;
+    this.agg_all = agg_all;
     
     // TEMP till I can figure out this logic. grr
-    if (tsuids.size() > 1)
-      throw new NoSuchUniqueName("metric", "Only one TSUID per query is allowed");
+//    if (tsuids.size() > 1)
+//      throw new NoSuchUniqueName("metric", "Only one TSUID per query is allowed");
+//    
     
+    tags = new ArrayList<byte[]>();
     for (String tsuid : tsuids){
+      LOG.trace("Working tsuid: " + tsuid);
       final byte[] m = TimeseriesUID.getMetric(tsuid);
       if (this.metric != null){
         if (!Bytes.equals(this.metric, m))
@@ -191,7 +223,7 @@ final class TsdbQuery implements Query {
         this.metric = m;
       }
       
-      tags = new ArrayList<byte[]>();
+      
       ArrayList<byte[]> pairs = (ArrayList<byte[]>) 
         TimeseriesUID.getTagPairsFromTSUID(tsuid, (short)3, (short)3);
       if (pairs == null){
@@ -203,31 +235,30 @@ final class TsdbQuery implements Query {
 //        group_bys = new ArrayList<byte[]>();
 //        
       
-      tags = new ArrayList<byte[]>();
-      for (byte[] pair : pairs){
-        byte[] tagk = new byte[3];
-        for (int i=0; i<3; i++)
-          tagk[i] = pair[i];
-        tsdb.tag_names.getName(tagk);
-        int x=0;
-        byte[] tagv = new byte[3];
-        for (int i=3; i<pair.length; i++){
-          tagv[x] = pair[i];
-          x++;
-        }
-        tsdb.tag_values.getName(tagv);
-        
-        tags.add(pair);
-        
-//        group_bys.add(tagk);
-//        if (group_map.containsKey(UniqueId.IDtoString(tagk)))
-//          group_map.get(UniqueId.IDtoString(tagk)).add(tagv);
-//        else{
-//          ArrayList<byte[]> vals = new ArrayList<byte[]>();
-//          vals.add(tagv);
-//          group_map.put(UniqueId.IDtoString(tagk), vals);
+//      for (byte[] pair : pairs){
+//        byte[] tagk = new byte[3];
+//        for (int i=0; i<3; i++)
+//          tagk[i] = pair[i];
+//        tsdb.tag_names.getName(tagk);
+//        int x=0;
+//        byte[] tagv = new byte[3];
+//        for (int i=3; i<pair.length; i++){
+//          tagv[x] = pair[i];
+//          x++;
 //        }
-      }
+//        tsdb.tag_values.getName(tagv);
+//        
+//        tags.add(pair);
+//        
+////        group_bys.add(tagk);
+////        if (group_map.containsKey(UniqueId.IDtoString(tagk)))
+////          group_map.get(UniqueId.IDtoString(tagk)).add(tagv);
+////        else{
+////          ArrayList<byte[]> vals = new ArrayList<byte[]>();
+////          vals.add(tagv);
+////          group_map.put(UniqueId.IDtoString(tagk), vals);
+////        }
+//      }
       
       // build the group by map now
 //      if (group_by_values == null)
@@ -242,6 +273,10 @@ final class TsdbQuery implements Query {
 //          System.arraycopy(value_id, 0, value_ids[j], 0, value_width);
 //        }
 //      }
+    }
+    
+    for (byte[] pair : tags){
+      LOG.trace("Pair: " + UniqueId.IDtoString(pair));
     }
     aggregator = function;
     this.rate = rate;
@@ -307,6 +342,42 @@ final class TsdbQuery implements Query {
         // todo - need to use lucene here since we don't have any maps that would
         // let us say "match /*/ where tagk=name"
         // regex format would be "tag1=/regex/,tag2=/regex/"
+        
+        // HACK - This will return all values that match the regex, regardless of whether or not they
+        // are assigned to the tagk.
+        
+        if (tagvalue.indexOf("/") == 0){
+          LOG.trace("Found regex: " + tagvalue);
+          if (tagvalue.lastIndexOf("/") != tagvalue.length()-1){
+            LOG.warn("Invalid regex, missing end slash: " + tagvalue);
+            throw new PatternSyntaxException("Missing closing backslash", tagvalue, tagvalue.length() -1);
+          }
+          
+          String reg = tagvalue.substring(1, tagvalue.length() - 1);
+          LOG.trace("cleaned regex: " + reg);
+          Pattern regex = Pattern.compile(reg);
+          
+          ArrayList<byte[]> values = tsdb.tag_values.matchRegex(regex);
+          if (values.size() < 1){
+            LOG.debug("no matches found");
+            continue;
+          }
+          
+          if (group_by_values == null)
+            group_by_values = new ByteMap<byte[][]>();
+          final short value_width = tsdb.tag_values.width();
+          final byte[][] value_ids = new byte[values.size()][value_width]; 
+          group_by_values.put(tsdb.tag_names.getId(tag.getKey()),
+              value_ids);
+          for (int j = 0; j < values.size(); j++) {
+            final byte[] value_id = values.get(j);
+            System.arraycopy(value_id, 0, value_ids[j], 0, value_width);
+          }
+          
+          LOG.trace(String.format("Loaded [%d] values into groupby", values.size()));
+          // done
+          continue;
+        }
         
         // 'GROUP BY' with specific values.  Need to split the values
         // to group on and store their IDs in group_by_values.
@@ -399,21 +470,19 @@ final class TsdbQuery implements Query {
     }
     
     JSON codec = new JSON(this);
-    LOG.trace("this query");
-    LOG.trace(codec.getJsonString());
     
-    if (this.aggregator.toString() == "none"){
-      LOG.trace("Non aggregator, returning datapoints");
-      DataPoints[] dps = new DataPoints[spans.size()];
-      int i=0;
-      for (Span sp : spans.values()){
-        dps[i] = sp;
-        i++;
-      }
-      return dps;
-    }
+//    if (this.aggregator.toString() == "none"){
+//      LOG.trace("Non aggregator, returning datapoints");
+//      DataPoints[] dps = new DataPoints[spans.size()];
+//      int i=0;
+//      for (Span sp : spans.values()){
+//        dps[i] = sp;
+//        i++;
+//      }
+//      return dps;
+//    }
     
-    if (group_bys == null) {
+    if (group_bys == null || agg_all) {
       // We haven't been asked to find groups, so let's put all the spans
       // together in the same group.
       final SpanGroup group = new SpanGroup(tsdb,
@@ -423,9 +492,6 @@ final class TsdbQuery implements Query {
                                             rate,
                                             aggregator,
                                             sample_interval, downsampler);
-      codec = new JSON(group);
-      LOG.trace("no group by found");
-      LOG.trace(codec.getJsonString());
       return new SpanGroup[] { group };
     }
 
@@ -510,7 +576,9 @@ final class TsdbQuery implements Query {
     final TsdbScanner scanner = new TsdbScanner();
     scanner.setStartRow(start_row);
     scanner.setEndRow(end_row);
-    if (tags.size() > 0 || group_bys != null) {
+    if (tsuids != null && tsuids.size() > 0)
+      createAndSetTSUIDFilter(scanner);
+    else if (tags.size() > 0 || group_bys != null) {
       createAndSetFilter(scanner);
     }
     scanner.setFamily(TSDB.FAMILY);
@@ -614,6 +682,47 @@ final class TsdbQuery implements Query {
     } while (tag != group_by);  // Stop when they both become null.
     // Skip any number of tags before the end.
     buf.append("(?:.{").append(tagsize).append("})*$");
+    scanner.setRowRegex(buf.toString());
+   }
+  
+  void createAndSetTSUIDFilter(final TsdbScanner scanner) {
+    
+    // get a list of tagk/v pairs from the tsuids
+    ArrayList<byte[]> pairs = new ArrayList<byte[]>();
+    int length = 0;
+    for (String tsuid : this.tsuids){
+      byte[] pair = UniqueId.StringtoID(tsuid.substring(tsdb.metrics.width() * 2));
+      length += pair.length;
+      pairs.add(pair);
+    }
+
+    LOG.trace(String.format("gonna generate regex from [%d] tsuids", tsuids.size()));
+    // Generate a regexp for our tags.  Say we have 2 tags: { 0 0 1 0 0 2 }
+    // and { 4 5 6 9 8 7 }, the regexp will be:
+    // "^.{7}(?:.{6})*\\Q\000\000\001\000\000\002\\E(?:.{6})*\\Q\004\005\006\011\010\007\\E(?:.{6})*$"
+    final StringBuilder buf = new StringBuilder(
+        15  // "^.{N}" + "(?:.{M})*" + "$"
+        + ((13 * tsuids.size()) + length));
+    // In order to avoid re-allocations, reserve a bit more w/ groups ^^^
+
+    // Alright, let's build this regexp.  From the beginning...
+    buf.append("(?s)"  // Ensure we use the DOTALL flag.
+               + "^.{")
+       // ... start by skipping the metric ID and timestamp.
+       .append(tsdb.metrics.width() + Const.TIMESTAMP_BYTES)
+       .append("}")
+       .append("(");
+        
+    int count = 0;
+    for (byte[] pair : pairs){
+      if (count > 0)
+        buf.append('|');
+      buf.append("\\Q");
+      addId(buf, pair);
+      count++;
+    }
+    // Skip any number of tags before the end.
+    buf.append(")$");
     scanner.setRowRegex(buf.toString());
    }
 
