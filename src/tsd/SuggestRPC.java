@@ -14,11 +14,13 @@ package net.opentsdb.tsd;
 
 import java.util.List;
 
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.formatters.TSDFormatter;
 
 /**
  * The auto-complete oracle class that returns a list of search results
@@ -38,8 +40,12 @@ final class SuggestRPC implements HttpRpc {
       return;
     }
     
+    // get formatter
+    TSDFormatter formatter = query.getFormatter();
+    if (formatter == null)
+      return;
+    
     // build up the suggestion
-    final String jsonp = JSON_HTTP.getJsonPFunction(query);
     final String type = query.getRequiredQueryStringParam("type");
     final String q = query.getQueryStringParam("q");
     if (q == null) {
@@ -55,16 +61,6 @@ final class SuggestRPC implements HttpRpc {
     } else {
       throw new BadRequestException("Invalid 'type' parameter:" + type);
     }
-    final JSON_HTTP response = new JSON_HTTP(suggestions);
-    
-    // build our cache object, store and reply
-    CacheEntry entry = new CacheEntry(query_hash, 
-        jsonp.isEmpty() ? response.getJsonString().getBytes() 
-            : response.getJsonPString(jsonp).getBytes(),
-            tsdb.getConfig().httpSuggestExpire());
-    if (!nocache && !query.putCache(entry)){
-      LOG.warn("Unable to cache [" + query_hash + "]");
-    }
-    query.sendReply(entry.getData());
+    formatter.handleHTTPSuggest(query, suggestions);
   }
 }

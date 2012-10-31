@@ -5,8 +5,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
+import java.util.TreeSet;
+
+import net.opentsdb.search.SearchQuery.SearchResults;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.index.CorruptIndexException;
@@ -56,7 +58,7 @@ public class Searcher {
 //    this.parser.setAllowLeadingWildcard(true);
   }
   
-  public final ArrayList<String> searchTSUIDs(final SearchQuery query){
+  public final SearchResults searchTSUIDs(final SearchQuery query){
     if (!this.checkSearcher()){
       return null;
     }
@@ -68,9 +70,9 @@ public class Searcher {
       return null;
     }
     
-    query.setTotal_hits(hits.totalHits);
+    SearchResults sr = new SearchResults(query);
     if (hits.totalHits < 1)      
-      return new ArrayList<String>();
+      return sr;
     
     final int page = query.getPage();
     final int limit = query.getLimit();
@@ -100,10 +102,12 @@ public class Searcher {
         e.printStackTrace();
       }
     }
-    return tsuids;
+    sr.tsuids = tsuids;
+    sr.setTotalHits(hits.totalHits);
+    return sr;
   }
   
-  public final ArrayList<Map<String, Object>> searchShortMeta(final SearchQuery query){
+  public final SearchResults searchShortMeta(final SearchQuery query){
     if (!this.checkSearcher()){
       return null;
     }
@@ -115,9 +119,9 @@ public class Searcher {
       return null;
     }
 
-    query.setTotal_hits(hits.totalHits);
+    SearchResults sr = new SearchResults(query);
     if (hits.totalHits < 1)      
-      return new ArrayList<Map<String, Object>>();
+      return sr;
     
     final int page = query.getPage();
     final int limit = query.getLimit();
@@ -139,10 +143,12 @@ public class Searcher {
       if (i+2 > hits.totalHits)
         break;
     }
-    return metas;
+    sr.short_meta = metas;
+    sr.setTotalHits(hits.totalHits);
+    return sr;
   }
 
-  public final Map<String, Object> groupBy(final SearchQuery query){
+  public final SearchResults groupBy(final SearchQuery query){
     if (!this.checkSearcher()){
       return null;
     }
@@ -234,18 +240,11 @@ public class Searcher {
       }
       
       // set query vars
-      query.setTotalGroups(topGroups.size());
-      query.setTotal_hits(groupsResult.totalHitCount);
-      return group_map;
-      
-//        int count = 0;
-//        for (int i = (page * limit); i < ((page  + 1) * limit); i++){
-//          GroupDocs<String> doc = groupsResult.groups[i];
-//          System.out.println("- " + doc.groupValue);
-//          count++;
-//        }
-//        System.out.println("Dumped [" + count + "] groups");
-      
+      SearchResults sr = new SearchResults(query);
+      sr.groups = group_map;
+      sr.total_groups = topGroups.size();   
+      sr.setTotalHits(groupsResult.totalHitCount);         
+      return sr;
     } catch (IOException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
@@ -253,7 +252,7 @@ public class Searcher {
     return null;
   }
   
-  public final HashSet<String> getTerms(final SearchQuery query){
+  public final SearchResults getTerms(final SearchQuery query){
     if (!this.checkSearcher()){
       return null;
     }
@@ -265,7 +264,7 @@ public class Searcher {
     TermEnum terms;
     try {
       terms = searcher.getIndexReader().terms();
-      HashSet<String> uniqueTerms = new HashSet<String>();
+      TreeSet<String> uniqueTerms = new TreeSet<String>();
       while (terms.next()) {
         final Term term = terms.term();
         if (term.field().equals(query.getGroup())) {
@@ -273,9 +272,11 @@ public class Searcher {
         }
       }
       
-      query.setLimit(0);
-      query.setTotal_hits(uniqueTerms.size());
-      return uniqueTerms;
+      SearchResults sr = new SearchResults(query);
+      sr.terms = uniqueTerms;
+      sr.limit = 0;
+      sr.setTotalHits(uniqueTerms.size());      
+      return sr;
     } catch (IOException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();

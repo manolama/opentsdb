@@ -15,11 +15,11 @@ package net.opentsdb.tsd;
 import java.util.HashMap;
 
 import net.opentsdb.BuildData;
-import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.formatters.TSDFormatter;
 
 import org.jboss.netty.channel.Channel;
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,62 +39,31 @@ final class VersionRPC implements TelnetRpc, HttpRpc {
    */
   public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
       final String[] cmd, final TSDFormatter formatter) {
-    if (chan.isConnected()) {
-      chan.write(BuildData.revisionString() + '\n' + BuildData.buildString()
-          + '\n');
-    }
-    return Deferred.fromResult(null);
+    return formatter.handleTelnetVersion(cmd, chan, this.getVersion());
   }
-
-  /**
-   * Returns the version information as a simple string (Default) or
-   * in a JSON format, caching either response for a full day
-   * @param tsdb The TSDB to fetch data from
-   * @param query HTTP Query to send the response to
-   */
+  
   public void execute(final TSDB tsdb, final HttpQuery query) {
-    final boolean nocache = query.hasQueryStringParam("nocache");
-    final int query_hash = query.getQueryStringHash();
-    if (!nocache && query.getCacheAndReturn(query_hash)) {
+    // get formatter
+    TSDFormatter formatter = query.getFormatter();
+    if (formatter == null)
       return;
-    }
-
-    // Send in JSON if requested
-    if (JSON_HTTP.getJsonRequested(query)) {
-      final String jsonp = JSON_HTTP.getJsonPFunction(query);
-      HashMap<String, Object> version = new HashMap<String, Object>();
-      version.put("short_revision", BuildData.short_revision);
-      version.put("full_revision", BuildData.full_revision);
-      version.put("timestamp", BuildData.timestamp);
-      version.put("repo_status", BuildData.repo_status);
-      version.put("user", BuildData.user);
-      version.put("host", BuildData.host);
-      version.put("repo", BuildData.repo);
-      final JSON_HTTP response = new JSON_HTTP(version);
-
-      // build our cache object, store and reply
-      CacheEntry entry = new CacheEntry(query_hash,
-          jsonp.isEmpty() ? response.getJsonString().getBytes() : response
-              .getJsonPString(jsonp).getBytes(), 86400);
-      if (!nocache && !query.putCache(entry)) {
-        LOG.warn("Unable to cache emitter for key [" + query_hash + "]");
-      }
-      query.sendReply(entry.getData());
-    } else {
-      StringBuilder buf;
-      final String revision = BuildData.revisionString();
-      final String build = BuildData.buildString();
-      buf = new StringBuilder(2 // For the \n's
-          + revision.length() + build.length());
-      buf.append(revision).append('\n').append(build).append('\n');
-
-      // build our cache object, store and reply
-      CacheEntry entry = new CacheEntry(query_hash, buf.toString()
-          .getBytes(), 86400);
-      if (!nocache && !query.putCache(entry)) {
-        LOG.warn("Unable to cache emitter for key [" + query_hash + "]");
-      }
-      query.sendReply(entry.getData());
-    }
+    
+    formatter.handleHTTPVersion(query, this.getVersion());
+  }
+  
+  /**
+   * Builds a hashmap with various items pertaining to the version
+   * @return A hashmap of version information
+   */
+  private final HashMap<String, Object> getVersion(){
+    HashMap<String, Object> version = new HashMap<String, Object>();
+    version.put("short_revision", BuildData.short_revision);
+    version.put("full_revision", BuildData.full_revision);
+    version.put("timestamp", BuildData.timestamp);
+    version.put("repo_status", BuildData.repo_status);
+    version.put("user", BuildData.user);
+    version.put("host", BuildData.host);
+    version.put("repo", BuildData.repo);
+    return version;
   }
 }

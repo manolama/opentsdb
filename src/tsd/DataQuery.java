@@ -3,6 +3,7 @@ package net.opentsdb.tsd;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.regex.PatternSyntaxException;
 
@@ -23,7 +24,7 @@ public class DataQuery {
   public String start;
   public String end;
   public ArrayList<TSQuery> queries;
-  public HashMap<String, String> format_options;
+  public HashMap<String, List<String>> format_options;
 
   @JsonIgnore
   public String error = "";
@@ -31,7 +32,9 @@ public class DataQuery {
   public long start_time;
   @JsonIgnore
   public long end_time;
-
+  @JsonIgnore
+  public int query_hash;
+  
   @JsonIgnore
   public boolean parseQuery(final TSDB tsdb, final HttpQuery query) {
     try {
@@ -64,6 +67,8 @@ public class DataQuery {
 
   @JsonIgnore
   public boolean parseQueryString(final TSDB tsdb, final HttpQuery query) {
+    this.format_options = (HashMap<String, List<String>>) query.querystring;
+    
     try {
       this.start_time = query.getQueryStringDate("start");
     } catch (BadRequestException e) {
@@ -109,7 +114,7 @@ public class DataQuery {
 
     return true;
   }
-
+ 
   @JsonIgnore
   public Query[] getTSDQueries() {
     if (this.queries.size() < 1)

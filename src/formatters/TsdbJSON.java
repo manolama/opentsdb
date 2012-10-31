@@ -17,7 +17,9 @@ import org.slf4j.LoggerFactory;
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.search.SearchQuery.SearchResults;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.stats.StatsCollector.StatsDP;
 import net.opentsdb.tsd.DataQuery;
 import net.opentsdb.tsd.HttpQuery;
 
@@ -52,7 +54,7 @@ public class TsdbJSON extends TSDFormatter {
    * @param query The HTTPQuery to parse
    * @return Returns true
    */
-  public boolean handleHTTPGet(final HttpQuery query){  
+  public boolean handleHTTPDataGet(final HttpQuery query){  
     List<TsdbJSONOutput> timeseries = new ArrayList<TsdbJSONOutput>();
     boolean return_basic_meta = query.hasQueryStringParam("meta") ?
         query.parseBoolean(query.getQueryStringParam("meta")) : true;
@@ -105,7 +107,7 @@ public class TsdbJSON extends TSDFormatter {
    * @return Returns true
    */
   @SuppressWarnings("unchecked")
-  public boolean handleHTTPPut(final HttpQuery query){
+  public boolean handleHTTPDataPut(final HttpQuery query){
     boolean details = query.hasQueryStringParam("error_details") ?
         query.parseBoolean(query.getQueryStringParam("error_details")) : false;
     boolean fault = query.hasQueryStringParam("fault_on_any") ?
@@ -230,11 +232,90 @@ public class TsdbJSON extends TSDFormatter {
     return true;
   }
   
-  public static void collectStats(final StatsCollector collector){
-    collector.record("http.formatter.tsdbjson.put.success", puts_success.get());
-    collector.record("http.formatter.tsdbjson.put.fail", puts_fail.get());
+  public boolean handleHTTPMetaGet(final HttpQuery query, final Object meta){
+    JSON codec = new JSON(meta);
+    query.sendReply(codec.getJsonBytes());
+    return true;
+  }
+  
+  public boolean handleHTTPStats(final HttpQuery query, ArrayList<StatsDP> stats){
+    JSON codec = new JSON(stats);
+    query.sendReply(codec.getJsonBytes());
+    return true;
+  }
+  
+  public boolean handleHTTPSearch(final HttpQuery query, SearchResults results){
+    // build a response map and send away!
+    Map<String, Object> response = new HashMap<String, Object>();
+    response.put("limit", results.limit);
+    response.put("page", results.page);
+    response.put("total_uids", results.total_hits);
+    response.put("total_pages", results.pages);
+    response.put("time", results.time);
+    if (results.short_meta != null)
+      response.put("results", results.short_meta);
+    else if (results.tsuids != null)
+      response.put("results", results.tsuids);
+    else if (results.ts_meta != null)
+      response.put("results", results.ts_meta);
+    else if (results.terms != null)
+      response.put("results", results.terms);
+    else
+      response.put("results", null);
+    JSON codec = new JSON(response);
+    query.sendReply(codec.getJsonBytes());
+    return true;
+  }
+  
+  public boolean handleHTTPGroupby(final HttpQuery query, SearchResults results){
+    Map<String, Object> response = new HashMap<String, Object>();
+    response.put("limit", results.limit);
+    response.put("page", results.page);
+    response.put("total_pages", results.pages);
+    response.put("time", results.time);
+    if (results.terms != null){
+      response.put("total_terms", results.terms.size());
+      response.put("results", results.terms);
+    }else if (results.groups != null){
+      response.put("total_groups", results.total_groups);
+      response.put("results", results.groups); 
+      response.put("total_uids", results.total_hits);
+    }else
+      response.put("results", null); 
+    JSON codec = new JSON(response);
+    query.sendReply(codec.getJsonBytes());
+    return true;
+  }
+  
+  public boolean handleHTTPSuggest(final HttpQuery query, final List<String> results){
+    JSON codec = new JSON(results);
+    query.sendReply(codec.getJsonBytes());
+    return true;
+  }
+  
+  public boolean handleHTTPVersion(final HttpQuery query, final HashMap<String, Object> version){
+    JSON codec = new JSON(version);
+    query.sendReply(codec.getJsonBytes());
+    return true;
+  }
+  
+  public boolean handleHTTPFormatters(final HttpQuery query, 
+      final HashMap<String, ArrayList<String>> formatters){
+    JSON codec = new JSON(formatters);
+    query.sendReply(codec.getJsonBytes());
+    return true;
+  }
+  
+  public static void collectClassStats(final StatsCollector collector){
+    collector.record("formatter.tsdbjson.put.success", puts_success.get());
+    collector.record("formatter.tsdbjson.put.fail", puts_fail.get());
   }
 
+  
+  public String contentType(){
+    return "application/json";
+  }
+  
   @Override
   public boolean validateQuery(final DataQuery query) {
     this.query = query;

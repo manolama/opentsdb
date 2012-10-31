@@ -82,7 +82,7 @@ public final class TSDB {
   final TsdbStore data_storage;
 
   /** Configuration for the TSD and related services */
-  final TsdbConfig config;
+  public final TsdbConfig config;
 
   /** Name of the table in which timeseries are stored.  */
   final byte[] table;

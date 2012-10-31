@@ -83,9 +83,6 @@ public class GnuGraphFormatter extends TSDFormatter {
     System.getProperty("os.name").contains("Windows") ? "mygnuplot.bat" : "mygnuplot.sh";
   /** Path to the wrapper script.  */
   private static String GNUPLOT;
-//  static {
-//    GNUPLOT = findGnuplotHelperScript();
-//  }
 
   /** Stores metadata about the graph generation */
   private Map<String, Object> results = new HashMap<String, Object>();
@@ -98,13 +95,7 @@ public class GnuGraphFormatter extends TSDFormatter {
     super(tsdb);
     if (GNUPLOT == null)
       GNUPLOT = findGnuplotHelperScript();
-  }
-  
-  public String getEndpoint(){
-    return "gnugraph";
-  }
-  
-  public boolean init(){
+
     // Gnuplot is mostly CPU bound and does only a little bit of IO at the
     // beginning to read the input data and at the end to write its output.
     // We want to avoid running too many Gnuplot instances concurrently as
@@ -121,33 +112,35 @@ public class GnuGraphFormatter extends TSDFormatter {
     // ArrayBlockingQueue does not scale as much as LinkedBlockingQueue in terms
     // of throughput but we don't need high throughput here.  We use ABQ instead
     // of LBQ because it creates far fewer references.
-    return true;
+  }
+  
+  public String getEndpoint(){
+    return "gnugraph";
   }
 
-  public void setStartTime(final long start){
-    this.start_time = start;
-  }
-  
-  public void setEndTime(final long end){
-    this.end_time = end;
-  }
-  
-  public void setQueryString(final Map<String, List<String>> qs){
-    this.query_string = qs;
-  }
-  
-  public void setBasePath(final String path){
-    this.basepath = path;
-  }
-  
-  public void setQueryHash(final int hash){
-    this.query_hash = hash;
+  public String contentType(){
+    return "application/json";
   }
   
   @Override
   public boolean validateQuery(final DataQuery query) {
     this.query = query;
-    // TODO Auto-generated method stub
+    this.start_time = query.start_time;
+    this.end_time = query.end_time;
+    this.query_hash = query.query_hash;
+    this.query_string = query.format_options;
+    
+    // get the cache directory
+    this.basepath = tsdb.getConfig().cacheDirectory();
+    if (System.getProperty("os.name").contains("Windows")){
+      if (!basepath.endsWith("\\"))
+        basepath += "\\";
+    }else{
+      if (!basepath.endsWith("/"))
+        basepath += "/";     
+    }
+    
+    basepath += Integer.toHexString(query_hash);
     return true;
   }
   
@@ -158,7 +151,7 @@ public class GnuGraphFormatter extends TSDFormatter {
    * generation process. Then the GUI will parse the JSON data and request
    * the PNG image directly from disk
    */
-  public final boolean handleHTTPGet(final HttpQuery query) {
+  public final boolean handleHTTPDataGet(final HttpQuery query) {
     if (datapoints.size() < 1) {
       error = "No data to process";
       LOG.error(error);

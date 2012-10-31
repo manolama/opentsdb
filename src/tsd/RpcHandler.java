@@ -12,9 +12,11 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.stumbleupon.async.Callback;
@@ -98,7 +100,8 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     telnet_commands.put("exit", new Exit());
     telnet_commands.put("help", new Help());
     telnet_commands.put("put", new PutDataPointRpc());
-
+    telnet_commands.put("format", new Reformat());
+    
     http_commands.put("", new HomePage());
     http_commands.put("aggregators", new AggregatorsRPC());
     http_commands.put("logs", new LogsRpc());
@@ -147,7 +150,8 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       rpc = unknown_cmd;
     }
     telnet_rpcs_received.incrementAndGet();
-    rpc.execute(tsdb, chan, command, null);
+    rpc.execute(tsdb, chan, command, 
+        TSDFormatter.getFormatter(tsdb.config.formatterDefaultTelnet(), tsdb));
   }
 
   /**
@@ -296,15 +300,20 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
         final String[] cmd, final TSDFormatter formatter) {
       chan.disconnect();
-      for (String format : TSDFormatter.listFormatters()){
-        chan.write(format + "\n");
+      for (Map.Entry<String, ArrayList<String>> format : TSDFormatter.listFormatters().entrySet()){
+        chan.write(format.getKey() + "\n");
+        for (String publics : format.getValue())
+          chan.write("-- " + publics + "\n");
       }
       return Deferred.fromResult(null);
     }
     
     public void execute(final TSDB tsdb, final HttpQuery query) {
-      JSON codec = new JSON(TSDFormatter.listFormatters());
-      query.sendReply(codec.getJsonBytes());
+      TSDFormatter formatter = query.getFormatter();
+      if (formatter == null)
+        return;
+      
+      formatter.handleHTTPFormatters(query, TSDFormatter.listFormatters());
     }
   }
   
@@ -356,6 +365,37 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       logWarn(chan, "unknown command : " + Arrays.toString(cmd));
       chan.write("unknown command: " + cmd[0] + ".  Try `help'.\n");
       return Deferred.fromResult(null);
+    }
+  }
+  
+  /** Forwards the command on to the proper handler with the formatter set */
+  private final class Reformat implements TelnetRpc {
+    public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
+                                    final String[] cmd, final TSDFormatter formatter) {
+      if (cmd.length < 3){
+        throw new IllegalArgumentException("Not enough arguments"
+            + " (need least 3, got " + (cmd.length) + ')');
+      }
+      String[] fwd = new String[cmd.length-2];
+      int x=0;
+      for (int i = 2; i<cmd.length; i++){
+        fwd[x] = cmd[i];
+        x++;
+      }
+      
+      LOG.trace(String.format("Attempting formatter [%s]", cmd[1]));
+      TSDFormatter fmt = TSDFormatter.getFormatter(cmd[1], tsdb);
+      if (fmt == null){
+        chan.write("Unknown formatter [" + cmd[1] + "]");
+        return Deferred.fromResult(null);
+      }
+      
+      TelnetRpc rpc = telnet_commands.get(fwd[0]);
+      if (rpc == null) {
+        rpc = unknown_cmd;
+      }
+      telnet_rpcs_received.incrementAndGet();
+      return rpc.execute(tsdb, chan, fwd, fmt);
     }
   }
   

@@ -40,8 +40,8 @@ import org.slf4j.LoggerFactory;
  * ,"write"],"time":1328130386,"interval":10,"host":"hobbes-64bit","plugin":
  * "disk","plugin_instance":"sdb","type":"disk_octets","type_instance":""}
  */
-@JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
-@JsonIgnoreProperties(ignoreUnknown = true)
+//@JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
+//@JsonIgnoreProperties(ignoreUnknown = true)
 public class CollectdJSON extends TSDFormatter {
   private static final Logger LOG = LoggerFactory.getLogger(CollectdJSON.class);
   
@@ -71,7 +71,7 @@ public class CollectdJSON extends TSDFormatter {
    * @return Returns true if successful, false if there was an error
    */
   @SuppressWarnings("unchecked")
-  public boolean handleHTTPPut(final HttpQuery query){
+  public boolean handleHTTPDataPut(final HttpQuery query){
     Boolean details = query.hasQueryStringParam("error_details") ?
         query.parseBoolean(query.getQueryStringParam("error_details")) : false;
     Boolean fault = query.hasQueryStringParam("fault_on_any") ?
@@ -235,6 +235,10 @@ public class CollectdJSON extends TSDFormatter {
     return true;
   }
   
+  public String contentType(){
+    return "application/json";
+  }
+  
   @Override
   public boolean validateQuery(final DataQuery query) {
     this.query = query;
@@ -242,9 +246,9 @@ public class CollectdJSON extends TSDFormatter {
     return true;
   }
   
-  public static void collectStats(final StatsCollector collector){
-    collector.record("http.formatter.collectdjson.put.success", puts_success.get());
-    collector.record("http.formatter.collectdjson.put.fail", puts_fail.get());
+  public static void collectClassStats(final StatsCollector collector){
+    collector.record("formatter.collectdjson.put.success", puts_success.get());
+    collector.record("formatter.collectdjson.put.fail", puts_fail.get());
   }
   
 // ---------------- PRIVATES ------------------------------

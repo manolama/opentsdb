@@ -13,11 +13,14 @@
 package net.opentsdb.search;
 
 import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.tsd.HttpQuery;
 
 import org.codehaus.jackson.map.annotate.JsonSerialize;
@@ -51,20 +54,16 @@ public class SearchQuery {
   private int limit = 25;
   private int page = 0;
   private boolean return_meta = false;
-  private String error;
+  private String error = "";
   private Pattern query_regex = null;
   private Map<String, Pattern> tags_compiled;
   private Map<String, Pattern> custom_compiled;
-  private int total_hits = 0;
-  private int pages = 0;
   private boolean return_tsuids = false;
   private String group = "host";
   private String sub_group = "metric";
   private boolean group_only = false;
   private boolean terms = false;
   private boolean regex = false;
-  @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
-  private int total_groups = 0;
 
   // field -> operator -> value
   // if no operator was passed in, then we save it as eq
@@ -609,26 +608,6 @@ public class SearchQuery {
   public void setError(String err){
     this.error = err;
   }
-  
-  public int getTotal_hits() {
-    return total_hits;
-  }
-
-  public void setTotal_hits(int total_hits) {
-    this.total_hits = total_hits;
-    if (this.total_groups > 0){
-      this.pages = (this.total_groups / this.limit) + 1;
-    }else if (this.terms){
-      this.pages = 0;
-    }else{
-      if (total_hits > 0)
-        this.pages = (total_hits / this.limit) + 1;
-    }
-  }
-
-  public int getPages(){
-    return pages;
-  }
 
   public Map<String, SimpleEntry<SearchOperator, Double>> getNumerics() {
     return numerics;
@@ -670,14 +649,6 @@ public class SearchQuery {
     this.sub_group = sub_group;
   }
 
-  public int getTotalGroups() {
-    return total_groups;
-  }
-
-  public void setTotalGroups(int total_groups) {
-    this.total_groups = total_groups;
-  }
-  
   public boolean getReturnTSUIDs() {
     return return_tsuids;
   }
@@ -708,5 +679,36 @@ public class SearchQuery {
   
   public void setRegex(boolean regex){
     this.regex = regex;
+  }
+
+  public static class SearchResults {
+    public int limit;
+    public int page;
+    public double time;
+    public int total_groups;
+    public int total_hits = 0;
+    public int pages = 0;
+    
+    public SearchResults(final SearchQuery query){
+      this.limit = query.getLimit();
+      this.page = query.getPage();
+    }
+    
+    // Pick one and ONLY one of these to use at any time
+    public ArrayList<Map<String, Object>> short_meta;
+    public ArrayList<String> tsuids;
+    public ArrayList<TimeSeriesMeta> ts_meta;
+    public TreeSet<String> terms;
+    public Map<String, Object> groups;
+    
+    public void setTotalHits(int total_hits) {
+      this.total_hits = total_hits;
+      if (this.groups != null){
+        this.pages = (this.total_groups / this.limit) + 1;
+      }else{
+        if (total_hits > 0)
+          this.pages = (total_hits / this.limit) + 1;
+      }
+    }
   }
 }

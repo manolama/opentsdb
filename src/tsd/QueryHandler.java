@@ -13,37 +13,20 @@
 package net.opentsdb.tsd;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.regex.PatternSyntaxException;
 
-import org.codehaus.jackson.annotate.JsonAutoDetect;
-import org.codehaus.jackson.annotate.JsonIgnore;
-import org.codehaus.jackson.annotate.JsonIgnoreProperties;
-import org.codehaus.jackson.annotate.JsonTypeInfo;
 import org.codehaus.jackson.type.TypeReference;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.opentsdb.core.Aggregator;
-import net.opentsdb.core.Aggregators;
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDB.TSDRole;
-import net.opentsdb.core.Tags;
-import net.opentsdb.formatters.Ascii;
-import net.opentsdb.formatters.CollectdJSON;
 import net.opentsdb.formatters.TSDFormatter;
-import net.opentsdb.formatters.TsdbJSON;
 import net.opentsdb.graph.GnuGraphFormatter;
-import net.opentsdb.uid.NoSuchUniqueName;
 
 /**
  * Used to be the GraphHandler, but we won't always be requesting graphs. Instead we'll
@@ -116,20 +99,8 @@ public class QueryHandler implements HttpRpc {
     if (dq.end_time < 1) {
       dq.end_time = now;
     }
+    dq.query_hash = query.hashCode();
     
-    // get the cache directory
-    String basepath = tsdb.getConfig().cacheDirectory();
-    if (System.getProperty("os.name").contains("Windows")){
-      if (!basepath.endsWith("\\"))
-        basepath += "\\";
-    }else{
-      if (!basepath.endsWith("/"))
-        basepath += "/";     
-    }
-    
-    // append the hash of the query string so we have effective caching
-    basepath += Integer.toHexString(query_hash);
-
     // determine how many HBase queries we'll need to run
     int total_queries = 0;
     Query[] tsdbqueries = dq.getTSDQueries();
@@ -154,31 +125,8 @@ public class QueryHandler implements HttpRpc {
       return;
     }
     
-    // setup the proper formatter object based on the path
-    String endpoint = query.getEndpoint();
-    final TSDFormatter formatter;
-    if (endpoint != null){
-      formatter = TSDFormatter.getFormatter(endpoint, tsdb);
-      if (endpoint.compareTo("gnugraph") == 0){
-        // gnugraph needs more cruft set
-        ((GnuGraphFormatter)formatter).init();
-        ((GnuGraphFormatter)formatter).setBasePath(basepath);
-        ((GnuGraphFormatter)formatter).setStartTime(dq.start_time);
-        ((GnuGraphFormatter)formatter).setEndTime(dq.end_time);
-        ((GnuGraphFormatter)formatter).setQueryString(query.querystring);
-        ((GnuGraphFormatter)formatter).setQueryHash(query.hashCode());
-      }
-    }else
-      formatter = TSDFormatter.getFormatter("tsdbjson", tsdb);
-    
-    if (formatter == null){
-      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, 
-          "Could not find a formatter for endpoint [" + endpoint + "]");
-      return;
-    }
-
     // validate the query before running it
-    if (!formatter.validateQuery(dq)){
+    if (!query.getFormatter().validateQuery(dq)){
       query.sendError(HttpResponseStatus.BAD_REQUEST, dq.error);
       return;
     }
@@ -193,7 +141,7 @@ public class QueryHandler implements HttpRpc {
         
         // loop through the series and add them to the formatter
         for (final DataPoints datapoints : series) {
-          formatter.putDatapoints(datapoints);
+          query.getFormatter().putDatapoints(datapoints);
         }
       } catch (RuntimeException e) {
         LOG.info("Query failed (stack trace coming): " + tsdbqueries[i]);
@@ -204,7 +152,7 @@ public class QueryHandler implements HttpRpc {
     tsdbqueries = null;  // free()
     
     // process the formatter
-    formatter.handleHTTPGet(query);
+    query.getFormatter().handleHTTPDataGet(query);
 
     return;
   }

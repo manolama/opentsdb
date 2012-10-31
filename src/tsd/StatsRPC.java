@@ -13,11 +13,8 @@
 package net.opentsdb.tsd;
 
 import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 
 import net.opentsdb.cache.Cache;
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.formatters.CollectdJSON;
 import net.opentsdb.formatters.TSDFormatter;
@@ -26,6 +23,7 @@ import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.stats.StatsCollector.StatsDP;
 
 import org.jboss.netty.channel.Channel;
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 
 import com.stumbleupon.async.Deferred;
 
@@ -42,15 +40,8 @@ final class StatsRPC implements TelnetRpc, HttpRpc {
    */
   public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
       final String[] cmd, final TSDFormatter formatter) {
-    final StringBuilder buf = new StringBuilder(1024);
-    final StatsCollector collector = new StatsCollector("tsd") {
-      @Override
-      public final void emit(StatsDP dp) {
-        buf.append(StatsCollector.getAscii(dp));
-      }
-    };
-    doCollectStats(tsdb, collector);
-    chan.write(buf.toString());
+    final ArrayList<StatsDP> datapoints = doCollectStats(tsdb);
+    formatter.handleTelnetStats(cmd, chan, datapoints);
     return Deferred.fromResult(null);
   }
 
@@ -61,17 +52,13 @@ final class StatsRPC implements TelnetRpc, HttpRpc {
    * @param query HTTP query to respond to
    */
   public void execute(final TSDB tsdb, final HttpQuery query) {
-    final List<Object> datapoints = new ArrayList<Object>();
-    final StatsCollector collector = new StatsCollector("tsd") {
-      @Override
-      public final void emit(final StatsDP dp) {
-        datapoints.add(dp);
-      }
-    };
-    doCollectStats(tsdb, collector);
+    final ArrayList<StatsDP> datapoints = doCollectStats(tsdb);
 
-    JSON codec = new JSON(datapoints);
-    query.sendReply(codec.getJsonBytes());
+    TSDFormatter formatter = query.getFormatter();
+    if (formatter == null)
+      return;
+    
+    formatter.handleHTTPStats(query, datapoints);
   }
 
   /**
@@ -80,14 +67,22 @@ final class StatsRPC implements TelnetRpc, HttpRpc {
    * @param tsdb TSD to collect data from
    * @param collector Collector to store data in
    */
-  private void doCollectStats(final TSDB tsdb, final StatsCollector collector) {
+  private ArrayList<StatsDP> doCollectStats(final TSDB tsdb) {
+    final ArrayList<StatsDP> datapoints = new ArrayList<StatsDP>();
+    final StatsCollector collector = new StatsCollector("tsd") {
+      @Override
+      public final void emit(final StatsDP dp) {
+        datapoints.add(dp);
+      }
+    };
+    
     collector.addHostTag();
     ConnectionManager.collectStats(collector);
     Cache.collectStats(collector);
     RpcHandler.collectStats(collector);
     tsdb.collectStats(collector);
     //PipelineFactory.collectStats(collector);
-    CollectdJSON.collectStats(collector);
-    TsdbJSON.collectStats(collector);
+    TSDFormatter.collectStats(collector, tsdb);
+    return datapoints;
   }
 }

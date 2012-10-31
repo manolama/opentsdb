@@ -12,25 +12,13 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.TreeSet;
-
-import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDB.TSDRole;
+import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.search.SearchQuery;
-import net.opentsdb.uid.NoSuchUniqueId;
-import net.opentsdb.uid.UniqueId;
+import net.opentsdb.search.SearchQuery.SearchResults;
 
-import org.codehaus.jackson.type.TypeReference;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
@@ -44,6 +32,11 @@ public class GroupRPC implements HttpRpc {
       query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
       return;
     }
+    
+    // get formatter
+    TSDFormatter formatter = query.getFormatter();
+    if (formatter == null)
+      return;
     
     // parse the search query
     SearchQuery search_query = new SearchQuery();
@@ -70,9 +63,9 @@ public class GroupRPC implements HttpRpc {
     JSON codec = new JSON(search_query);
     LOG.trace(codec.getJsonString());
 
-    Object results = null;
+    SearchResults results = null;
     if (search_query.getTerms())
-      results = new TreeSet<String>(tsdb.meta_searcher.getTerms(search_query));
+      results = tsdb.meta_searcher.getTerms(search_query);
     else
       results = tsdb.meta_searcher.groupBy(search_query);
     if (results == null){
@@ -80,23 +73,8 @@ public class GroupRPC implements HttpRpc {
       return;
     }
     
-    double time = ((double)(System.nanoTime() - query.start_time) / (double)1000000);
-    
-    // build a response map and send away!
-    Map<String, Object> response = new HashMap<String, Object>();
-    response.put("limit", search_query.getLimit());
-    response.put("page", search_query.getPage());
-    if (search_query.getTerms())
-      response.put("total_terms", search_query.getTotal_hits());
-    else
-      response.put("total_uids", search_query.getTotal_hits());
-    response.put("total_pages", search_query.getPages());
-    response.put("time", time);
-    if (!search_query.getTerms())
-      response.put("total_groups", search_query.getTotalGroups());
-    response.put("results", results);
-    codec = new JSON(response);
-    query.sendReply(codec.getJsonBytes());
+    results.time = ((double)(System.nanoTime() - query.start_time) / (double)1000000);
+    formatter.handleHTTPGroupby(query, results);
     return;
   }
 

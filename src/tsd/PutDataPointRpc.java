@@ -65,19 +65,11 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
       return;
     }
     
-    String endpoint = query.getEndpoint();
-    final TSDFormatter formatter;
-    if (endpoint != null){
-      formatter = TSDFormatter.getFormatter(endpoint, tsdb);
-    }else
-      formatter = TSDFormatter.getFormatter("tsdbjson", tsdb);
-    if (formatter == null){
-      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, 
-          "Could not find a formatter for endpoint [" + endpoint + "]");
+    TSDFormatter formatter = query.getFormatter();
+    if (formatter == null)
       return;
-    }
     
-    formatter.handleHTTPPut(query);
+    formatter.handleHTTPDataPut(query);
     return;
   }
 
@@ -87,36 +79,43 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
   public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
       final String[] cmd, final TSDFormatter formatter) {
     requests.incrementAndGet();
-    String errmsg = null;
-    try {
-      final class PutErrback implements Callback<Exception, Exception> {
-        public Exception call(final Exception arg) {
-          if (chan.isConnected()) {
-            chan.write("put: HBase error: " + arg.getMessage() + '\n');
-          }
-          hbase_errors.incrementAndGet();
-          return arg;
-        }
-
-        public String toString() {
-          return "report error to channel";
-        }
-      }
-      return importDataPoint(tsdb, cmd).addErrback(new PutErrback());
-    } catch (NumberFormatException x) {
-      errmsg = "put: invalid value: " + x.getMessage() + '\n';
-      invalid_values.incrementAndGet();
-    } catch (IllegalArgumentException x) {
-      errmsg = "put: illegal argument: " + x.getMessage() + '\n';
-      illegal_arguments.incrementAndGet();
-    } catch (NoSuchUniqueName x) {
-      errmsg = "put: unknown metric: " + x.getMessage() + '\n';
-      unknown_metrics.incrementAndGet();
-    }
-    if (errmsg != null && chan.isConnected()) {
-      chan.write(errmsg);
-    }
-    return Deferred.fromResult(null);
+    if (formatter != null)
+      return formatter.handleTelnetDataPut(cmd, chan);
+    
+    // default formatter
+    TSDFormatter fmt = TSDFormatter.getFormatter(tsdb.config.formatterDefaultTelnet(), tsdb);
+    return fmt.handleTelnetDataPut(cmd, chan);
+    
+//    String errmsg = null;
+//    try {
+//      final class PutErrback implements Callback<Exception, Exception> {
+//        public Exception call(final Exception arg) {
+//          if (chan.isConnected()) {
+//            chan.write("put: HBase error: " + arg.getMessage() + '\n');
+//          }
+//          hbase_errors.incrementAndGet();
+//          return arg;
+//        }
+//
+//        public String toString() {
+//          return "report error to channel";
+//        }
+//      }
+//      return importDataPoint(tsdb, cmd).addErrback(new PutErrback());
+//    } catch (NumberFormatException x) {
+//      errmsg = "put: invalid value: " + x.getMessage() + '\n';
+//      invalid_values.incrementAndGet();
+//    } catch (IllegalArgumentException x) {
+//      errmsg = "put: illegal argument: " + x.getMessage() + '\n';
+//      illegal_arguments.incrementAndGet();
+//    } catch (NoSuchUniqueName x) {
+//      errmsg = "put: unknown metric: " + x.getMessage() + '\n';
+//      unknown_metrics.incrementAndGet();
+//    }
+//    if (errmsg != null && chan.isConnected()) {
+//      chan.write(errmsg);
+//    }
+//    return Deferred.fromResult(null);
   }
 
   /**

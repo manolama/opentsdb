@@ -108,7 +108,8 @@ public class TsdbConfig {
   // -------- Formatters --------
   /** Path to override map file */
   private String formatter_collectd_override_path = "";
-  private String formatter_default = "tsdbjson";
+  private String formatter_default_http = "tsdbjson";
+  private String formatter_default_telnet = "ascii";
 
   // -------- MQ --------
   private boolean mq_enable = false;
@@ -577,15 +578,26 @@ public class TsdbConfig {
     return this.formatter_collectd_override_path;
   }
 
-  public final String formatterDefault() {
+  public final String formatterDefaultHTTP() {
     try {
-      return this.config.getString("tsd.formatter.default");
+      return this.config.getString("tsd.formatter.default.http");
     } catch (NullPointerException npe) {
       // return the default below
     } catch (NumberFormatException nfe) {
       LOG.warn(nfe.getLocalizedMessage());
     }
-    return this.formatter_default;
+    return this.formatter_default_http;
+  }
+  
+  public final String formatterDefaultTelnet() {
+    try {
+      return this.config.getString("tsd.formatter.default.telnet");
+    } catch (NullPointerException npe) {
+      // return the default below
+    } catch (NumberFormatException nfe) {
+      LOG.warn(nfe.getLocalizedMessage());
+    }
+    return this.formatter_default_telnet;
   }
 
   // -------- Formatters --------

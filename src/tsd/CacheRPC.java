@@ -49,7 +49,7 @@ public class CacheRPC implements HttpRpc {
      }
    } else if (query.hasQueryStringParam("flush")) {
      // TODO flush the cache
-     query.sendReply(new JsonRpcError("Not implemented", 404).getJSON());
+     query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented");
    } else {
      // the default is to print info about the cache
      final JSON_HTTP response = new JSON_HTTP(query.cache);

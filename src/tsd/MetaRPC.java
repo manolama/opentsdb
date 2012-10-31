@@ -18,6 +18,7 @@ import java.util.Map;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDB.TSDRole;
+import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.GeneralMeta.Meta_Type;
 import net.opentsdb.meta.TimeSeriesMeta;
@@ -83,40 +84,39 @@ public class MetaRPC implements HttpRpc {
    * @param tsdb The TSDB to use for fetching/writing meta data
    * @param query The Query to respond to
    */
-  private void getMeta(final TSDB tsdb, final HttpQuery query) {
+  private void getMeta(final TSDB tsdb, final HttpQuery query) { 
+    // get formatter
+    TSDFormatter formatter = query.getFormatter();
+    if (formatter == null)
+      return;
+    
+    final String endpoint = query.getEndpoint();
+    if (endpoint == null || endpoint.isEmpty() || endpoint.toLowerCase().compareTo("meta") == 0){
+      query.sendError(HttpResponseStatus.BAD_REQUEST, "Missing type of meta endpoint");
+      return;
+    }      
     if (!query.hasQueryStringParam("uid")) {
       query.sendError(HttpResponseStatus.BAD_REQUEST, "Missing [uid] parameter");
       return;
     }
     byte[] id = UniqueId.StringtoID(query.getQueryStringParam("uid"));
-    
-    final String endpoint = query.getEndpoint();
 
-    byte[] result = null;
+    Object meta = null;
     if (endpoint == null || endpoint.isEmpty() || endpoint.compareTo("timeseries") == 0){
-      TimeSeriesMeta ts_meta = tsdb.getTimeSeriesMeta(id, true);
-      if (ts_meta != null)
-        result = ts_meta.getJSONBytes();
+      meta = tsdb.getTimeSeriesMeta(id, true);
     } else if (endpoint.compareTo("metric") == 0){
-      GeneralMeta meta = tsdb.metrics.getGeneralMeta(id, false);
-      if (meta != null)
-        result = meta.getJSONBytes();
+      meta = tsdb.metrics.getGeneralMeta(id, false);
     } else if (endpoint.compareTo("tagk") == 0){
-      GeneralMeta meta = tsdb.tag_names.getGeneralMeta(id, false);
-      if (meta != null)
-        result = meta.getJSONBytes();
+      meta = tsdb.tag_names.getGeneralMeta(id, false);
     } else if (endpoint.compareTo("tagv") == 0){
-      GeneralMeta meta = tsdb.tag_values.getGeneralMeta(id, false);
-      if (meta != null)
-        result = meta.getJSONBytes();
+      meta = tsdb.tag_values.getGeneralMeta(id, false);
     }
 
-    if (result == null){
+    if (meta == null){
       query.sendError(HttpResponseStatus.BAD_REQUEST, "UID object was not found");
       return;
     }
-    query.sendReply(result);
-    return;
+    formatter.handleHTTPMetaGet(query, meta);
   }
 
   /**
