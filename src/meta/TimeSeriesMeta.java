@@ -326,11 +326,11 @@ final public class TimeSeriesMeta extends MetaData {
     this.tags = t;
   }
 
-  public long getLastReceived() {
+  public long getLast_received() {
     return last_received;
   }
 
-  public void setLastReceived(long last_received) {
+  public void setLast_received(long last_received) {
     this.last_received = last_received;
   }
 }

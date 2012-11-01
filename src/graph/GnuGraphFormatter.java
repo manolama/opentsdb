@@ -123,7 +123,7 @@ public class GnuGraphFormatter extends TSDFormatter {
   }
   
   @Override
-  public boolean validateQuery(final DataQuery query) {
+  public boolean validateQuery(DataQuery query) {
     this.query = query;
     this.start_time = query.start_time;
     this.end_time = query.end_time;
@@ -141,6 +141,9 @@ public class GnuGraphFormatter extends TSDFormatter {
     }
     
     basepath += Integer.toHexString(query_hash);
+    
+    // Graphing needs padding, so turn it on!
+    query.padding = true;
     return true;
   }
   
@@ -176,11 +179,15 @@ public class GnuGraphFormatter extends TSDFormatter {
     
     @SuppressWarnings("unchecked")    
     final HashSet<String>[] aggregated_tags = new HashSet[datapoints.size()];
-    int npoints = 0;
+    int raw_points = 0;
+    int agg_points = 0;
+    int tsuids = 0;
     for (int i = 0; i < nseries; i++) {
       aggregated_tags[i] = new HashSet<String>();
       aggregated_tags[i].addAll(datapoints.get(i).getAggregatedTags());
-      npoints += datapoints.get(i).aggregatedSize();
+      raw_points += datapoints.get(i).aggregatedSize();
+      agg_points += datapoints.get(i).size();
+      tsuids += datapoints.get(i).getUID().size();
       plot.add(datapoints.get(i), options.get(i));
     }
     
@@ -209,6 +216,12 @@ public class GnuGraphFormatter extends TSDFormatter {
       File f = new File(basepath + ".png");
       if (f.exists()){
         
+        // if the png was requested, return it
+        if (this.query_string.get("png") != null){
+          query.sendFile(basepath + ".png", 300);
+          return true;
+        }
+        
         String image = "";
         if (basepath.lastIndexOf("\\") != -1){
           image = basepath.substring(basepath.lastIndexOf("\\")+1) + ".png";
@@ -218,9 +231,11 @@ public class GnuGraphFormatter extends TSDFormatter {
         
         // set our results
         results.put("plotted", run.getNPlotted());
-        results.put("points", npoints);
+        results.put("raw_points", raw_points);
+        results.put("agg_points", agg_points);
         results.put("etags", aggregated_tags);
         results.put("image", image);
+        results.put("tsuids", tsuids);
         
         JSON codec = new JSON(results);
         query.sendReply(codec.getJsonBytes());
@@ -234,6 +249,9 @@ public class GnuGraphFormatter extends TSDFormatter {
     } catch (RejectedExecutionException e) {
       this.error = "Too many requests pending, please try again later";
       LOG.error(error);
+    } catch (IOException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
     }
     return true;
   }

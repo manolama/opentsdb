@@ -105,6 +105,12 @@ public class QueryHandler implements HttpRpc {
     int total_queries = 0;
     Query[] tsdbqueries = dq.getTSDQueries();
     
+    // validate the query before running it
+    if (!query.getFormatter().validateQuery(dq)){
+      query.sendError(HttpResponseStatus.BAD_REQUEST, dq.error);
+      return;
+    }
+    
     // loop through the queries and set the timestamps
     for (final Query tsdbquery : tsdbqueries) {
       try {
@@ -117,17 +123,12 @@ public class QueryHandler implements HttpRpc {
       } catch (IllegalArgumentException e) {
         throw new BadRequestException("end time: " + e.getMessage());
       }
+      tsdbquery.setPadding(dq.padding);
       total_queries++;
     }
 
     if (tsdbqueries == null || total_queries < 1){
       query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the query");
-      return;
-    }
-    
-    // validate the query before running it
-    if (!query.getFormatter().validateQuery(dq)){
-      query.sendError(HttpResponseStatus.BAD_REQUEST, dq.error);
       return;
     }
     

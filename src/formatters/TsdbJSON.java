@@ -45,7 +45,7 @@ public class TsdbJSON extends TSDFormatter {
   }
   
   public String getEndpoint(){
-    return "tsdbjson";
+    return "json";
   }
   
   /**

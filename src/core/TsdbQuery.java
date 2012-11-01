@@ -118,6 +118,8 @@ final class TsdbQuery implements Query {
 
   private ArrayList<String> tsuids;
   
+  private boolean padding = false;
+  
   /** Constructor. */
   public TsdbQuery(final TSDB tsdb) {
     this.tsdb = tsdb;
@@ -159,6 +161,14 @@ final class TsdbQuery implements Query {
     return end_time;
   }
 
+  public void setPadding(final boolean padding) {
+    this.padding = padding;
+  }
+  
+  public boolean getPadding(){
+    return this.padding;
+  }
+  
   public void setTimeSeries(final String metric,
                             final Map<String, String> tags,
                             final Aggregator function,
@@ -431,13 +441,33 @@ final class TsdbQuery implements Query {
                 + " our scanner (" + scanner + ")! " + row + " does not start"
                 + " with " + Arrays.toString(metric));
           }
-          Span datapoints = spans.get(key);
-          if (datapoints == null) {
-            datapoints = new Span(tsdb);
-            spans.put(key, datapoints);
+          LOG.trace(String.format("Processing row [%s]", UniqueId.IDtoString(key)));
+          if (this.padding){
+            Span datapoints = spans.get(key);
+            if (datapoints == null) {
+              datapoints = new Span(tsdb);
+              spans.put(key, datapoints);
+            }
+            datapoints.addRow(tsdb.compact(row));
+            nrows++;
+          }else{
+            ArrayList<KeyValue> valid = new ArrayList<KeyValue>();
+            for (KeyValue dp : row){
+              // remember the timestamp is in ms. The +1 is for rounding issues
+              if (dp.timestamp() / 1000 >= this.start_time && dp.timestamp() / 1000 <= (this.end_time + 1))
+                valid.add(dp);
+            }
+            if (!valid.isEmpty()){
+              Span datapoints = spans.get(key);
+              if (datapoints == null) {
+                datapoints = new Span(tsdb);
+                spans.put(key, datapoints);
+              }
+              datapoints.addRow(tsdb.compact(valid));
+              nrows++;
+            }
           }
-          datapoints.addRow(tsdb.compact(row));
-          nrows++;
+          
           starttime = System.nanoTime();
         }
       }
@@ -469,19 +499,18 @@ final class TsdbQuery implements Query {
       return NO_RESULT;
     }
     
+    if (this.aggregator.toString() == "none"){
+      LOG.trace("Non aggregator, returning datapoints");
+      DataPoints[] dps = new DataPoints[spans.size()];
+      int i=0;
+      for (Span sp : spans.values()){
+        dps[i] = sp;
+        i++;
+      }
+      return dps;
+    }
+    
     JSON codec = new JSON(this);
-    
-//    if (this.aggregator.toString() == "none"){
-//      LOG.trace("Non aggregator, returning datapoints");
-//      DataPoints[] dps = new DataPoints[spans.size()];
-//      int i=0;
-//      for (Span sp : spans.values()){
-//        dps[i] = sp;
-//        i++;
-//      }
-//      return dps;
-//    }
-    
     if (group_bys == null || agg_all) {
       // We haven't been asked to find groups, so let's put all the spans
       // together in the same group.

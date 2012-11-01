@@ -3,7 +3,6 @@ package net.opentsdb.tsd;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.regex.PatternSyntaxException;
 
@@ -25,6 +24,7 @@ public class DataQuery {
   public String end;
   public ArrayList<TSQuery> queries;
   public HashMap<String, List<String>> format_options;
+  public boolean padding = false;
 
   @JsonIgnore
   public String error = "";
@@ -81,6 +81,8 @@ public class DataQuery {
       this.error = e.getMessage();
       return false;
     }
+    if (query.hasQueryStringParam("padding"))
+      this.padding = query.parseBoolean(query.getQueryStringParam("padding"));
 
     this.queries = new ArrayList<TSQuery>();
 

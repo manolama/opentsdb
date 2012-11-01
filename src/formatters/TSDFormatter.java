@@ -40,6 +40,7 @@ public abstract class TSDFormatter {
     add("net.opentsdb.formatters.CollectdJSON");
     add("net.opentsdb.formatters.TsdbJSON");
     add("net.opentsdb.graph.GnuGraphFormatter");
+    add("net.opentsdb.formatters.HTML");
   }
     private static final long serialVersionUID = 5304450759358216935L;
   };
@@ -155,6 +156,12 @@ public abstract class TSDFormatter {
     JSON codec = new JSON(error);
     query.sendReply(error.status, codec.getJsonString());
     return true;
+  }
+  
+  public boolean handleHTTPRoot(final HttpQuery query){
+    LOG.warn("Method has not been implemented");
+    query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Method has not been implemented");
+    return false;
   }
   
 // TELNET HANDLERS ------------------------------------------------------------
@@ -322,9 +329,16 @@ public abstract class TSDFormatter {
     return null;
   }
 
-  public static HashMap<String, ArrayList<String>> listFormatters(){
+  public static HashMap<String, ArrayList<String>> listFormatters(final TSDB tsdb){
+
     HashMap<String, ArrayList<String>> fmts = new HashMap<String, ArrayList<String>>();
     try {
+      HashMap<String, String> init_formatters = new HashMap<String, String>();
+      for (Map.Entry<String, Constructor> fmt : formatter_map.entrySet()){
+        TSDFormatter temp = (TSDFormatter) fmt.getValue().newInstance(tsdb);
+        init_formatters.put(temp.getClass().getCanonicalName(), temp.getEndpoint());
+      }
+      
       for (String formatter : formatters){
         Class f = Class.forName(formatter);
         ArrayList<String> publics = new ArrayList<String>();
@@ -335,10 +349,22 @@ public abstract class TSDFormatter {
               publics.add(m.getName().substring(6));
           }
         }
-        fmts.put(formatter.substring(formatter.lastIndexOf(".") + 1).toLowerCase(), publics);
+        fmts.put(init_formatters.get(formatter), publics);
       }
       return fmts;
     } catch (ClassNotFoundException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    } catch (IllegalArgumentException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    } catch (InstantiationException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    } catch (IllegalAccessException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    } catch (InvocationTargetException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
     }   

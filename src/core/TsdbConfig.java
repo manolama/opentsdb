@@ -108,7 +108,7 @@ public class TsdbConfig {
   // -------- Formatters --------
   /** Path to override map file */
   private String formatter_collectd_override_path = "";
-  private String formatter_default_http = "tsdbjson";
+  private String formatter_default_http = "json";
   private String formatter_default_telnet = "ascii";
 
   // -------- MQ --------
@@ -561,8 +561,6 @@ public class TsdbConfig {
   }
   
   // -------- Formatters -------
-  
-  // -------- Formatters --------
 
   /**
    * Path to override map file

@@ -34,6 +34,7 @@ import org.jboss.netty.handler.codec.http.HttpRequest;
 import net.opentsdb.cache.Cache;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.formatters.HTML;
 import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.stats.StatsCollector;
 
@@ -255,8 +256,9 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
 
     public void execute(final TSDB tsdb, final HttpQuery query) {
       logWarn(query, "shutdown requested");
-      query.sendReply(HttpQuery.makePage("TSD Exiting", "You killed me",
-                                         "Cleaning up and exiting now."));
+//      query.sendReply(HttpQuery.makePage("TSD Exiting", "You killed me",
+//                                         "Cleaning up and exiting now."));
+      query.sendReply("TSD Exiting You killed me Cleaning up and exiting now.");
       doShutdown(tsdb, query.channel());
     }
 
@@ -300,7 +302,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
         final String[] cmd, final TSDFormatter formatter) {
       chan.disconnect();
-      for (Map.Entry<String, ArrayList<String>> format : TSDFormatter.listFormatters().entrySet()){
+      for (Map.Entry<String, ArrayList<String>> format : TSDFormatter.listFormatters(tsdb).entrySet()){
         chan.write(format.getKey() + "\n");
         for (String publics : format.getValue())
           chan.write("-- " + publics + "\n");
@@ -313,7 +315,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       if (formatter == null)
         return;
       
-      formatter.handleHTTPFormatters(query, TSDFormatter.listFormatters());
+      formatter.handleHTTPFormatters(query, TSDFormatter.listFormatters(tsdb));
     }
   }
   
@@ -351,7 +353,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
                  + "<iframe src=javascript:'' id=__gwt_historyFrame tabIndex=-1"
                  + " style=position:absolute;width:0;height:0;border:0>"
                  + "</iframe>");
-      query.sendReply(HttpQuery.makePage(
+      query.sendReply(HTML.makePage(
         "<script type=text/javascript language=javascript"
         + " src=/s/queryui.nocache.js></script>",
         "TSD", "Time Series Database", buf.toString()));

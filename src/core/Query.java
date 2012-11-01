@@ -13,7 +13,6 @@
 package net.opentsdb.core;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 import org.hbase.async.HBaseException;
@@ -66,6 +65,10 @@ public interface Query {
    */
   long getEndTime();
 
+  void setPadding(boolean padding);
+  
+  boolean getPadding();
+  
   /**
    * Sets the time series to the query.
    * @param metric The metric to retreive from the TSDB.
@@ -77,9 +80,11 @@ public interface Query {
    * does not exist.
    */
   void setTimeSeries(String metric, Map<String, String> tags,
-                     Aggregator function, boolean rate, boolean agg_all) throws NoSuchUniqueName;
+                     Aggregator function, boolean rate, 
+                     boolean agg_all) throws NoSuchUniqueName;
 
-  void setTimeSeries(ArrayList<String> tsuids, Aggregator function, boolean rate, boolean agg_all) 
+  void setTimeSeries(ArrayList<String> tsuids, Aggregator function, 
+      boolean rate, boolean agg_all) 
     throws NoSuchUniqueName;
   
   /**

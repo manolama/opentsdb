@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.tsd.DataQuery;
 import net.opentsdb.tsd.HttpQuery;
 
@@ -119,6 +120,7 @@ public class CollectdJSON extends TSDFormatter {
             errors.add(err);
           }
           LOG.error("Empty values list at [" + total + "]");
+          invalid_values.incrementAndGet();
           continue;
         }
         if (dp.time <= 0) {
@@ -129,6 +131,7 @@ public class CollectdJSON extends TSDFormatter {
             errors.add(err);
           }
           LOG.error("Invalid timestamp at [" + total + "]");
+          invalid_values.incrementAndGet();
           continue;
         }
         if (dp.plugin.isEmpty()) {
@@ -139,6 +142,7 @@ public class CollectdJSON extends TSDFormatter {
             errors.add(err);
           }
           LOG.error("Invalid plugin name at [" + total + "]");
+          invalid_values.incrementAndGet();
           continue;
         }
         if (dp.dstypes.size() > 0 && (dp.values.size() != dp.dstypes.size() || 
@@ -150,6 +154,7 @@ public class CollectdJSON extends TSDFormatter {
             errors.add(err);
           }
           LOG.error("Invalid dstypes/value size at [" + total + "]");
+          invalid_values.incrementAndGet();
           continue;
         }
         
@@ -197,6 +202,7 @@ public class CollectdJSON extends TSDFormatter {
         }
         LOG.error(String.format("Unable to convert metric at [%d]: %s", 
             total, nfe.getMessage()));
+        invalid_values.incrementAndGet();
       } catch (IllegalArgumentException iae){
         if (details){
           err = new HashMap<String, Object>();
@@ -206,6 +212,17 @@ public class CollectdJSON extends TSDFormatter {
         }
         LOG.error(String.format("Unable to convert metric at [%d]: %s", 
             total, iae.getMessage()));
+        invalid_values.incrementAndGet();
+      } catch (TsdbStorageException tse){
+        if (details){
+          err = new HashMap<String, Object>();
+          err.put("error", tse.getMessage());
+          err.put("datapoints", dp);
+          errors.add(err);
+        }
+        LOG.error(String.format("Unable to store metric at [%d]: %s", 
+            total, tse.getMessage()));
+        storage_errors.incrementAndGet();
       }
     }
     

@@ -705,8 +705,9 @@ public class QueryUi implements EntryPoint {
           if (nplotted != null && nplotted.isNumber().doubleValue() > 0) {
             graph.setUrl("/cache?file=" + image.isString().stringValue());
             graph.setVisible(true);
-            msg += result.get("points").isNumber() + " points retrieved, "
-              + nplotted + " points plotted";
+            msg += result.get("raw_points").isNumber() + " points retrieved, "
+              + nplotted + " points plotted, " + result.get("tsuids").isNumber()
+              + " timeseries";
           } else {
             graph.setVisible(false);
             msg += "Your query didn't return anything";

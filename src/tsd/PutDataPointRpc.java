@@ -85,37 +85,6 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
     // default formatter
     TSDFormatter fmt = TSDFormatter.getFormatter(tsdb.config.formatterDefaultTelnet(), tsdb);
     return fmt.handleTelnetDataPut(cmd, chan);
-    
-//    String errmsg = null;
-//    try {
-//      final class PutErrback implements Callback<Exception, Exception> {
-//        public Exception call(final Exception arg) {
-//          if (chan.isConnected()) {
-//            chan.write("put: HBase error: " + arg.getMessage() + '\n');
-//          }
-//          hbase_errors.incrementAndGet();
-//          return arg;
-//        }
-//
-//        public String toString() {
-//          return "report error to channel";
-//        }
-//      }
-//      return importDataPoint(tsdb, cmd).addErrback(new PutErrback());
-//    } catch (NumberFormatException x) {
-//      errmsg = "put: invalid value: " + x.getMessage() + '\n';
-//      invalid_values.incrementAndGet();
-//    } catch (IllegalArgumentException x) {
-//      errmsg = "put: illegal argument: " + x.getMessage() + '\n';
-//      illegal_arguments.incrementAndGet();
-//    } catch (NoSuchUniqueName x) {
-//      errmsg = "put: unknown metric: " + x.getMessage() + '\n';
-//      unknown_metrics.incrementAndGet();
-//    }
-//    if (errmsg != null && chan.isConnected()) {
-//      chan.write(errmsg);
-//    }
-//    return Deferred.fromResult(null);
   }
 
   /**
@@ -133,47 +102,5 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
         new SimpleEntry<String, String>("type", "illegal_arguments"));
     collector.record("rpc.errors", unknown_metrics, 
         new SimpleEntry<String, String>("type", "unknown_metrics"));
-  }
-
-  /**
-   * Imports a single data point.
-   * @param tsdb The TSDB to import the data point into.
-   * @param words The words describing the data point to import, in the
-   *          following format: {@code [metric, timestamp, value, ..tags..]}
-   * @return A deferred object that indicates the completion of the request.
-   * @throws NumberFormatException if the timestamp or value is invalid.
-   * @throws IllegalArgumentException if any other argument is invalid.
-   * @throws NoSuchUniqueName if the metric isn't registered.
-   */
-  private Deferred<Object> importDataPoint(final TSDB tsdb, final String[] words) {
-    words[0] = null; // Ditch the "put".
-    if (words.length < 5) { // Need at least: metric timestamp value tag
-      // ^ 5 and not 4 because words[0] is "put".
-      throw new IllegalArgumentException("not enough arguments"
-          + " (need least 4, got " + (words.length - 1) + ')');
-    }
-    final String metric = words[1];
-    if (metric.length() <= 0) {
-      throw new IllegalArgumentException("empty metric name");
-    }
-    final long timestamp = Tags.parseLong(words[2]);
-    if (timestamp <= 0) {
-      throw new IllegalArgumentException("invalid timestamp: " + timestamp);
-    }
-    final String value = words[3];
-    if (value.length() <= 0) {
-      throw new IllegalArgumentException("empty value");
-    }
-    final HashMap<String, String> tags = new HashMap<String, String>();
-    for (int i = 4; i < words.length; i++) {
-      if (!words[i].isEmpty()) {
-        Tags.parse(tags, words[i]);
-      }
-    }
-    if (value.indexOf('.') < 0) { // integer value
-      return tsdb.addPoint(metric, timestamp, Tags.parseLong(value), tags);
-    } else { // floating point value
-      return tsdb.addPoint(metric, timestamp, Float.parseFloat(value), tags);
-    }
   }
 }

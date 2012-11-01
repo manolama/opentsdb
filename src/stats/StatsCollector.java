@@ -289,6 +289,7 @@ public abstract class StatsCollector {
         count++;
       }
     }
+    buf.append("\n");
     return buf.toString();
   }
   
