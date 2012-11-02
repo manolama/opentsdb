@@ -13,21 +13,19 @@ package net.opentsdb.cache;
 //of the GNU Lesser General Public License along with this program.  If not,
 //see <http://www.gnu.org/licenses/>.
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.AbstractMap.SimpleEntry;
+import java.util.LinkedList;
+import java.util.ListIterator;
 
-import net.opentsdb.core.TSDB;
+import net.opentsdb.core.TsdbConfig;
 import net.opentsdb.stats.StatsCollector;
 
+import org.apache.jcs.JCS;
+import org.apache.jcs.access.exception.CacheException;
+import org.apache.jcs.admin.CacheRegionInfo;
+import org.apache.jcs.admin.JCSAdminBean;
+import org.apache.jcs.engine.behavior.IElementAttributes;
+import org.apache.jcs.engine.control.CompositeCache;
+import org.apache.jcs.engine.control.CompositeCacheManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,244 +38,183 @@ import org.slf4j.LoggerFactory;
 public class Cache {
   private static final Logger LOG = LoggerFactory.getLogger(Cache.class);
   
-  /** Stores the cache entries */
-  private ConcurrentHashMap<Integer, CacheEntry> cache = new ConcurrentHashMap<Integer, CacheEntry>();
+  public enum CacheRegion {
+      QUERY,        /** for data query results */
+      SEARCH,       /** for search query results */
+      META,         /** for metadata */
+      GENERAL       /** for general use */
+  };
   
-  /** How many times cache was fulfilled from RAM */
-  private static final AtomicInteger cache_ram_hit = new AtomicInteger();
-  /** How many times cache was fulfilled from disk */
-  private static final AtomicInteger cache_disk_hit = new AtomicInteger();
-  /** How many times an object wasn't found in cache */
-  private static final AtomicInteger cache_miss = new AtomicInteger();
-  /** How much space is taken up by raw object data (does not include overhead) */
-  private static final AtomicInteger cache_ram_size = new AtomicInteger();
+  private CompositeCacheManager ccm = CompositeCacheManager.getUnconfiguredInstance();
+  private JCS query_cache = null;
+  private JCS search_cache = null;
+  private JCS meta_cache = null;
+  private JCS general_cache = null;  
   
-  /** Sets the limit we can store in RAM */
-  private final int ram_size_limit;
-  /** Sets the maximum chunk of data (or file) we can store in RAM */
-  private final int ram_file_size_limit;
-  /** The {@code TSDB} instance we belong to */
-  private final TSDB tsd;
-  
-  /**
-  * Default constructor
-  * @param tsd The TSDB we belong to.
-  */
-  public Cache(final TSDB tsd) {
-   this.tsd = tsd;
-   ram_size_limit = tsd.getConfig().httpCacheRamLimit();
-   ram_file_size_limit = tsd.getConfig().httpCacheRamFileLimit();
+  public Cache(final TsdbConfig config) {
+    try {
+      ccm.configure(config.getProperties());
+      
+      this.query_cache = JCS.getInstance("query");
+      this.search_cache = JCS.getInstance("search");
+      this.meta_cache = JCS.getInstance("meta");
+      this.general_cache = JCS.getInstance("general");
+    } catch (CacheException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
   }
   
-  /**
-  * Attempts to store a CacheEntry object in the cache. This method will
-  * automatically handle persisting the data to disk and see if it can be
-  * stored in ram (unless overloaded by fileOnly)
-  * @param entry An object to store in the cache
-  * @return True if we were able to store the data successfully, false if not
-  */
-  public boolean putCache(final CacheEntry entry) {
-   // TODO make this call asynchronous so queries can return faster
-   // if expire == 0 then we are not caching the file
-   if (entry.getExpire() < 1) {
-     LOG.debug("Entry [" + entry.getKey() + "] is set to not be cached");
-     return true;
-   }
-  
-   boolean delete_ram = false;
-  
-   // see if the file is small enough to fit in RAM and if it's not fileOnly
-   if (!entry.getFileOnly() && entry.getDataSize() > 0
-       && entry.getDataSize() <= ram_file_size_limit) {
-     if ((entry.getDataSize() + cache_ram_size.longValue()) > ram_size_limit) {
-       if (!freeRAM(entry.getKey()))
-         delete_ram = true;
-     }
-   }
-  
-   // flush the bytes to a file if it hasn't been done already
-   if (!entry.getFileOnly() && !entry.getFile().isEmpty()
-   /* && filecache is enabled */) {
-     try {
-       LOG.debug("Attempting to save cache file [" + entry.getFile() + "]");
-       final FileOutputStream out = new FileOutputStream(entry.getFile());
-       try {
-         out.write(entry.getData());
-         LOG.debug("Stored cache file [" + entry.getFile() + "]");
-       } finally {
-         out.close();
-       }
-     } catch (FileNotFoundException e) {
-       LOG.error("Failed to create file [" + entry.getFile() + "]");
-       e.printStackTrace();
-     } catch (IOException e) {
-       LOG.error("Failed to write file [" + entry.getFile() + "]");
-       e.printStackTrace();
-     }
-   }
-  
-   // free up the ram bit if we are out of space
-   if (delete_ram)
-     entry.flushData();
-  
-   // check to see if we're overwriting an existing cache object
-   if (cache.containsKey(entry.getKey()))
-     LOG.debug("Overwriting existing key [" + entry.getKey() + "]");
-  
-   // store
-   if (entry.getDataSize() > 0)
-     cache_ram_size.addAndGet(entry.getDataSize());
-   cache.put(entry.getKey(), entry);
-   LOG.debug("Stored key [" + entry.getKey() + "] in cache");
-   return true;
-  }
-    
-  public final CacheEntry getCache(final int key){
-   final CacheEntry entry = cache.get(key);
-   if (entry == null) {
-     LOG.debug("Unable to find [" + key + "] in cache");
-     cache_miss.incrementAndGet();
-     return null;
-   }
-  
-   // increment hits
-   entry.incrementHits();
-  
-   // see if it's expired
-   if (entry.hasExpired()) {
-     LOG.debug("Key [" + key + "] has expired");
-     deleteCache(key);
-     cache_miss.incrementAndGet();
-     return null;
-   }
-  
-   // check the RAM cache
-   if (!entry.getFileOnly() && entry.getData() != null) {
-     cache_ram_hit.incrementAndGet();
-     LOG.debug("Returning data from RAM for [" + key + "]");
-     return entry;
-   }
-  
-   // check disk
-   String path = entry.getFile();
-   if (path.isEmpty()) {
-     cache_miss.incrementAndGet();
-     LOG.debug("Unable to find [" + key + "] data on disk");
-     return null;
-   }
-  
-   // see if the file exists
-   File file = new File(path);
-   if (!file.exists()) {
-     cache_miss.incrementAndGet();
-     LOG.warn("Cache file [" + path + "] is missing");
-     return null;
-   }
-  
-   // send the file
-   cache_disk_hit.incrementAndGet();
-   LOG.debug("Hit disk cache for key [" + key + "]");
-   return entry;
+  public boolean put(final CacheRegion region, final Object key, final Object value) {
+    try{
+      switch (region){
+      case QUERY:
+        if (this.query_cache == null)
+          return false;
+        this.query_cache.put(key, value);
+        return true;
+        
+      case SEARCH:
+        if (this.search_cache == null)
+          return false;
+        this.search_cache.put(key, value);
+        return true;
+        
+      case META:
+        if (this.meta_cache == null)
+          return false;
+        this.meta_cache.put(key, value);
+        return true;
+        
+      case GENERAL:
+        if (this.general_cache == null)
+          return false;
+        this.general_cache.put(key, value);
+        return true;
+      
+      default:
+          LOG.error("Unrecognized enumerator");
+          return false;
+      }
+    } catch (CacheException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
+    return false;
   }
   
-  /**
-  * Collects the stats and metrics tracked by this instance.
-  * @param collector The collector to use.
-  */
-  public static void collectStats(final StatsCollector collector) {
-   collector.record("http.cache", cache_ram_hit, 
-       new SimpleEntry<String, String>("type", "memory"));
-   collector.record("http.cache", cache_disk_hit, 
-       new SimpleEntry<String, String>("type", "disk"));
-   collector.record("http.cache", cache_miss, 
-       new SimpleEntry<String, String>("cache", "miss"));
-   collector.record("http.cache.size", cache_ram_size, 
-       new SimpleEntry<String, String>("cache", "memory"));
-   //collector.record("http.cache.size", cache.size(), "cache=objects");
-   collector.record("http.cache.size", 0, 
-       new SimpleEntry<String, String>("cache", "disk"));
+  public boolean put(final CacheRegion region, final Object key, final Object value, final int max_life) {
+    try{
+      IElementAttributes attributes = null;
+      switch (region){
+      case QUERY:
+        if (this.query_cache == null)
+          return false;
+        attributes = query_cache.getDefaultElementAttributes();
+        attributes.setMaxLifeSeconds(max_life);
+        this.query_cache.put(key, value, attributes);
+        return true;
+        
+      case SEARCH:
+        if (this.search_cache == null)
+          return false;
+        attributes = search_cache.getDefaultElementAttributes();
+        attributes.setMaxLifeSeconds(max_life);
+        this.search_cache.put(key, value, attributes);
+        return true;
+        
+      case META:
+        if (this.meta_cache == null)
+          return false;
+        attributes = meta_cache.getDefaultElementAttributes();
+        attributes.setMaxLifeSeconds(max_life);
+        this.meta_cache.put(key, value, attributes);
+        return true;
+        
+      case GENERAL:
+        if (this.general_cache == null)
+          return false;
+        attributes = general_cache.getDefaultElementAttributes();
+        attributes.setMaxLifeSeconds(max_life);
+        this.general_cache.put(key, value, attributes);
+        return true;
+      
+      default:
+          LOG.error("Unrecognized enumerator");
+          return false;
+      }
+    } catch (CacheException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
+    return false;
   }
  
-  
-  /**
-  * Removes an object from the cache and attempts to delete the file associated
-  * with it
-  * @param key Query hash value to delete
-  * @return True if the deletion was successful, false if there was an error
-  */
-  private boolean deleteCache(final int key) {
-   CacheEntry entry = cache.get(key);
-   if (entry == null) {
-     LOG.error("Key [" + key + "] does not exist in hash");
-     return false;
-   }
-  
-   // delete file if it exists
-   if (!entry.getFile().isEmpty()) {
-     File file = new File(entry.getFile());
-     if (file.exists()) {
-       if (!file.delete()) {
-         LOG.error("Unable to delete file [" + entry.getFile() + "]");
-         // continue on anyway so we free up RAM
-       }
-     }
-   }
-  
-   // delete from the hash now
-   if (cache.remove(key) == null) {
-     LOG.error("Error removing key [" + key + "] from cache");
-     return false;
-   }
-   LOG.debug("Removed [" + key + "] from cache");
-   return true;
+  public Object get(final CacheRegion region, final Object key){
+    switch (region){
+    case QUERY:
+      if (this.query_cache == null)
+        return null;
+      return this.query_cache.get(key);
+      
+    case SEARCH:
+      if (this.search_cache == null)
+        return null;
+      return this.search_cache.get(key);
+      
+    case META:
+      if (this.meta_cache == null)
+        return null;
+      return this.meta_cache.get(key);
+      
+    case GENERAL:
+      LOG.trace("Trying to get [" + key.toString() + "] from general");
+      if (this.general_cache == null){
+        LOG.trace("Not found");
+        return null;
+      }
+      return this.general_cache.get(key);
+    
+    default:
+        LOG.error("Unrecognized enumerator");
+        return null;
+    }
   }
-  
-  /**
-  * Sorts the cache entries by how many hits they have received and how much
-  * data is stored in RAM. Less popular entries will be ejected from RAM so
-  * that we can try to store a new value.
-  * @param size The amount of space we need to free
-  * @return True if we could find enough room, false if there was an error
-  */
-  private boolean freeRAM(final int size) {
-   ArrayList<CacheEntryMeta> meta_list = new ArrayList<CacheEntryMeta>();
-  
-   // build an ordered list of hash meta data objects
-   for (Map.Entry<Integer, CacheEntry> entry : cache.entrySet()) {
-     meta_list.add(entry.getValue().getMeta());
-   }
-  
-   // data check
-   if (meta_list.size() < 1) {
-     LOG.error("Meta list is empty, unable to sort or fix cache memory");
-     return false;
-   }
-  
-   // sort it!
-   Collections.sort(meta_list);
-  
-   CacheEntryMeta meta;
-   Iterator<CacheEntryMeta> iterator = meta_list.iterator();
-   while (iterator.hasNext()
-       && (cache_ram_size.longValue() + size) > ram_size_limit) {
-     meta = iterator.next();
-     if (meta.getDataSize() > 0) {
-       LOG.debug("Flushing [" + meta.getDataSize() + "] bytes from cache ID ["
-           + meta.getID() + "=");
-       if (!cache.containsKey(meta.getID())) {
-         LOG.error("Cache does not contain key [" + meta.getID() + "]");
-         continue;
-       }
-       cache.get(meta.getID()).flushData();
-       cache_ram_size.addAndGet(-meta.getDataSize());
-     }
-  
-     if ((cache_ram_size.longValue() + size) <= ram_size_limit) {
-       return true;
-     }
-   }
-   LOG.error("Unable to free any RAM from the cache");
-   return false;
+
+  public void collectStats(final StatsCollector collector){
+    try {
+      JCSAdminBean admin = new JCSAdminBean();
+      LinkedList linkedList  = admin.buildCacheInfo();
+      ListIterator iterator = linkedList.listIterator();
+
+      while (iterator.hasNext()) {
+        CacheRegionInfo info = (CacheRegionInfo)iterator.next();
+        CompositeCache compCache = info.getCache();
+        String base = "cache." + compCache.getCacheName() +".";
+        
+//        System.out.println("Cache Name: " + compCache.getCacheName());
+//        System.out.println("Cache Type: " + compCache.getCacheType());
+        System.out.println("Cache Misses (not found): " + compCache.getMissCountNotFound());
+        System.out.println("Cache Misses (expired): " + compCache.getMissCountExpired());
+        System.out.println("Cache Hits (memory): " + compCache.getHitCountRam());
+        System.out.println("Cache Updates: " + compCache.getUpdateCount());
+        
+        collector.record(base + "misses.notfound", compCache.getMissCountNotFound());
+        collector.record(base + "misses.expired", compCache.getMissCountExpired());
+        collector.record(base + "hits.memory", compCache.getHitCountRam());
+        collector.record(base + "hits.aux", compCache.getHitCountAux());
+        collector.record(base + "updates", compCache.getUpdateCount());
+        collector.record(base + "items", compCache.getSize());
+      }
+    } catch (Exception e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
+//    collector.record("formatters.storage_errors", storage_errors.get());
+//    collector.record("formatters.invalid_values", invalid_values.get());
+//    collector.record("formatters.illegal_arguments", illegal_arguments.get());
+//    collector.record("formatters.unknown_metrics", unknown_metrics.get());
+
   }
 }
 

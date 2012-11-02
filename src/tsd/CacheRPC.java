@@ -19,7 +19,6 @@ public class CacheRPC implements HttpRpc {
   */
   public void execute(final TSDB tsdb, final HttpQuery query) {
    // respond with metadata about each cache object in a JSON format
-   final String jsonp = JSON_HTTP.getJsonPFunction(query);
    final String file = query.hasQueryStringParam("file") ? query
        .getQueryStringParam("file") : "";
   
@@ -52,9 +51,9 @@ public class CacheRPC implements HttpRpc {
      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented");
    } else {
      // the default is to print info about the cache
-     final JSON_HTTP response = new JSON_HTTP(query.cache);
-     query.sendReply(jsonp.isEmpty() ? response.getJsonString() : response
-         .getJsonPString(jsonp));
+//     final JSON_HTTP response = new JSON_HTTP(query.cache);
+//     query.sendReply(jsonp.isEmpty() ? response.getJsonString() : response
+//         .getJsonPString(jsonp));
    }
   }
 }

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -22,7 +23,6 @@ import net.opentsdb.search.SearchQuery.SearchResults;
 
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
-import org.mortbay.jetty.servlet.PathMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,6 +62,14 @@ public abstract class TSDFormatter {
   
   public final void putDatapoints(final DataPoints dps){
     this.datapoints.add(dps);
+  }
+  
+  public final void putDatapoints(final List<DataPoints> dps){
+    this.datapoints = dps;
+  }
+  
+  public final List<DataPoints> getDataPoints(){
+    return this.datapoints;
   }
   
   public abstract boolean validateQuery(final DataQuery query);
@@ -164,6 +172,12 @@ public abstract class TSDFormatter {
     return false;
   }
   
+  public boolean handleHTTPAggregators(final HttpQuery query, final Set<String> aggregators){
+    LOG.warn("Method has not been implemented");
+    query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Method has not been implemented");
+    return false;
+  }
+  
 // TELNET HANDLERS ------------------------------------------------------------
   
   public boolean handleTelnetDataGet(String[] command, final Channel chan){
@@ -223,6 +237,14 @@ public abstract class TSDFormatter {
     return Deferred.fromResult(null);
   }
    
+  public Deferred<Object> handleTelnetAggregators(String[] command, final Channel chan, 
+      final Set<String> aggregators){
+    LOG.warn("Method has not been implemented");
+    return Deferred.fromResult(null);
+  }
+
+// STATICS ------------------------------------------------------------
+  
   public static void collectStats(final StatsCollector collector, final TSDB tsdb){
     collector.record("formatters.storage_errors", storage_errors.get());
     collector.record("formatters.invalid_values", invalid_values.get());

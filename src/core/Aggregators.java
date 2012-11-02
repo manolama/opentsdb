@@ -55,7 +55,7 @@ public final class Aggregators {
   /**
    * Returns the set of the names that can be used with {@link #get get}.
    */
-  public static Set<String> set() {
+  public static Set<String> getAggregators() {
     return aggregators.keySet();
   }
 

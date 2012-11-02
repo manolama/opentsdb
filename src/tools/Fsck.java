@@ -72,15 +72,15 @@ final class Fsck {
     // TODO instantiate config properly
     TsdbConfig config = new TsdbConfig();
     
-    final HBaseClient client = CliOptions.clientFromOptions(config);
+    //final HBaseClient client = CliOptions.clientFromOptions(config);
     final byte[] table = argp.get("--table", "tsdb").getBytes();
-    final TsdbStoreHBase storage = new TsdbStoreHBase(config, table, client);
+    final TsdbStoreHBase storage = new TsdbStoreHBase(config, table);
     final TSDB tsdb = new TSDB(storage, storage, config, TSDRole.Tool);
     final boolean fix = argp.has("--fix");
     argp = null;
     int errors = 42;
     try {
-      errors = fsck(tsdb, client, table, fix, args);
+      errors = fsck(tsdb, storage, table, fix, args);
     } finally {
       tsdb.shutdown().joinUninterruptibly();
     }
@@ -88,7 +88,7 @@ final class Fsck {
   }
 
   private static int fsck(final TSDB tsdb,
-                           final HBaseClient client,
+                           final TsdbStore storage,
                            final byte[] table,
                            final boolean fix,
                            final String[] args) throws Exception {
@@ -103,8 +103,9 @@ final class Fsck {
         }
 
         public Deferred<Object> call(final Object arg) {
-          return client.delete(new DeleteRequest(table, kv.key(),
-                                                 kv.family(), kv.qualifier()));
+//          return storage.delete(new DeleteRequest(table, kv.key(),
+//                                                 kv.family(), kv.qualifier()));
+          return null;
         }
 
         public String toString() {
@@ -115,7 +116,7 @@ final class Fsck {
     int errors = 0;
     int correctable = 0;
 
-    TsdbStore storage = new TsdbStoreHBase(null, table, client);
+    //TsdbStore storage = new TsdbStoreHBase(null, table, client);
     final short metric_width = Internal.metricWidth(tsdb);
 
     final ArrayList<Query> queries = new ArrayList<Query>();
@@ -212,10 +213,10 @@ final class Fsck {
                 errors++;
                 correctable++;
                 if (fix) {
-                  client.put(new PutRequest(table, ordered.key(),
+                  storage.putWithRetry(table, ordered.key(),
                                             ordered.family(),
                                             ordered.qualifier(),
-                                            ordered.value()))
+                                            ordered.value())
                     .addCallbackDeferring(new DeleteOutOfOrder(kv));
                 } else {
                   LOG.error("Two or more values in a compacted cell are"
@@ -247,8 +248,8 @@ final class Fsck {
                   if (fix) {
                     value = value.clone();  // We're going to change it.
                     value[0] = value[1] = value[2] = value[3] = 0;
-                    client.put(new PutRequest(table, kv.key(), kv.family(),
-                                              qual, value));
+                    storage.putWithRetry(table, kv.key(), kv.family(),
+                                              qual, value);
                   } else {
                     LOG.error("Floating point value with 0xFF most significant"
                               + " bytes, probably caused by sign extension bug"
@@ -278,8 +279,8 @@ final class Fsck {
                                                | (qualifier & Internal.FLAGS_MASK));
                 final DeleteOutOfOrder delooo = new DeleteOutOfOrder(kv);
                 if (timestamp < prev.timestamp()) {
-                  client.put(new PutRequest(table, newkey, kv.family(),
-                                            Bytes.fromShort(newqual), value))
+                  storage.putWithRetry(table, newkey, kv.family(),
+                                            Bytes.fromShort(newqual), value)
                     // Only delete the offending KV once we're sure that the new
                     // KV has been persisted in HBase.
                     .addCallbackDeferring(delooo);

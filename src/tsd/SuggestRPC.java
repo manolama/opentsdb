@@ -14,13 +14,11 @@ package net.opentsdb.tsd;
 
 import java.util.List;
 
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.opentsdb.cache.CacheEntry;
+import net.opentsdb.cache.Cache.CacheRegion;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.formatters.TSDFormatter;
 
 /**
  * The auto-complete oracle class that returns a list of search results
@@ -36,15 +34,19 @@ final class SuggestRPC implements HttpRpc {
   public void execute(final TSDB tsdb, final HttpQuery query) {
     final boolean nocache = query.hasQueryStringParam("nocache");
     final int query_hash = query.getQueryStringHash();
-    if (!nocache && query.getCacheAndReturn(query_hash)){
-      return;
+    if (!nocache){
+      try{
+        @SuppressWarnings("unchecked")
+        List<String> cached = (List<String>)tsdb.cache.get(CacheRegion.GENERAL, query_hash);
+        if (cached != null){
+          query.formatter.handleHTTPSuggest(query, cached);
+          return;
+        }
+      }catch (Exception e){
+        e.printStackTrace();
+      }
     }
-    
-    // get formatter
-    TSDFormatter formatter = query.getFormatter();
-    if (formatter == null)
-      return;
-    
+
     // build up the suggestion
     final String type = query.getRequiredQueryStringParam("type");
     final String q = query.getQueryStringParam("q");
@@ -61,6 +63,10 @@ final class SuggestRPC implements HttpRpc {
     } else {
       throw new BadRequestException("Invalid 'type' parameter:" + type);
     }
-    formatter.handleHTTPSuggest(query, suggestions);
+    
+    if (!nocache)
+      tsdb.cache.put(CacheRegion.GENERAL, query_hash, suggestions);
+    
+    query.formatter.handleHTTPSuggest(query, suggestions);
   }
 }

@@ -66,17 +66,17 @@ final class TextImporter {
     // TODO instantiate config properly
     TsdbConfig config = new TsdbConfig();
 
-    final HBaseClient client = CliOptions.clientFromOptions(config);
+    //final HBaseClient client = CliOptions.clientFromOptions(config);
     // Flush more frequently since we read very fast from the files.
-    client.setFlushInterval((short) 500);  // ms
-    final TsdbStoreHBase storage = new TsdbStoreHBase(config, config.tsdTable().getBytes(), client);
+    //client.setFlushInterval((short) 500);  // ms
+    final TsdbStoreHBase storage = new TsdbStoreHBase(config, config.tsdTable().getBytes());
     final TSDB tsdb = new TSDB(storage, storage, config, TSDRole.Tool);
     argp = null;
     try {
       int points = 0;
       final long start_time = System.nanoTime();
       for (final String path : args) {
-        points += importFile(client, tsdb, path);
+        //points += importFile(client, tsdb, path);
       }
       final double time_delta = (System.nanoTime() - start_time) / 1000000000.0;
       LOG.info(String.format("Total: imported %d data points in %.3fs"

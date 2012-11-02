@@ -28,7 +28,6 @@ dist_noinst_SCRIPTS = src/create_table.sh
 dist_pkgdata_SCRIPTS = src/mygnuplot.sh
 tsdb_SRC := \
   src/cache/Cache.java	\
-  src/cache/CacheEntry.java	\
 	src/core/Aggregator.java	\
 	src/core/Aggregators.java	\
 	src/core/CompactionQueue.java	\
@@ -57,6 +56,7 @@ tsdb_SRC := \
 	src/formatters/CollectdJSON.java	\
 	src/formatters/TSDFormatter.java	\
 	src/formatters/TsdbJSON.java	\
+	src/formatters/HTML.java	\
 	src/graph/GnuGraphFormatter.java	\
 	src/graph/GnuplotException.java	\
 	src/graph/Plot.java	\
@@ -92,7 +92,6 @@ tsdb_SRC := \
 	src/tsd/GroupRPC.java	\
 	src/tsd/HttpQuery.java	\
 	src/tsd/HttpRpc.java	\
-	src/tsd/JSON_HTTP.java	\
 	src/tsd/JsonRpcError.java	\
 	src/tsd/LogsRpc.java	\
 	src/tsd/MetaRPC.java	\
@@ -135,7 +134,10 @@ tsdb_DEPS = \
 	$(CURATOR_RECIPES) \
 	$(COMMONS_MATH) \
 	$(RABBITMQ) \ 
-	$(ONTOPIA)
+	$(ONTOPIA) \ 
+	$(COMMONS_LOGGING) \ 
+	$(CONCURRENT) \ 
+	$(JCS)
 
 # Install all the .jar files in pkgdatadir.
 pkgdata_DATA = $(tsdb_DEPS) $(jar)

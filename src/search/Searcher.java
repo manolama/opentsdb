@@ -8,6 +8,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeSet;
 
+import net.opentsdb.cache.Cache;
+import net.opentsdb.cache.Cache.CacheRegion;
 import net.opentsdb.search.SearchQuery.SearchResults;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
@@ -48,14 +50,11 @@ public class Searcher {
   private final String directory;
   private Directory idx_directory = null;
   private IndexSearcher searcher = null;
-  // Docs say that the parser isn't thread safe, so we better open one per call
-  //private final QueryParser parser;
+  private final Cache cache;
   
-  public Searcher(final String directory){
+  public Searcher(final String directory, final Cache cache){
     this.directory = directory;
-//    this.parser = new QueryParser(Version.LUCENE_36, "content", 
-//        new StandardAnalyzer(Version.LUCENE_36));
-//    this.parser.setAllowLeadingWildcard(true);
+    this.cache = cache;
   }
   
   public final SearchResults searchTSUIDs(final SearchQuery query){
@@ -63,7 +62,13 @@ public class Searcher {
       return null;
     }
     
-    TopDocs hits = this.search(query, null);
+    boolean cached = false;
+    TopDocs hits = (TopDocs)this.cache.get(CacheRegion.SEARCH, query.hashCode());
+    if (hits == null)
+      hits = this.search(query, null);
+    else{
+      cached = true;
+    }
     
     if (hits == null){
       LOG.error(String.format("Unable to execute query [%s]", query.getQuery()));
@@ -71,8 +76,11 @@ public class Searcher {
     }
     
     SearchResults sr = new SearchResults(query);
-    if (hits.totalHits < 1)      
+    if (hits.totalHits < 1){
+      if (!cached)
+        this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
       return sr;
+    }
     
     final int page = query.getPage();
     final int limit = query.getLimit();
@@ -104,6 +112,9 @@ public class Searcher {
     }
     sr.tsuids = tsuids;
     sr.setTotalHits(hits.totalHits);
+    
+    if (!cached)
+      this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
     return sr;
   }
   
@@ -112,7 +123,14 @@ public class Searcher {
       return null;
     }
 
-    TopDocs hits = this.search(query, null);
+    boolean cached = false;
+    TopDocs hits = (TopDocs)this.cache.get(CacheRegion.SEARCH, query.hashCode());
+    if (hits == null)
+      hits = this.search(query, null);
+    else{
+      cached = true;
+      LOG.trace("Got Cached search!!!");
+    }
     
     if (hits == null){
       LOG.error(String.format("Unable to execute query [%s]", query.getQuery()));
@@ -120,8 +138,11 @@ public class Searcher {
     }
 
     SearchResults sr = new SearchResults(query);
-    if (hits.totalHits < 1)      
+    if (hits.totalHits < 1){
+      if (!cached)
+        this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
       return sr;
+    }
     
     final int page = query.getPage();
     final int limit = query.getLimit();
@@ -145,6 +166,8 @@ public class Searcher {
     }
     sr.short_meta = metas;
     sr.setTotalHits(hits.totalHits);
+    if (!cached)
+      this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
     return sr;
   }
 
@@ -156,56 +179,68 @@ public class Searcher {
       LOG.error("Group value was null");
       return null;
     }
-    SortField group_sort = new SortField(query.getGroup(), SortField.STRING);
-    SortField doc_sort = null;
-    if (query.getSubGroup() != null)
-      doc_sort = new SortField(query.getSubGroup(), SortField.STRING);
+
     final int page = query.getPage();
     final int limit = query.getLimit();
     
     try {
-      TermFirstPassGroupingCollector c1 = new TermFirstPassGroupingCollector(
-          query.getGroup(), new Sort(group_sort), searcher.maxDoc());
-      
-      boolean cacheScores = true;
-      double maxCacheRAMMB = 256.0;
-      
-      CachingCollector cachedCollector = CachingCollector.create(c1, cacheScores, maxCacheRAMMB);
-      Query q = NumericRangeQuery.newDoubleRange("created", 0d, Double.MAX_VALUE, true, true);
-      searcher.search(q, cachedCollector);
-      
-      Collection<SearchGroup<String>> topGroups = c1.getTopGroups(0, true);
-      
-      if (topGroups == null) {
-        // No groups matched
-        LOG.warn(String.format("No groups matched for field [%s]", query.getGroup()));
-        return null;
+      boolean cached = false;
+      TopGroups<String> groupsResult = (TopGroups<String>)this.cache.get(CacheRegion.SEARCH, query.hashCode());
+      if (groupsResult != null)
+        cached = true;
+      else{
+        SortField group_sort = new SortField(query.getGroup(), SortField.STRING);
+        SortField doc_sort = null;
+        if (query.getSubGroup() != null)
+          doc_sort = new SortField(query.getSubGroup(), SortField.STRING);
+        
+        TermFirstPassGroupingCollector c1 = new TermFirstPassGroupingCollector(
+            query.getGroup(), new Sort(group_sort), searcher.maxDoc());
+        
+        boolean cacheScores = true;
+        double maxCacheRAMMB = 256.0;
+        
+        CachingCollector cachedCollector = CachingCollector.create(c1, cacheScores, maxCacheRAMMB);
+        Query q = NumericRangeQuery.newDoubleRange("created", 0d, Double.MAX_VALUE, true, true);
+        searcher.search(q, cachedCollector);
+        
+        Collection<SearchGroup<String>> topGroups = c1.getTopGroups(0, true);
+        
+        if (topGroups == null) {
+          // No groups matched
+          LOG.warn(String.format("No groups matched for field [%s]", query.getGroup()));
+          return null;
+        }
+        System.out.println(String.format("have [%d] groups", topGroups.size()));
+        
+        TermSecondPassGroupingCollector c2 = new TermSecondPassGroupingCollector(
+            "host", topGroups, new Sort(group_sort), 
+            new Sort(doc_sort), 500, false, false, false);
+
+        //Optionally compute total group count
+        TermAllGroupsCollector allGroupsCollector = null;
+        if (true) {
+          allGroupsCollector = new TermAllGroupsCollector("host");
+          //c2 = (TermSecondPassGroupingCollector) MultiCollector.wrap(c2, allGroupsCollector);
+        }
+
+        if (cachedCollector.isCached()) {
+          // Cache fit within maxCacheRAMMB, so we can replay it:
+          cachedCollector.replay(c2);
+        } else {
+          // Cache was too large; must re-execute query:
+          searcher.search(q, c2);
+        }
+
+        groupsResult = c2.getTopGroups(0);
+        groupsResult = new TopGroups<String>(groupsResult, allGroupsCollector.getGroupCount());   
+        
+        // TODO - figure this out. 
+        // org.apache.lucene.search.grouping.TopGroups cannot be cast to java.io.Serializable
+//        if (groupsResult != null)
+//          cache.put(CacheRegion.SEARCH, query.hashCode(), groupsResult);
       }
-      System.out.println(String.format("have [%d] groups", topGroups.size()));
       
-      TermSecondPassGroupingCollector c2 = new TermSecondPassGroupingCollector(
-          "host", topGroups, new Sort(group_sort), 
-          new Sort(doc_sort), 500, false, false, false);
-
-      //Optionally compute total group count
-      TermAllGroupsCollector allGroupsCollector = null;
-      if (true) {
-        allGroupsCollector = new TermAllGroupsCollector("host");
-        //c2 = (TermSecondPassGroupingCollector) MultiCollector.wrap(c2, allGroupsCollector);
-      }
-
-      if (cachedCollector.isCached()) {
-        // Cache fit within maxCacheRAMMB, so we can replay it:
-        cachedCollector.replay(c2);
-      } else {
-        // Cache was too large; must re-execute query:
-        searcher.search(q, c2);
-      }
-
-      TopGroups<String> groupsResult = c2.getTopGroups(0);
-      groupsResult = new TopGroups<String>(groupsResult, allGroupsCollector.getGroupCount());               
-//        System.out.println("Total grouped docs: " + groupsResult.totalGroupedHitCount);
-
       Map<String, Object> group_map = new HashMap<String, Object>();
       for(int i = (page * limit); i < ((page + 1) * limit); i++) {
         if (i >= groupsResult.groups.length)
@@ -242,7 +277,7 @@ public class Searcher {
       // set query vars
       SearchResults sr = new SearchResults(query);
       sr.groups = group_map;
-      sr.total_groups = topGroups.size();   
+      sr.total_groups = groupsResult.totalGroupedHitCount;   
       sr.setTotalHits(groupsResult.totalHitCount);         
       return sr;
     } catch (IOException e) {
@@ -261,21 +296,34 @@ public class Searcher {
       return null;
     }
     
-    TermEnum terms;
     try {
-      terms = searcher.getIndexReader().terms();
-      TreeSet<String> uniqueTerms = new TreeSet<String>();
-      while (terms.next()) {
-        final Term term = terms.term();
-        if (term.field().equals(query.getGroup())) {
-          uniqueTerms.add(term.text());
+      TreeSet<String> uniqueTerms = null;
+      boolean cached = false;
+      
+      uniqueTerms = (TreeSet<String>)this.cache.get(CacheRegion.SEARCH, query.hashCode());
+      if (uniqueTerms == null){
+        uniqueTerms = new TreeSet<String>();
+        TermEnum terms = searcher.getIndexReader().terms();
+        if (terms == null)
+          return null;
+        
+        while (terms.next()) {
+          final Term term = terms.term();
+          if (term.field().equals(query.getGroup())) {
+            uniqueTerms.add(term.text());
+          }
         }
-      }
+      }else{
+        cached = true;
+      }  
       
       SearchResults sr = new SearchResults(query);
       sr.terms = uniqueTerms;
       sr.limit = 0;
-      sr.setTotalHits(uniqueTerms.size());      
+      sr.setTotalHits(uniqueTerms.size());   
+      
+      if (!cached)
+        this.cache.put(CacheRegion.SEARCH, query.hashCode(), uniqueTerms);
       return sr;
     } catch (IOException e) {
       // TODO Auto-generated catch block

@@ -72,22 +72,21 @@ final class DumpSeries {
     // TODO instantiate config properly
     TsdbConfig config = new TsdbConfig();
     
-    final HBaseClient client = CliOptions.clientFromOptions(config);
+    //final HBaseClient client = CliOptions.clientFromOptions(config);
     final byte[] table = argp.get("--table", "tsdb").getBytes();
-    final TsdbStoreHBase storage = new TsdbStoreHBase(config, table, client);
+    final TsdbStoreHBase storage = new TsdbStoreHBase(config, table);
     final TSDB tsdb = new TSDB(storage, storage, config, TSDRole.Tool);
     final boolean delete = argp.has("--delete");
     final boolean importformat = delete || argp.has("--import");
     argp = null;
     try {
-      doDump(tsdb, client, table, delete, importformat, args);
+      doDump(tsdb, table, delete, importformat, args);
     } finally {
       tsdb.shutdown().joinUninterruptibly();
     }
   }
 
   private static void doDump(final TSDB tsdb,
-                             final HBaseClient client,
                              final byte[] table,
                              final boolean delete,
                              final boolean importformat,
@@ -95,7 +94,7 @@ final class DumpSeries {
     final ArrayList<Query> queries = new ArrayList<Query>();
     CliQuery.parseCommandLineQuery(args, tsdb, queries, null, null);
 
-    TsdbStore storage = new TsdbStoreHBase(null, table, client);
+    TsdbStore storage = new TsdbStoreHBase(null, table);
     final StringBuilder buf = new StringBuilder();
     for (final Query query : queries) {
       final TsdbScanner scanner = Internal.getScanner(query);
@@ -138,7 +137,8 @@ final class DumpSeries {
 
           if (delete) {
             final DeleteRequest del = new DeleteRequest(table, key);
-            client.delete(del);
+            storage.deleteValue(key, table, null);
+            //client.delete(del);
           }
         }
       }

@@ -32,7 +32,6 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
@@ -41,7 +40,6 @@ import net.opentsdb.stats.Histogram;
 import net.opentsdb.tsd.BadRequestException;
 import net.opentsdb.tsd.DataQuery;
 import net.opentsdb.tsd.HttpQuery;
-import net.opentsdb.tsd.JSON_HTTP;
 
 /**
  * Refactors/Replaces the previous GraphHandler class
@@ -254,24 +252,6 @@ public class GnuGraphFormatter extends TSDFormatter {
       e.printStackTrace();
     }
     return true;
-  }
-
-  /** 
-   * Generates a cache entry object to store and/or send to the user. It will
-   * not store the PNG in RAM, only on disk since GNU writes the graph straight
-   * to the cache directory
-   * @return Returns a new cache entry object
-   */
-  public final CacheEntry getCacheData(){
- // now we have all the metrics stored, serialize and return
-    JSON_HTTP json = new JSON_HTTP(this.results);
-    String response = json.getJsonString();
-    
-    return new CacheEntry(
-        query_hash,
-        basepath + ".json",
-        computeExpire()
-    );
   }
   
   /**

@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.TimeseriesUID;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.cache.Cache;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaDataCache;
 import net.opentsdb.meta.TimeSeriesMeta;
@@ -119,10 +120,12 @@ public final class TSDB {
   public final SearchIndexer meta_search_writer;
   public final Searcher meta_searcher;
   
-  public final TSDRole role;
+  public static TSDRole role = TSDRole.Full;
   public final boolean time_puts = true;
   public final MQTest mq;
   public final boolean use_mq = true;
+  
+  public final Cache cache;
   
   /**
    * DEPRECATED Constructor
@@ -151,12 +154,16 @@ public final class TSDB {
     timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts");
     ts_uids = new TimeseriesUID(this.uid_storage);
     if (config.role() != role && role != TSDRole.Tool)
-      this.role = config.role();
+      TSDB.role = config.role();
     else
-      this.role = role;
+      TSDB.role = role;
+    if (role != TSDRole.Ingest)
+      this.cache = new Cache(config);
+    else
+      this.cache = null;
     if (role == TSDRole.API){
       meta_search_writer = new SearchIndexer(config.searchIndexPath());
-      meta_searcher = new Searcher(config.searchIndexPath());
+      meta_searcher = new Searcher(config.searchIndexPath(), cache);
     }else{
       meta_search_writer = null;
       meta_searcher = null;
@@ -191,12 +198,16 @@ public final class TSDB {
     timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts");
     ts_uids = new TimeseriesUID(this.uid_storage);
     if (config.role() != role && role != TSDRole.Tool)
-      this.role = config.role();
+      TSDB.role = config.role();
     else
-      this.role = role;
+      TSDB.role = role;
+    if (role != TSDRole.Ingest)
+      this.cache = new Cache(config);
+    else
+      this.cache = null;
     if (role == TSDRole.API){
       meta_search_writer = new SearchIndexer(config.searchIndexPath());
-      meta_searcher = new Searcher(config.searchIndexPath());
+      meta_searcher = new Searcher(config.searchIndexPath(), cache);
     }else{
       meta_search_writer = null;
       meta_searcher = null;
@@ -319,6 +330,7 @@ public final class TSDB {
     collector.record("uid.cache.size.tsuid.queue", this.ts_uids.queueSize());
     collector.record("uid.cache.size.tsuid.meta", this.timeseries_meta.size());
     this.ts_uids.collectStats(collector);
+    this.cache.collectStats(collector);
     IncomingDataPoints.collectStats(collector);
     {
       final Runtime runtime = Runtime.getRuntime();

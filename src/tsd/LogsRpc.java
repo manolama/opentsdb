@@ -31,48 +31,48 @@ final class LogsRpc implements HttpRpc {
 
   public void execute(final TSDB tsdb, final HttpQuery query) {
     LogIterator logmsgs = new LogIterator();
-    // see if the user requested json
-    if (JSON_HTTP.getJsonRequested(query)) {
-      final String jsonp = JSON_HTTP.getJsonPFunction(query);
-      final JSON_HTTP response = new JSON_HTTP(logmsgs);
-      query.sendReply(jsonp.isEmpty() ? response.getJsonString() 
-          : response.getJsonPString(jsonp));
-    } else if (query.hasQueryStringParam("level")) {
-      final Level level = Level.toLevel(query.getQueryStringParam("level"),
-                                        null);
-      if (level == null) {
-        throw new BadRequestException("Invalid level: "
-                                      + query.getQueryStringParam("level"));
-      }
-      final Logger root =
-        (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-      String logger_name = query.getQueryStringParam("logger");
-      if (logger_name == null) {
-        logger_name = Logger.ROOT_LOGGER_NAME;
-      } else if (root.getLoggerContext().exists(logger_name) == null) {
-        throw new BadRequestException("Invalid logger: " + logger_name);
-      }
-      final Logger logger = (Logger) LoggerFactory.getLogger(logger_name);
-      int nloggers = 0;
-      if (logger == root) {  // Update all the loggers.
-        for (final Logger l : logger.getLoggerContext().getLoggerList()) {
-          l.setLevel(level);
-          nloggers++;
-        }
-      } else {
-        logger.setLevel(level);
-        nloggers++;
-      }
-      query.sendReply("Set the log level to " + level + " on " + nloggers
-                      + " logger" + (nloggers > 1 ? "s" : "") + ".\n");
-    } else {
-      final StringBuilder buf = new StringBuilder(512);
-      for (final String logmsg : logmsgs) {
-        buf.append(logmsg).append('\n');
-      }
-      logmsgs = null;
-      query.sendReply(buf);
-    }
+//    // see if the user requested json
+//    if (JSON_HTTP.getJsonRequested(query)) {
+//      final String jsonp = JSON_HTTP.getJsonPFunction(query);
+//      final JSON_HTTP response = new JSON_HTTP(logmsgs);
+//      query.sendReply(jsonp.isEmpty() ? response.getJsonString() 
+//          : response.getJsonPString(jsonp));
+//    } else if (query.hasQueryStringParam("level")) {
+//      final Level level = Level.toLevel(query.getQueryStringParam("level"),
+//                                        null);
+//      if (level == null) {
+//        throw new BadRequestException("Invalid level: "
+//                                      + query.getQueryStringParam("level"));
+//      }
+//      final Logger root =
+//        (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+//      String logger_name = query.getQueryStringParam("logger");
+//      if (logger_name == null) {
+//        logger_name = Logger.ROOT_LOGGER_NAME;
+//      } else if (root.getLoggerContext().exists(logger_name) == null) {
+//        throw new BadRequestException("Invalid logger: " + logger_name);
+//      }
+//      final Logger logger = (Logger) LoggerFactory.getLogger(logger_name);
+//      int nloggers = 0;
+//      if (logger == root) {  // Update all the loggers.
+//        for (final Logger l : logger.getLoggerContext().getLoggerList()) {
+//          l.setLevel(level);
+//          nloggers++;
+//        }
+//      } else {
+//        logger.setLevel(level);
+//        nloggers++;
+//      }
+//      query.sendReply("Set the log level to " + level + " on " + nloggers
+//                      + " logger" + (nloggers > 1 ? "s" : "") + ".\n");
+//    } else {
+//      final StringBuilder buf = new StringBuilder(512);
+//      for (final String logmsg : logmsgs) {
+//        buf.append(logmsg).append('\n');
+//      }
+//      logmsgs = null;
+//      query.sendReply(buf);
+//    }
   }
 
   /** Helper class to iterate over logback's recent log messages. */

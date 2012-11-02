@@ -51,7 +51,7 @@ final class CliQuery {
         + " 2010/03/11-20:57 sum my.awsum.metric host=blah"
         + " sum some.other.metric host=blah state=foo\n"
         + "Dates must follow this format: [YYYY/MM/DD-]HH:MM[:SS]\n"
-        + "Supported values for FUNC: " + Aggregators.set()
+        + "Supported values for FUNC: " + Aggregators.getAggregators()
         + "\nGnuplot options are of the form: +option=value");
     if (argp != null) {
       System.err.print(argp.usage());
@@ -113,8 +113,8 @@ final class CliQuery {
     // TODO instantiate config properly
     TsdbConfig config = new TsdbConfig();
 
-    final HBaseClient client = CliOptions.clientFromOptions(config);
-    final TsdbStoreHBase storage = new TsdbStoreHBase(config, config.tsdTable().getBytes(), client);
+    //final HBaseClient client = CliOptions.clientFromOptions(config);
+    final TsdbStoreHBase storage = new TsdbStoreHBase(config, config.tsdTable().getBytes());
     final TSDB tsdb = new TSDB(storage, storage, config, TSDRole.Tool);
     final String basepath = argp.get("--graph");
     argp = null;

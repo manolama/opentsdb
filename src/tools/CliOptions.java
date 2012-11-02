@@ -137,13 +137,13 @@ final class CliOptions {
    * @param config Configuration instance to use
    * @return A reference to an HBaseClient
    */
-  static HBaseClient clientFromOptions(final TsdbConfig config) {
-    final String zkbasedir = config.zookeeperBaseDirectory();
-
-    if (zkbasedir.isEmpty())
-      return new HBaseClient(config.zookeeperQuorum());
-    else
-      return new HBaseClient(config.zookeeperQuorum(), zkbasedir);
-  }
+//  static HBaseClient clientFromOptions(final TsdbConfig config) {
+//    final String zkbasedir = config.zookeeperBaseDirectory();
+//
+//    if (zkbasedir.isEmpty())
+//      return new HBaseClient(config.zookeeperQuorum());
+//    else
+//      return new HBaseClient(config.zookeeperQuorum(), zkbasedir);
+//  }
 
 }

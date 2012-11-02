@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -305,13 +306,18 @@ public class TsdbJSON extends TSDFormatter {
     query.sendReply(codec.getJsonBytes());
     return true;
   }
+
+  public boolean handleHTTPAggregators(final HttpQuery query, final Set<String> aggregators){
+    JSON codec = new JSON(aggregators);
+    query.sendReply(codec.getJsonBytes());
+    return true;
+  }
   
   public static void collectClassStats(final StatsCollector collector){
     collector.record("formatter.tsdbjson.put.success", puts_success.get());
     collector.record("formatter.tsdbjson.put.fail", puts_fail.get());
   }
 
-  
   public String contentType(){
     return "application/json";
   }

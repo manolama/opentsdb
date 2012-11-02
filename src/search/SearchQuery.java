@@ -83,29 +83,35 @@ public class SearchQuery {
       st.append(field);
     if (query != null)
       st.append(query);
+    if (group != null)
+      st.append(group);
+    if (sub_group != null)
+      st.append(sub_group);
+    if (terms)
+      st.append("t");
     
-    if (tags_compiled != null){
-      for (Map.Entry<String, Pattern> entry : tags_compiled.entrySet()){
-        st.append(entry.getKey());
-        st.append(entry.getValue().toString());
-      }
-    }
-    
-    if (custom_compiled != null){
-      for (Map.Entry<String, Pattern> entry : custom_compiled.entrySet()){
-        st.append(entry.getKey());
-        st.append(entry.getValue().toString());
-      }
-    }
-    
-    if (numerics != null){
-      for (Map.Entry<String, SimpleEntry<SearchOperator, Double>> entry : numerics.entrySet()){
-        st.append(entry.getKey());
-        st.append(entry.getValue().getKey().toString());
-        st.append(entry.getValue().getValue());
-      }
-    }
-    
+//    if (tags_compiled != null){
+//      for (Map.Entry<String, Pattern> entry : tags_compiled.entrySet()){
+//        st.append(entry.getKey());
+//        st.append(entry.getValue().toString());
+//      }
+//    }
+//    
+//    if (custom_compiled != null){
+//      for (Map.Entry<String, Pattern> entry : custom_compiled.entrySet()){
+//        st.append(entry.getKey());
+//        st.append(entry.getValue().toString());
+//      }
+//    }
+//    
+//    if (numerics != null){
+//      for (Map.Entry<String, SimpleEntry<SearchOperator, Double>> entry : numerics.entrySet()){
+//        st.append(entry.getKey());
+//        st.append(entry.getValue().getKey().toString());
+//        st.append(entry.getValue().getValue());
+//      }
+//    }
+//    
     // we do NOT hash on the page or limit
     return st.toString().hashCode();
   }
@@ -703,7 +709,9 @@ public class SearchQuery {
     
     public void setTotalHits(int total_hits) {
       this.total_hits = total_hits;
-      if (this.groups != null){
+      if (limit == 0)
+        this.pages = 1;
+      else if (this.groups != null){
         this.pages = (this.total_groups / this.limit) + 1;
       }else{
         if (total_hits > 0)

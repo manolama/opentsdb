@@ -350,4 +350,31 @@ public final class ConfigLoader {
       return response;
     }
   }
+
+  public final Properties getProperties(){
+    // check for required values before returning
+    if (!props.contains("jcs.default"))
+      props.put("jcs.default", "");
+    if (!props.contains("jcs.default.cacheattributes.MaxObjects"))
+      props.put("jcs.default.cacheattributes.MaxObjects", "1024");
+    if (!props.contains("jcs.default.cacheattributes.UseMemoryShrinker"))
+      props.put("jcs.default.cacheattributes.UseMemoryShrinker", "true");
+    if (!props.contains("jcs.default.cacheattributes.MaxMemoryIdleTimeSeconds"))
+      props.put("jcs.default.cacheattributes.MaxMemoryIdleTimeSeconds", "3600");
+    if (!props.contains("jcs.default.elementattributes.MaxLifeSeconds"))
+      props.put("jcs.default.elementattributes.MaxLifeSeconds", "3600");
+    if (!props.contains("jcs.default.elementattributes"))
+      props.put("jcs.default.elementattributes", "org.apache.jcs.engine.ElementAttributes");
+    if (!props.contains("jcs.default.elementattributes.IsEternal"))
+      props.put("jcs.default.elementattributes.IsEternal", "false");
+//    if (!props.contains("jcs.default.elementattributes.IsLateral"))
+//      props.put("jcs.default.elementattributes.IsLateral", "false");
+//    if (!props.contains("jcs.default.elementattributes.IsRemote"))
+//      props.put("jcs.default.elementattributes.IsRemote", "false");
+//    if (!props.contains("jcs.default.cacheattributes.IsLateral"))
+//      props.put("jcs.default.cacheattributes.IsLateral", "false");
+//    if (!props.contains("jcs.default.cacheattributes.IsRemote"))
+//      props.put("jcs.default.cacheattributes.IsRemote", "false");
+    return this.props;
+  }
 }

@@ -12,7 +12,7 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
-import java.lang.reflect.Field;
+import java.util.Properties;
 
 import net.opentsdb.core.TSDB.TSDRole;
 
@@ -63,10 +63,6 @@ public class TsdbConfig {
   private String tsd_table = "tsdb";
   /** The name of the HBase table where metadata is stored */
   private String tsd_uid_table = "tsdb-uid";
-  /** Defaults to the localhost for connecting to Zookeeper */
-  private String zookeeper_quorum = "localhost";
-  /** Path under which is the znode for the -ROOT- region */
-  private String zookeeper_base_directory = "/hbase";
   private String storage_handler = "hbase";
   private boolean storage_time_puts = true;
   /** How often, in milliseconds, to flush incoming metrics to HBase */
@@ -184,6 +180,14 @@ public class TsdbConfig {
    */
   public final void setConfig(final String property, final String value){
     this.config.setConfig(property, value);
+  }
+  
+  public final Properties getProperties(){
+    return this.config.getProperties();
+  }
+  
+  public final ConfigLoader getConfigLoader(){
+    return this.config;
   }
   
   // -------- TSD -------
@@ -318,37 +322,6 @@ public class TsdbConfig {
   
   //-------- Storage -------
 
-  /**
-   * A comma delimited list of zookeeper hosts to poll for access to the HBase
-   * cluster
-   * @return The hosts to work with
-   */
-  public final String zookeeperQuorum() {
-    try {
-      return this.config.getString("tsd.storage.hbase.zk.quorum");
-    } catch (NullPointerException npe) {
-      // return the default below
-    } catch (NumberFormatException nfe) {
-      LOG.warn(nfe.getLocalizedMessage());
-    }
-    return this.zookeeper_quorum;
-  }
-
-  /**
-   * Path under which is the znode for the -ROOT- region
-   * @return Path
-   */
-  public final String zookeeperBaseDirectory() {
-    try {
-      return this.config.getString("tsd.storage.hbase.zk.basedirectory");
-    } catch (NullPointerException npe) {
-      // return the default below
-    } catch (NumberFormatException nfe) {
-      LOG.warn(nfe.getLocalizedMessage());
-    }
-    return this.zookeeper_base_directory;
-  }
-
   public final String storageHandler() {
     try {
       return this.config.getString("tsd.storage.handler");
@@ -433,8 +406,6 @@ public class TsdbConfig {
   }
 
   // -------- HTTP -------
-  
-  // -------- HTTP -------
   /**
    * Determines the maximum chunk size to accept for the HTTP chunk aggregator
    * (in bytes)
@@ -512,8 +483,6 @@ public class TsdbConfig {
     return this.http_static_root;
   }
 
-  // -------- Search -------
-  
   // -------- Search --------
   
   public final String searchIndexPath() {
@@ -598,7 +567,7 @@ public class TsdbConfig {
     return this.formatter_default_telnet;
   }
 
-  // -------- Formatters --------
+  // -------- MQ --------
 
   public final boolean mqEnable() {
     try {

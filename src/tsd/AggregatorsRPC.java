@@ -12,10 +12,12 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
+import java.util.Set;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.opentsdb.cache.CacheEntry;
+import net.opentsdb.cache.Cache.CacheRegion;
 import net.opentsdb.core.Aggregators;
 import net.opentsdb.core.TSDB;
 
@@ -34,21 +36,22 @@ final class AggregatorsRPC implements HttpRpc {
   public void execute(final TSDB tsdb, final HttpQuery query) {
     final boolean nocache = query.hasQueryStringParam("nocache");
     final int query_hash = query.getQueryStringHash();
-    if (!nocache && query.getCacheAndReturn(query_hash)){
-      return;
+    if (!nocache){
+      try{
+        @SuppressWarnings("unchecked")
+        Set<String> cached = (Set<String>)tsdb.cache.get(CacheRegion.GENERAL, query_hash);
+        if (cached != null){
+          query.formatter.handleHTTPAggregators(query, cached);
+          return;
+        }
+      }catch (Exception e){
+        e.printStackTrace();
+      }
     }
-    
-    final String jsonp = JSON_HTTP.getJsonPFunction(query);
-    final JSON_HTTP response = new JSON_HTTP(Aggregators.set());
- 
-    // build our cache object, store and reply
-    CacheEntry entry = new CacheEntry(query_hash, 
-        jsonp.isEmpty() ? response.getJsonString().getBytes() 
-            : response.getJsonPString(jsonp).getBytes(),
-            86400);
-    if (!nocache && !query.putCache(entry)){
-      LOG.warn("Unable to cache emitter for key [" + query_hash + "]");
-    }
-    query.sendReply(entry.getData());
+
+    Set<String> aggs = Aggregators.getAggregators();
+    if (!nocache)
+      tsdb.cache.put(CacheRegion.GENERAL, query_hash, aggs);
+    query.formatter.handleHTTPAggregators(query, aggs);
   }
 }

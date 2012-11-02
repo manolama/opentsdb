@@ -13,6 +13,8 @@
 package net.opentsdb.tsd;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.Set;
 
 import org.codehaus.jackson.type.TypeReference;
 import org.jboss.netty.handler.codec.http.HttpMethod;
@@ -20,6 +22,7 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.opentsdb.cache.Cache.CacheRegion;
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.Query;
@@ -51,21 +54,27 @@ public class QueryHandler implements HttpRpc {
    * @throws IOException 
    */
   public void execute(final TSDB tsdb, final HttpQuery query) throws IOException {
-    if (tsdb.role != TSDRole.API){
-      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
+    if (TSDB.role != TSDRole.API){
+      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + TSDB.role + "]");
       return;
     }
     
-    //final long start_time = query.getQueryStringDate("start");
     final boolean nocache = query.hasQueryStringParam("nocache");
-    //long end_time = query.getQueryStringDate("end");
     final int query_hash = query.getQueryStringHash();
     
-    //LOG.trace(String.format("HTTP Start [%d] End [%d]", start_time, end_time));
-    // first, see if we can satisfy the request from cache
-    if (!nocache && query.getCacheAndReturn(query_hash)){
-      // satisfied from cache!!
-      return;
+    if (!nocache){
+      try{
+        @SuppressWarnings("unchecked")
+        List<DataPoints> cached = (List<DataPoints>)tsdb.cache.get(CacheRegion.QUERY, query_hash);
+        if (cached != null){
+          LOG.trace("was cached");
+          query.getFormatter().putDatapoints(cached);
+          query.getFormatter().handleHTTPDataGet(query);
+          return;
+        }
+      }catch (Exception e){
+        e.printStackTrace();
+      }
     }
     
     // parse query
@@ -152,9 +161,11 @@ public class QueryHandler implements HttpRpc {
     }
     tsdbqueries = null;  // free()
     
+    if (!nocache)
+      tsdb.cache.put(CacheRegion.QUERY, query_hash, query.getFormatter().getDataPoints());
+    
     // process the formatter
     query.getFormatter().handleHTTPDataGet(query);
-
     return;
   }
 }

@@ -78,7 +78,6 @@ final class StatsRPC implements TelnetRpc, HttpRpc {
     
     collector.addHostTag();
     ConnectionManager.collectStats(collector);
-    Cache.collectStats(collector);
     RpcHandler.collectStats(collector);
     tsdb.collectStats(collector);
     //PipelineFactory.collectStats(collector);

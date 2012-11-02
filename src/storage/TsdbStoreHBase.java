@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 
+import net.opentsdb.core.ConfigLoader;
 import net.opentsdb.core.TsdbConfig;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.uid.UniqueId;
@@ -51,20 +52,22 @@ public class TsdbStoreHBase extends TsdbStore {
 
   /** HBase client to use. */
   private HBaseClient client;
-  private final TsdbConfig config;
+  private final HBaseConfig local_config;
+  private final boolean use_zk_locks;
   private RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
   private CuratorFramework zk_client = null;
-  private boolean use_zk_locks = false;
 
   /**
    * Initializes the TsdbStore class, sets the table and the HBase client object
    * @param table Default table to use for connections
    * @param client HBase async client
    */
-  public TsdbStoreHBase(final TsdbConfig config, final byte[] table, final HBaseClient client) {
+  public TsdbStoreHBase(final TsdbConfig config, final byte[] table) {
     super(config, table);
-    this.client = client;
-    this.config = config;
+    this.local_config = new HBaseConfig(config.getConfigLoader());
+    this.use_zk_locks = local_config.useZKLocks();
+    this.client = new HBaseClient(local_config.zookeeperQuorum(), 
+        local_config.zookeeperBaseDirectory());
   }
   
   public void copy(final TsdbStore store){
@@ -225,17 +228,18 @@ public class TsdbStoreHBase extends TsdbStore {
       if (this.use_zk_locks){
         if (this.zk_client == null){
           LOG.debug("Initializing Zookeeper lock client");
-            this.zk_client = CuratorFrameworkFactory.newClient((config.zookeeperQuorum() + ":2181"), retryPolicy);
+            this.zk_client = CuratorFrameworkFactory.newClient(local_config.zookeeperQuorum(), 
+                retryPolicy);
             this.zk_client.start();
         }
         
         final String lock_path = "/locks/opentsdb/" + UniqueId.IDtoString(key);
-        LOG.trace(String.format("Attempting to acquire lock on [%s]", lock_path));
+        //LOG.trace(String.format("Attempting to acquire lock on [%s]", lock_path));
         
         InterProcessMutex lock = new InterProcessMutex(this.zk_client, lock_path);
         if ( lock.acquire(500, TimeUnit.MILLISECONDS) ) 
         {
-          LOG.trace(String.format("Successfully acquired lock on [%s]", lock_path));
+          //LOG.trace(String.format("Successfully acquired lock on [%s]", lock_path));
           return lock;
         }
 
@@ -247,7 +251,7 @@ public class TsdbStoreHBase extends TsdbStore {
             .joinUninterruptibly();
       }
     } catch (HBaseException e) {
-      LOG.warn("Failed to lock the ____ row", e);
+      LOG.warn("Failed to lock the [" + UniqueId.IDtoString(key) + "] row", e);
       throw new TsdbStorageException(e.getMessage(), e);
     } catch (IOException e) {
       // TODO Auto-generated catch block
@@ -390,5 +394,64 @@ public class TsdbStoreHBase extends TsdbStore {
 
   public final void setFlushInterval(final short flush_interval) throws TsdbStorageException {
     client.setFlushInterval(flush_interval);
+  }
+
+  private static class HBaseConfig{
+    private static final Logger LOG = LoggerFactory.getLogger(TsdbConfig.class);
+
+    private ConfigLoader config = new ConfigLoader();
+    
+    /** Defaults to the localhost for connecting to Zookeeper */
+    private String zookeeper_quorum = "localhost";
+    /** Path under which is the znode for the -ROOT- region */
+    private String zookeeper_base_directory = "/hbase";
+    /** Whether or not to use Zookeeper for locking */
+    private boolean use_zk_locks = false;
+    
+    public HBaseConfig(final ConfigLoader config){
+      this.config = config;
+    }
+    
+    /**
+     * A comma delimited list of zookeeper hosts to poll for access to the HBase
+     * cluster
+     * @return The hosts to work with
+     */
+    public final String zookeeperQuorum() {
+      try {
+        return this.config.getString("tsd.storage.hbase.zk.quorum");
+      } catch (NullPointerException npe) {
+        // return the default below
+      } catch (NumberFormatException nfe) {
+        LOG.warn(nfe.getLocalizedMessage());
+      }
+      return this.zookeeper_quorum;
+    }
+
+    /**
+     * Path under which is the znode for the -ROOT- region
+     * @return Path
+     */
+    public final String zookeeperBaseDirectory() {
+      try {
+        return this.config.getString("tsd.storage.hbase.zk.basedirectory");
+      } catch (NullPointerException npe) {
+        // return the default below
+      } catch (NumberFormatException nfe) {
+        LOG.warn(nfe.getLocalizedMessage());
+      }
+      return this.zookeeper_base_directory;
+    }
+
+    public final boolean useZKLocks() {
+      try {
+        return this.config.getBoolean("tsd.storage.hbase.zk.uselocks");
+      } catch (NullPointerException npe) {
+        // return the default below
+      } catch (NumberFormatException nfe) {
+        LOG.warn(nfe.getLocalizedMessage());
+      }
+      return this.use_zk_locks;
+    }
   }
 }

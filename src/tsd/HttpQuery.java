@@ -54,7 +54,6 @@ import org.jboss.netty.handler.codec.http.QueryStringDecoder;
 import org.jboss.netty.util.CharsetUtil;
 
 import net.opentsdb.cache.Cache;
-import net.opentsdb.cache.CacheEntry;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.formatters.TSDFormatter;
@@ -102,12 +101,6 @@ public class HttpQuery {
   /** The {@code TSDB} instance we belong to */
   protected final TSDB tsdb;
 
-  /** HTTP cache to store/read from */
-  protected final Cache cache;
-
-  // todo - move this to the TsdbFormatter
-  protected String jsonp = "";
-
   protected static final Charset CHARSET = Charset.forName("UTF-8");
 
   protected TSDFormatter formatter;
@@ -118,12 +111,10 @@ public class HttpQuery {
    * @param chan The channel on which the request was received.
    */
   public HttpQuery(final TSDB tsdb, final HttpRequest request,
-      final Channel chan, final Cache cache) {
+      final Channel chan) {
     this.tsdb = tsdb;
     this.request = request;
     this.chan = chan;
-    this.cache = cache;
-    this.jsonp = JSON_HTTP.getJsonPFunction(this);
     this.setFormatter();
   }
 
@@ -501,26 +492,6 @@ public class HttpQuery {
 //    } else {
 //      sendReply(HttpResponseStatus.NOT_FOUND, PAGE_NOT_FOUND);
 //    }
-  }
-
-  /**
-   * Accessor for the cache object
-   * @return Cache reference
-   */
-  public CacheEntry getCache(final int id) {
-    return this.cache.getCache(id);
-  }
-
-  public final boolean putCache(final CacheEntry entry) {
-    return this.cache.putCache(entry);
-  }
-
-  public boolean getCacheAndReturn(final int id) {
-    final CacheEntry entry = this.cache.getCache(id);
-    if (entry == null)
-      return false;
-    this.sendReply(entry.getData());
-    return true;
   }
 
   /**
@@ -1239,7 +1210,7 @@ public class HttpQuery {
     }
     if (this.formatter == null)
       this.formatter = new TsdbJSON(tsdb);
-    LOG.trace("Formatters used [" + this.formatter.getEndpoint() + "]");
+    LOG.trace("Formatter used [" + this.formatter.getEndpoint() + "]");
   }
 
   // ---------------- //

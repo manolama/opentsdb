@@ -166,14 +166,14 @@ final class TSDMain {
         Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
     
     // setup hbase client
-    final HBaseClient client = CliOptions.clientFromOptions(config);
+    //final HBaseClient client = CliOptions.clientFromOptions(config);
     log.info("Setup the HBase client");
     try {
       // Make sure we don't even start if we can't find out tables.
-      client.ensureTableExists(config.tsdTable()).joinUninterruptibly();
-      client.ensureTableExists(config.tsdUIDTable()).joinUninterruptibly();
-
-      client.setFlushInterval((short)config.flushInterval());
+//      client.ensureTableExists(config.tsdTable()).joinUninterruptibly();
+//      client.ensureTableExists(config.tsdUIDTable()).joinUninterruptibly();
+//
+//      client.setFlushInterval((short)config.flushInterval());
 
       final TsdbStore uid_storage;
       final TsdbStore data_storage;
@@ -200,8 +200,8 @@ final class TSDMain {
         data_storage.setTable("tsdb");
       }else{
         log.info("Running with HBase");
-        uid_storage = new TsdbStoreHBase(config, config.tsdUIDTable().getBytes(), client);
-        data_storage = new TsdbStoreHBase(config, config.tsdTable().getBytes(), client);
+        uid_storage = new TsdbStoreHBase(config, config.tsdUIDTable().getBytes());
+        data_storage = new TsdbStoreHBase(config, config.tsdTable().getBytes());
       }
       final TSDB tsdb = new TSDB(uid_storage, data_storage, config, TSDRole.API);
       log.info("Setup tsdb");   
@@ -239,7 +239,7 @@ final class TSDMain {
     } catch (Throwable e) {
       factory.releaseExternalResources();
       try {
-        client.shutdown().joinUninterruptibly();
+        //tsdb.shutdown().joinUninterruptibly();
       } catch (Exception e2) {
         log.error("Failed to shutdown HBase client", e2);
       }

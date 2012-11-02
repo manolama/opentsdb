@@ -43,6 +43,7 @@ public class TimeseriesUID {
   // these locks should only be used for the hashes
   
   // Take a look at the Apache.math OpenIntToDoubleHashMap
+  // looks like the Apache one ate up moe ram than the compact one
   private final CompactHashSet<Integer> ts_uid_hashes;
   private final ReentrantReadWriteLock locker = new ReentrantReadWriteLock();
   private final Lock read_lock  = locker.readLock();

@@ -56,9 +56,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   private final TelnetRpc unknown_cmd = new Unknown();
   /** Commands we serve on the HTTP interface. */
   private final HashMap<String, HttpRpc> http_commands;
-  /** Cache for HTTP commands */
-  private final Cache cache;
-  
+
   /** The TSDB to use. */
   private final TSDB tsdb;
 
@@ -68,8 +66,6 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
    */
   public RpcHandler(final TSDB tsdb) {
     this.tsdb = tsdb;
-    cache = new Cache(tsdb);
-
     telnet_commands = new HashMap<String, TelnetRpc>(6);
     http_commands = new HashMap<String, HttpRpc>(10);
     {
@@ -162,7 +158,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
    */
   private void handleHttpQuery(final Channel chan, final HttpRequest req) {
     http_rpcs_received.incrementAndGet();
-    final HttpQuery query = new HttpQuery(tsdb, req, chan, cache);
+    final HttpQuery query = new HttpQuery(tsdb, req, chan);
     if (req.isChunked()) {
       logError(query, "Received an unsupported chunked request: "
                + query.request());
