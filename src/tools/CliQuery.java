@@ -115,7 +115,7 @@ final class CliQuery {
 
     //final HBaseClient client = CliOptions.clientFromOptions(config);
     final TsdbStoreHBase storage = new TsdbStoreHBase(config, config.tsdTable().getBytes());
-    final TSDB tsdb = new TSDB(storage, storage, config, TSDRole.Tool);
+    final TSDB tsdb = new TSDB(storage, storage, config);
     final String basepath = argp.get("--graph");
     argp = null;
 

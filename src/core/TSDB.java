@@ -123,7 +123,7 @@ public final class TSDB {
   public static TSDRole role = TSDRole.Full;
   public final boolean time_puts = true;
   public final MQTest mq;
-  public final boolean use_mq = true;
+  public final boolean use_mq = false;
   
   public final Cache cache;
   
@@ -138,7 +138,7 @@ public final class TSDB {
    * are stored.
    */
   public TSDB(final TsdbStore uid_store, final TsdbStore data_store, 
-      final String timeseries_table, final String uniqueids_table, final TSDRole role) {
+      final String timeseries_table, final String uniqueids_table) {
     //this.client = client;
     this.config = new TsdbConfig();
     table = timeseries_table.getBytes();
@@ -153,10 +153,7 @@ public final class TSDB {
     compactionq = new CompactionQueue(this);
     timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts");
     ts_uids = new TimeseriesUID(this.uid_storage);
-    if (config.role() != role && role != TSDRole.Tool)
-      TSDB.role = config.role();
-    else
-      TSDB.role = role;
+    TSDB.role = config.role();
     if (role != TSDRole.Ingest)
       this.cache = new Cache(config);
     else
@@ -181,8 +178,7 @@ public final class TSDB {
    * @param uniqueids_table The name of the HBase table where the unique IDs
    * are stored.
    */
-  public TSDB(final TsdbStore uid_store, final TsdbStore data_store, final TsdbConfig config,
-      final TSDRole role) {
+  public TSDB(final TsdbStore uid_store, final TsdbStore data_store, final TsdbConfig config) {
     //this.client = client;
     this.config = config;
     table = config.tsdTable().getBytes();
@@ -197,10 +193,7 @@ public final class TSDB {
     compactionq = new CompactionQueue(this);
     timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts");
     ts_uids = new TimeseriesUID(this.uid_storage);
-    if (config.role() != role && role != TSDRole.Tool)
-      TSDB.role = config.role();
-    else
-      TSDB.role = role;
+    TSDB.role = config.role();
     if (role != TSDRole.Ingest)
       this.cache = new Cache(config);
     else
@@ -330,7 +323,8 @@ public final class TSDB {
     collector.record("uid.cache.size.tsuid.queue", this.ts_uids.queueSize());
     collector.record("uid.cache.size.tsuid.meta", this.timeseries_meta.size());
     this.ts_uids.collectStats(collector);
-    this.cache.collectStats(collector);
+    if (this.cache != null)
+      this.cache.collectStats(collector);
     IncomingDataPoints.collectStats(collector);
     {
       final Runtime runtime = Runtime.getRuntime();

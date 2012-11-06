@@ -179,31 +179,20 @@ final class TSDMain {
       final TsdbStore data_storage;
       final Boolean use_cass = false;
       if (use_cass){
-        Cassandra.Client cass_uid = null;
-        Cassandra.Client cass_data = null;
-        try{
-          TTransport tr = new TFramedTransport(new TSocket("localhost", 9160));
-          TProtocol proto = new TBinaryProtocol(tr);
-          cass_uid = new Cassandra.Client(proto);
-          cass_data = new Cassandra.Client(proto);
-          tr.open();
-        } catch (TException te){
-          te.printStackTrace();
-        }
-        
+        config.setConfig("tsd.storage.table.uid", "tsdbuid");
         // temp!
         log.info("Running with Casandra");
 //        config.tsdUIDTable("tsdbuid");
 //        config.tsdTable("tsdb");
-        uid_storage = new TsdbStoreCass(config, config.tsdUIDTable().getBytes(), cass_uid);
-        data_storage = new TsdbStoreCass(config, config.tsdTable().getBytes(), cass_data);
+        uid_storage = new TsdbStoreCass(config, config.tsdUIDTable().getBytes());
+        data_storage = new TsdbStoreCass(config, config.tsdTable().getBytes());
         data_storage.setTable("tsdb");
       }else{
         log.info("Running with HBase");
         uid_storage = new TsdbStoreHBase(config, config.tsdUIDTable().getBytes());
         data_storage = new TsdbStoreHBase(config, config.tsdTable().getBytes());
       }
-      final TSDB tsdb = new TSDB(uid_storage, data_storage, config, TSDRole.API);
+      final TSDB tsdb = new TSDB(uid_storage, data_storage, config);
       log.info("Setup tsdb");   
       registerShutdownHook(tsdb);
       log.info("Registered shutdown hook");

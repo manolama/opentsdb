@@ -70,7 +70,7 @@ final class TextImporter {
     // Flush more frequently since we read very fast from the files.
     //client.setFlushInterval((short) 500);  // ms
     final TsdbStoreHBase storage = new TsdbStoreHBase(config, config.tsdTable().getBytes());
-    final TSDB tsdb = new TSDB(storage, storage, config, TSDRole.Tool);
+    final TSDB tsdb = new TSDB(storage, storage, config);
     argp = null;
     try {
       int points = 0;

@@ -90,7 +90,7 @@ final class MapSync {
     //final HBaseClient client = CliOptions.clientFromOptions(config);
     final TsdbStore uid_storage = new TsdbStoreHBase(config, config.tsdUIDTable().getBytes());
     final TsdbStore data_storage = new TsdbStoreHBase(config, config.tsdTable().getBytes());
-    final TSDB tsdb = new TSDB(uid_storage, data_storage, config, TSDRole.Tool);
+    final TSDB tsdb = new TSDB(uid_storage, data_storage, config);
     argp = null;
     try {
       

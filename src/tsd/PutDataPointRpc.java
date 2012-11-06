@@ -60,7 +60,8 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
    * @param query The query from Netty
    */
   public void execute(final TSDB tsdb, final HttpQuery query) {
-    if (tsdb.role != TSDRole.Ingest && tsdb.role != TSDRole.Forwarder){
+    if (tsdb.role != TSDRole.Ingest && tsdb.role != TSDRole.Forwarder
+        && tsdb.role != TSDRole.Full){
       query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
       return;
     }

@@ -92,7 +92,6 @@ tsdb_SRC := \
 	src/tsd/GroupRPC.java	\
 	src/tsd/HttpQuery.java	\
 	src/tsd/HttpRpc.java	\
-	src/tsd/JsonRpcError.java	\
 	src/tsd/LogsRpc.java	\
 	src/tsd/MetaRPC.java	\
 	src/tsd/PipelineFactory.java	\

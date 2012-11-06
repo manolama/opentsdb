@@ -43,6 +43,8 @@ public class TsdbScanner {
   private String row_regex;
   /** The client specific scanner object */
   private Object scanner = null;
+  /** Used for iterating over a scanner if not supported directly by the client */
+  private byte[] last_key = null;
 
   /**
    * Default constructor, everything set to its default
@@ -137,5 +139,13 @@ public class TsdbScanner {
 
   public byte[] getQualifier() {
     return qualifier;
+  }
+
+  public void setLastKey(final byte[] key){
+    this.last_key = key;
+  }
+  
+  public byte[] getLastKey() {
+    return this.last_key;
   }
 }

@@ -4,11 +4,17 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.opentsdb.core.ConfigLoader;
 import net.opentsdb.core.TsdbConfig;
 import net.opentsdb.stats.StatsCollector;
 
 import org.apache.thrift.TException;
+import org.apache.thrift.protocol.TProtocol;
+import org.apache.thrift.transport.TFramedTransport;
+import org.apache.thrift.transport.TSocket;
+import org.apache.thrift.transport.TTransport;
 import org.apache.cassandra.thrift.*;
+import org.hbase.async.Bytes;
 import org.hbase.async.KeyValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,10 +27,14 @@ public class TsdbStoreCass extends TsdbStore {
       
   private Cassandra.Client client;
   
-  public TsdbStoreCass(final TsdbConfig config, final byte[] table, final Cassandra.Client client) {
+  public TsdbStoreCass(final TsdbConfig config, final byte[] table) {
     super(config, table);
-    this.client = client;
     try {
+      TTransport tr = new TFramedTransport(new TSocket("localhost", 9160));
+      TProtocol proto = new TBinaryProtocol(tr);
+      this.client = new Cassandra.Client(proto);
+      tr.open();
+      
       this.client.set_keyspace(fromBytes(table));
     } catch (InvalidRequestException e) {
       // TODO Auto-generated catch block
@@ -129,8 +139,10 @@ public class TsdbStoreCass extends TsdbStore {
         Column c = new Column();
         c.setName(qualifier);
         c.setValue(data);
-        client.set_keyspace(fromBytes(this.table));
-        client.insert(row, cp, c, ConsistencyLevel.ONE);       
+        // todo, proper time
+        c.setTimestamp(System.currentTimeMillis());
+        //client.set_keyspace(fromBytes(this.table));
+        client.insert(row, cp, c, ConsistencyLevel.ONE);     
         return Deferred.fromResult(null);
       } catch (InvalidRequestException ire){
         ire.printStackTrace();
@@ -165,9 +177,9 @@ public class TsdbStoreCass extends TsdbStore {
     throws TsdbStorageException {
 
     SlicePredicate predicate = new SlicePredicate();
-    SliceRange sr = new SliceRange();
-    sr.setStart(new byte[] { 0 });
-    sr.setFinish(new byte[] { 0 });
+    SliceRange sr = new SliceRange();    
+    sr.setStart("".getBytes(this.CHARSET));
+    sr.setFinish("".getBytes(this.CHARSET));
     sr.setCount(scanner.getMaxRows());
     predicate.setSlice_range(sr);
 
@@ -182,7 +194,7 @@ public class TsdbStoreCass extends TsdbStore {
     if (scanner.getScanner() == null)
       throw new TsdbStorageException("Cassandra scanner object is null");
     
-    try {
+    try {    
       SlicePredicate predicate = (SlicePredicate) scanner.getScanner();
       
       ColumnParent cp = new ColumnParent();
@@ -190,20 +202,34 @@ public class TsdbStoreCass extends TsdbStore {
       
       // this is the range of keys we want
       KeyRange range = new KeyRange();
-      range.setStart_key(scanner.getStart_row());
+      if (scanner.getLastKey() != null)
+        range.setStart_key(scanner.getLastKey());
+      else
+        range.setStart_key(scanner.getStart_row());
       range.setEnd_key(scanner.getEndRow());
+      
+//      range.setStart_key(new byte[] { 0 });
+//      range.setEnd_key(new byte[] { 0 });
       
       ArrayList<ArrayList<KeyValue>> rows = new ArrayList<ArrayList<KeyValue>>();
       // something crappy is happening where the keyspace keeps getting switched
-      client.set_keyspace(fromBytes(this.table));
+      //client.set_keyspace(fromBytes(this.table));
       List<KeySlice> rs = client.get_range_slices(cp, predicate, range, ConsistencyLevel.ONE);
       
       long num_rows = 0;
       for (KeySlice ks : rs){
+        // if the end key is equal to the last key, then we've iterated through everything
+        if (scanner.getLastKey() != null && 
+            Bytes.equals(scanner.getLastKey(), ks.getKey())){
+          LOG.trace("Reached final key");
+          return Deferred.fromResult(null);
+        }
+        
+        scanner.setLastKey(ks.getKey());
         ArrayList<KeyValue> row = new ArrayList<KeyValue>();
         for (ColumnOrSuperColumn sc : ks.columns){
-          row.add(new KeyValue(ks.getKey(), sc.super_column.getName(), 
-              sc.column.getName(), sc.column.timestamp / 1000, sc.column.getValue()));
+          row.add(new KeyValue(ks.getKey(), toBytes("t"),
+              sc.column.getName(), sc.column.timestamp, sc.column.getValue()));
           num_rows++;
         }
         rows.add(row);
@@ -244,4 +270,62 @@ public class TsdbStoreCass extends TsdbStore {
       e.printStackTrace();
     }
   }
+
+  private static class CassandraConfig{
+    private static final Logger LOG = LoggerFactory.getLogger(TsdbConfig.class);
+
+    private ConfigLoader config = new ConfigLoader();
+    
+    private String host = "localhost";
+    private int port = 9160;
+    /** Whether or not to use Zookeeper for locking */
+    private boolean use_zk_locks = false;
+    
+    public CassandraConfig(final ConfigLoader config){
+      this.config = config;
+    }
+    
+    /**
+     * A comma delimited list of zookeeper hosts to poll for access to the HBase
+     * cluster
+     * @return The hosts to work with
+     */
+    public final String host() {
+      try {
+        return this.config.getString("tsd.storage.cassandra.host");
+      } catch (NullPointerException npe) {
+        // return the default below
+      } catch (NumberFormatException nfe) {
+        LOG.warn(nfe.getLocalizedMessage());
+      }
+      return this.host;
+    }
+
+    /**
+     * 
+     * @return Path
+     */
+    public final int port() {
+      try {
+        return this.config.getInt("tsd.storage.cassandra.port");
+      } catch (NullPointerException npe) {
+        // return the default below
+      } catch (NumberFormatException nfe) {
+        LOG.warn(nfe.getLocalizedMessage());
+      }
+      return this.port;
+    }
+
+    public final boolean useZKLocks() {
+      try {
+        return this.config.getBoolean("tsd.storage.cassandra.zk.uselocks");
+      } catch (NullPointerException npe) {
+        // return the default below
+      } catch (NumberFormatException nfe) {
+        LOG.warn(nfe.getLocalizedMessage());
+      }
+      return this.use_zk_locks;
+    }
+  }
+
 }

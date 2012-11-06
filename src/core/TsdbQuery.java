@@ -456,6 +456,7 @@ final class TsdbQuery implements Query {
               // remember the timestamp is in ms. The +1 is for rounding issues
               if (dp.timestamp() / 1000 >= this.start_time && dp.timestamp() / 1000 <= (this.end_time + 1))
                 valid.add(dp);
+              LOG.trace(String.format("Proced cell at [%d]", dp.timestamp()));
             }
             if (!valid.isEmpty()){
               Span datapoints = spans.get(key);

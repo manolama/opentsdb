@@ -54,7 +54,7 @@ public class QueryHandler implements HttpRpc {
    * @throws IOException 
    */
   public void execute(final TSDB tsdb, final HttpQuery query) throws IOException {
-    if (TSDB.role != TSDRole.API){
+    if (TSDB.role == TSDRole.Ingest){
       query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + TSDB.role + "]");
       return;
     }
