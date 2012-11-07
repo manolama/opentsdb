@@ -123,7 +123,7 @@ public final class TSDB {
   public static TSDRole role = TSDRole.Full;
   public final boolean time_puts = true;
   public final MQTest mq;
-  public final boolean use_mq = false;
+  public boolean use_mq = false;
   
   public final Cache cache;
   
@@ -158,14 +158,18 @@ public final class TSDB {
       this.cache = new Cache(config);
     else
       this.cache = null;
-    if (role == TSDRole.API){
+    if (role == TSDRole.API || role == TSDRole.Full){
       meta_search_writer = new SearchIndexer(config.searchIndexPath());
       meta_searcher = new Searcher(config.searchIndexPath(), cache);
     }else{
       meta_search_writer = null;
       meta_searcher = null;
     }
-    mq = new MQTest("localhost");
+    if (config.mqEnable()){
+      mq = new MQTest("localhost");
+      this.use_mq = true;
+    }else
+      mq = null;
     LOG.info(String.format("Setting TSD role to [%s]", role));
   }
   
@@ -198,14 +202,18 @@ public final class TSDB {
       this.cache = new Cache(config);
     else
       this.cache = null;
-    if (role == TSDRole.API){
+    if (role == TSDRole.API || role == TSDRole.Full){
       meta_search_writer = new SearchIndexer(config.searchIndexPath());
       meta_searcher = new Searcher(config.searchIndexPath(), cache);
     }else{
       meta_search_writer = null;
       meta_searcher = null;
     }
-    mq = new MQTest("wtdb-1-3.phx3.llnw.net");
+    if (config.mqEnable()){
+      mq = new MQTest("localhost");
+      this.use_mq = true;
+    }else
+      mq = null;
     LOG.info(String.format("Setting TSD role to [%s]", role));
   }
 
@@ -536,7 +544,7 @@ public final class TSDB {
 //    // timing in a moving Histogram (once we have a class for this).
     if (!time_puts){
       return data_storage.putWithRetry(row, FAMILY, Bytes.fromShort(qualifier), value,
-        null, false, true);
+        timestamp * 1000, null, false, true);
     }else{
       final long start_put = System.nanoTime();
       final Callback<Object, Object> cb = new Callback<Object, Object>() {
@@ -552,7 +560,7 @@ public final class TSDB {
       };
       
       return data_storage.putWithRetry(row, FAMILY, Bytes.fromShort(qualifier), value,
-          null, false, true).addCallback(cb);
+          timestamp * 1000, null, false, true).addCallback(cb);
     }
   }
 

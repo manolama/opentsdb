@@ -265,7 +265,7 @@ final class IncomingDataPoints implements WritableDataPoints {
     //point.setDurable(!batch_import);
     put_counter.incrementAndGet();
     return tsdb.data_storage.putWithRetry(row, TSDB.FAMILY, Bytes.fromShort(qualifier), value,
-        null, !batch_import, true).addCallback(cb);
+        timestamp * 1000, null, !batch_import, true).addCallback(cb);
   }
 
   private void grow() {

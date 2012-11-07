@@ -25,6 +25,7 @@ public class DataQuery {
   public ArrayList<TSQuery> queries;
   public HashMap<String, List<String>> format_options;
   public boolean padding = false;
+  public TopN topn = null;
 
   @JsonIgnore
   public String error = "";
@@ -62,7 +63,7 @@ public class DataQuery {
         return false;
       }
     }
-    return true;
+    return this.setQueries();
   }
 
   @JsonIgnore
@@ -114,9 +115,47 @@ public class DataQuery {
       }
     }
 
+    if (query.hasQueryStringParam("topn"))
+      this.parseTopN(query.getQueryStringParam("topn"));
+    
+    return this.setQueries();
+  }
+  
+  public boolean setQueries(){
+    // data checks
+    if (this.start_time < 1) {
+      throw BadRequestException.missingParameter("start");
+    }
+    final long now = System.currentTimeMillis() / 1000;
+    if (this.end_time < 1) {
+      this.end_time = now;
+    }
+    
+    for (TSQuery q : queries) {
+      try {
+        q.tsd_query.setStartTime(this.start_time);
+      } catch (IllegalArgumentException e) {
+        throw new BadRequestException("start time: " + e.getMessage());
+      }
+      try {
+        q.tsd_query.setEndTime(this.end_time);
+      } catch (IllegalArgumentException e) {
+        throw new BadRequestException("end time: " + e.getMessage());
+      }
+      q.tsd_query.setPadding(this.padding);
+      
+      if (this.topn != null){
+        // if the query doesn't have tsuids OR groups, then we have to bail
+        if ((q.tsuids == null || q.tsuids.size() < 1) && !q.has_tags){
+          throw new BadRequestException("Missing a group-by tag or TSUIDs list");
+        }
+       
+        q.tsd_query.downsample(Integer.MAX_VALUE, topn.agg);
+      }
+    }
     return true;
   }
- 
+  
   @JsonIgnore
   public Query[] getTSDQueries() {
     if (this.queries.size() < 1)
@@ -130,6 +169,41 @@ public class DataQuery {
     return qs;
   }
 
+  // PRIVATES *****************************************************
+  
+  private void parseTopN(final String topn){  
+    TopN topper = new TopN();
+    if (topn == null || topn.length() < 1){
+      this.topn = topper;
+      return;
+    }
+    
+    final String[] parts = Tags.splitString(topn, ':');
+    LOG.trace("Got topn: " + topn);
+    if (parts.length < 1){
+      LOG.warn("Missing topn components");
+      return;
+    }
+    
+    topper.agg = getAggregator(parts[0]);
+    
+    for (int i = 1; i<parts.length; i++){
+      if (Character.isDigit(parts[i].charAt(0))){
+        topper.limit = Integer.parseInt(parts[i]);
+      }else{
+        if (parts[i].toLowerCase().compareTo("asc") == 0)
+          topper.reverse = false;
+        else if (parts[i].toLowerCase().compareTo("desc") == 0)
+          topper.reverse = true;
+        else
+          throw new BadRequestException("Invalid sorting operator");
+        topper.order = parts[i].toLowerCase();
+      }
+    }
+    
+    this.topn = topper;
+  }
+  
   /**
    * Returns the aggregator with the given name.
    * @param name Name of the aggregator to get.
@@ -158,7 +232,9 @@ public class DataQuery {
     public Query tsd_query;
     @JsonIgnore
     public String error = "";
-
+    @JsonIgnore
+    public boolean has_tags;
+    
     @JsonIgnore
     public boolean ParseQuery(final TSDB tsdb) {
       // set the default aggregator
@@ -307,8 +383,8 @@ public class DataQuery {
       this.tsd_query = tsdb.newQuery();
       final Aggregator agg = getAggregator(parts[0]);
       i--; // Move to the last part (the metric name).
-      tags = new HashMap<String, String>();
-      final String metric = Tags.parseWithMetric(parts[i], tags);
+      this.tags = new HashMap<String, String>();
+      final String metric = Tags.parseWithMetric(parts[i], this.tags);
 
       boolean rate = false;
       boolean agg_all = false;
@@ -340,6 +416,10 @@ public class DataQuery {
       }
 
       try {
+        if (this.tags.size() > 0){
+          this.has_tags = true;
+          LOG.trace("Definitely has the damned tags");
+        }
         this.tsd_query.setTimeSeries(metric, tags, agg, rate, agg_all);
       } catch (NoSuchUniqueName e) {
         this.error = e.getMessage();
@@ -350,5 +430,16 @@ public class DataQuery {
       }
       return true;
     }
+  }
+  
+  public static final class TopN {
+    public String aggregator = "sum";
+    public String order = "desc";
+    public int limit = 10;
+    
+    @JsonIgnore
+    public Aggregator agg = Aggregators.SUM;
+    @JsonIgnore
+    public boolean reverse = true;
   }
 }

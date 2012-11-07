@@ -534,7 +534,7 @@ public final class UniqueId {
               // table, MAXID_ROW, ID_FAMILY, kind, row, lock);
               // hbasePutWithRetry(update_maxid, MAX_ATTEMPTS_PUT,
               // INITIAL_EXP_BACKOFF_DELAY);
-              storage.putWithRetry(MAXID_ROW, ID_FAMILY, kind, row, lock);
+              storage.putWithRetry(MAXID_ROW, ID_FAMILY, kind, row, 0, lock);
             } // end HACK HACK HACK.
             LOG.info("Got ID=" + id + " for kind='" + kind() + "' name='" + name
                 + "'");
@@ -590,7 +590,7 @@ public final class UniqueId {
           // table, row, NAME_FAMILY, kind, toBytes(name));
           // hbasePutWithRetry(reverse_mapping, MAX_ATTEMPTS_PUT,
           // INITIAL_EXP_BACKOFF_DELAY);
-          storage.putWithRetry(row, NAME_FAMILY, kind, toBytes(name), null);
+          storage.putWithRetry(row, NAME_FAMILY, kind, toBytes(name), 0);
         } catch (TsdbStorageException e) {
           LOG.error("Failed to Put reverse mapping!  ID leaked: " + id, e);
           hbe = e;
@@ -603,7 +603,7 @@ public final class UniqueId {
           // table, toBytes(name), ID_FAMILY, kind, row);
           // hbasePutWithRetry(forward_mapping, MAX_ATTEMPTS_PUT,
           // INITIAL_EXP_BACKOFF_DELAY);
-          storage.putWithRetry(toBytes(name), ID_FAMILY, kind, row, null);
+          storage.putWithRetry(toBytes(name), ID_FAMILY, kind, row, 0);
         } catch (TsdbStorageException e) {
           LOG.error("Failed to Put forward mapping!  ID leaked: " + id, e);
           hbe = e;
@@ -837,7 +837,7 @@ public final class UniqueId {
     // partially assigned ID. The reverse mapping on its own is harmless
     // but the forward mapping without reverse mapping is bad.
     try {
-      storage.putWithRetry(row, NAME_FAMILY, kind, newnameb, null);
+      storage.putWithRetry(row, NAME_FAMILY, kind, newnameb, 0);
       // final PutRequest reverse_mapping = new PutRequest(
       // table, row, NAME_FAMILY, kind, newnameb);
       // hbasePutWithRetry(reverse_mapping, MAX_ATTEMPTS_PUT,
@@ -851,7 +851,7 @@ public final class UniqueId {
 
     // Now create the new forward mapping.
     try {
-      storage.putWithRetry(newnameb, NAME_FAMILY, kind, row, null);
+      storage.putWithRetry(newnameb, NAME_FAMILY, kind, row, 0);
       // final PutRequest forward_mapping = new PutRequest(
       // table, newnameb, ID_FAMILY, kind, row);
       // hbasePutWithRetry(forward_mapping, MAX_ATTEMPTS_PUT,
@@ -916,7 +916,7 @@ public final class UniqueId {
             continue;
           }
 
-          this.storage.putWithRetry(row, family, kind, value, lock)
+          this.storage.putWithRetry(row, family, kind, value, 0, lock)
               .joinUninterruptibly();
 
           // do NOT forget to unlock
@@ -1094,7 +1094,7 @@ public final class UniqueId {
             continue;
           }
 
-          this.storage.putWithRetry(MAXID_ROW, ID_FAMILY, kind, max, lock)
+          this.storage.putWithRetry(MAXID_ROW, ID_FAMILY, kind, max, 0, lock)
               .joinUninterruptibly();
 
           LOG.info(String.format("Updated MAX ID for %s to [%d]", fromBytes(kind), Bytes.getLong(max)));

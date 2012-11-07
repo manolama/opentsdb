@@ -45,11 +45,11 @@ public abstract class TsdbStore {
    * Default Constructor requires a table name When extending this class, be
    * sure to pass in a table name
    */
-  public TsdbStore(final TsdbConfig config, final byte[] table) {
+  public TsdbStore(final TsdbConfig config, final byte[] table) throws TsdbStorageException {
     this.table = table;
   }
   
-  public TsdbStore(final byte[] table, final TsdbStore store) {
+  public TsdbStore(final byte[] table, final TsdbStore store) throws TsdbStorageException {
     this.table = table;
     this.copy(store);
   }
@@ -187,8 +187,8 @@ public abstract class TsdbStore {
    * @throws TsdbStorageException
    */
   public Deferred<Object> putWithRetry(final byte[] key, final byte[] family,
-      final byte[] qualifier, final byte[] data) throws TsdbStorageException {
-    return putWithRetry(key, family, qualifier, data, null);
+      final byte[] qualifier, final byte[] data, final long ts) throws TsdbStorageException {
+    return putWithRetry(key, family, qualifier, data, ts, null);
   }
   
   /**
@@ -206,9 +206,9 @@ public abstract class TsdbStore {
    */
   public Deferred<Object> putWithRetry(final byte[] key,
       final byte[] family, final byte[] qualifier, final byte[] data,
-      final Object rowLock) 
+      final long ts, final Object rowLock) 
       throws TsdbStorageException{
-    return putWithRetry(key, family, qualifier, data, rowLock, true, false);
+    return putWithRetry(key, family, qualifier, data, ts, rowLock, true, false);
   }
 
   /**
@@ -227,7 +227,7 @@ public abstract class TsdbStore {
    * @throws TsdbStorageException
    */
   abstract public Deferred<Object> putWithRetry(final byte[] key,
-      final byte[] family, final byte[] qualifier, final byte[] data,
+      final byte[] family, final byte[] qualifier, final byte[] data, final long ts,
       final Object rowLock, final Boolean durable, final Boolean bufferable) 
       throws TsdbStorageException;
 

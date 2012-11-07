@@ -171,7 +171,7 @@ public class TsdbStoreHBase extends TsdbStore {
    * @throws TsdbStorageException
    */
   public Deferred<Object> putWithRetry(final byte[] key,
-      final byte[] family, final byte[] qualifier, final byte[] data,
+      final byte[] family, final byte[] qualifier, final byte[] data, final long ts,
       final Object rowLock, final Boolean durable, final Boolean bufferable) 
       throws TsdbStorageException {
     // data check

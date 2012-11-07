@@ -387,7 +387,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       final byte[] qual = compact.qualifier();
       final byte[] value = compact.value();
       written_cells.incrementAndGet();
-      return tsdb.data_storage.putWithRetry(key, null, qual, value)
+      return tsdb.data_storage.putWithRetry(key, null, qual, value, 0)
         .addCallbacks(new DeleteCompactedCB(row), handle_write_error);
     } else {
       // We had nothing to write, because one of the cells is already the

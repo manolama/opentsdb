@@ -366,7 +366,7 @@ public class MetaDataCache {
         try {
           storage.putWithRetry(id, TsdbStore.toBytes("name"),
               TsdbStore.toBytes(this.kind + "_meta"), TsdbStore.toBytes(json),
-              lock);
+              0, lock);
           LOG.debug("Updated meta in storage for [" + this.kind + "] on UID [" + UniqueId.IDtoString(id) + "]");
         } catch (HBaseException e) {
           LOG.error("Failed to Put Meta Data [" + uid + "]", e);

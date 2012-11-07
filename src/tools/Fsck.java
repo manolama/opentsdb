@@ -213,10 +213,10 @@ final class Fsck {
                 errors++;
                 correctable++;
                 if (fix) {
-                  storage.putWithRetry(table, ordered.key(),
+                  storage.putWithRetry(ordered.key(),
                                             ordered.family(),
                                             ordered.qualifier(),
-                                            ordered.value())
+                                            ordered.value(), 0L)
                     .addCallbackDeferring(new DeleteOutOfOrder(kv));
                 } else {
                   LOG.error("Two or more values in a compacted cell are"
@@ -248,8 +248,8 @@ final class Fsck {
                   if (fix) {
                     value = value.clone();  // We're going to change it.
                     value[0] = value[1] = value[2] = value[3] = 0;
-                    storage.putWithRetry(table, kv.key(), kv.family(),
-                                              qual, value);
+                    storage.putWithRetry(kv.key(), kv.family(),
+                                              qual, value, 0L);
                   } else {
                     LOG.error("Floating point value with 0xFF most significant"
                               + " bytes, probably caused by sign extension bug"
@@ -279,8 +279,8 @@ final class Fsck {
                                                | (qualifier & Internal.FLAGS_MASK));
                 final DeleteOutOfOrder delooo = new DeleteOutOfOrder(kv);
                 if (timestamp < prev.timestamp()) {
-                  storage.putWithRetry(table, newkey, kv.family(),
-                                            Bytes.fromShort(newqual), value)
+                  storage.putWithRetry(newkey, kv.family(),
+                                            Bytes.fromShort(newqual), value, 0L)
                     // Only delete the offending KV once we're sure that the new
                     // KV has been persisted in HBase.
                     .addCallbackDeferring(delooo);

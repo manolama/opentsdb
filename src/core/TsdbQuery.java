@@ -312,6 +312,7 @@ final class TsdbQuery implements Query {
     }
     this.downsampler = downsampler;
     this.sample_interval = interval;
+    LOG.trace(String.format("Setting Downsampler [%s]  Interval [%d]", this.downsampler, this.sample_interval));
   }
 
   /**
@@ -441,7 +442,7 @@ final class TsdbQuery implements Query {
                 + " our scanner (" + scanner + ")! " + row + " does not start"
                 + " with " + Arrays.toString(metric));
           }
-          LOG.trace(String.format("Processing row [%s]", UniqueId.IDtoString(key)));
+          //LOG.trace(String.format("Processing row [%s]", UniqueId.IDtoString(key)));
           if (this.padding){
             Span datapoints = spans.get(key);
             if (datapoints == null) {
@@ -456,7 +457,7 @@ final class TsdbQuery implements Query {
               // remember the timestamp is in ms. The +1 is for rounding issues
               if (dp.timestamp() / 1000 >= this.start_time && dp.timestamp() / 1000 <= (this.end_time + 1))
                 valid.add(dp);
-              LOG.trace(String.format("Proced cell at [%d]", dp.timestamp()));
+              //LOG.trace(String.format("Proced cell at [%d]", dp.timestamp()));
             }
             if (!valid.isEmpty()){
               Span datapoints = spans.get(key);

@@ -1,12 +1,15 @@
 package net.opentsdb.storage;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import net.opentsdb.core.ConfigLoader;
 import net.opentsdb.core.TsdbConfig;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.uid.UniqueId;
 
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TProtocol;
@@ -16,9 +19,15 @@ import org.apache.thrift.transport.TTransport;
 import org.apache.cassandra.thrift.*;
 import org.hbase.async.Bytes;
 import org.hbase.async.KeyValue;
+import org.hbase.async.UnknownRowLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.netflix.curator.RetryPolicy;
+import com.netflix.curator.framework.CuratorFramework;
+import com.netflix.curator.framework.CuratorFrameworkFactory;
+import com.netflix.curator.framework.recipes.locks.InterProcessMutex;
+import com.netflix.curator.retry.ExponentialBackoffRetry;
 import com.stumbleupon.async.Deferred;
 
 public class TsdbStoreCass extends TsdbStore {
@@ -26,11 +35,17 @@ public class TsdbStoreCass extends TsdbStore {
       .getLogger(TsdbStoreCass.class);
       
   private Cassandra.Client client;
+  private final CassandraConfig local_config;
+  private final boolean use_zk_locks;
+  private RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+  private CuratorFramework zk_client = null;
   
   public TsdbStoreCass(final TsdbConfig config, final byte[] table) {
     super(config, table);
-    try {
-      TTransport tr = new TFramedTransport(new TSocket("localhost", 9160));
+    this.local_config = new CassandraConfig(config.getConfigLoader());
+    this.use_zk_locks = local_config.useZKLocks();
+    try {     
+      TTransport tr = new TFramedTransport(new TSocket(local_config.host(), local_config.port()));
       TProtocol proto = new TBinaryProtocol(tr);
       this.client = new Cassandra.Client(proto);
       tr.open();
@@ -103,7 +118,7 @@ public class TsdbStoreCass extends TsdbStore {
   }
   
   public Deferred<Object> putWithRetry(final byte[] key,
-      final byte[] family, final byte[] qualifier, final byte[] data,
+      final byte[] family, final byte[] qualifier, final byte[] data, final long ts,
       final Object rowLock, final Boolean durable, final Boolean bufferable) 
       throws TsdbStorageException {
     // data check
@@ -128,8 +143,8 @@ public class TsdbStoreCass extends TsdbStore {
     short wait = INITIAL_EXP_BACKOFF_DELAY;
     while (attempts-- > 0) {
       try {
-        LOG.trace(String.format("table [%s] key [%s] family [%s] qualifier [%s]  val [%s]",
-            fromBytes(table), fromBytes(key), fromBytes(family), fromBytes(qualifier), fromBytes(data)));
+//        LOG.trace(String.format("table [%s] key [%s] family [%s] qualifier [%s]  val [%s]",
+//            fromBytes(table), fromBytes(key), fromBytes(family), fromBytes(qualifier), fromBytes(data)));
         ColumnParent cp = new ColumnParent();
         cp.setColumn_family(fromBytes(family));
         ByteBuffer row = ByteBuffer.allocate(key.length);
@@ -139,9 +154,10 @@ public class TsdbStoreCass extends TsdbStore {
         Column c = new Column();
         c.setName(qualifier);
         c.setValue(data);
-        // todo, proper time
-        c.setTimestamp(System.currentTimeMillis());
-        //client.set_keyspace(fromBytes(this.table));
+        if (ts > 0)
+          c.setTimestamp(ts);
+        else
+          c.setTimestamp(System.currentTimeMillis());
         client.insert(row, cp, c, ConsistencyLevel.ONE);     
         return Deferred.fromResult(null);
       } catch (InvalidRequestException ire){
@@ -166,10 +182,57 @@ public class TsdbStoreCass extends TsdbStore {
   }
   
   public Object getRowLock(final byte[] key) throws TsdbStorageException {
-    return new Boolean(true);
+    try {
+      if (this.use_zk_locks){
+        if (this.zk_client == null){
+          LOG.debug("Initializing Zookeeper lock client");
+            this.zk_client = CuratorFrameworkFactory.newClient(local_config.zookeeperQuorum(), 
+                retryPolicy);
+            this.zk_client.start();
+        }
+        
+        final String lock_path = "/locks/opentsdb/" + UniqueId.IDtoString(key);
+        //LOG.trace(String.format("Attempting to acquire lock on [%s]", lock_path));
+        
+        InterProcessMutex lock = new InterProcessMutex(this.zk_client, lock_path);
+        if ( lock.acquire(500, TimeUnit.MILLISECONDS) ) 
+        {
+          //LOG.trace(String.format("Successfully acquired lock on [%s]", lock_path));
+          return lock;
+        }
+
+        LOG.warn(String.format("Unable to acquire ZK lock [%s] in 500ms", lock_path));
+        lock = null;
+        return null;
+      }else{
+        return new Boolean(true);
+      }
+    } catch (IOException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+      return null;
+    } catch (Exception e) {
+      throw new TsdbStorageException("Should never be here", e);
+    }
   }
   
   public Boolean releaseRowLock(final Object lock) throws TsdbStorageException {
+    if (lock == null)
+      return true;
+    try {
+      if (this.use_zk_locks){
+        InterProcessMutex zk_lock = (InterProcessMutex)lock;
+        zk_lock.release();
+        //LOG.trace(String.format("Successfully released lock on [%s]", zk_lock.toString()));
+        zk_lock = null;
+        return true;
+      }
+    } catch (UnknownRowLockException urle){
+      LOG.warn("Lock was already released or invalid");
+    } catch (Exception e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
     return true;
   }
   
@@ -280,6 +343,8 @@ public class TsdbStoreCass extends TsdbStore {
     private int port = 9160;
     /** Whether or not to use Zookeeper for locking */
     private boolean use_zk_locks = false;
+    /** Defaults to the localhost for connecting to Zookeeper */
+    private String zookeeper_quorum = "localhost";
     
     public CassandraConfig(final ConfigLoader config){
       this.config = config;
@@ -325,6 +390,22 @@ public class TsdbStoreCass extends TsdbStore {
         LOG.warn(nfe.getLocalizedMessage());
       }
       return this.use_zk_locks;
+    }
+    
+    /**
+     * A comma delimited list of zookeeper hosts to poll for access to the HBase
+     * cluster
+     * @return The hosts to work with
+     */
+    public final String zookeeperQuorum() {
+      try {
+        return this.config.getString("tsd.storage.cassandra.zk.quorum");
+      } catch (NullPointerException npe) {
+        // return the default below
+      } catch (NumberFormatException nfe) {
+        LOG.warn(nfe.getLocalizedMessage());
+      }
+      return this.zookeeper_quorum;
     }
   }
 

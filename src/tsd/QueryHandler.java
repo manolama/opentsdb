@@ -13,14 +13,21 @@
 package net.opentsdb.tsd;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 import org.codehaus.jackson.type.TypeReference;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import edu.emory.mathcs.backport.java.util.Collections;
 
 import net.opentsdb.cache.Cache.CacheRegion;
 import net.opentsdb.core.DataPoints;
@@ -62,20 +69,20 @@ public class QueryHandler implements HttpRpc {
     final boolean nocache = query.hasQueryStringParam("nocache");
     final int query_hash = query.getQueryStringHash();
     
-    if (!nocache){
-      try{
-        @SuppressWarnings("unchecked")
-        List<DataPoints> cached = (List<DataPoints>)tsdb.cache.get(CacheRegion.QUERY, query_hash);
-        if (cached != null){
-          LOG.trace("was cached");
-          query.getFormatter().putDatapoints(cached);
-          query.getFormatter().handleHTTPDataGet(query);
-          return;
-        }
-      }catch (Exception e){
-        e.printStackTrace();
-      }
-    }
+//    if (!nocache){
+//      try{
+//        @SuppressWarnings("unchecked")
+//        List<DataPoints> cached = (List<DataPoints>)tsdb.cache.get(CacheRegion.QUERY, query_hash);
+//        if (cached != null){
+//          LOG.trace("was cached");
+//          query.getFormatter().putDatapoints(cached);
+//          query.getFormatter().handleHTTPDataGet(query);
+//          return;
+//        }
+//      }catch (Exception e){
+//        e.printStackTrace();
+//      }
+//    }
     
     // parse query
     DataQuery dq = null;
@@ -99,19 +106,10 @@ public class QueryHandler implements HttpRpc {
         return;
       }
     }    
-    
-    // data checks
-    if (dq.start_time < 1) {
-      throw BadRequestException.missingParameter("start");
-    }
-    final long now = System.currentTimeMillis() / 1000;
-    if (dq.end_time < 1) {
-      dq.end_time = now;
-    }
+   
     dq.query_hash = query.hashCode();
     
     // determine how many HBase queries we'll need to run
-    int total_queries = 0;
     Query[] tsdbqueries = dq.getTSDQueries();
     
     // validate the query before running it
@@ -119,24 +117,8 @@ public class QueryHandler implements HttpRpc {
       query.sendError(HttpResponseStatus.BAD_REQUEST, dq.error);
       return;
     }
-    
-    // loop through the queries and set the timestamps
-    for (final Query tsdbquery : tsdbqueries) {
-      try {
-        tsdbquery.setStartTime(dq.start_time);
-      } catch (IllegalArgumentException e) {
-        throw new BadRequestException("start time: " + e.getMessage());
-      }
-      try {
-        tsdbquery.setEndTime(dq.end_time);
-      } catch (IllegalArgumentException e) {
-        throw new BadRequestException("end time: " + e.getMessage());
-      }
-      tsdbquery.setPadding(dq.padding);
-      total_queries++;
-    }
 
-    if (tsdbqueries == null || total_queries < 1){
+    if (tsdbqueries == null || tsdbqueries.length < 1){
       query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the query");
       return;
     }
@@ -161,8 +143,34 @@ public class QueryHandler implements HttpRpc {
     }
     tsdbqueries = null;  // free()
     
-    if (!nocache)
-      tsdb.cache.put(CacheRegion.QUERY, query_hash, query.getFormatter().getDataPoints());
+    // if this was a topn query, we need to filter it before calling the formatter's function
+    if (dq.topn != null){
+      LOG.trace("Filtering on topn");
+      
+      TreeMap<Double, Integer> temp = (dq.topn.reverse ? 
+          new TreeMap<Double, Integer>(Collections.reverseOrder()) : 
+            new TreeMap<Double, Integer>());
+      int i=0;
+      for (DataPoints dps : query.getFormatter().getDataPoints()){
+        temp.put(dps.doubleValue(0), i);
+        i++;
+      }
+      
+      //SortedMap<Double, Integer> sorted = (SortedMap<Double, Integer>)temp;
+      List<DataPoints> series = new ArrayList<DataPoints>(temp.size());
+      i = 0;
+      for (Map.Entry<Double, Integer> entry : temp.entrySet()){
+        if (i >= dq.topn.limit)
+          break;
+        series.add(query.getFormatter().getDataPoints().get(entry.getValue()));
+        i++;
+      }
+      
+      query.getFormatter().putDatapoints(series);
+    }
+    
+//    if (!nocache)
+//      tsdb.cache.put(CacheRegion.QUERY, query_hash, query.getFormatter().getDataPoints());
     
     // process the formatter
     query.getFormatter().handleHTTPDataGet(query);

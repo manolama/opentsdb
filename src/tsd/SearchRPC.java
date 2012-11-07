@@ -38,8 +38,8 @@ public class SearchRPC implements HttpRpc {
   private static final Logger LOG = LoggerFactory.getLogger(SearchRPC.class);
     
   public void execute(final TSDB tsdb, final HttpQuery query) {
-    if (tsdb.role != TSDRole.API){
-      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
+    if (TSDB.role == TSDRole.Ingest){
+      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + TSDB.role + "]");
       return;
     }
     
