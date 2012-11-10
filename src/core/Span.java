@@ -40,6 +40,8 @@ final class Span implements DataPoints {
   /** All the rows in this span. */
   private ArrayList<RowSeq> rows = new ArrayList<RowSeq>();
 
+  private ArrayList<Annotation> annotations = new ArrayList<Annotation>();
+  
   Span(final TSDB tsdb) {
     this.tsdb = tsdb;
   }
@@ -78,6 +80,10 @@ final class Span implements DataPoints {
     return Collections.emptyList();
   }
 
+  public List<Annotation> getAnnotations() {
+    return this.annotations;
+  }
+  
   public int size() {
     int size = 0;
     for (final RowSeq row : rows) {
@@ -145,6 +151,10 @@ final class Span implements DataPoints {
     rows.add(rowseq);
   }
 
+  void addAnnotation(final ArrayList<Annotation> notes){
+    this.annotations.addAll(notes);
+  }
+  
   /**
    * Package private helper to access the last timestamp in an HBase row.
    * @param metric_width The number of bytes on which metric IDs are stored.

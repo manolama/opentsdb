@@ -210,6 +210,18 @@ final class SpanGroup implements DataPoints {
     return aggregated_tags;
   }
 
+  public List<Annotation> getAnnotations(){
+    ArrayList<Annotation> notes = new ArrayList<Annotation>();
+    for (Span sp : this.spans){
+      if (sp.getAnnotations() != null)
+        notes.addAll(sp.getAnnotations());
+    }
+    if (notes.size() > 0)
+      return notes;
+    else
+      return null;
+  }
+  
   public int size() {
     // TODO(tsuna): There is a way of doing this way more efficiently by
     // inspecting the Spans and counting only data points that fall in

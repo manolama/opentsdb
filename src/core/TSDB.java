@@ -63,15 +63,6 @@ public final class TSDB {
   
   private static final Logger LOG = LoggerFactory.getLogger(TSDB.class);
   
-  static final byte[] FAMILY = { 't' };
-
-  private static final String METRICS_QUAL = "metrics";
-  private static final short METRICS_WIDTH = 3;
-  private static final String TAG_NAME_QUAL = "tagk";
-  private static final short TAG_NAME_WIDTH = 3;
-  private static final String TAG_VALUE_QUAL = "tagv";
-  private static final short TAG_VALUE_WIDTH = 3;
-
   static final boolean enable_compactions;
   static {
     final String compactions = System.getProperty("tsd.feature.compactions");
@@ -118,7 +109,9 @@ public final class TSDB {
   private final CompactionQueue compactionq;
   
   public final SearchIndexer meta_search_writer;
+  public final SearchIndexer annotation_search_writer;
   public final Searcher meta_searcher;
+  public final Searcher annotation_searcher;
   
   public static TSDRole role = TSDRole.Full;
   public final boolean time_puts = true;
@@ -126,52 +119,6 @@ public final class TSDB {
   public boolean use_mq = false;
   
   public final Cache cache;
-  
-  /**
-   * DEPRECATED Constructor
-   * Please use the constructor with the Config class instead
-   * @param uid_client The HBase client to use for UID tasks
-   * @param data_client The HBase client to use for data tasks
-   * @param timeseries_table The name of the HBase table where time series
-   * data is stored.
-   * @param uniqueids_table The name of the HBase table where the unique IDs
-   * are stored.
-   */
-  public TSDB(final TsdbStore uid_store, final TsdbStore data_store, 
-      final String timeseries_table, final String uniqueids_table) {
-    //this.client = client;
-    this.config = new TsdbConfig();
-    table = timeseries_table.getBytes();
-    this.uid_storage = uid_store;
-    this.data_storage = data_store;
-        
-    final byte[] uidtable = uniqueids_table.getBytes();
-    metrics = new UniqueId(uid_storage, uidtable, METRICS_QUAL, METRICS_WIDTH);
-    tag_names = new UniqueId(uid_storage, uidtable, TAG_NAME_QUAL, TAG_NAME_WIDTH);
-    tag_values = new UniqueId(uid_storage, uidtable, TAG_VALUE_QUAL,
-                              TAG_VALUE_WIDTH);
-    compactionq = new CompactionQueue(this);
-    timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts");
-    ts_uids = new TimeseriesUID(this.uid_storage);
-    TSDB.role = config.role();
-    if (role != TSDRole.Ingest)
-      this.cache = new Cache(config);
-    else
-      this.cache = null;
-    if (role == TSDRole.API || role == TSDRole.Full){
-      meta_search_writer = new SearchIndexer(config.searchIndexPath());
-      meta_searcher = new Searcher(config.searchIndexPath(), cache);
-    }else{
-      meta_search_writer = null;
-      meta_searcher = null;
-    }
-    if (config.mqEnable()){
-      mq = new MQTest("localhost");
-      this.use_mq = true;
-    }else
-      mq = null;
-    LOG.info(String.format("Setting TSD role to [%s]", role));
-  }
   
   /**
    * Constructor.
@@ -190,10 +137,10 @@ public final class TSDB {
     this.data_storage = data_store;
     
     final byte[] uidtable = config.tsdUIDTable().getBytes();
-    metrics = new UniqueId(uid_storage, uidtable, METRICS_QUAL, METRICS_WIDTH);
-    tag_names = new UniqueId(uid_storage, uidtable, TAG_NAME_QUAL, TAG_NAME_WIDTH);
-    tag_values = new UniqueId(uid_storage, uidtable, TAG_VALUE_QUAL,
-                              TAG_VALUE_WIDTH);
+    metrics = new UniqueId(uid_storage, uidtable, TsdbConfig.METRICS_QUAL, TsdbConfig.METRICS_WIDTH);
+    tag_names = new UniqueId(uid_storage, uidtable, TsdbConfig.TAG_NAME_QUAL, TsdbConfig.TAG_NAME_WIDTH);
+    tag_values = new UniqueId(uid_storage, uidtable, TsdbConfig.TAG_VALUE_QUAL,
+        TsdbConfig.TAG_VALUE_WIDTH);
     compactionq = new CompactionQueue(this);
     timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts");
     ts_uids = new TimeseriesUID(this.uid_storage);
@@ -203,11 +150,15 @@ public final class TSDB {
     else
       this.cache = null;
     if (role == TSDRole.API || role == TSDRole.Full){
-      meta_search_writer = new SearchIndexer(config.searchIndexPath());
-      meta_searcher = new Searcher(config.searchIndexPath(), cache);
+      meta_search_writer = new SearchIndexer(config.searchIndexPath() + "meta");
+      annotation_search_writer = new SearchIndexer(config.searchIndexPath() + "annotation");
+      meta_searcher = new Searcher(config.searchIndexPath() + "meta", cache);
+      annotation_searcher = new Searcher(config.searchIndexPath() + "annotation", cache);
     }else{
       meta_search_writer = null;
+      annotation_search_writer = null;
       meta_searcher = null;
+      annotation_searcher = null;
     }
     if (config.mqEnable()){
       mq = new MQTest("localhost");
@@ -227,7 +178,7 @@ public final class TSDB {
     uid_manager.start();
 //    tsuid_manager = new TSUIDManager();
 //    tsuid_manager.start();
-    if (role == TSDRole.API){
+    if (role != TSDRole.Ingest && role != TSDRole.Forwarder){
       if (config.searchEnableIndexer()){
         search_manager = new SearchManager(this);
         search_manager.start();
@@ -523,12 +474,12 @@ public final class TSDB {
     if (!this.ts_uids.contains(tsuid)){
       this.ts_uids.add(tsuid);
     }
-    final long base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
+    final long base_time = IncomingDataPoints.normalizeTimestamp(timestamp);
     Bytes.setInt(row, (int) base_time, metrics.width());
     scheduleForCompaction(row, (int) base_time);
     final short qualifier = (short) ((timestamp - base_time) << Const.FLAG_BITS
                                      | flags);
-    
+
     // MQ publish
     if (use_mq){
       StringBuilder msg = new StringBuilder();
@@ -543,7 +494,7 @@ public final class TSDB {
 //    // TODO(tsuna): Add a callback to time the latency of HBase and store the
 //    // timing in a moving Histogram (once we have a class for this).
     if (!time_puts){
-      return data_storage.putWithRetry(row, FAMILY, Bytes.fromShort(qualifier), value,
+      return data_storage.putWithRetry(row, TsdbConfig.DP_FAMILY, Bytes.fromShort(qualifier), value,
         timestamp * 1000, null, false, true);
     }else{
       final long start_put = System.nanoTime();
@@ -559,7 +510,7 @@ public final class TSDB {
         }
       };
       
-      return data_storage.putWithRetry(row, FAMILY, Bytes.fromShort(qualifier), value,
+      return data_storage.putWithRetry(row, TsdbConfig.DP_FAMILY, Bytes.fromShort(qualifier), value,
           timestamp * 1000, null, false, true).addCallback(cb);
     }
   }
@@ -850,7 +801,7 @@ public final class TSDB {
         try {
           Thread.sleep(5000);
           
-          if (role == TSDRole.Ingest){
+          if (role == TSDRole.Ingest || role == TSDRole.Full){
             LOG.debug("Flushing all TS/UID maps and meta...");
             // update the UIDs
             metrics.flushMeta();

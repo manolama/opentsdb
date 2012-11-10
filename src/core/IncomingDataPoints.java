@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
 
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.uid.UniqueId;
 
 /**
  * Receives new data points and stores them in HBase.
@@ -91,6 +92,35 @@ final class IncomingDataPoints implements WritableDataPoints {
   public static void collectStats(final StatsCollector collector){
     collector.record("datapoints.put", put_counter.get());
   }
+  
+  public static long normalizeTimestamp(final long timestamp){
+    return (timestamp - (timestamp % Const.MAX_TIMESPAN));
+  }
+  
+  public static byte[] getNormalizedRow(final String tsuid, final long timestamp){
+    if (tsuid.length() < (TsdbConfig.METRICS_WIDTH * 2 + TsdbConfig.TAG_NAME_WIDTH * 2 + 
+        TsdbConfig.TAG_VALUE_WIDTH * 2)){
+      throw new IllegalArgumentException("Invalid TSUID length");
+    }
+    byte[] row = new byte[TsdbConfig.METRICS_WIDTH + Const.TIMESTAMP_BYTES + 
+                          (tsuid.substring(TsdbConfig.METRICS_WIDTH * 2).length() / 2)];
+    
+    byte[] metric = UniqueId.StringtoID(tsuid.substring(0, TsdbConfig.METRICS_WIDTH * 2));
+    for (int i=0; i<metric.length; i++){
+      row[i] = metric[i];
+    }
+    
+    final long base_time = normalizeTimestamp(timestamp);
+    Bytes.setInt(row, (int) base_time, TsdbConfig.METRICS_WIDTH);
+    
+    byte[] tags = UniqueId.StringtoID(tsuid.substring(TsdbConfig.METRICS_WIDTH * 2));
+    int x = 0;
+    for (int i=TsdbConfig.METRICS_WIDTH + Const.TIMESTAMP_BYTES; i<row.length; i++){
+      row[i] = tags[x];
+      x++;
+    }
+    return row;
+  } 
   
   /**
    * Validates the given metric and tags.
@@ -264,7 +294,7 @@ final class IncomingDataPoints implements WritableDataPoints {
     // TODO(tsuna): Add an errback to handle some error cases here.
     //point.setDurable(!batch_import);
     put_counter.incrementAndGet();
-    return tsdb.data_storage.putWithRetry(row, TSDB.FAMILY, Bytes.fromShort(qualifier), value,
+    return tsdb.data_storage.putWithRetry(row, TsdbConfig.DP_FAMILY, Bytes.fromShort(qualifier), value,
         timestamp * 1000, null, !batch_import, true).addCallback(cb);
   }
 
@@ -431,6 +461,13 @@ final class IncomingDataPoints implements WritableDataPoints {
     }
     buf.append("])");
     return buf.toString();
+  }
+
+  
+  @Override
+  public List<Annotation> getAnnotations() {
+    // TODO Auto-generated method stub
+    return null;
   }
 
 }

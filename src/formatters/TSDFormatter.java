@@ -11,6 +11,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 
+import net.opentsdb.core.Annotation;
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
@@ -178,6 +179,12 @@ public abstract class TSDFormatter {
     return false;
   }
   
+  public boolean handleHTTPAnnotation(final HttpQuery query, final List<Annotation> annotations){
+    LOG.warn("Method has not been implemented");
+    query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Method has not been implemented");
+    return false;
+  }
+  
 // TELNET HANDLERS ------------------------------------------------------------
   
   public boolean handleTelnetDataGet(String[] command, final Channel chan){
@@ -243,6 +250,12 @@ public abstract class TSDFormatter {
     return Deferred.fromResult(null);
   }
 
+  public Deferred<Object> handleTelnetAnnotation(String[] command, final Channel chan, 
+      final List<Annotation> annotations){
+    LOG.warn("Method has not been implemented");
+    return Deferred.fromResult(null);
+  }
+  
 // STATICS ------------------------------------------------------------
   
   public static void collectStats(final StatsCollector collector, final TSDB tsdb){

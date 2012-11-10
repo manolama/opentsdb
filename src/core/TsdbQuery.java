@@ -115,6 +115,8 @@ final class TsdbQuery implements Query {
   private double time_taken;
   
   private boolean agg_all;
+  
+  private boolean get_annotations;
 
   private ArrayList<String> tsuids;
   
@@ -173,7 +175,8 @@ final class TsdbQuery implements Query {
                             final Map<String, String> tags,
                             final Aggregator function,
                             final boolean rate,
-                            final boolean agg_all) 
+                            final boolean agg_all,
+                            final boolean get_annotations) 
         throws NoSuchUniqueName, PatternSyntaxException {
     this.findGroupBys(tags);
     this.metric = tsdb.metrics.getId(metric);
@@ -181,6 +184,7 @@ final class TsdbQuery implements Query {
     aggregator = function;
     this.rate = rate;
     this.agg_all = agg_all;
+    this.get_annotations = get_annotations;
     
     // debug
     if (this.tags != null){
@@ -211,9 +215,11 @@ final class TsdbQuery implements Query {
   public void setTimeSeries(final ArrayList<String> tsuids,
                             final Aggregator function,
                             final boolean rate,
-                            final boolean agg_all) throws NoSuchUniqueName {
+                            final boolean agg_all,
+                            final boolean get_annotations) throws NoSuchUniqueName {
     this.tsuids = tsuids;
     this.agg_all = agg_all;
+    this.get_annotations = get_annotations;
     
     // TEMP till I can figure out this logic. grr
 //    if (tsuids.size() > 1)
@@ -411,7 +417,7 @@ final class TsdbQuery implements Query {
   public DataPoints[] run() throws HBaseException {
     return groupByAndAggregate(findSpans());
   }
-
+  
   /**
    * Finds all the {@link Span}s that match this query.
    * This is what actually scans the HBase table and loads the data into
@@ -432,6 +438,7 @@ final class TsdbQuery implements Query {
     long starttime = System.nanoTime();
     final TsdbScanner scanner = getScanner();
     try {
+      JSON codec = new JSON(new Annotation());
       ArrayList<ArrayList<KeyValue>> rows;
       while ((rows = tsdb.data_storage.nextRows(scanner).joinUninterruptibly()) != null) {
         hbase_time += (System.nanoTime() - starttime) / 1000000;
@@ -442,34 +449,44 @@ final class TsdbQuery implements Query {
                 + " our scanner (" + scanner + ")! " + row + " does not start"
                 + " with " + Arrays.toString(metric));
           }
-          //LOG.trace(String.format("Processing row [%s]", UniqueId.IDtoString(key)));
-          if (this.padding){
+          
+          ArrayList<KeyValue> valid = new ArrayList<KeyValue>();
+          ArrayList<Annotation> annotations = new ArrayList<Annotation>();
+          for (KeyValue dp : row){
+            if (Bytes.equals(dp.family(), TsdbConfig.ANNOTATE_FAMILY)){
+              //LOG.trace("Processing an annotation");
+              try{
+                if (!codec.parseObject(dp.value())){
+                  LOG.warn(String.format("Unable to parse annotation for ts [%s] at [%d]",
+                      UniqueId.IDtoString(dp.key()), dp.timestamp()));
+                }else{
+                  annotations.add((Annotation)codec.getObject());
+                  LOG.debug("Found an annotation: [" + ((Annotation)codec.getObject()).getDescription() + "]");
+                }
+              } catch(Exception e){
+                e.printStackTrace();
+              }
+              continue;
+            }
+            
+            // remember the timestamp is in ms. The +1 is for rounding issues
+            if (this.padding || 
+                (dp.timestamp() / 1000 >= this.start_time && 
+                    dp.timestamp() / 1000 <= (this.end_time + 1)))
+              valid.add(dp);
+            //LOG.trace(String.format("Proced cell at [%d]", dp.timestamp()));
+          }
+          
+          if (!valid.isEmpty()){
             Span datapoints = spans.get(key);
             if (datapoints == null) {
               datapoints = new Span(tsdb);
               spans.put(key, datapoints);
             }
-            datapoints.addRow(tsdb.compact(row));
+            datapoints.addRow(tsdb.compact(valid));
+            datapoints.addAnnotation(annotations);
             nrows++;
-          }else{
-            ArrayList<KeyValue> valid = new ArrayList<KeyValue>();
-            for (KeyValue dp : row){
-              // remember the timestamp is in ms. The +1 is for rounding issues
-              if (dp.timestamp() / 1000 >= this.start_time && dp.timestamp() / 1000 <= (this.end_time + 1))
-                valid.add(dp);
-              //LOG.trace(String.format("Proced cell at [%d]", dp.timestamp()));
-            }
-            if (!valid.isEmpty()){
-              Span datapoints = spans.get(key);
-              if (datapoints == null) {
-                datapoints = new Span(tsdb);
-                spans.put(key, datapoints);
-              }
-              datapoints.addRow(tsdb.compact(valid));
-              nrows++;
-            }
           }
-          
           starttime = System.nanoTime();
         }
       }
@@ -612,7 +629,9 @@ final class TsdbQuery implements Query {
     else if (tags.size() > 0 || group_bys != null) {
       createAndSetFilter(scanner);
     }
-    scanner.setFamily(TSDB.FAMILY);
+    if (!this.get_annotations)
+      scanner.setFamily(TsdbConfig.DP_FAMILY);
+    // DEBUG TEMP
     JSON codec = new JSON(scanner);
     LOG.trace(codec.getJsonString());
     return tsdb.data_storage.openScanner(scanner);
@@ -850,7 +869,10 @@ final class TsdbQuery implements Query {
         buf.append(", ");
       }
     }
-    buf.append("))");
+    buf.append(")");
+    buf.append(" padding=").append(this.padding);
+    buf.append(" w_annotations=").append(this.get_annotations);
+    buf.append(")");
     return buf.toString();
   }
 

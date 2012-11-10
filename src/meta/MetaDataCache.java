@@ -153,7 +153,8 @@ public class MetaDataCache {
     for (Entry<String, MetaData> entry : meta_copy.entrySet()){
       this.flushMeta(entry.getValue());
     }
-    LOG.debug(String.format("Flushed [%d] metadata entries", meta_copy.size()));
+    if (meta_copy.size() > 0)
+      LOG.debug(String.format("Flushed [%d] metadata entries", meta_copy.size()));
     meta_copy.clear();
   }
   

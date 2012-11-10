@@ -252,7 +252,7 @@ final class CliQuery {
       if (end_ts > 0) {
         query.setEndTime(end_ts);
       }
-      query.setTimeSeries(metric, tags, agg, rate, false);
+      query.setTimeSeries(metric, tags, agg, rate, false, true);
       if (downsample) {
         query.downsample(interval, sampler);
       }

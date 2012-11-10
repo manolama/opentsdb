@@ -18,6 +18,7 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.opentsdb.core.Annotation;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDB.TSDRole;
@@ -42,6 +43,8 @@ public class SearchRPC implements HttpRpc {
       query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + TSDB.role + "]");
       return;
     }
+    
+    String endpoint = query.getEndpoint();
     
     // get formatter
     TSDFormatter formatter = query.getFormatter();
@@ -75,7 +78,9 @@ public class SearchRPC implements HttpRpc {
     LOG.trace(codec.getJsonString());
  
     SearchResults results = null;
-    if (search_query.getReturnTSUIDs())
+    if (endpoint != null && endpoint.toLowerCase().compareTo("annotations") == 0)
+      results = tsdb.annotation_searcher.getAnnotations(search_query);
+    else if (search_query.getReturnTSUIDs())
       results = tsdb.meta_searcher.searchTSUIDs(search_query);
     else if (search_query.getReturnMeta()){
       SearchResults tsuids = tsdb.meta_searcher.searchTSUIDs(search_query);
@@ -103,18 +108,6 @@ public class SearchRPC implements HttpRpc {
     }
     
     results.time = ((double)(System.nanoTime() - query.start_time) / (double)1000000);
-    
-    // build a response map and send away!
-//    Map<String, Object> response = new HashMap<String, Object>();
-//    response.put("limit", search_query.getLimit());
-//    response.put("page", search_query.getPage());
-//    response.put("total_uids", search_query.getTotal_hits());
-//    response.put("total_pages", search_query.getPages());
-//    response.put("time", time);
-//    response.put("results", results);
-//    codec = new JSON(response);
-//    query.sendReply(codec.getJsonBytes());
-    formatter.handleHTTPSearch(query, results);
-    return;
+    query.getFormatter().handleHTTPSearch(query, results);
   }
 }

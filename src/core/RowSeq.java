@@ -514,4 +514,10 @@ final class RowSeq implements DataPoints {
     }
 
   }
+
+  @Override
+  public List<Annotation> getAnnotations() {
+    // TODO Auto-generated method stub
+    return null;
+  }
 }

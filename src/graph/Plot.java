@@ -23,6 +23,7 @@ import java.util.TimeZone;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.opentsdb.core.Annotation;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.DataPoint;
 import net.opentsdb.core.DataPoints;
@@ -73,6 +74,8 @@ public final class Plot {
   private static final int utc_offset =
     TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000;
 
+  private List<Annotation> annotations = new ArrayList<Annotation>();
+  
   /**
    * Constructor.
    * @param start_time Timestamp of the start time of the graph.
@@ -121,6 +124,11 @@ public final class Plot {
     this.height = height;
   }
 
+  public void addAnnotations(final List<Annotation> annotations){
+    if (annotations != null)
+      this.annotations.addAll(annotations);
+  }
+  
   /**
    * Adds some data points to this plot.
    * @param datapoints The data points to plot.
@@ -325,6 +333,15 @@ public final class Plot {
           gp.write("set y2tics border\n");
           break;
         }
+      }
+
+      LOG.debug("Have [" + annotations.size() + "] annotations to graph");
+      for(Annotation annotation : annotations) {
+        String ts = Long.toString(annotation.getStart_time());
+        String value = new String(annotation.getDescription());
+        gp.append("set arrow from \"").append(ts).append("\", graph 0 to \"").append(ts).append("\", graph 1 nohead ls 3\n");
+        gp.append("set object rectangle at \"").append(ts).append("\", graph 0 size char (strlen(\"").append(value).append("\") + 3), char 1 front fc rgbcolor \"white\"\n");
+        gp.append("set label \"").append(value).append("\" at \"").append(ts).append("\", graph 0 front center\n");
       }
 
       gp.write("plot ");

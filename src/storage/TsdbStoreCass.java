@@ -13,6 +13,7 @@ import net.opentsdb.uid.UniqueId;
 
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TProtocol;
+import org.apache.thrift.protocol.TProtocolException;
 import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
@@ -261,22 +262,34 @@ public class TsdbStoreCass extends TsdbStore {
       SlicePredicate predicate = (SlicePredicate) scanner.getScanner();
       
       ColumnParent cp = new ColumnParent();
-      cp.setColumn_family(fromBytes(scanner.getFamily()));
+      if (scanner.getFamily() != null)
+        cp.setColumn_family(fromBytes(scanner.getFamily()));
+      else
+        cp.setColumn_family("");
       
       // this is the range of keys we want
       KeyRange range = new KeyRange();
       if (scanner.getLastKey() != null)
         range.setStart_key(scanner.getLastKey());
-      else
+      else if (scanner.getStart_row() != null)
         range.setStart_key(scanner.getStart_row());
-      range.setEnd_key(scanner.getEndRow());
-      
-//      range.setStart_key(new byte[] { 0 });
-//      range.setEnd_key(new byte[] { 0 });
+      else
+        range.setStart_key("".getBytes(CHARSET));
+      if (scanner.getEndRow() != null)
+        range.setEnd_key(scanner.getEndRow());
+      else
+        range.setEnd_key("".getBytes(CHARSET));
+      if (scanner.getRowRegex() != null && scanner.getRowRegex().length() > 0){
+        IndexExpression reg = new IndexExpression();
+        reg.setColumn_name("".getBytes(CHARSET));
+        reg.setValue(scanner.getRowRegex().getBytes(CHARSET));
+        reg.setOp(IndexOperator.EQ);
+        List<IndexExpression> regs = new ArrayList<IndexExpression>();
+        regs.add(reg);
+        range.setRow_filter(regs);
+      }
       
       ArrayList<ArrayList<KeyValue>> rows = new ArrayList<ArrayList<KeyValue>>();
-      // something crappy is happening where the keyspace keeps getting switched
-      //client.set_keyspace(fromBytes(this.table));
       List<KeySlice> rs = client.get_range_slices(cp, predicate, range, ConsistencyLevel.ONE);
       
       long num_rows = 0;
@@ -300,7 +313,9 @@ public class TsdbStoreCass extends TsdbStore {
       if (num_rows < 1)
         return Deferred.fromResult(null);
       return Deferred.fromResult(rows);    
-
+    } catch (TProtocolException tpe){
+      tpe.printStackTrace();
+      throw new TsdbStorageException("Cass Exception", tpe);
     } catch (Exception e) {
       e.printStackTrace();
       throw new TsdbStorageException("Unable to cast Scanner", e);

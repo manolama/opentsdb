@@ -15,6 +15,7 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.opentsdb.core.Annotation;
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
@@ -93,6 +94,7 @@ public class TsdbJSON extends TSDFormatter {
         stats.unique_tsids = dp.getUID().size();
         ts.stats = stats;
       }
+      ts.annotations = dp.getAnnotations();
       
       timeseries.add(ts);
     }
@@ -261,6 +263,8 @@ public class TsdbJSON extends TSDFormatter {
       response.put("results", results.ts_meta);
     else if (results.terms != null)
       response.put("results", results.terms);
+    else if (results.annotations != null)
+      response.put("results", results.annotations);
     else
       response.put("results", null);
     JSON codec = new JSON(response);
@@ -313,6 +317,12 @@ public class TsdbJSON extends TSDFormatter {
     return true;
   }
   
+  public boolean handleHTTPAnnotation(final HttpQuery query, final List<Annotation> annotations){
+    JSON codec = new JSON(annotations);
+    query.sendReply(codec.getJsonBytes());
+    return true;
+  }
+  
   public static void collectClassStats(final StatsCollector collector){
     collector.record("formatter.tsdbjson.put.success", puts_success.get());
     collector.record("formatter.tsdbjson.put.fail", puts_fail.get());
@@ -349,6 +359,8 @@ public class TsdbJSON extends TSDFormatter {
     public SortedMap<Long, Object> dps = null;
     /** Statistics from the query */
     public TsdbJSONStats stats = null;    
+    /** Annotations */
+    public List<Annotation> annotations = null;
   }
   
   /**

@@ -187,6 +187,7 @@ public class GnuGraphFormatter extends TSDFormatter {
       agg_points += datapoints.get(i).size();
       tsuids += datapoints.get(i).getUID().size();
       plot.add(datapoints.get(i), options.get(i));
+      plot.addAnnotations(datapoints.get(i).getAnnotations());
     }
     
     try {

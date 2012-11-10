@@ -20,6 +20,7 @@ import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import net.opentsdb.core.Annotation;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.tsd.HttpQuery;
 
@@ -706,6 +707,7 @@ public class SearchQuery {
     public ArrayList<TimeSeriesMeta> ts_meta;
     public TreeSet<String> terms;
     public Map<String, Object> groups;
+    public ArrayList<Annotation> annotations;
     
     public void setTotalHits(int total_hits) {
       this.total_hits = total_hits;

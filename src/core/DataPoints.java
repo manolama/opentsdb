@@ -142,4 +142,5 @@ public interface DataPoints extends Iterable<DataPoint> {
    */
   double doubleValue(int i);
 
+  List<Annotation> getAnnotations();
 }

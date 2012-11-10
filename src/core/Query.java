@@ -81,10 +81,10 @@ public interface Query {
    */
   void setTimeSeries(String metric, Map<String, String> tags,
                      Aggregator function, boolean rate, 
-                     boolean agg_all) throws NoSuchUniqueName;
+                     boolean agg_all, boolean get_annotations) throws NoSuchUniqueName;
 
   void setTimeSeries(ArrayList<String> tsuids, Aggregator function, 
-      boolean rate, boolean agg_all) 
+      boolean rate, boolean agg_all, boolean get_annotations) 
     throws NoSuchUniqueName;
   
   /**

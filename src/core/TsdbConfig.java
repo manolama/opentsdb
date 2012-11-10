@@ -47,6 +47,16 @@ public class TsdbConfig {
 
   private ConfigLoader config = new ConfigLoader();
 
+  public static final byte[] DP_FAMILY = { 't' };
+  public static final byte[] ANNOTATE_FAMILY = { 'a' };
+
+  public static final String METRICS_QUAL = "metrics";
+  public static final short METRICS_WIDTH = 3;
+  public static final String TAG_NAME_QUAL = "tagk";
+  public static final short TAG_NAME_WIDTH = 3;
+  public static final String TAG_VALUE_QUAL = "tagv";
+  public static final short TAG_VALUE_WIDTH = 3;
+  
   // -------- TSD -------
   /** Whether or not this TSD instance is read-only */
   private boolean read_only = false;
@@ -486,14 +496,21 @@ public class TsdbConfig {
   // -------- Search --------
   
   public final String searchIndexPath() {
-    try {
-      return this.config.getString("tsd.search.directory");
+    String separator = System.getProperty("file.separator");
+    try {      
+      String path = this.config.getString("tsd.search.directory");
+      if (path.lastIndexOf(separator) != path.length() - 1)
+        path += separator;
+      return path;
     } catch (NullPointerException npe) {
       // return the default below
     } catch (NumberFormatException nfe) {
       LOG.warn(nfe.getLocalizedMessage());
     }
-    return this.search_index_path;
+    String path = this.search_index_path;
+    if (path.lastIndexOf(separator) != path.length() - 1)
+      path += separator;
+    return path;
   }
 
   public final boolean searchEnableIndexer(){

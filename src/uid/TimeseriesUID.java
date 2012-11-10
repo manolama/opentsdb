@@ -111,7 +111,7 @@ public class TimeseriesUID {
       final UniqueId tag_values, final MetaDataCache timeseries_meta){
     try{
       if (this.tsuid_queue.size() < 1){
-        LOG.trace("No new TSUIDs to process");
+        //LOG.trace("No new TSUIDs to process");
         return true;
       }
       

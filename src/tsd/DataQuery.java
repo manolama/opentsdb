@@ -26,6 +26,7 @@ public class DataQuery {
   public HashMap<String, List<String>> format_options;
   public boolean padding = false;
   public TopN topn = null;
+  public boolean with_annotations = false;
 
   @JsonIgnore
   public String error = "";
@@ -58,7 +59,7 @@ public class DataQuery {
     }
 
     for (TSQuery q : this.queries) {
-      if (!q.ParseQuery(tsdb)) {
+      if (!q.ParseQuery(tsdb, this.with_annotations)) {
         this.error = q.error;
         return false;
       }
@@ -84,6 +85,8 @@ public class DataQuery {
     }
     if (query.hasQueryStringParam("padding"))
       this.padding = query.parseBoolean(query.getQueryStringParam("padding"));
+    if (query.hasQueryStringParam("with_annotations"))
+      this.with_annotations = query.parseBoolean(query.getQueryStringParam("with_annotations"));
 
     this.queries = new ArrayList<TSQuery>();
 
@@ -97,7 +100,7 @@ public class DataQuery {
 
       for (final String m : ms) {
         TSQuery mq = new TSQuery();
-        if (!mq.parseQueryString(tsdb, m)) {
+        if (!mq.parseQueryString(tsdb, m, this.with_annotations)) {
           this.error = mq.error;
           return false;
         }
@@ -227,6 +230,7 @@ public class DataQuery {
     public String type;
     public String downsample;
     public boolean agg_all;
+    public boolean with_annotations;
 
     @JsonIgnore
     public Query tsd_query;
@@ -236,8 +240,9 @@ public class DataQuery {
     public boolean has_tags;
     
     @JsonIgnore
-    public boolean ParseQuery(final TSDB tsdb) {
+    public boolean ParseQuery(final TSDB tsdb, final boolean with_annotations) {
       // set the default aggregator
+      this.with_annotations = with_annotations;
       if (this.aggregator == null || this.aggregator.isEmpty())
         this.aggregator = "sum";
       final Aggregator agg = getAggregator(aggregator);
@@ -251,7 +256,7 @@ public class DataQuery {
         this.tsd_query = tsdb.newQuery();
         try {
           this.tsd_query.setTimeSeries(this.tsuids, agg,
-              (this.type != null && !this.type.isEmpty()), this.agg_all);
+              (this.type != null && !this.type.isEmpty()), this.agg_all, this.with_annotations);
         } catch (NoSuchUniqueName e) {
           this.error = e.getMessage();
           return false;
@@ -272,7 +277,7 @@ public class DataQuery {
         this.tsd_query = tsdb.newQuery();
         try {
           this.tsd_query.setTimeSeries(this.metric, this.tags, agg,
-              (this.type != null && !this.type.isEmpty()), this.agg_all);
+              (this.type != null && !this.type.isEmpty()), this.agg_all, this.with_annotations);
         } catch (NoSuchUniqueName e) {
           this.error = e.getMessage();
           return false;
@@ -330,7 +335,7 @@ public class DataQuery {
 
       this.tsd_query = tsdb.newQuery();
       try {
-        this.tsd_query.setTimeSeries(tsuids, agg, rate, this.agg_all);
+        this.tsd_query.setTimeSeries(tsuids, agg, rate, this.agg_all, this.with_annotations);
       } catch (NoSuchUniqueName e) {
         this.error = e.getMessage();
         return false;
@@ -368,7 +373,8 @@ public class DataQuery {
     }
 
     @JsonIgnore
-    public boolean parseQueryString(final TSDB tsdb, final String query) {
+    public boolean parseQueryString(final TSDB tsdb, final String query, final boolean with_annotations) {
+      this.with_annotations = with_annotations;
       // m is of the following forms:
       // agg:[interval-agg:][rate:]metric[{tag=value,...}]
       // Where the parts in square brackets `[' .. `]' are optional.
@@ -420,7 +426,7 @@ public class DataQuery {
           this.has_tags = true;
           LOG.trace("Definitely has the damned tags");
         }
-        this.tsd_query.setTimeSeries(metric, tags, agg, rate, agg_all);
+        this.tsd_query.setTimeSeries(metric, tags, agg, rate, agg_all, this.with_annotations);
       } catch (NoSuchUniqueName e) {
         this.error = e.getMessage();
         return false;

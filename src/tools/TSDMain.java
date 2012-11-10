@@ -177,7 +177,7 @@ final class TSDMain {
 
       final TsdbStore uid_storage;
       final TsdbStore data_storage;
-      final Boolean use_cass = true;
+      final Boolean use_cass = false;
       if (use_cass){
         config.setConfig("tsd.storage.table.uid", "tsdbuid");
         // temp!

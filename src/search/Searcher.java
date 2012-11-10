@@ -10,9 +10,11 @@ import java.util.TreeSet;
 
 import net.opentsdb.cache.Cache;
 import net.opentsdb.cache.Cache.CacheRegion;
+import net.opentsdb.core.Annotation;
 import net.opentsdb.search.SearchQuery.SearchResults;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.document.Fieldable;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermEnum;
@@ -65,7 +67,7 @@ public class Searcher {
     boolean cached = false;
     TopDocs hits = (TopDocs)this.cache.get(CacheRegion.SEARCH, query.hashCode());
     if (hits == null)
-      hits = this.search(query, null);
+      hits = this.search(query, null, "created");
     else{
       cached = true;
     }
@@ -126,7 +128,7 @@ public class Searcher {
     boolean cached = false;
     TopDocs hits = (TopDocs)this.cache.get(CacheRegion.SEARCH, query.hashCode());
     if (hits == null)
-      hits = this.search(query, null);
+      hits = this.search(query, null, "created");
     else{
       cached = true;
       LOG.trace("Got Cached search!!!");
@@ -332,6 +334,84 @@ public class Searcher {
     return null;
   }
   
+  public final SearchResults getAnnotations(final SearchQuery query){
+    if (!this.checkSearcher()){
+      return null;
+    }
+    
+    boolean cached = false;
+    TopDocs hits = (TopDocs)this.cache.get(CacheRegion.SEARCH, query.hashCode());
+    if (hits == null)
+      hits = this.search(query, null, "start_time");
+    else{
+      cached = true;
+    }
+    
+    if (hits == null){
+      LOG.error(String.format("Unable to execute query [%s]", query.getQuery()));
+      return null;
+    }
+    
+    SearchResults sr = new SearchResults(query);
+    if (hits.totalHits < 1){
+      if (!cached)
+        this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
+      return sr;
+    }
+    
+    final int page = query.getPage();
+    final int limit = query.getLimit();
+    
+    if (hits.totalHits < (page * limit)){
+      query.setError(String.format("Page [%d] starting at result [%d] is greater than total results [%d]", 
+          page, (page * limit), hits.totalHits));
+      LOG.warn(query.getError());
+      return null;
+    }
+    
+    // return an array of TSUIDs
+    ArrayList<Annotation> annotations = new ArrayList<Annotation>();
+    for(int i = (page * limit); i < ((page + 1) * limit); i++) {
+      try {
+        Annotation note = new Annotation();
+        HashMap<String, String> custom = new HashMap<String, String>();
+        for (Fieldable field : searcher.doc(hits.scoreDocs[i].doc).getFields()){
+          if (field.name().compareTo("tsuid") == 0)
+            note.setTsuid(field.stringValue().toUpperCase());
+          else if (field.name().compareTo("description") == 0)
+            note.setDescription(field.stringValue());
+          else if (field.name().compareTo("notes") == 0)
+            note.setNotes(field.stringValue());
+          else if (field.name().compareTo("start_time") == 0)
+            note.setStart_time(Long.getLong(field.stringValue()));
+          else if (field.name().compareTo("end_time") == 0)
+            note.setEnd_time(Long.getLong(field.stringValue()));
+          else if (field.name().compareTo("uid") != 0)
+            custom.put(field.name(), field.stringValue());
+        }
+        if (custom.size() > 0)
+          note.setCustom(custom);
+        annotations.add(note);
+        
+        // bail if we exceed the bounds
+        if (i+2 > hits.totalHits)
+          break;
+      } catch (CorruptIndexException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      } catch (IOException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
+    }
+    sr.annotations = annotations;
+    sr.setTotalHits(hits.totalHits);
+    
+    if (!cached)
+      this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
+    return sr;
+  }
+  
 // PRIVATES -----------------------------------------
   
   /**
@@ -418,7 +498,7 @@ public class Searcher {
    * @param query
    * @return
    */
-  private final TopDocs search(final SearchQuery query, final ScoreDoc last_result){
+  private final TopDocs search(final SearchQuery query, final ScoreDoc last_result, final String get_all_field){
     try {
       Query q = null;
       QueryParser parser = new QueryParser(Version.LUCENE_36, "content", 
@@ -428,7 +508,7 @@ public class Searcher {
       
       // if we want ALL records, do so
       if (query.getQuery().equals("*") || query.getQuery().isEmpty())
-        q = NumericRangeQuery.newDoubleRange("created", 0d, Double.MAX_VALUE, true, true);
+        q = NumericRangeQuery.newDoubleRange(get_all_field, 0d, Double.MAX_VALUE, true, true);
       else if (query.getRegex())
         q = new RegexQuery( new Term(query.getField(), query.getQuery()));
       else
