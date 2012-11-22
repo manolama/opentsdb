@@ -48,7 +48,6 @@ public class TsdbConfig {
   private ConfigLoader config = new ConfigLoader();
 
   public static final byte[] DP_FAMILY = { 't' };
-  public static final byte[] ANNOTATE_FAMILY = { 'a' };
 
   public static final String METRICS_QUAL = "metrics";
   public static final short METRICS_WIDTH = 3;
@@ -56,6 +55,7 @@ public class TsdbConfig {
   public static final short TAG_NAME_WIDTH = 3;
   public static final String TAG_VALUE_QUAL = "tagv";
   public static final short TAG_VALUE_WIDTH = 3;
+  public static final short NOTE_QUAL_WIDTH = 3;
   
   // -------- TSD -------
   /** Whether or not this TSD instance is read-only */

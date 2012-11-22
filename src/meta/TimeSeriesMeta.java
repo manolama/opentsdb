@@ -202,12 +202,12 @@ final public class TimeSeriesMeta extends MetaData {
     doc.add(new Field("tsuid", this.uid.toLowerCase(), Field.Store.YES, Field.Index.NOT_ANALYZED));
     doc.add(new Field("metric", this.metric.getName(), Field.Store.YES, Field.Index.NOT_ANALYZED));
     doc.add(new Field("metric_uid", this.uid.substring(0, 6).toLowerCase(), Field.Store.NO, Field.Index.NOT_ANALYZED));
-    doc.add(new NumericField("retention").setIntValue(this.retention));
-    doc.add(new NumericField("max").setDoubleValue(this.max));
-    doc.add(new NumericField("min").setDoubleValue(this.min));
-    doc.add(new NumericField("interval").setDoubleValue(this.interval));
-    doc.add(new NumericField("created").setLongValue(this.created));
-    doc.add(new NumericField("last_received").setLongValue(this.last_received));
+    doc.add(new NumericField("retention", Field.Store.NO, true).setIntValue(this.retention));
+    doc.add(new NumericField("max", Field.Store.NO, true).setDoubleValue(this.max));
+    doc.add(new NumericField("min", Field.Store.NO, true).setDoubleValue(this.min));
+    doc.add(new NumericField("interval", Field.Store.NO, true).setDoubleValue(this.interval));
+    doc.add(new NumericField("created", Field.Store.NO, true).setLongValue(this.created));
+    doc.add(new NumericField("last_received", Field.Store.NO, true).setLongValue(this.last_received));
     doc.add(new Field("notes", this.notes, Field.Store.NO, Field.Index.ANALYZED));
     flatten.append(this.notes + " ");
     doc.add(new Field("units", this.units, Field.Store.NO, Field.Index.ANALYZED));

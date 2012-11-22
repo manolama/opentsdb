@@ -34,6 +34,7 @@ import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.TimeseriesUID;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.cache.Cache;
+import net.opentsdb.core.CompactionQueue.CompactedDPS;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaDataCache;
 import net.opentsdb.meta.TimeSeriesMeta;
@@ -63,11 +64,7 @@ public final class TSDB {
   
   private static final Logger LOG = LoggerFactory.getLogger(TSDB.class);
   
-  static final boolean enable_compactions;
-  static {
-    final String compactions = System.getProperty("tsd.feature.compactions");
-    enable_compactions = compactions != null && !"false".equals(compactions);
-  }
+  static boolean enable_compactions;
 
   /** Client for the HBase cluster to use.  */
   public final TsdbStore uid_storage;
@@ -132,23 +129,24 @@ public final class TSDB {
   public TSDB(final TsdbStore uid_store, final TsdbStore data_store, final TsdbConfig config) {
     //this.client = client;
     this.config = config;
-    table = config.tsdTable().getBytes();
-    this.uid_storage = uid_store;
-    this.data_storage = data_store;
-    
-    final byte[] uidtable = config.tsdUIDTable().getBytes();
-    metrics = new UniqueId(uid_storage, uidtable, TsdbConfig.METRICS_QUAL, TsdbConfig.METRICS_WIDTH);
-    tag_names = new UniqueId(uid_storage, uidtable, TsdbConfig.TAG_NAME_QUAL, TsdbConfig.TAG_NAME_WIDTH);
-    tag_values = new UniqueId(uid_storage, uidtable, TsdbConfig.TAG_VALUE_QUAL,
-        TsdbConfig.TAG_VALUE_WIDTH);
-    compactionq = new CompactionQueue(this);
-    timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts");
-    ts_uids = new TimeseriesUID(this.uid_storage);
     TSDB.role = config.role();
     if (role != TSDRole.Ingest)
       this.cache = new Cache(config);
     else
       this.cache = null;
+    table = config.tsdTable().getBytes();
+    this.uid_storage = uid_store;
+    this.data_storage = data_store;
+    
+    final byte[] uidtable = config.tsdUIDTable().getBytes();
+    metrics = new UniqueId(uid_storage, uidtable, TsdbConfig.METRICS_QUAL, TsdbConfig.METRICS_WIDTH, this.cache);
+    tag_names = new UniqueId(uid_storage, uidtable, TsdbConfig.TAG_NAME_QUAL, TsdbConfig.TAG_NAME_WIDTH, this.cache);
+    tag_values = new UniqueId(uid_storage, uidtable, TsdbConfig.TAG_VALUE_QUAL,
+        TsdbConfig.TAG_VALUE_WIDTH, this.cache);
+    compactionq = new CompactionQueue(this);
+    ts_uids = new TimeseriesUID(this.uid_storage);
+    enable_compactions = config.enableCompactions();
+
     if (role == TSDRole.API || role == TSDRole.Full){
       meta_search_writer = new SearchIndexer(config.searchIndexPath() + "meta");
       annotation_search_writer = new SearchIndexer(config.searchIndexPath() + "annotation");
@@ -160,6 +158,7 @@ public final class TSDB {
       meta_searcher = null;
       annotation_searcher = null;
     }
+    timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts", this.cache);
     if (config.mqEnable()){
       mq = new MQTest("localhost");
       this.use_mq = true;
@@ -174,16 +173,16 @@ public final class TSDB {
    * utilities.
    */
   public void startManagementThreads(){
-    uid_manager = new UIDManager();
-    uid_manager.start();
-//    tsuid_manager = new TSUIDManager();
-//    tsuid_manager.start();
-    if (role != TSDRole.Ingest && role != TSDRole.Forwarder){
-      if (config.searchEnableIndexer()){
-        search_manager = new SearchManager(this);
-        search_manager.start();
-      }
-    }
+//    uid_manager = new UIDManager();
+//    uid_manager.start();
+////    tsuid_manager = new TSUIDManager();
+////    tsuid_manager.start();
+//    if (role != TSDRole.Ingest && role != TSDRole.Forwarder){
+//      if (config.searchEnableIndexer()){
+//        search_manager = new SearchManager(this);
+//        search_manager.start();
+//      }
+//    }
   }
   
   /**
@@ -280,7 +279,6 @@ public final class TSDB {
     collectUidStats(tag_values, collector);
     collector.record("uid.cache.size.tsuid.hashes", this.ts_uids.hashSize());
     collector.record("uid.cache.size.tsuid.queue", this.ts_uids.queueSize());
-    collector.record("uid.cache.size.tsuid.meta", this.timeseries_meta.size());
     this.ts_uids.collectStats(collector);
     if (this.cache != null)
       this.cache.collectStats(collector);
@@ -340,8 +338,6 @@ public final class TSDB {
     collector.record("uid.cache.size.name", uid.cacheSizeName(), 
         new SimpleEntry<String, String>("kind", uid.kind()));
     collector.record("uid.cache.size.id", uid.cacheSizeID(), 
-        new SimpleEntry<String, String>("kind", uid.kind()));
-    collector.record("uid.cache.size.meta", uid.cacheSizeMeta(), 
         new SimpleEntry<String, String>("kind", uid.kind()));
   }
 
@@ -647,13 +643,13 @@ public final class TSDB {
     return this.config;
   }
   
-  public TimeSeriesMeta getTimeSeriesMeta(final byte[] id, final boolean cache){
+  public TimeSeriesMeta getTimeSeriesMeta(final byte[] id){
     if (id.length <= (short)3){
       LOG.debug("ID was too short");
       return null;
     }
     try{
-      TimeSeriesMeta meta = this.timeseries_meta.getTimeSeriesMeta(id, cache);
+      TimeSeriesMeta meta = this.timeseries_meta.getTimeSeriesMeta(id);
       if (meta == null){
         LOG.trace(String.format("Couldn't find an entry for TSUID [%s]", UniqueId.IDtoString(id)));
         return null;
@@ -667,7 +663,7 @@ public final class TSDB {
             UniqueId.IDtoString(id)));
         return null;
       }else{
-        GeneralMeta metric = this.metrics.getGeneralMeta(metricID, cache);
+        GeneralMeta metric = this.metrics.getGeneralMeta(metricID);
         if (metric == null){
           LOG.warn(String.format("Metric meta [%s] for tsuid [%s] was null", 
               UniqueId.IDtoString(metricID), UniqueId.IDtoString(id)));
@@ -686,14 +682,14 @@ public final class TSDB {
         int index=1;
         for (byte[] tag : tags){
           if ((index % 2) != 0){
-            GeneralMeta tagk = this.tag_names.getGeneralMeta(tag, cache);
+            GeneralMeta tagk = this.tag_names.getGeneralMeta(tag);
             if (tagk == null){
               LOG.warn(String.format("Unable to get tagk value for [%s]", UniqueId.IDtoString(tag)));
               break;
             }
             tag_metas.add(tagk);
           }else{
-            GeneralMeta tagv = this.tag_values.getGeneralMeta(tag, cache);
+            GeneralMeta tagv = this.tag_values.getGeneralMeta(tag);
             if (tagv == null){
               LOG.warn(String.format("Unable to get tagv value for [%s]", UniqueId.IDtoString(tag)));
               break;
@@ -718,7 +714,7 @@ public final class TSDB {
   }
   
   public Boolean putMeta(final TimeSeriesMeta meta){
-    return this.timeseries_meta.putMeta(meta, false) != null;
+    return this.timeseries_meta.putMeta(meta) != null;
   }
   
   public static Boolean isInteger(Object dp){
@@ -770,7 +766,7 @@ public final class TSDB {
   // Compaction helpers //
   // ------------------ //
 
-  final KeyValue compact(final ArrayList<KeyValue> row) {
+  final CompactedDPS compact(final ArrayList<KeyValue> row) {
     return compactionq.compact(row);
   }
 

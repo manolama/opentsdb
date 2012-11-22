@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 
+import net.opentsdb.cache.Cache;
+import net.opentsdb.cache.Cache.CacheRegion;
 import net.opentsdb.core.JSON;
 import net.opentsdb.meta.GeneralMeta.Meta_Type;
 import net.opentsdb.storage.TsdbStorageException;
@@ -41,9 +43,11 @@ public class MetaDataCache {
   /** The kind of UniqueId, used as the column qualifier. */
   private final String kind;
 
-  /** Cache NOTE TO SELF can't use a byte[] for a key, won't compare */
-  private final ConcurrentHashMap<String, MetaData> cache = new ConcurrentHashMap<String, MetaData>();
+  /** Queue for storing new entries that should be flushed to storage */
+  private final ArrayList<MetaData> storage_queue = new ArrayList<MetaData>();
 
+  private final Cache cache;
+  
   /**
    * Constructor.
    * @param client The HBase client to use.
@@ -51,17 +55,19 @@ public class MetaDataCache {
    * @param kind The name of the cache, e.g. metrics, tagk or ts
    */
   public MetaDataCache(final TsdbStore client, final byte[] table,
-      final Boolean is_ts, final String kind) {
+      final Boolean is_ts, final String kind, final Cache cache) {
     this.storage = client;
     this.is_ts = is_ts;
     this.kind = kind;
+    this.cache = cache;
   }
 
-  public TimeSeriesMeta getTimeSeriesMeta(final byte[] id, final boolean cache) {
-    TimeSeriesMeta meta = (TimeSeriesMeta) this.cache.get(UniqueId.IDtoString(id));
+  public TimeSeriesMeta getTimeSeriesMeta(final byte[] id) {
+    TimeSeriesMeta meta = 
+      (TimeSeriesMeta) this.cache.get(CacheRegion.META, kind + UniqueId.IDtoString(id));
     if (meta != null)
       return meta;
-    meta = getTimeSeriesMetaFromHBase(id, cache);
+    meta = getTimeSeriesMetaFromHBase(id);
     if (meta != null) {
       return meta;
     } else
@@ -69,7 +75,8 @@ public class MetaDataCache {
   }
 
   public boolean haveMeta(final String uid){
-    if (this.cache.get(uid) != null)
+    if (this.cache != null && 
+        this.cache.get(CacheRegion.META, kind + uid) != null)
       return true;
     
     try{
@@ -84,12 +91,12 @@ public class MetaDataCache {
     return false;
   }
   
-  public GeneralMeta getGeneralMeta(final byte[] id, final boolean cache) {
-    GeneralMeta meta = (GeneralMeta) this.cache.get(UniqueId.IDtoString(id));
+  public GeneralMeta getGeneralMeta(final byte[] id) {
+    GeneralMeta meta = (GeneralMeta) this.cache.get(CacheRegion.META, kind + UniqueId.IDtoString(id));
     if (meta != null){
       return meta;
     }
-    meta = getGeneralMetaFromHBase(id, cache);
+    meta = getGeneralMetaFromHBase(id);
     if (meta != null){
       return meta;
     }
@@ -97,7 +104,12 @@ public class MetaDataCache {
       return null;
   }
 
-  public GeneralMeta putMeta(final MetaData meta, final boolean flush) {
+  /**
+   * Merges the metadata with whatever is in storage
+   * @param meta
+   * @return
+   */
+  public GeneralMeta putMeta(final MetaData meta) {
     if (meta == null) {
       LOG.error("Null value for meta object");
       return null;
@@ -116,45 +128,36 @@ public class MetaDataCache {
       return null;
     }
 
-    // if we're not flushing, just merge and cache
-    if (!flush){
-      if (this.cache.contains(uid)){
-        this.cache.get(uid).copyChanges(meta);
-      }else
-        this.cache.put(uid, meta);
-      return (GeneralMeta) this.cache.get(uid);
-    }
-
     MetaData new_meta = this.flushMeta(meta);
-    if (!flush && new_meta != null)
-      this.cache.put(uid, new_meta);
     if (!this.is_ts){
       return (GeneralMeta) new_meta;
     }else
       return null;
   }
 
-  public void putCache(final byte[] id, final MetaData meta){
-    this.cache.put(UniqueId.IDtoString(id), meta);
+  public void QueueMeta(final MetaData meta){
+    this.storage_queue.add(meta);
   }
   
-  public int size(){
-    return this.cache.size();
+  public void putCache(final byte[] id, final MetaData meta){
+    this.cache.put(CacheRegion.META, kind + UniqueId.IDtoString(id), meta);
   }
   
   /**
-   * Runs through the cache, flushes anything to disk that exists, and then wipes the cache
+   * Runs through the list, flushes anything to disk that exists, and then wipes the cache
    */
   public final void flush(){
-    Map<String, MetaData> meta_copy = new HashMap<String, MetaData>();
-    meta_copy.putAll(this.cache);
-    this.cache.clear();
+    if (this.storage_queue.isEmpty())
+      return;
+    
+    ArrayList<MetaData> meta_copy = new ArrayList<MetaData>();
+    meta_copy.addAll(this.storage_queue);
+    this.storage_queue.clear();
 
-    for (Entry<String, MetaData> entry : meta_copy.entrySet()){
-      this.flushMeta(entry.getValue());
+    for (MetaData entry : meta_copy){
+      this.flushMeta(entry);
     }
-    if (meta_copy.size() > 0)
-      LOG.debug(String.format("Flushed [%d] metadata entries", meta_copy.size()));
+    LOG.debug(String.format("Flushed [%d] metadata entries", meta_copy.size()));
     meta_copy.clear();
   }
   
@@ -200,7 +203,7 @@ public class MetaDataCache {
 
   // PRIVATES ---------------------------------------------------------
 
-  private TimeSeriesMeta getTimeSeriesMetaFromHBase(final byte[] id, final boolean cache)
+  private TimeSeriesMeta getTimeSeriesMetaFromHBase(final byte[] id)
       throws HBaseException {
     try{
       final String cell = this.kind + "_meta";
@@ -215,8 +218,8 @@ public class MetaDataCache {
       JSON codec = new JSON(new TimeSeriesMeta(id));
       if (codec.parseObject(json)) {
         TimeSeriesMeta meta = (TimeSeriesMeta) codec.getObject();
-        if (cache)
-          this.cache.put(UniqueId.IDtoString(id), meta);
+//        if (cache)
+//          this.cache.put(CacheRegion.META, kind + UniqueId.IDtoString(id), meta);
         return meta;
       }
     }catch (TsdbStorageException tse){
@@ -226,7 +229,7 @@ public class MetaDataCache {
     return null;
   }
 
-  private GeneralMeta getGeneralMetaFromHBase(final byte[] id, final boolean cache)
+  private GeneralMeta getGeneralMetaFromHBase(final byte[] id)
       throws HBaseException {
     final String cell = this.kind + "_meta";
     final Meta_Type type;
@@ -251,13 +254,13 @@ public class MetaDataCache {
           meta.setType(Meta_Type.TAGK);
         else
           meta.setType(Meta_Type.TAGV);
-        if (cache)
-          this.cache.put(UniqueId.IDtoString(id), meta);
+//        if (cache)
+//          this.cache.put(UniqueId.IDtoString(id), meta);
         return meta;
       }
     }
     // todo - log
-    this.cache.put(UniqueId.IDtoString(id), new GeneralMeta(id, type));
+    //this.cache.put(UniqueId.IDtoString(id), new GeneralMeta(id, type));
     return new GeneralMeta(id, type);
   }
 

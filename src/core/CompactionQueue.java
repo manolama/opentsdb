@@ -33,6 +33,8 @@ import org.hbase.async.KeyValue;
 import org.hbase.async.PleaseThrottleException;
 
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.storage.TsdbStore;
+import net.opentsdb.uid.UniqueId;
 
 /**
  * "Queue" of rows to compact.
@@ -223,10 +225,10 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
    * Must contain at least one element.
    * @return A compacted version of this row.
    */
-  KeyValue compact(final ArrayList<KeyValue> row) {
-    final KeyValue[] compacted = { null };
+  CompactedDPS compact(final ArrayList<KeyValue> row) {
+    final CompactedDPS compacted = new CompactedDPS();
     compact(row, compacted);
-    return compacted[0];
+    return compacted;
   }
 
   /**
@@ -246,13 +248,18 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
    * to HBase, otherwise {@code null}.
    */
   private Deferred<Object> compact(final ArrayList<KeyValue> row,
-                                   final KeyValue[] compacted) {
+                                   final CompactedDPS compacted) {
     if (row.size() <= 1) {
+      LOG.trace("Row size empty or 1");
       if (row.isEmpty()) {  // Maybe the row got deleted in the mean time?
         LOG.debug("Attempted to compact a row that doesn't exist.");
       } else if (compacted != null) {
-        // no need to re-compact rows containing a single value.
-        compacted[0] = row.get(0);
+        // no need to re-compact rows containing a single value, and make sure it's not
+        // an annotation
+        if (row.get(0).qualifier().length != TsdbConfig.NOTE_QUAL_WIDTH)
+          compacted.values = row.get(0);
+        else
+          LOG.trace("Row only had an annotation in it");
       }
       return null;
     }
@@ -272,14 +279,34 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       KeyValue longest = row.get(0);  // KV with the longest qualifier.
       int longest_idx = 0;            // Index of `longest'.
       final int nkvs = row.size();
+      final ArrayList<Integer> remove_notes = new ArrayList<Integer>();
+      JSON codec = new JSON(new Annotation());
       for (int i = 0; i < nkvs; i++) {
         final KeyValue kv = row.get(i);
         final byte[] qual = kv.qualifier();
-        // If the qualifier length isn't 2, this row might have already
+        // If the qualifier length isn't 2 or 3, this row might have already
         // been compacted, potentially partially, so we need to merge the
         // partially compacted set of cells, with the rest.
         final int len = qual.length;
-        if (len != 2) {
+        if (len == TsdbConfig.NOTE_QUAL_WIDTH){
+          remove_notes.add(i);
+          // annotation
+          if (compacted.annotations == null)
+            compacted.annotations = new ArrayList<Annotation>();
+          try{
+            if (!codec.parseObject(row.get(i).value())){
+              LOG.warn(String.format("Unable to parse annotation for ts [%s] at [%d]",
+                  UniqueId.IDtoString(row.get(i).key()), row.get(i).timestamp()));
+            }else{
+              compacted.annotations.add((Annotation)codec.getObject());
+              LOG.debug("Found an annotation: [" + ((Annotation)codec.getObject()).getDescription() + "]");
+            }
+          } catch(Exception e){
+            e.printStackTrace();
+          }
+          // don't fudge the qualifier length, we don't want it in there
+          continue;
+        } else if (len != 2) {
           trivial = false;
           // We only do this here because no qualifier can be < 2 bytes.
           if (len > longest.qualifier().length) {
@@ -287,6 +314,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
             longest_idx = i;
           }
         } else {
+          LOG.trace("Found possibly compacted row");
           // In the trivial case, do some sanity checking here.
           // For non-trivial cases, the sanity checking logic is more
           // complicated and is thus pushed down to `complexCompact'.
@@ -310,6 +338,12 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
         qual_len += len;
       }
 
+      // strip annotations
+      for (int i : remove_notes){
+        LOG.trace("Removing col [" + i + "]");
+        row.remove(i);
+      }
+      
       if (trivial) {
         trivial_compactions.incrementAndGet();
         compact = trivialCompact(row, qual_len, val_len);
@@ -368,7 +402,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       }
     }
     if (compacted != null) {  // Caller is interested in the compacted form.
-      compacted[0] = compact;
+      compacted.values = compact;
       final long base_time = Bytes.getUnsignedInt(compact.key(), metric_width);
       final long cut_off = System.currentTimeMillis() / 1000
         - Const.MAX_TIMESPAN - 1;
@@ -381,19 +415,22 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     }
 
     final byte[] key = compact.key();
-    //LOG.debug("Compacting row " + Arrays.toString(key));
+    LOG.trace("Compacting row " + UniqueId.IDtoString(key));//Arrays.toString(key));
     deleted_cells.addAndGet(row.size());  // We're going to delete this.
     if (write) {
       final byte[] qual = compact.qualifier();
       final byte[] value = compact.value();
       written_cells.incrementAndGet();
-      return tsdb.data_storage.putWithRetry(key, null, qual, value, 0)
+      return tsdb.data_storage.putWithRetry(key, TsdbConfig.DP_FAMILY, qual, value)
         .addCallbacks(new DeleteCompactedCB(row), handle_write_error);
     } else {
       // We had nothing to write, because one of the cells is already the
       // correctly compacted version, so we can go ahead and delete the
       // individual cells directly.
-      new DeleteCompactedCB(row).call(null);
+      if (row.size() > 0){
+        LOG.trace("Compacted row, deleting leftovers");
+        new DeleteCompactedCB(row).call(null);
+      }
       return null;
     }
   }
@@ -414,6 +451,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
   private static KeyValue trivialCompact(final ArrayList<KeyValue> row,
                                          final int qual_len,
                                          final int val_len) {
+    LOG.trace(String.format("Trivial compaction on row [%s]", UniqueId.IDtoString(row.get(0).key())));
     // Now let's simply concatenate all the qualifiers and values together.
     final byte[] qualifier = new byte[qual_len];
     final byte[] value = new byte[val_len];
@@ -422,6 +460,9 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     int val_idx = 0;
     for (final KeyValue kv : row) {
       final byte[] q = kv.qualifier();
+      if (q.length == TsdbConfig.NOTE_QUAL_WIDTH)
+        continue;
+      
       // We shouldn't get into this function if this isn't true.
       assert q.length == 2: "Qualifier length must be 2: " + kv;
       final byte[] v = fixFloatingPointValue(q[1], kv.value());
@@ -563,6 +604,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
    */
   static KeyValue complexCompact(final ArrayList<KeyValue> row,
                                  final int estimated_nvalues) {
+    LOG.trace(String.format("Complex compaction on row [%s]", UniqueId.IDtoString(row.get(0).key())));
     // We know at least one of the cells contains multiple values, and we need
     // to merge all the cells together in a sorted fashion.  We use a simple
     // strategy: split all the cells into individual objects, sort them,
@@ -658,6 +700,11 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       final byte[] qual = kv.qualifier();
       final int len = qual.length;
       final byte[] val = kv.value();
+      
+      // skip annotations
+      if (len == TsdbConfig.NOTE_QUAL_WIDTH)
+        continue;
+      
       if (len == 2) {  // Single-value cell.
         // Maybe we need to fix the flags in the qualifier.
         final byte[] actual_val = fixFloatingPointValue(qual[1], val);
@@ -722,11 +769,16 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       family = first.family();
       qualifiers = new byte[cells.size()][];
       for (int i = 0; i < qualifiers.length; i++) {
+//        // skip annotations
+//        if (cells.get(i).qualifier().length == TsdbConfig.NOTE_QUAL_WIDTH)
+//          continue;
         qualifiers[i] = cells.get(i).qualifier();
       }
+      LOG.trace("Found [" + qualifiers.length + "] cells to delete");
     }
 
     public Object call(final Object arg) {
+      LOG.trace("Found [" + qualifiers.length + "] cells to delete");
       return tsdb.data_storage.deleteValues(key, family, qualifiers).addErrback(handle_delete_error);
     }
 
@@ -913,4 +965,8 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     }
   }
 
+  public static final class CompactedDPS{
+    public KeyValue values = null;
+    public ArrayList<Annotation> annotations = null;
+  }
 }

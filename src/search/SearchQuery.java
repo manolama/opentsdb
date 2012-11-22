@@ -576,8 +576,8 @@ public class SearchQuery {
 
   public void setQuery(String query) {
     this.query = query;
-    if (query != null)
-      this.query_regex = Pattern.compile(this.query);
+//    if (query != null)
+//      this.query_regex = Pattern.compile(this.query);
   }
   
   public Pattern getQueryRegex(){

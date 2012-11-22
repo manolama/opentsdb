@@ -230,7 +230,7 @@ public class DataQuery {
     public String type;
     public String downsample;
     public boolean agg_all;
-    public boolean with_annotations;
+    public boolean with_annotations = true;
 
     @JsonIgnore
     public Query tsd_query;

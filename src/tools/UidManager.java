@@ -290,7 +290,7 @@ final class UidManager {
                             final short idwidth,
                             final String[] args) {
     final UniqueId uid = new UniqueId(new TsdbStoreHBase(null, table), 
-        table, args[1], (int) idwidth);
+        table, args[1], (int) idwidth, null);
     for (int i = 2; i < args.length; i++) {
       try {
         uid.getOrCreateId(args[i]);
@@ -320,7 +320,7 @@ final class UidManager {
     final String oldname = args[2];
     final String newname = args[3];
     final UniqueId uid = new UniqueId(new TsdbStoreHBase(null, table), 
-        table, kind, (int) idwidth);
+        table, kind, (int) idwidth, null);
     try {
       uid.rename(oldname, newname);
     } catch (HBaseException e) {
@@ -585,7 +585,7 @@ final class UidManager {
                                     final String kind,
                                     final byte[] id) {
     final UniqueId uid = new UniqueId(new TsdbStoreHBase(null, table), 
-        table, kind, (int) idwidth);
+        table, kind, (int) idwidth, null);
     try {
       final String name = uid.getName(id);
       System.out.println(kind + ' ' + name + ": " + Arrays.toString(id));
@@ -652,7 +652,7 @@ final class UidManager {
                                       final String kind,
                                       final String name) {
     final UniqueId uid = new UniqueId(new TsdbStoreHBase(null, table), 
-        table, kind, (int) idwidth);
+        table, kind, (int) idwidth, null);
     try {
       final byte[] id = uid.getId(name);
       System.out.println(kind + ' ' + name + ": " + Arrays.toString(id));

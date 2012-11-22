@@ -103,13 +103,13 @@ public class MetaRPC implements HttpRpc {
 
     Object meta = null;
     if (endpoint == null || endpoint.isEmpty() || endpoint.compareTo("timeseries") == 0){
-      meta = tsdb.getTimeSeriesMeta(id, true);
+      meta = tsdb.getTimeSeriesMeta(id);
     } else if (endpoint.compareTo("metric") == 0){
-      meta = tsdb.metrics.getGeneralMeta(id, false);
+      meta = tsdb.metrics.getGeneralMeta(id);
     } else if (endpoint.compareTo("tagk") == 0){
-      meta = tsdb.tag_names.getGeneralMeta(id, false);
+      meta = tsdb.tag_names.getGeneralMeta(id);
     } else if (endpoint.compareTo("tagv") == 0){
-      meta = tsdb.tag_values.getGeneralMeta(id, false);
+      meta = tsdb.tag_values.getGeneralMeta(id);
     }
 
     if (meta == null){
@@ -188,7 +188,7 @@ public class MetaRPC implements HttpRpc {
       switch (type) {
       case METRICS:
         meta.setName(tsdb.metrics.getName(UniqueId.StringtoID(meta.getUID())));
-        meta = tsdb.metrics.putMeta(meta, true);
+        meta = tsdb.metrics.putMeta(meta);
         if (meta == null) {
           query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
               "Error saving data");
@@ -197,7 +197,7 @@ public class MetaRPC implements HttpRpc {
         break;
       case TAGK:
         meta.setName(tsdb.tag_names.getName(UniqueId.StringtoID(meta.getUID())));
-        meta = tsdb.tag_names.putMeta(meta, true);
+        meta = tsdb.tag_names.putMeta(meta);
         if (meta == null) {
           query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
               "Error saving data");
@@ -206,7 +206,7 @@ public class MetaRPC implements HttpRpc {
         break;
       case TAGV:
         meta.setName(tsdb.tag_values.getName(UniqueId.StringtoID(meta.getUID())));
-        meta = tsdb.tag_values.putMeta(meta, true);
+        meta = tsdb.tag_values.putMeta(meta);
         if (meta == null) {
           query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
               "Error saving data");
@@ -310,7 +310,7 @@ public class MetaRPC implements HttpRpc {
           "Error saving data");
       return;
     }
-    ts_meta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(ts_meta.getUID()), true);
+    ts_meta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(ts_meta.getUID()));
     
     // update the search index
     Document doc = ts_meta.buildLuceneDoc();

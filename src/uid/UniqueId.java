@@ -34,6 +34,7 @@ import java.util.regex.Pattern;
 
 import javax.xml.bind.DatatypeConverter;
 
+import net.opentsdb.cache.Cache;
 import net.opentsdb.core.JSON;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaDataCache;
@@ -127,7 +128,7 @@ public final class UniqueId {
    *           if kind is an empty string.
    */
   public UniqueId(final TsdbStore client, final byte[] table,
-      final String kind, final int width) {
+      final String kind, final int width, final Cache cache) {
     this.table = table;
     this.storage = client;
     if (kind.isEmpty()) {
@@ -138,7 +139,7 @@ public final class UniqueId {
       throw new IllegalArgumentException("Invalid width: " + width);
     }
     this.idWidth = (short) width;
-    this.metadata = new MetaDataCache(client, table, false, kind);
+    this.metadata = new MetaDataCache(client, table, false, kind, cache);
   }
 
   /** Returns a human readable string representation of the object. */
@@ -184,10 +185,6 @@ public final class UniqueId {
   
   public int cacheSizeID() {
     return idCache.size();
-  }
-  
-  public int cacheSizeMeta(){
-    return this.metadata.size();
   }
 
   public String kind() {
@@ -295,14 +292,14 @@ public final class UniqueId {
     }
   }
 
-  public GeneralMeta getGeneralMeta(final byte[] id, final boolean cache) {
+  public GeneralMeta getGeneralMeta(final byte[] id) {
     try{
       if (this.bad_meta_ids.contains(id)){
         LOG.trace("ID [" + IDtoString(id) + "] was in the bad list");
         return null;
       }
       
-      GeneralMeta meta = this.metadata.getGeneralMeta(id, cache);
+      GeneralMeta meta = this.metadata.getGeneralMeta(id);
       if (meta.getName().length() < 1 && meta.getCreated() < 1){
         LOG.trace(String.format("Didn't find %s metadata for UID [%s]",
             fromBytes(kind), IDtoString(id)));
@@ -330,8 +327,8 @@ public final class UniqueId {
     }
   }
 
-  public GeneralMeta putMeta(final GeneralMeta meta, final boolean flush) {
-    return this.metadata.putMeta(meta, flush);
+  public GeneralMeta putMeta(final GeneralMeta meta) {
+    return this.metadata.putMeta(meta);
   }
   
   public boolean haveMeta(final String uid){
@@ -616,7 +613,7 @@ public final class UniqueId {
         meta.setUID(UniqueId.IDtoString(row));
         meta.setCreated(System.currentTimeMillis() / 1000L);
         meta.setName(name);
-        this.metadata.putMeta(meta, false);
+        this.metadata.QueueMeta(meta);
 
         return row;
       } finally {

@@ -37,12 +37,10 @@ public class Annotation {
       final byte[] row = IncomingDataPoints.getNormalizedRow(tsuid, start_time);
       
       final JSON codec = new JSON(this);
+      final byte[] qualifier = getQualifier(start_time);
       
-      final long base_time = IncomingDataPoints.normalizeTimestamp(start_time);
-      final short qualifier = (short) ((start_time - base_time) << Const.FLAG_BITS);
-      
-      tsdb.data_storage.putWithRetry(row, TsdbConfig.ANNOTATE_FAMILY, 
-          Bytes.fromShort(qualifier), codec.getJsonBytes(), 0).joinUninterruptibly();
+      tsdb.data_storage.putWithRetry(row, TsdbConfig.DP_FAMILY, 
+          qualifier, codec.getJsonBytes(), start_time * 1000).joinUninterruptibly();
       
       return true;
     }catch (Exception e){
@@ -66,7 +64,7 @@ public class Annotation {
       final long base_time = IncomingDataPoints.normalizeTimestamp(start_time);
       final short qualifier = (short) ((start_time - base_time) << Const.FLAG_BITS);
       
-      tsdb.data_storage.deleteValue(row, TsdbConfig.ANNOTATE_FAMILY, Bytes.fromShort(qualifier)).joinUninterruptibly();
+      tsdb.data_storage.deleteValue(row, TsdbConfig.DP_FAMILY, Bytes.fromShort(qualifier)).joinUninterruptibly();
       return true;
     } catch (Exception e){
       e.printStackTrace();
@@ -77,10 +75,9 @@ public class Annotation {
   public static Annotation getFromStorage(final TSDB tsdb, final String tsuid, final long timestamp){
     try{
       final byte[] row = IncomingDataPoints.getNormalizedRow(tsuid, timestamp);
-      final long base_time = IncomingDataPoints.normalizeTimestamp(timestamp);
-      final short qualifier = (short) ((timestamp - base_time) << Const.FLAG_BITS);
+      final byte[] qualifier = getQualifier(timestamp);
       
-      final byte[] data = tsdb.data_storage.getValue(row, TsdbConfig.ANNOTATE_FAMILY, Bytes.fromShort(qualifier));
+      final byte[] data = tsdb.data_storage.getValue(row, TsdbConfig.DP_FAMILY, qualifier);
       if (data == null)
         return null;
       
@@ -115,8 +112,8 @@ public class Annotation {
     flatten.append(this.description).append(" ");
     doc.add(new Field("notes", this.notes, Field.Store.YES, Field.Index.ANALYZED));
     flatten.append(this.notes).append(" ");
-    doc.add(new NumericField("start_time").setLongValue(this.start_time));
-    doc.add(new NumericField("end_time").setLongValue(this.end_time));
+    doc.add(new NumericField("start_time", 64, Field.Store.YES, true).setLongValue(this.start_time));
+    doc.add(new NumericField("end_time", 64, Field.Store.YES, true).setLongValue(this.end_time));
     if (this.custom != null){
       for (Map.Entry<String, String> entry : this.custom.entrySet()){
         doc.add(new Field(entry.getKey(), entry.getValue(), Field.Store.YES, Field.Index.ANALYZED));
@@ -134,6 +131,16 @@ public class Annotation {
   @JsonIgnore
   public String getSearchUID(){
     return this.tsuid.toLowerCase() + Long.toString(this.start_time);
+  }
+  
+  private static byte[] getQualifier(final long timestamp){
+    final long base_time = IncomingDataPoints.normalizeTimestamp(timestamp);
+    final byte[] ts = Bytes.fromShort((short) ((timestamp - base_time) << Const.FLAG_BITS));
+    byte[] qualifier = new byte[3];
+    qualifier[0] = 0x01;
+    qualifier[1] = ts[0];
+    qualifier[2] = ts[1];
+    return qualifier;
   }
   
 // GETTERS AND SETTERS

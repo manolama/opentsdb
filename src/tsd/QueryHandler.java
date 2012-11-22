@@ -14,11 +14,9 @@ package net.opentsdb.tsd;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.SortedMap;
 import java.util.TreeMap;
 
 import org.codehaus.jackson.type.TypeReference;
@@ -27,16 +25,11 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import edu.emory.mathcs.backport.java.util.Collections;
-
-import net.opentsdb.cache.Cache.CacheRegion;
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDB.TSDRole;
-import net.opentsdb.formatters.TSDFormatter;
-import net.opentsdb.graph.GnuGraphFormatter;
 
 /**
  * Used to be the GraphHandler, but we won't always be requesting graphs. Instead we'll

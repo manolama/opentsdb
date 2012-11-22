@@ -77,33 +77,33 @@ public final class TestUniqueId {
 
   @Test(expected=IllegalArgumentException.class)
   public void testCtorZeroWidth() {
-    uid = new UniqueId(client, table, kind, 0);
+    uid = new UniqueId(client, table, kind, 0, null);
   }
 
   @Test(expected=IllegalArgumentException.class)
   public void testCtorNegativeWidth() {
-    uid = new UniqueId(client, table, kind, -1);
+    uid = new UniqueId(client, table, kind, -1, null);
   }
 
   @Test(expected=IllegalArgumentException.class)
   public void testCtorEmptyKind() {
-    uid = new UniqueId(client, table, "", 3);
+    uid = new UniqueId(client, table, "", 3, null);
   }
 
   @Test(expected=IllegalArgumentException.class)
   public void testCtorLargeWidth() {
-    uid = new UniqueId(client, table, kind, 9);
+    uid = new UniqueId(client, table, kind, 9, null);
   }
 
   @Test
   public void kindEqual() {
-    uid = new UniqueId(client, table, kind, 3);
+    uid = new UniqueId(client, table, kind, 3, null);
     assertEquals(kind, uid.kind());
   }
 
   @Test
   public void widthEqual() {
-    uid = new UniqueId(client, table, kind, 3);
+    uid = new UniqueId(client, table, kind, 3, null);
     assertEquals(3, uid.width());
   }
 
@@ -174,7 +174,7 @@ public final class TestUniqueId {
 
   @Test(expected=IllegalArgumentException.class)
   public void getNameWithInvalidId() {
-    uid = new UniqueId(client, table, kind, 3);
+    uid = new UniqueId(client, table, kind, 3, null);
 
     uid.getName(new byte[] { 1 });
   }

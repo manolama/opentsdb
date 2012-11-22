@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
+import net.opentsdb.core.CompactionQueue.CompactedDPS;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -104,11 +106,13 @@ final class Span implements DataPoints {
    * @throws IllegalArgumentException if the argument represents a row for
    * data points that are older than those already added to this span.
    */
-  void addRow(final KeyValue row) {
+  void addRow(final CompactedDPS row) {
     long last_ts = 0;
+    if (row.annotations != null)
+      this.addAnnotation(row.annotations);
     if (rows.size() != 0) {
       // Verify that we have the same metric id and tags.
-      final byte[] key = row.key();
+      final byte[] key = row.values.key();
       final RowSeq last = rows.get(rows.size() - 1);
       final short metric_width = tsdb.metrics.width();
       final short tags_offset = (short) (metric_width + Const.TIMESTAMP_BYTES);
@@ -134,15 +138,15 @@ final class Span implements DataPoints {
       // row key of the last RowSeq we created and the timestamp of the
       // last data point in `row' is small enough, we can merge `row' into
       // the last RowSeq.
-      if (RowSeq.canTimeDeltaFit(lastTimestampInRow(metric_width, row)
+      if (RowSeq.canTimeDeltaFit(lastTimestampInRow(metric_width, row.values)
                                  - last.baseTime())) {
-        last.addRow(row);
+        last.addRow(row.values);
         return;
       }
     }
 
     final RowSeq rowseq = new RowSeq(tsdb);
-    rowseq.setRow(row);
+    rowseq.setRow(row.values);
     if (last_ts >= rowseq.timestamp(0)) {
       LOG.error("New RowSeq added out of order to this Span! Last = " +
                 rows.get(rows.size() - 1) + ", new = " + rowseq);

@@ -148,7 +148,7 @@ public class TimeseriesUID {
         LOG.trace(String.format("Processing new TSUID [%s]", tsuid));
         TimeSeriesMeta tsmd = new TimeSeriesMeta(UniqueId.StringtoID(tsuid));
         tsmd.setCreated(System.currentTimeMillis() / 1000);
-        timeseries_meta.putMeta(tsmd, true);
+        timeseries_meta.putMeta(tsmd);
         this.new_tsuids.incrementAndGet();
 
         count++;

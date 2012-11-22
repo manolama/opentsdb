@@ -30,6 +30,7 @@ tsdb_SRC := \
   src/cache/Cache.java	\
 	src/core/Aggregator.java	\
 	src/core/Aggregators.java	\
+	src/core/Annotation.java	\
 	src/core/CompactionQueue.java	\
 	src/core/Const.java	\
 	src/core/TsdbConfig.java	\
@@ -85,6 +86,7 @@ tsdb_SRC := \
 	src/tools/TextImporter.java	\
 	src/tools/UidManager.java	\
 	src/tsd/AggregatorsRPC.java	\
+	src/tsd/AnnotationRPC.java	\
 	src/tsd/BadRequestException.java	\
 	src/tsd/CacheRPC.java	\
 	src/tsd/ConnectionManager.java	\
@@ -124,6 +126,7 @@ tsdb_DEPS = \
 	$(JACKSON_MAPPER) \
 	$(GUAVA_CORE) \
 	$(CASSANDRA_CORE) \
+	$(CASSANDRA_CLIENT) \
 	$(CASSANDRA_THRIFT) \
 	$(LUCENE) \
 	$(LUCENE_GROUPING) \

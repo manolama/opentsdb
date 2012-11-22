@@ -187,6 +187,25 @@ public abstract class TsdbStore {
    * @throws TsdbStorageException
    */
   public Deferred<Object> putWithRetry(final byte[] key, final byte[] family,
+      final byte[] qualifier, final byte[] data) throws TsdbStorageException {
+    return putWithRetry(key, family, qualifier, data, 0, null);
+  }
+  
+  /**
+   * Attempts to store a value in the storage system at the given location
+   * 
+   * Simply passes the data on to putWithRetry with a NULL for the row lock
+   * 
+   * @param key The row key in bytes
+   * @param family The column family in bytes
+   * @param qualifier The name of the cell in bytes
+   * @param data The data to store
+   * @param ts Timestamp (in milliseconds) to use when storing the data
+   * @return True if the put was successful (or queued successfully if async)
+   *         False if there was an error
+   * @throws TsdbStorageException
+   */
+  public Deferred<Object> putWithRetry(final byte[] key, final byte[] family,
       final byte[] qualifier, final byte[] data, final long ts) throws TsdbStorageException {
     return putWithRetry(key, family, qualifier, data, ts, null);
   }
@@ -197,6 +216,27 @@ public abstract class TsdbStore {
    * @param family The column family in bytes
    * @param qualifier The name of the cell in bytes
    * @param data The data to store
+   * @param rowLock An object referring to a currently held row lock. Note that
+   *          this method will not retrieve the lock for you, you have to call
+   *          getLock() first.
+   * @return True if the put was successful (or queued successfully if async)
+   *         False if there was an error
+   * @throws TsdbStorageException
+   */
+  public Deferred<Object> putWithRetry(final byte[] key,
+      final byte[] family, final byte[] qualifier, final byte[] data,
+      final Object rowLock) 
+      throws TsdbStorageException{
+    return putWithRetry(key, family, qualifier, data, 0, rowLock, true, false);
+  }
+  
+  /**
+   * Attempts to store a value in the storage system at the given location
+   * @param key The row key in bytes
+   * @param family The column family in bytes
+   * @param qualifier The name of the cell in bytes
+   * @param data The data to store
+   * @param ts Timestamp (in milliseconds) to use when storing the data
    * @param rowLock An object referring to a currently held row lock. Note that
    *          this method will not retrieve the lock for you, you have to call
    *          getLock() first.

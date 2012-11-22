@@ -90,7 +90,7 @@ public class SearchRPC implements HttpRpc {
         ArrayList<TimeSeriesMeta> metas = new ArrayList<TimeSeriesMeta>();
         
         for (String tsuid : tsuids.tsuids){
-          TimeSeriesMeta tmeta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(tsuid), false);
+          TimeSeriesMeta tmeta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
           if (tmeta == null){
             LOG.warn(String.format("Unable to load metadata for [%s]", tsuid));
             continue;

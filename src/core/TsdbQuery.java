@@ -438,6 +438,10 @@ final class TsdbQuery implements Query {
     long starttime = System.nanoTime();
     final TsdbScanner scanner = getScanner();
     try {
+      if (TSDB.enable_compactions)
+        LOG.info("Compactions enabled");
+      else
+        LOG.info("No compactions");
       JSON codec = new JSON(new Annotation());
       ArrayList<ArrayList<KeyValue>> rows;
       while ((rows = tsdb.data_storage.nextRows(scanner).joinUninterruptibly()) != null) {
@@ -449,45 +453,60 @@ final class TsdbQuery implements Query {
                 + " our scanner (" + scanner + ")! " + row + " does not start"
                 + " with " + Arrays.toString(metric));
           }
-          
-          ArrayList<KeyValue> valid = new ArrayList<KeyValue>();
-          ArrayList<Annotation> annotations = new ArrayList<Annotation>();
-          for (KeyValue dp : row){
-            if (Bytes.equals(dp.family(), TsdbConfig.ANNOTATE_FAMILY)){
-              //LOG.trace("Processing an annotation");
-              try{
-                if (!codec.parseObject(dp.value())){
-                  LOG.warn(String.format("Unable to parse annotation for ts [%s] at [%d]",
-                      UniqueId.IDtoString(dp.key()), dp.timestamp()));
-                }else{
-                  annotations.add((Annotation)codec.getObject());
-                  LOG.debug("Found an annotation: [" + ((Annotation)codec.getObject()).getDescription() + "]");
-                }
-              } catch(Exception e){
-                e.printStackTrace();
-              }
-              continue;
-            }
-            
-            // remember the timestamp is in ms. The +1 is for rounding issues
-            if (this.padding || 
-                (dp.timestamp() / 1000 >= this.start_time && 
-                    dp.timestamp() / 1000 <= (this.end_time + 1)))
-              valid.add(dp);
-            //LOG.trace(String.format("Proced cell at [%d]", dp.timestamp()));
+          Span datapoints = spans.get(key);
+          if (datapoints == null) {
+            datapoints = new Span(tsdb);
+            spans.put(key, datapoints);
           }
-          
-          if (!valid.isEmpty()){
-            Span datapoints = spans.get(key);
-            if (datapoints == null) {
-              datapoints = new Span(tsdb);
-              spans.put(key, datapoints);
-            }
-            datapoints.addRow(tsdb.compact(valid));
-            datapoints.addAnnotation(annotations);
-            nrows++;
-          }
+          datapoints.addRow(tsdb.compact(row));
+//          if (nrows >= 2)
+//            throw new Exception("blarg!!");
+          nrows++;
           starttime = System.nanoTime();
+//          ArrayList<KeyValue> valid = new ArrayList<KeyValue>();
+//          ArrayList<Annotation> annotations = new ArrayList<Annotation>();
+//          for (KeyValue dp : row){
+//            if (Bytes.equals(dp.family(), TsdbConfig.DP_FAMILY)){
+//              //LOG.trace("Processing an annotation");
+//              try{
+//                if (!codec.parseObject(dp.value())){
+//                  LOG.warn(String.format("Unable to parse annotation for ts [%s] at [%d]",
+//                      UniqueId.IDtoString(dp.key()), dp.timestamp()));
+//                }else{
+//                  annotations.add((Annotation)codec.getObject());
+//                  LOG.debug("Found an annotation: [" + ((Annotation)codec.getObject()).getDescription() + "]");
+//                }
+//              } catch(Exception e){
+//                e.printStackTrace();
+//              }
+//              continue;
+//            }
+//            
+//            // TODO - this won't work with compacted cells!!!
+//            
+//            // TODO - MAJOR BUG HERE, the column timestamp does NOT reflect the time of
+//            // the actual datapoint. We could batch insert old data and the ts would be
+//            // much later than the real stamp. Either we need to write the proper time 
+//            // on insert or calculate the time, based on the qualifier, for every DP.
+//            // remember the timestamp is in ms. The +1 is for rounding issues
+//            if (this.padding || 
+//                (dp.timestamp() / 1000 >= this.start_time && 
+//                    dp.timestamp() / 1000 <= (this.end_time + 1)))
+//              valid.add(dp);
+//            //LOG.trace(String.format("Proced cell at [%d]", dp.timestamp()));
+//          }
+//          
+//          if (!valid.isEmpty()){
+//            Span datapoints = spans.get(key);
+//            if (datapoints == null) {
+//              datapoints = new Span(tsdb);
+//              spans.put(key, datapoints);
+//            }
+//            datapoints.addRow(tsdb.compact(valid));
+//            datapoints.addAnnotation(annotations);
+//            nrows++;
+//          }
+//          starttime = System.nanoTime();
         }
       }
     } catch (RuntimeException e) {
@@ -629,8 +648,7 @@ final class TsdbQuery implements Query {
     else if (tags.size() > 0 || group_bys != null) {
       createAndSetFilter(scanner);
     }
-    if (!this.get_annotations)
-      scanner.setFamily(TsdbConfig.DP_FAMILY);
+    scanner.setFamily(TsdbConfig.DP_FAMILY);
     // DEBUG TEMP
     JSON codec = new JSON(scanner);
     LOG.trace(codec.getJsonString());

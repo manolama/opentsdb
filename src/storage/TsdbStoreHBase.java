@@ -146,6 +146,8 @@ public class TsdbStoreHBase extends TsdbStore {
       throws TsdbStorageException {
     try {
       final DeleteRequest dr = new DeleteRequest(table, key, family, qualifiers);
+      LOG.trace(dr.toString());
+      //return Deferred.fromResult(null);
       return client.delete(dr);
     } catch (HBaseException e) {
       throw new TsdbStorageException(e.getMessage(), e);
@@ -188,9 +190,12 @@ public class TsdbStoreHBase extends TsdbStore {
     short wait = INITIAL_EXP_BACKOFF_DELAY;
     final PutRequest put;
     if (rowLock != null && !this.use_zk_locks)
-      put = new PutRequest(this.table, key, family, qualifier, data, (RowLock) rowLock);
+      put = new PutRequest(this.table, key, family, qualifier, data, 
+          ts < 1 ? System.currentTimeMillis() : ts, 
+          (RowLock) rowLock);
     else
-      put = new PutRequest(this.table, key, family, qualifier, data);
+      put = new PutRequest(this.table, key, family, qualifier, data, 
+          ts < 1 ? System.currentTimeMillis() : ts);
     put.setDurable(durable);
     put.setBufferable(bufferable);
     while (attempts-- > 0) {

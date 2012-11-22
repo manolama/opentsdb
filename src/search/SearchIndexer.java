@@ -133,7 +133,7 @@ public class SearchIndexer {
             if (TsdbStore.fromBytes(cell.qualifier()).compareTo("ts_meta") == 0){
               final String uid = UniqueId.IDtoString(cell.key());
               
-              TimeSeriesMeta meta = tsdb.getTimeSeriesMeta(cell.key(), true);
+              TimeSeriesMeta meta = tsdb.getTimeSeriesMeta(cell.key());
               if (meta == null){
                 LOG.warn(String.format("Error retrieving TSUID metadata [%s]", uid));
                 continue;

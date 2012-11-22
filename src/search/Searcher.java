@@ -15,6 +15,7 @@ import net.opentsdb.search.SearchQuery.SearchResults;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Fieldable;
+import org.apache.lucene.document.NumericField;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermEnum;
@@ -53,6 +54,7 @@ public class Searcher {
   private Directory idx_directory = null;
   private IndexSearcher searcher = null;
   private final Cache cache;
+  private String error;
   
   public Searcher(final String directory, final Cache cache){
     this.directory = directory;
@@ -101,9 +103,6 @@ public class Searcher {
         final String tsuid = searcher.doc(hits.scoreDocs[i].doc).get("tsuid");
         if (tsuid != null)
           tsuids.add(tsuid.toUpperCase());
-        // bail if we exceed the bounds
-        if (i+2 > hits.totalHits)
-          break;
       } catch (CorruptIndexException e) {
         // TODO Auto-generated catch block
         e.printStackTrace();
@@ -111,6 +110,10 @@ public class Searcher {
         // TODO Auto-generated catch block
         e.printStackTrace();
       }
+      
+      // bail if we exceed the bounds
+      if (i+2 > hits.totalHits)
+        break;
     }
     sr.tsuids = tsuids;
     sr.setTotalHits(hits.totalHits);
@@ -382,27 +385,31 @@ public class Searcher {
             note.setDescription(field.stringValue());
           else if (field.name().compareTo("notes") == 0)
             note.setNotes(field.stringValue());
-          else if (field.name().compareTo("start_time") == 0)
-            note.setStart_time(Long.getLong(field.stringValue()));
-          else if (field.name().compareTo("end_time") == 0)
-            note.setEnd_time(Long.getLong(field.stringValue()));
-          else if (field.name().compareTo("uid") != 0)
+          else if (field.name().compareTo("start_time") == 0){
+            NumericField nf = (NumericField)field;
+            note.setStart_time(nf.getNumericValue().longValue());
+          }else if (field.name().compareTo("end_time") == 0){
+            NumericField nf = (NumericField)field;
+            note.setEnd_time(nf.getNumericValue().longValue());
+          }else if (field.name().compareTo("uid") != 0)
             custom.put(field.name(), field.stringValue());
         }
         if (custom.size() > 0)
           note.setCustom(custom);
         annotations.add(note);
-        
-        // bail if we exceed the bounds
-        if (i+2 > hits.totalHits)
-          break;
       } catch (CorruptIndexException e) {
         // TODO Auto-generated catch block
         e.printStackTrace();
       } catch (IOException e) {
         // TODO Auto-generated catch block
         e.printStackTrace();
+      } catch (NullPointerException npe){
+        npe.printStackTrace();
       }
+      
+      // bail if we exceed the bounds
+      if (i+2 > hits.totalHits)
+        break;
     }
     sr.annotations = annotations;
     sr.setTotalHits(hits.totalHits);
@@ -419,6 +426,7 @@ public class Searcher {
    * if it wasn't already
    */
   private final boolean checkSearcher(){
+    this.error = "";
     if (searcher == null)
       return this.openSearcher();
     
@@ -512,7 +520,7 @@ public class Searcher {
       else if (query.getRegex())
         q = new RegexQuery( new Term(query.getField(), query.getQuery()));
       else
-        q = parser.parse(query.getQuery().toLowerCase());
+        q = parser.parse(query.getQuery());
 
       LOG.trace("Query: " + q.toString());
       if (last_result == null)
@@ -521,9 +529,11 @@ public class Searcher {
         return searcher.searchAfter(last_result, new ConstantScoreQuery(q), Integer.MAX_VALUE);
       
     } catch (ParseException e) {
+      this.error = e.getMessage();
       // TODO Auto-generated catch block
       e.printStackTrace();
     } catch (IOException e) {
+      this.error = e.getMessage();
       // TODO Auto-generated catch block
       e.printStackTrace();
     }
