@@ -110,6 +110,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     http_commands.put("search", new SearchRPC());
     http_commands.put("group", new GroupRPC());
     http_commands.put("annotate", new AnnotationRPC());
+    http_commands.put("tree", new TreeRPC());
   }
 
   @Override

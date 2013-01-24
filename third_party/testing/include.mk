@@ -30,3 +30,13 @@ $(RABBITMQ): $(RABBITMQ).md5
 	set dummy "$(RABBITMQ_BASE_URL)" "$(RABBITMQ)"; shift; $(FETCH_DEPENDENCY)
   
 THIRD_PARTY += $(RABBITMQ)
+
+
+SPYMEMCACHED_VERSION := 2.8-preview3
+SPYMEMCACHED := third_party/testing/spymemcached-$(SPYMEMCACHED_VERSION).jar
+SPYMEMCACHED_BASE_URL := http://www.euphoriaaudio.com/downloads
+
+$(SPYMEMCACHED): $(SPYMEMCACHED).md5
+	set dummy "$(SPYMEMCACHED_BASE_URL)" "$(SPYMEMCACHED)"; shift; $(FETCH_DEPENDENCY)
+  
+THIRD_PARTY += $(SPYMEMCACHED)

@@ -56,7 +56,7 @@ public class SearchQuery {
   private int page = 0;
   private boolean return_meta = false;
   private String error = "";
-  private Pattern query_regex = null;
+  //private Pattern query_regex = null;
   private Map<String, Pattern> tags_compiled;
   private Map<String, Pattern> custom_compiled;
   private boolean return_tsuids = false;
@@ -65,6 +65,7 @@ public class SearchQuery {
   private boolean group_only = false;
   private boolean terms = false;
   private boolean regex = false;
+  private int group_regex_index = 0;
 
   // field -> operator -> value
   // if no operator was passed in, then we save it as eq
@@ -414,6 +415,14 @@ public class SearchQuery {
         return false;
       }
     }
+    if (query.hasQueryStringParam("gri")){
+      try{
+        this.group_regex_index = Integer.parseInt(query.getQueryStringParam("gri"));
+      } catch (NumberFormatException nfe){
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the limit value");
+        return false;
+      }
+    }
     if (query.hasQueryStringParam("group"))
       this.group = query.getQueryStringParam("group");
     if (query.hasQueryStringParam("sub_group"))
@@ -580,9 +589,9 @@ public class SearchQuery {
 //      this.query_regex = Pattern.compile(this.query);
   }
   
-  public Pattern getQueryRegex(){
-    return this.query_regex;
-  }
+//  public Pattern getQueryRegex(){
+//    return this.query_regex;
+//  }
 
   public int getLimit() {
     return limit;

@@ -36,6 +36,7 @@
   <logger name="org.apache.zookeeper" level="info"/>
   <logger name="org.hbase.async" level="info"/>
   <logger name="com.stumbleupon.async" level="info"/>
+  <logger name="org.apache.jcs" level="info"/>
   <root level="INFO">
     <appender-ref ref="STDOUT"/>
     <appender-ref ref="CYCLIC"/>

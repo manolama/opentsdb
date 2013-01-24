@@ -13,6 +13,7 @@ import net.opentsdb.cache.Cache.CacheRegion;
 import net.opentsdb.core.Annotation;
 import net.opentsdb.search.SearchQuery.SearchResults;
 
+import org.apache.lucene.analysis.KeywordAnalyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Fieldable;
 import org.apache.lucene.document.NumericField;
@@ -510,7 +511,7 @@ public class Searcher {
     try {
       Query q = null;
       QueryParser parser = new QueryParser(Version.LUCENE_36, "content", 
-          new StandardAnalyzer(Version.LUCENE_36));
+          new KeywordAnalyzer());
       parser.setAllowLeadingWildcard(true);
       parser.setLowercaseExpandedTerms(false);
       

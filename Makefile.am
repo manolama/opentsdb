@@ -64,6 +64,9 @@ tsdb_SRC := \
 	src/meta/GeneralMeta.java	\
 	src/meta/MetaData.java	\
   src/meta/MetaDataCache.java	\
+  src/meta/MetaManager.java	\
+  src/meta/MetaTree.java	\
+  src/meta/MetaTreeRule.java	\
 	src/meta/TimeSeriesMeta.java	\
 	src/search/Searcher.java	\
 	src/search/SearchIndexer.java	\
@@ -76,6 +79,7 @@ tsdb_SRC := \
 	src/storage/TsdbStore.java	\
 	src/storage/TsdbStoreHBase.java	\
 	src/storage/TsdbStoreCass.java	\
+	src/storage/TsdbMemcache.java	\
 	src/tools/ArgP.java	\
 	src/tools/CliOptions.java	\
 	src/tools/CliQuery.java	\
@@ -104,6 +108,7 @@ tsdb_SRC := \
 	src/tsd/StaticFileRpc.java	\
 	src/tsd/StatsRPC.java	\
 	src/tsd/SuggestRPC.java	\
+	src/tsd/TreeRPC.java	\
 	src/tsd/TelnetRpc.java	\
 	src/tsd/VersionRPC.java	\
 	src/tsd/WordSplitter.java	\
@@ -139,7 +144,8 @@ tsdb_DEPS = \
 	$(ONTOPIA) \ 
 	$(COMMONS_LOGGING) \ 
 	$(CONCURRENT) \ 
-	$(JCS)
+	$(JCS) \
+	$(SPYMEMCACHED)
 
 # Install all the .jar files in pkgdatadir.
 pkgdata_DATA = $(tsdb_DEPS) $(jar)

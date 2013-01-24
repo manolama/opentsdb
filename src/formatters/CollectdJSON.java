@@ -48,6 +48,7 @@ public class CollectdJSON extends TSDFormatter {
   
   private static final AtomicLong puts_success = new AtomicLong();
   private static final AtomicLong puts_fail = new AtomicLong();
+  private static final String metric_prefix = "sys.";
   
   /** Used for deserializing the Collectd JSON data */
   private static final TypeReference<ArrayList<CollectdJSONdps>> dpsTypeRef = 
@@ -162,7 +163,8 @@ public class CollectdJSON extends TSDFormatter {
         for (int i=0; i<dp.values.size(); i++){
           
           // build metric name
-          StringBuilder metric = new StringBuilder(dp.plugin);
+          StringBuilder metric = new StringBuilder(metric_prefix);
+          metric.append(dp.plugin);
           
           // extend the metric name        
           if (!dp.type.isEmpty() && !dp.type.equals(dp.plugin)){

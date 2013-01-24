@@ -37,12 +37,14 @@ import net.opentsdb.cache.Cache;
 import net.opentsdb.core.CompactionQueue.CompactedDPS;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaDataCache;
+import net.opentsdb.meta.MetaManager;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.search.SearchIndexer;
 import net.opentsdb.search.SearchManager;
 import net.opentsdb.search.Searcher;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.storage.TsdbMemcache;
 import net.opentsdb.storage.TsdbStore;
 
 /**
@@ -96,6 +98,8 @@ public final class TSDB {
   private UIDManager uid_manager;
   private TSUIDManager tsuid_manager;
   private SearchManager search_manager;
+  private MetaManager meta_manager;
+  private final TsdbMemcache memcache;
   
   /**
    * Row keys that need to be compacted.
@@ -114,6 +118,7 @@ public final class TSDB {
   public final boolean time_puts = true;
   public final MQTest mq;
   public boolean use_mq = false;
+  public final boolean enable_memcache;
   
   public final Cache cache;
   
@@ -146,6 +151,8 @@ public final class TSDB {
     compactionq = new CompactionQueue(this);
     ts_uids = new TimeseriesUID(this.uid_storage);
     enable_compactions = config.enableCompactions();
+    this.memcache = new TsdbMemcache(config);
+    this.enable_memcache = config.storageMemcacheEnable();
 
     if (role == TSDRole.API || role == TSDRole.Full){
       meta_search_writer = new SearchIndexer(config.searchIndexPath() + "meta");
@@ -173,16 +180,19 @@ public final class TSDB {
    * utilities.
    */
   public void startManagementThreads(){
-//    uid_manager = new UIDManager();
-//    uid_manager.start();
-////    tsuid_manager = new TSUIDManager();
-////    tsuid_manager.start();
-//    if (role != TSDRole.Ingest && role != TSDRole.Forwarder){
-//      if (config.searchEnableIndexer()){
-//        search_manager = new SearchManager(this);
-//        search_manager.start();
-//      }
-//    }
+    uid_manager = new UIDManager();
+    uid_manager.start();
+//    tsuid_manager = new TSUIDManager();
+//    tsuid_manager.start();
+    if (role != TSDRole.Ingest && role != TSDRole.Forwarder){
+      if (config.searchEnableIndexer()){
+        search_manager = new SearchManager(this);
+        search_manager.start();
+      }
+      
+      meta_manager = new MetaManager(this);
+      meta_manager.start();
+    }
   }
   
   /**
@@ -483,6 +493,10 @@ public final class TSDB {
       for (Map.Entry<String, String> entry : tags.entrySet())
         msg.append(entry.getKey()).append("=").append(entry.getValue());
       mq.publish(metric, msg.toString().getBytes());
+    }
+    
+    if (this.enable_memcache){
+      this.memcache.AsyncSetKey("tsdb:" + tsuid, value.toString(), 2592000);
     }
     
 //    final PutRequest point = new PutRequest(table, row, FAMILY,

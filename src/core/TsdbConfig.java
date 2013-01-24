@@ -354,6 +354,26 @@ public class TsdbConfig {
     return this.storage_time_puts;
   }
   
+  public final String storageMemcacheHosts() {
+    try {
+      return this.config.getString("tsd.storage.memcache.hosts");
+    } catch (NullPointerException npe) {
+      // return the default below
+    }
+    return "";
+  }
+  
+  public final boolean storageMemcacheEnable() {
+    try {
+      return this.config.getBoolean("tsd.storage.memcache.enable");
+    } catch (NullPointerException npe) {
+      // return the default below
+    } catch (NumberFormatException nfe) {
+      LOG.warn(nfe.getLocalizedMessage());
+    }
+    return false;
+  }
+  
   // -------- Network -------
   /**
    * The network port for Telnet and HTTP communications

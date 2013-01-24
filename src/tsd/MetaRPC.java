@@ -43,10 +43,10 @@ public class MetaRPC implements HttpRpc {
    * Routes the query to the proper handler
    */
   public void execute(final TSDB tsdb, final HttpQuery query) {
-    if (tsdb.role != TSDRole.API){
-      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
-      return;
-    }
+//    if (tsdb.role != TSDRole.API){
+//      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
+//      return;
+//    }
     
     LOG.trace(query.request.getUri());
     // GET

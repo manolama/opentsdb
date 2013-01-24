@@ -373,7 +373,7 @@ public class MetaDataCache {
               0, lock);
           LOG.debug("Updated meta in storage for [" + this.kind + "] on UID [" + UniqueId.IDtoString(id) + "]");
         } catch (HBaseException e) {
-          LOG.error("Failed to Put Meta Data [" + uid + "]", e);
+          LOG.error("Failed to Put Meta Data [" + uid + "]: " + e);
           continue;
         }
 
