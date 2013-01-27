@@ -441,7 +441,7 @@ final class TsdbQuery implements Query {
       if (TSDB.enable_compactions)
         LOG.info("Compactions enabled");
       else
-        LOG.info("No compactions");
+        LOG.info("Compactions are disabled");
       JSON codec = new JSON(new Annotation());
       ArrayList<ArrayList<KeyValue>> rows;
       while ((rows = tsdb.data_storage.nextRows(scanner).joinUninterruptibly()) != null) {

@@ -82,10 +82,17 @@ public class MetaTree {
   int max_depth;
   
   @JsonIgnore
-  String tree_separator = "|";
+  private String tree_separator = "|";
+  
   /*these be the temp branches that are loaded, then flushed to "storage" */
   @JsonIgnore
-  HashMap<Integer, MetaTreeBranch> temp_branches = new HashMap<Integer, MetaTreeBranch>();
+  private HashMap<Integer, MetaTreeBranch> temp_branches = new HashMap<Integer, MetaTreeBranch>();
+  
+  @JsonIgnore
+  private ArrayList<String> parsing_messages = new ArrayList<String>();
+  
+  @JsonIgnore
+  private boolean load_meta = false;
   
   @JsonIgnore
   private TsdbStore storage;
@@ -131,6 +138,9 @@ public class MetaTree {
     this.full_sync_start = System.currentTimeMillis()/1000;
     this.full_sync_completed = 0;
     
+    long start = this.full_sync_start;
+    this.setLoadMeta();
+    
     // put new root
     MetaTreeBranch root = this.FetchBranch(0);
     if (root == null){
@@ -143,6 +153,7 @@ public class MetaTree {
     
     try {
       scanner = tsdb.uid_storage.openScanner(scanner);
+      JSON codec = new JSON(new TimeSeriesMeta());
  
       long count=0;
       ArrayList<ArrayList<KeyValue>> rows;
@@ -152,18 +163,116 @@ public class MetaTree {
             if (TsdbStore.fromBytes(cell.qualifier()).compareTo("ts_meta") == 0){
               final String uid = UniqueId.IDtoString(cell.key());
               
-              TimeSeriesMeta meta = tsdb.getTimeSeriesMeta(cell.key());
+              if (cell.value() == null){
+                LOG.warn(String.format("Metadata was null [%s]", uid));
+                continue;
+              }
+              
+              if (!codec.parseObject(cell.value())){
+                LOG.warn(String.format("Unable to parse metadata [%s]", uid));
+                continue;
+              }
+              TimeSeriesMeta meta = (TimeSeriesMeta)codec.getObject();
               if (meta == null){
                 LOG.warn(String.format("Error retrieving TSUID metadata [%s]", uid));
                 continue;
               }
               
+              // load the general metas
+              byte[] metricID = MetaDataCache.getMetricID(cell.key());
+              if (this.load_meta){
+                GeneralMeta m = tsdb.metrics.getGeneralMeta(metricID);
+                meta.setMetric(m);
+              }else{
+                GeneralMeta m = new GeneralMeta(metricID);
+                try{
+                  m.setName(tsdb.metrics.getName(metricID));
+                }catch (Exception e){
+                  LOG.error(e.getMessage());
+                  continue;
+                }
+                meta.setMetric(m);
+              }
+              
+              ArrayList<byte[]> tags = MetaDataCache.getTagIDs(cell.key());
+              ArrayList<GeneralMeta> tag_metas = new ArrayList<GeneralMeta>();
+              int index=1;
+              for (byte[] tag : tags){
+                if ((index % 2) != 0){
+                  GeneralMeta tagk;
+                  if (this.load_meta){
+                    tagk = tsdb.tag_names.getGeneralMeta(tag);
+                    if (tagk == null){
+                      LOG.warn(String.format("Unable to get tagk value for [%s]", UniqueId.IDtoString(tag)));
+                      break;
+                    }
+                  }else{
+                    tagk = new GeneralMeta(tag);
+                    try{
+                      tagk.setName(tsdb.tag_names.getName(tag));
+                    }catch (Exception e){
+                      LOG.error(e.getMessage());
+                      continue;
+                    }
+                  }
+                  tag_metas.add(tagk);
+                }else{
+                  GeneralMeta tagv;
+                  if (this.load_meta){
+                    tagv = tsdb.tag_values.getGeneralMeta(tag);
+                    if (tagv == null){
+                      LOG.warn(String.format("Unable to get tagv value for [%s]", UniqueId.IDtoString(tag)));
+                      break;
+                    }
+                  }else{
+                    tagv = new GeneralMeta(tag);
+                    try{
+                      tagv.setName(tsdb.tag_values.getName(tag));
+                    }catch (Exception e){
+                      LOG.error(e.getMessage());
+                      continue;
+                    }
+                  }
+                  tag_metas.add(tagv);
+                }
+                index++;
+              }
+              if (tag_metas.size() % 2 != 0){
+                LOG.warn(String.format("Improper number of tags detected: [%d]", tag_metas.size()));
+                continue;
+              }
+              
+              meta.setTags(tag_metas);
+              
               this.ProcessTS(meta);
               count++;
+              
+              if (this.temp_branches.size() > 500){
+                for (Map.Entry<Integer, MetaTreeBranch> entry : this.temp_branches.entrySet()){
+                  LOG.trace("Flushing branch: " + entry.getValue());
+                  StoreBranch(entry.getValue());
+                }
+                this.temp_branches.clear();
+              }
+              
+              if (count % 1000 == 0){
+                LOG.info(String.format("Processed [%d] meta data entries in tree in [%d]s", 
+                    count, ((System.currentTimeMillis() / 1000) - start)));
+                start = System.currentTimeMillis() / 1000;                
+              }
             }
           }
         }
       }
+      
+      if (this.temp_branches.size() > 0){
+        for (Map.Entry<Integer, MetaTreeBranch> entry : this.temp_branches.entrySet()){
+          LOG.trace("Flushing branch: " + entry.getValue());
+          StoreBranch(entry.getValue());
+        }
+        this.temp_branches.clear();
+      }
+      
       LOG.info(String.format("Indexed [%d] TSUID metadata into tree id [%d]", count, this.tree_id));
       
       root = this.FetchBranch(0);
@@ -192,24 +301,26 @@ public class MetaTree {
     TimeSeriesMeta meta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
     if (meta == null){
       LOG.debug(String.format("Unable to locate TSUID [%s]", tsuid));
-      return "";
+      return "{\"error\":\"Could not find an entry for the given TSUID\"}";
     }
     
     boolean[] had_nomatch = { false };
     MetaTreeBranch br = ProcessTS(meta, null, 0, new TreeRecursionState(), had_nomatch);
     if (br == null){
       LOG.error("Branch returned was null");
-      return "";
+      return "{\"error\":\"Branch returned was null\"}";
     }
+    if (had_nomatch[0] && !this.include_no_matches)
+      this.parsing_messages.add("Detected a no match on the tree and it would not be added");
+
+    HashMap<String, Object> tree = new HashMap<String, Object>();
+    tree.put("timeseries", meta);
+    if (!AddBranchToTree(br, true))
+      tree.put("error", "Unable to add TSUID to the tree");    
+    tree.put("parse_log", this.parsing_messages);
+    this.TestPrint(this.temp_branches.get(0), tree);
     
-    AddBranchToTree(br);
-    
-//    if (!AddBranchToTree(br)){
-//      LOG.error("Unable to integrate into tree");
-//      return "";
-//    }
-    
-    JSON codec = new JSON(this.temp_branches);
+    JSON codec = new JSON(tree);
     return codec.getJsonString();
   }
   
@@ -220,6 +331,8 @@ public class MetaTree {
    * timeseries didn't match any of the rules and NMs are disabled for the tree
    */
   public boolean ProcessTS(final TimeSeriesMeta ts){
+    this.parsing_messages.clear();
+    
     boolean[] had_nomatch = { false };
     MetaTreeBranch br = ProcessTS(ts, null, 0, new TreeRecursionState(), had_nomatch);
     if (had_nomatch[0]){
@@ -231,12 +344,7 @@ public class MetaTree {
       return false;
     }else{
       // now we can loop through the tree and build the hash
-      AddBranchToTree(br);
-      for (Map.Entry<Integer, MetaTreeBranch> entry : this.temp_branches.entrySet()){
-        LOG.trace("Flushing branch: " + entry.getValue());
-        StoreBranch(entry.getValue());
-      }
-      this.temp_branches.clear();
+      AddBranchToTree(br, false);
       return true;
     }
   }
@@ -262,6 +370,7 @@ public class MetaTree {
     
     this.tree_separator = tree.tree_separator;
     this.temp_branches = tree.temp_branches;
+    this.load_meta = tree.load_meta;
   }
   
   /**
@@ -311,7 +420,6 @@ public class MetaTree {
     }
   }
 
-  
   public final MetaTreeBranchDisplay GetBranch(int branch){
     MetaTreeBranch b = this.FetchBranch(branch);
     if (b == null)
@@ -319,6 +427,36 @@ public class MetaTree {
     return new MetaTreeBranchDisplay(b);
   }
   
+  public final MetaTreeRule GetRule(final int level, final int order){
+    TreeMap<Integer, MetaTreeRule> ruleset = this.rules.get(level);
+    if (ruleset == null)
+      return null;
+    
+    return ruleset.get(order);
+  }
+  
+  public final String DeleteRule(final int level, final int order, final boolean entire_level){
+    if (!this.rules.containsKey(level))
+      return "Rule level did not exist";
+    
+    if (entire_level){
+      this.rules.remove(level);
+      LOG.info(String.format("Removed entire rule level [%d] for tree [%d]", level, this.tree_id));
+      return "";
+    }
+    
+    TreeMap<Integer, MetaTreeRule> ruleset = this.rules.get(level);
+    if (!ruleset.containsKey(order))
+      return "Level did not contain a rule at that order";
+    
+    ruleset.remove(order);
+    LOG.info(String.format("Removed rule [%d:%d] from tree [%d]", level, order, this.tree_id));
+    if (ruleset.size() < 1){
+      this.rules.remove(level);
+      LOG.info(String.format("Level [%d] was empty, removed level from tree [%d]", level, this.tree_id));
+    }
+    return "";
+  }
   
 /* PRIVATE METHODS ----------------------------------- */   
   
@@ -345,6 +483,7 @@ public class MetaTree {
     MetaTreeBranch current_branch = new MetaTreeBranch(branch != null ? branch.name.hashCode() : 0);
     current_branch.depth = depth;
     state.current_branch = current_branch;
+    String message;
     
     // get the current rule level
     TreeMap<Integer, MetaTreeRule> current_rules = this.rules.get(state.rule_idx);
@@ -352,7 +491,9 @@ public class MetaTree {
     int count=0;
     for (Map.Entry<Integer, MetaTreeRule> entry : current_rules.entrySet()){
       MetaTreeRule rule = entry.getValue();
-      LOG.trace(String.format("Processing rule [%s]", rule));
+      message = String.format("Processing rule [%s]", rule);
+      this.parsing_messages.add(message);
+      LOG.trace(message);
       if (rule.ruleType() == Tree_Rule_Type.METRIC){
         state = ProcessRule(state, branch, rule, ts.getMetric().getName(), ts);
         current_branch = state.current_branch;
@@ -369,20 +510,28 @@ public class MetaTree {
           }
         }
         if (found && !tag.isEmpty()){
-          LOG.trace(String.format("Matched tagk [%s]", rule.getField()));
+          message = String.format("Matched tagk [%s]", rule.getField());
+          this.parsing_messages.add(message);
+          LOG.trace(message);
           state = ProcessRule(state, branch, rule, tag, ts);
           current_branch = state.current_branch;
         }else{
-          LOG.trace(String.format("No match on tagk [%s]", rule.getField()));
+          message = String.format("No match on tagk [%s]", rule.getField());
+          this.parsing_messages.add(message);
+          LOG.trace(message);
         }   
       }else if (rule.ruleType() == Tree_Rule_Type.METRIC_CUSTOM){
         Map<String, String> custom = ts.getMetric().getCustom();
         if (custom != null && custom.containsKey(rule.getField())){
-          LOG.trace(String.format("Matched metric custom tag [%s]", rule.getField()));
+          message = String.format("Matched metric custom tag [%s]", rule.getField());
+          this.parsing_messages.add(message);
+          LOG.trace(message);
           state = ProcessRule(state, branch, rule, custom.get(rule.getField()), ts);
           current_branch = state.current_branch;
         }else{
-          LOG.trace(String.format("No match on custom tag [%s]", rule.getField()));
+          message = String.format("No match on custom tag [%s]", rule.getField());
+          this.parsing_messages.add(message);
+          LOG.trace(message);
         } 
       }else if (rule.ruleType() == Tree_Rule_Type.TAGK_CUSTOM){
         GeneralMeta tagk = null;
@@ -393,17 +542,25 @@ public class MetaTree {
           }
         }
         if (tagk != null){
-          LOG.trace(String.format("Matched tagk [%s]", rule.getField()));
+          message = String.format("Matched tagk [%s]", rule.getField());
+          this.parsing_messages.add(message);
+          LOG.trace(message);
           Map<String, String> custom = tagk.getCustom();
           if (custom != null && custom.containsKey(rule.getCustom_field())){
-            LOG.trace(String.format("Matched tagk custom tag [%s]", rule.getCustom_field()));
+            message = String.format("Matched tagk custom tag [%s]", rule.getCustom_field());
+            this.parsing_messages.add(message);
+            LOG.trace(message);
             state = ProcessRule(state, branch, rule, custom.get(rule.getCustom_field()), ts);
             current_branch = state.current_branch;
           }else{
-            LOG.trace(String.format("No match on tagk custom tag [%s]", rule.getCustom_field()));
+            message = String.format("No match on tagk custom tag [%s]", rule.getCustom_field());
+            this.parsing_messages.add(message);
+            LOG.trace(message);
           } 
         }else{
-          LOG.trace(String.format("No match on tagk [%s]", rule.getField()));
+          message = String.format("No match on tagk [%s]", rule.getField());
+          this.parsing_messages.add(message);
+          LOG.trace(message);
         }   
       }else if (rule.ruleType() == Tree_Rule_Type.TAGV_CUSTOM){
         GeneralMeta tagv = null;
@@ -414,25 +571,37 @@ public class MetaTree {
           }
         }
         if (tagv != null){
-          LOG.trace(String.format("Matched tagv [%s]", rule.getField()));
+          message = String.format("Matched tagv [%s]", rule.getField());
+          this.parsing_messages.add(message);
+          LOG.trace(message);
           Map<String, String> custom = tagv.getCustom();
           if (custom != null && custom.containsKey(rule.getCustom_field())){
-            LOG.trace(String.format("Matched tagv custom tag [%s]", rule.getCustom_field()));
+            message = String.format("Matched tagv custom tag [%s]", rule.getCustom_field());
+            this.parsing_messages.add(message);
+            LOG.trace(message);
             state = ProcessRule(state, branch, rule, custom.get(rule.getCustom_field()), ts);
             current_branch = state.current_branch;
           }else{
-            LOG.trace(String.format("No match on tagv custom tag [%s]", rule.getCustom_field()));
+            message = String.format("No match on tagv custom tag [%s]", rule.getCustom_field());
+            this.parsing_messages.add(message);
+            LOG.trace(message);
           } 
         }else{
-          LOG.trace(String.format("No match on tagv [%s]", rule.getField()));
+          message = String.format("No match on tagv [%s]", rule.getField());
+          this.parsing_messages.add(message);
+          LOG.trace(message);
         }   
       }else{
-        LOG.warn("Rule type is not currently supported: " + rule);
+        message = "Rule type is not currently supported: " + rule;
+        this.parsing_messages.add(message);
+        LOG.warn(message);
       }
       
       // if we have successfully matched a rule out of multiple in the level, we need to bail
       if (!current_branch.name.isEmpty()){
-        LOG.trace(String.format("Matched name [%s] on sub rule: %s", current_branch.name, rule));
+        message = String.format("Matched name [%s] on sub rule: %s", current_branch.name, rule);
+        this.parsing_messages.add(message);
+        LOG.trace(message);
         break;
       }
       count++;
@@ -447,7 +616,7 @@ public class MetaTree {
     
     // determine if we need to increment the rule index or keep processing splits
     if (state.splits != null && state.split_idx >= state.splits.length){
-      LOG.trace("No more splits detected, resetting");
+      //LOG.trace("No more splits detected, resetting");
       state.splits = null;
       state.split_idx = 0;
       state.rule_idx++;
@@ -473,7 +642,9 @@ public class MetaTree {
         LOG.error(String.format("Attempting to add a leaf to a NULL parent branch: %s", state));
       }else{
         branch.leaf = leaf;
-        LOG.trace(String.format("Adding leaf [%s] to parent branch [%s]", leaf.name, branch));
+        message = String.format("Adding leaf [%s] to parent branch [%s]", leaf.name, branch);
+        this.parsing_messages.add(message);
+        LOG.trace(message);
       }
     }else if (r_branch.display_name.compareTo(no_match_name) == 0 &&
         r_branch.branch == null && r_branch.leaf == null){
@@ -481,7 +652,9 @@ public class MetaTree {
     }else{
       if (branch != null){
         branch.branch = current_branch;
-        LOG.trace(String.format("Adding branch [%s] to parent branch [%s]", current_branch, branch));
+        message = String.format("Adding branch [%s] to parent branch [%s]", current_branch, branch);
+        this.parsing_messages.add(message);
+        LOG.trace(message);
       }else
         LOG.trace(String.format("Found root branch [%s]", current_branch));
     }
@@ -508,8 +681,10 @@ public class MetaTree {
       state = ProcessRegex(state, branch, rule, value, ts);
     }else if (rule.getSeparator() != null && !rule.getSeparator().isEmpty()){
       state = Process_Split(state, branch, rule, value, ts);
-    }else
+    }else{
       LOG.error("Unknown rule processing state: " + state);
+      this.parsing_messages.add("Unknown rule processing state: " + state);
+    }
     return state;
   }
   
@@ -557,13 +732,16 @@ public class MetaTree {
   private TreeRecursionState ProcessRegex(TreeRecursionState state, 
       MetaTreeBranch branch, MetaTreeRule rule, String value, TimeSeriesMeta ts){
     try{
+      String message;
       Matcher m = rule.getRe().matcher(value);
       if (m.find()){
         if (m.groupCount() >= rule.getRegex_group_idx() + 1){
           final String extracted = m.group(rule.getRegex_group_idx() + 1);
           if (extracted == null || extracted.isEmpty()){
-            LOG.warn(String.format("Extracted value for rule [%d:%d] was null or empty", 
-                rule.getLevel(), rule.getOrder()));
+            message = String.format("Extracted value for rule [%d:%d] was null or empty", 
+                rule.getLevel(), rule.getOrder());
+            this.parsing_messages.add(message);
+            LOG.warn(message);
             System.out.println("Warning: Extracted value was null or empty");
           }else{
             state.current_branch.name = (branch != null ? branch.name + tree_separator + 
@@ -572,8 +750,10 @@ public class MetaTree {
                 extracted);
           }
         }else{
-          LOG.warn(String.format("Regex group index [%d] for rule [%d:%d] was out of range [%d]", 
-              rule.getRegex_group_idx(), rule.getLevel(), rule.getOrder(), m.groupCount()));
+          message = String.format("Regex group index [%d] for rule [%d:%d] was out of range [%d]", 
+              rule.getRegex_group_idx(), rule.getLevel(), rule.getOrder(), m.groupCount());
+          this.parsing_messages.add(message);
+          LOG.warn(message);
         }
       }
     }catch (Exception e){
@@ -720,7 +900,9 @@ public class MetaTree {
    * @param b The TS branch to process into the tree
    * @return True if processed successfully, false if there was an error
    */
-  private boolean AddBranchToTree(MetaTreeBranch b){ 
+  private boolean AddBranchToTree(MetaTreeBranch b, final boolean testing){ 
+    String message;
+    
     // if we have a parent, add the current branch to it
     MetaTreeBranch parent = FetchBranch(b.parent_hash);
     if (parent == null){
@@ -729,16 +911,28 @@ public class MetaTree {
     }else{
       if (parent.branches == null)
         parent.branches = new TreeSet<MetaTreeStoreBranch>();
-      parent.branches.add(new MetaTreeStoreBranch(b));
-      LOG.trace("Updated parent with branch: " + b);
-      this.temp_branches.put(parent.hashCode(), parent);
+      MetaTreeStoreBranch mtsb = new MetaTreeStoreBranch(b);
+      if (!parent.branches.contains(mtsb)){
+        parent.branches.add(mtsb);
+        message = "Updated parent with branch: " + b;
+        this.parsing_messages.add(message);
+        LOG.trace(message);
+        this.temp_branches.put(parent.hashCode(), parent);
+      }else{
+        message = "Parent already has branch: " + b;
+        this.parsing_messages.add(message);
+        if (testing)
+          this.temp_branches.put(parent.hashCode(), parent);
+      }
     }
       
     // now check/store the branch
     MetaTreeBranch local = FetchBranch(b.hashCode());
     if (local == null){
       temp_branches.put(b.hashCode(), b);
-      LOG.trace("Added new branch: " + b);
+      message = "Added a new branch to tree: " + b;
+      this.parsing_messages.add(message);
+      LOG.trace(message);
       local = FetchBranch(b.hashCode());
     }
     
@@ -748,21 +942,56 @@ public class MetaTree {
       if (local.leaves == null)
         local.leaves = new TreeSet<MetaTreeStoreLeaf>();
       if (local.leaves.contains(leaf)){
-        LOG.warn("Leaf collission: " + b.leaf);
-        this.collissions.add(leaf.tsuid);
-        return false;
+//        message = "Leaf collision: " + b.leaf;
+//        if (testing){
+//          for (MetaTreeStoreLeaf l : local.leaves){
+//            LOG.debug("Have leaf: " + l.hash + " and new " + leaf.hash);
+//            if (l.hashCode() == leaf.hashCode())
+//              message = "Leaf collision- Old: " + l + "  New: " + b.leaf;
+//          }
+//        }
+        message = "Leaf already belongs to node: " + b.leaf;
+        this.parsing_messages.add(message);
+        LOG.trace(message);
+        //this.collissions.add(leaf.tsuid);
+        if (testing)
+          local.leaves.add(leaf);
+        if (testing)
+          this.temp_branches.put(local.hashCode(), local);
+        return true;
       }else{
         local.leaves.add(leaf);
+        message = "Added new leaf to branch: " + b.leaf;
+        this.parsing_messages.add(message);
+        LOG.trace(message);
       }
     }
     
     if (b.branch != null)
-      return AddBranchToTree(b.branch);
+      return AddBranchToTree(b.branch, testing);
     else if (b.leaf == null){
       LOG.error("Ran into a null branch without leaves: " + b);
       return false;
     }
+    if (testing)
+      this.temp_branches.put(local.hashCode(), local);
     return true;
+  }
+  
+  private void setLoadMeta(){
+    if (this.rules.size() < 1)
+      return;
+    
+    for (TreeMap<Integer, MetaTreeRule> rule_set : this.rules.values()){
+      for (MetaTreeRule rule : rule_set.values()){
+        if (rule.getType() == 1 || 
+            rule.getType() == 3|| 
+            rule.getType() == 4){
+          this.load_meta = true;
+          return;
+        }
+      }        
+    }
   }
   
   public boolean StoreTree(){
@@ -802,6 +1031,7 @@ public class MetaTree {
       if (codec.parseObject(json)) {
         MetaTree tree = (MetaTree)codec.getObject();
         this.copy(tree);
+        this.setLoadMeta();
         return true;
       }
       LOG.error("Unable to parse tree");
@@ -809,6 +1039,38 @@ public class MetaTree {
     }    
     LOG.debug(String.format("Unable to locate tree [%d] in storage", id));
     return false;
+  }
+  
+  private void TestPrint(final MetaTreeBranch branch, HashMap<String, Object> tree){
+    if (branch == null){
+      LOG.error("Branch was null!!!");
+      return;
+    } 
+      
+    HashMap<String, Object> map = new HashMap<String, Object>();
+    map.put("parent_hash", branch.parent_hash);
+    map.put("depth", branch.depth);
+    map.put("display_name", branch.display_name);
+    
+    if (branch.branches != null){
+      HashMap<String, Object> branches = new HashMap<String, Object>();
+      for (MetaTreeStoreBranch b : branch.branches){
+        if (this.temp_branches.containsKey(b.hashCode())){
+          TestPrint(this.temp_branches.get(b.hashCode()), branches);
+        }else{
+          branches.put(b.display_name, b);
+        }
+      }
+      map.put("branches", branches);
+    }
+    
+    if (branch.leaves != null){
+      LOG.debug("Putting leaves on branch!! yayaya");
+      map.put("leaves", branch.leaves);
+    }
+    
+    
+    tree.put(branch.display_name, map);
   }
   
 /* GETTERS AND SETTERS ----------------------------------- */ 
@@ -1007,7 +1269,7 @@ public class MetaTree {
     }
     
     public String toString(){
-      return String.format("ph [%d] d [%d] name [%s] dn [%s]", this.parent_hash,
+      return String.format("pb [%d] d [%d] name [%s] dn [%s]", this.parent_hash,
           this.depth, this.name, this.display_name);
     }
   }
@@ -1046,7 +1308,7 @@ public class MetaTree {
     }
     
     public String toString(){
-      return String.format("[%d] dn [%s] tsuid [%s]", parent_hash, this.display_name, this.tsuid);
+      return String.format("pb [%d] dn [%s] tsuid [%s]", parent_hash, this.display_name, this.tsuid);
     }
   }
 
@@ -1144,7 +1406,8 @@ public class MetaTree {
      * Overrides the hash code with the local hash ID
      */
     public int hashCode() {
-      return this.hash;
+      //return this.hash;
+      return this.display_name.hashCode();
     }
     
     /**
@@ -1159,7 +1422,7 @@ public class MetaTree {
         return false;
     
       MetaTreeStoreLeaf l = (MetaTreeStoreLeaf)obj;
-      if (this.hash == l.hash)
+      if (this.tsuid == l.tsuid)
         return true;
       return false;
     }
@@ -1172,7 +1435,7 @@ public class MetaTree {
     }
   
     public String toString(){
-      return String.format("[%d] dn [%s] tsuid [%s]", this.hash, this.display_name, this.tsuid);
+      return String.format("pb [%d] dn [%s] tsuid [%s]", this.hash, this.display_name, this.tsuid);
     }
   }
 

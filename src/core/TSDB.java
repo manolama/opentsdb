@@ -190,8 +190,10 @@ public final class TSDB {
         search_manager.start();
       }
       
-      meta_manager = new MetaManager(this);
-      meta_manager.start();
+      if (config.searchEnableTreeIndexer()){
+        meta_manager = new MetaManager(this);
+        meta_manager.start();
+      }
     }
   }
   
@@ -812,7 +814,7 @@ public final class TSDB {
           Thread.sleep(5000);
           
           if (role == TSDRole.Ingest || role == TSDRole.Full){
-            LOG.debug("Flushing all TS/UID maps and meta...");
+            //LOG.debug("Flushing all TS/UID maps and meta...");
             // update the UIDs
             metrics.flushMeta();
             tag_names.flushMeta();
@@ -821,7 +823,7 @@ public final class TSDB {
 
             //ts_uids.flush();
             ts_uids.processNewMeta(metrics, tag_names, tag_values, timeseries_meta);
-            LOG.debug("Flushed all TS/UID maps and meta");
+            //LOG.debug("Flushed all TS/UID maps and meta");
           }
           
         } catch (InterruptedException e) {

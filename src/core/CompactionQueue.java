@@ -249,17 +249,29 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
    */
   private Deferred<Object> compact(final ArrayList<KeyValue> row,
                                    final CompactedDPS compacted) {
+    JSON codec = new JSON(new Annotation());
     if (row.size() <= 1) {
-      LOG.trace("Row size empty or 1");
+      LOG.trace(String.format("Row has [%d] cells", row.size()));
       if (row.isEmpty()) {  // Maybe the row got deleted in the mean time?
         LOG.debug("Attempted to compact a row that doesn't exist.");
       } else if (compacted != null) {
         // no need to re-compact rows containing a single value, and make sure it's not
         // an annotation
-        if (row.get(0).qualifier().length != TsdbConfig.NOTE_QUAL_WIDTH)
+        if (row.get(0).qualifier().length != TsdbConfig.NOTE_QUAL_WIDTH){
+          LOG.trace("Row had a single had a single value in there");
           compacted.values = row.get(0);
-        else
+        }else{
           LOG.trace("Row only had an annotation in it");
+          if (!codec.parseObject(row.get(0).value())){
+            LOG.warn(String.format("Unable to parse annotation for ts [%s] at [%d]",
+                UniqueId.IDtoString(row.get(0).key()), row.get(0).timestamp()));
+          }else{
+            if (compacted.annotations == null)
+              compacted.annotations = new ArrayList<Annotation>();
+            compacted.annotations.add((Annotation)codec.getObject());
+            LOG.debug("Found an annotation: [" + ((Annotation)codec.getObject()).getDescription() + "]");
+          }
+        }
       }
       return null;
     }
@@ -280,15 +292,16 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       int longest_idx = 0;            // Index of `longest'.
       final int nkvs = row.size();
       final ArrayList<Integer> remove_notes = new ArrayList<Integer>();
-      JSON codec = new JSON(new Annotation());
+      
       for (int i = 0; i < nkvs; i++) {
         final KeyValue kv = row.get(i);
         final byte[] qual = kv.qualifier();
-        // If the qualifier length isn't 2 or 3, this row might have already
+        // If the qualifier length isn't 2 bytes wide or more, this row might have already
         // been compacted, potentially partially, so we need to merge the
         // partially compacted set of cells, with the rest.
         final int len = qual.length;
         if (len == TsdbConfig.NOTE_QUAL_WIDTH){
+          LOG.debug("Found a qualifier that's 3 bytes wide");
           remove_notes.add(i);
           // annotation
           if (compacted.annotations == null)
@@ -307,6 +320,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
           // don't fudge the qualifier length, we don't want it in there
           continue;
         } else if (len != 2) {
+          LOG.debug("Found a compacted qualifier, it's length is: " + len);
           trivial = false;
           // We only do this here because no qualifier can be < 2 bytes.
           if (len > longest.qualifier().length) {
@@ -314,7 +328,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
             longest_idx = i;
           }
         } else {
-          LOG.trace("Found possibly compacted row");
+          LOG.trace("Found a qualifier that's 2 bytes long, needs to be squished");
           // In the trivial case, do some sanity checking here.
           // For non-trivial cases, the sanity checking logic is more
           // complicated and is thus pushed down to `complexCompact'.

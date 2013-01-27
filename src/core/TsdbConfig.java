@@ -110,6 +110,7 @@ public class TsdbConfig {
   private boolean search_enable_indexer = false;
   private int search_index_interval = 60 * 15;
   private String search_remote_indexers = "";
+  private boolean search_enable_tree_indexer = false;
 
   // -------- Formatters --------
   /** Path to override map file */
@@ -564,6 +565,17 @@ public class TsdbConfig {
       LOG.warn(nfe.getLocalizedMessage());
     }
     return this.search_remote_indexers;
+  }
+  
+  public final boolean searchEnableTreeIndexer(){
+    try {
+      return this.config.getBoolean("tsd.search.tree.indexer.enable");
+    } catch (NullPointerException npe) {
+      // return the default below
+    } catch (NumberFormatException nfe) {
+      LOG.warn(nfe.getLocalizedMessage());
+    }
+    return this.search_enable_tree_indexer;
   }
   
   // -------- Formatters -------

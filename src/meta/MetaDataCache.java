@@ -204,7 +204,7 @@ public class MetaDataCache {
   // PRIVATES ---------------------------------------------------------
 
   private TimeSeriesMeta getTimeSeriesMetaFromHBase(final byte[] id)
-      throws HBaseException {
+      throws TsdbStorageException {
     try{
       final String cell = this.kind + "_meta";
       final byte[] raw_meta = storage.getValue(id, TsdbStore.toBytes("name"),
@@ -230,7 +230,7 @@ public class MetaDataCache {
   }
 
   private GeneralMeta getGeneralMetaFromHBase(final byte[] id)
-      throws HBaseException {
+      throws TsdbStorageException {
     final String cell = this.kind + "_meta";
     final Meta_Type type;
     if (this.kind.compareTo("metrics") == 0)

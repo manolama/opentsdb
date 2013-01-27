@@ -110,6 +110,12 @@ final class Span implements DataPoints {
     long last_ts = 0;
     if (row.annotations != null)
       this.addAnnotation(row.annotations);
+    
+    // if we had an annotation only, no data, then just return
+    if (row.values == null || row.values.value() == null){
+      LOG.trace("Row looks like it had an annotation only");
+      return; 
+    }
     if (rows.size() != 0) {
       // Verify that we have the same metric id and tags.
       final byte[] key = row.values.key();

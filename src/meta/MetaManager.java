@@ -14,8 +14,8 @@ public final class MetaManager extends Thread {
   }
   
   public void run(){
-    if (true)
-      return;
+//    if (true)
+//      return;
     while(true){
       LOG.info("Rebuilding Tree 1");
       long start = System.currentTimeMillis() / 1000;
