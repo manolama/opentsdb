@@ -252,6 +252,25 @@ final public class TimeSeriesMeta extends MetaData {
     return doc;
   }
   
+  public String toString(){
+    StringBuilder sb = new StringBuilder();
+    sb.append("TSUID [" + this.uid + "] ");
+    if (this.metric != null)
+      sb.append("Metric [" + this.metric.name + "] ");
+    else
+      sb.append("Metric [] ");
+    
+    if (this.tags != null){
+      for (GeneralMeta tag : this.tags){
+        if (tag.getType() == Meta_Type.TAGK)
+          sb.append(tag.getName()).append("=");
+        else
+          sb.append(tag.getName()).append(" ");
+      }
+    }
+    return sb.toString();
+  }
+  
   // **** GETTERS AND SETTERS ****
   public int getRetention(){
     return this.retention;

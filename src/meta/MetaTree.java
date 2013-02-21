@@ -26,11 +26,13 @@ import org.hbase.async.KeyValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 /**
  * This class is responsible for creating and maintaining a tree of 
  * timeseries data for easy navigation
  */
-@JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
+//@JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
+@JsonAutoDetect(fieldVisibility = Visibility.PUBLIC_ONLY)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class MetaTree {
   @JsonIgnore
@@ -47,39 +49,46 @@ public class MetaTree {
     TAGV_CUSTOM,
   }
   
-  /* The display and actual name to use for a non-matching branches/leaves */
-  private String no_match_name = "NM";
   /* The name of this particular tree */
   private String name;
   /* Notes about this tree */
   private String notes;
   /* Whether or not to put non-matching branches/leaves in the tree */
-  private boolean include_no_matches;
+  private boolean strict_match;
+  
+  private boolean c_name;
+  private boolean c_notes;
+  private boolean c_strict_match;
   
   /* ID of the tree */
-  int tree_id;
+  private int tree_id;
   /* Sorted, two layer map of rules to use in building the tree */  
-  TreeMap<Integer, TreeMap<Integer, MetaTreeRule>> rules;
+  private TreeMap<Integer, TreeMap<Integer, MetaTreeRule>> rules;
+  /* Tracks the max level index for times when users forget a level */
+  private int max_rule_level;
   /* A list of non-matched timeseries UIDs that were not included in the tree */
-  HashSet<String> no_matches;
+  private HashSet<String> no_matches;
   /* A list of TSUID collissions that wouldn't make it onto the tree */
-  HashSet<String> collissions;
+  private HashSet<String> collissions;
   /* Total number of branches in the tree */
-  int num_branches;
+  private int num_branches;
   /* Total number of leaves in the tree */
-  int num_leaves;
+  private int num_leaves;
   /* Epoch timestamp when this tree was created */
-  long created;
+  private long created;
   /* Epoch timestamp when a full rebuild of this tree was started */
-  long full_sync_start;
+  private long full_sync_start;
   /* Epoch timestamp when a full rebuild of this tree was completed. It's 0 until completed */
-  long full_sync_completed;
+  private long full_sync_completed;
   /* Epoch timestamp when the tree was last updated, e.g. via a new TSUID in-between rebuilds */
-  long last_update;
+  private long last_update;
   /* Current version of the tree, used to cull stale branches and leaves */
-  long version;
+  private long version;
   /* Maximum depth of the tree */
-  int max_depth;
+  private int max_depth;
+  /* The limit before flushing the temp hashes to disk */
+  private int flush_limit;
+  
   
   @JsonIgnore
   private String tree_separator = "|";
@@ -95,24 +104,37 @@ public class MetaTree {
   private boolean load_meta = false;
   
   @JsonIgnore
-  private TsdbStore storage;
+  //private TsdbStore storage;
   
-  public MetaTree(final TsdbStore storage){
+  public MetaTree(final int tree_id){
+    this.tree_id = tree_id;
     this.rules = new TreeMap<Integer, TreeMap<Integer, MetaTreeRule>>();
-    this.storage = storage;
     this.no_matches = new HashSet<String>();
     this.collissions = new HashSet<String>();
+    this.max_rule_level = 0;
+    this.flush_limit = 500;
   }
   
   public MetaTree(){
+    this.tree_id = 0;
     this.rules = new TreeMap<Integer, TreeMap<Integer, MetaTreeRule>>();
-    this.storage = null;
     this.no_matches = new HashSet<String>();
     this.collissions = new HashSet<String>();
+    this.max_rule_level = 0;
+    this.flush_limit = 500;
+  }
+  
+  public void copyChanges(final MetaTree tree){
+    if (tree.c_name)
+      this.name = tree.name;
+    if (tree.c_notes)
+      this.notes = tree.notes;
+    if (tree.c_strict_match)
+      this.strict_match = tree.strict_match;
   }
   
   /**
-   * Attempts to add the rule in the proper spot in the rule tree
+   * Adds or replaces the rule in the proper spot in the rule tree
    * @param rule The rule to add
    * @returnTrue
    */
@@ -125,6 +147,9 @@ public class MetaTree {
     }else{
       r.put(rule.getOrder(), rule);
     }
+    
+    if (rule.getLevel() > this.max_rule_level)
+      this.max_rule_level = rule.getLevel();
   }
 
   /**
@@ -137,19 +162,26 @@ public class MetaTree {
     this.version++;
     this.full_sync_start = System.currentTimeMillis()/1000;
     this.full_sync_completed = 0;
+    this.StoreTree(tsdb.uid_storage);
     
     long start = this.full_sync_start;
     this.setLoadMeta();
     
     // put new root
-    MetaTreeBranch root = this.FetchBranch(0);
+    MetaTreeBranch root = this.FetchBranch(tsdb.uid_storage, 0);
     if (root == null){
       root = new MetaTreeBranch(0);
       root.tree_id = this.tree_id;
       root.display_name = "ROOT";
     }
     root.tree_version = this.version;
-    this.StoreBranch(root);
+    this.StoreBranch(tsdb.uid_storage, root);
+    
+    this.CalculateMaxLevel();
+    
+    // if we don't have rules, there's nothing to process, duh!
+    if (rules.size() < 1)
+      return;
     
     try {
       scanner = tsdb.uid_storage.openScanner(scanner);
@@ -208,6 +240,7 @@ public class MetaTree {
                     }
                   }else{
                     tagk = new GeneralMeta(tag);
+                    tagk.setType(Meta_Type.TAGK);
                     try{
                       tagk.setName(tsdb.tag_names.getName(tag));
                     }catch (Exception e){
@@ -226,6 +259,7 @@ public class MetaTree {
                     }
                   }else{
                     tagv = new GeneralMeta(tag);
+                    tagv.setType(Meta_Type.TAGV);
                     try{
                       tagv.setName(tsdb.tag_values.getName(tag));
                     }catch (Exception e){
@@ -244,16 +278,11 @@ public class MetaTree {
               
               meta.setTags(tag_metas);
               
-              this.ProcessTS(meta);
+              this.ProcessTS(tsdb.uid_storage, meta);
               count++;
               
-              if (this.temp_branches.size() > 500){
-                for (Map.Entry<Integer, MetaTreeBranch> entry : this.temp_branches.entrySet()){
-                  LOG.trace("Flushing branch: " + entry.getValue());
-                  StoreBranch(entry.getValue());
-                }
-                this.temp_branches.clear();
-              }
+              if (this.temp_branches.size() > flush_limit)
+                this.FlushTemp(tsdb.uid_storage);
               
               if (count % 1000 == 0){
                 LOG.info(String.format("Processed [%d] meta data entries in tree in [%d]s", 
@@ -265,24 +294,19 @@ public class MetaTree {
         }
       }
       
-      if (this.temp_branches.size() > 0){
-        for (Map.Entry<Integer, MetaTreeBranch> entry : this.temp_branches.entrySet()){
-          LOG.trace("Flushing branch: " + entry.getValue());
-          StoreBranch(entry.getValue());
-        }
-        this.temp_branches.clear();
-      }
+      if (this.temp_branches.size() > 0)
+        this.FlushTemp(tsdb.uid_storage);
       
       LOG.info(String.format("Indexed [%d] TSUID metadata into tree id [%d]", count, this.tree_id));
       
-      root = this.FetchBranch(0);
+      root = this.FetchBranch(tsdb.uid_storage, 0);
       if (root == null){
         LOG.error(String.format("Unable to find root branch for tree [%d]", this.tree_id));
         return;
       }
-      this.UpdateCounts(root);
+      this.UpdateCounts(tsdb.uid_storage, root);
       this.full_sync_completed = System.currentTimeMillis()/1000;
-      
+      this.StoreTree(tsdb.uid_storage);
       return;
     } catch (HBaseException e) {
       throw e;
@@ -297,12 +321,14 @@ public class MetaTree {
    * @param tsuid
    * @return
    */
-  public String TestTS(final TSDB tsdb, final String tsuid){
+  public String TestTS(final TSDB tsdb, final String tsuid, final boolean save){
     TimeSeriesMeta meta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
     if (meta == null){
       LOG.debug(String.format("Unable to locate TSUID [%s]", tsuid));
       return "{\"error\":\"Could not find an entry for the given TSUID\"}";
     }
+    
+    this.CalculateMaxLevel();
     
     boolean[] had_nomatch = { false };
     MetaTreeBranch br = ProcessTS(meta, null, 0, new TreeRecursionState(), had_nomatch);
@@ -310,15 +336,18 @@ public class MetaTree {
       LOG.error("Branch returned was null");
       return "{\"error\":\"Branch returned was null\"}";
     }
-    if (had_nomatch[0] && !this.include_no_matches)
+    if (had_nomatch[0] && this.strict_match)
       this.parsing_messages.add("Detected a no match on the tree and it would not be added");
 
     HashMap<String, Object> tree = new HashMap<String, Object>();
     tree.put("timeseries", meta);
-    if (!AddBranchToTree(br, true))
+    if (!AddBranchToTree(tsdb.uid_storage, br, true))
       tree.put("error", "Unable to add TSUID to the tree");    
     tree.put("parse_log", this.parsing_messages);
     this.TestPrint(this.temp_branches.get(0), tree);
+    
+    if (save)
+      this.FlushTemp(tsdb.uid_storage);
     
     JSON codec = new JSON(tree);
     return codec.getJsonString();
@@ -330,12 +359,19 @@ public class MetaTree {
    * @return True if processed successfully, false if there was an error or the
    * timeseries didn't match any of the rules and NMs are disabled for the tree
    */
-  public boolean ProcessTS(final TimeSeriesMeta ts){
+  public boolean ProcessTS(final TsdbStore storage, final TimeSeriesMeta ts){
+    if (ts.getUID().isEmpty()){
+      LOG.warn("Encountered an emtpy TS UID");
+      return false;
+    }
+    
+    LOG.trace("Processing TS: " + ts.toString());
+    
     this.parsing_messages.clear();
     
     boolean[] had_nomatch = { false };
     MetaTreeBranch br = ProcessTS(ts, null, 0, new TreeRecursionState(), had_nomatch);
-    if (had_nomatch[0]){
+    if (this.strict_match && had_nomatch[0]){
       LOG.trace("Branch had a no match and NMs are disabled, won't add to tree: " + br);
       this.no_matches.add(ts.getUID());
       return false;
@@ -344,16 +380,15 @@ public class MetaTree {
       return false;
     }else{
       // now we can loop through the tree and build the hash
-      AddBranchToTree(br, false);
+      AddBranchToTree(storage, br, false);
       return true;
     }
   }
   
   public void copy(final MetaTree tree){
-    this.no_match_name = tree.no_match_name;
     this.name = tree.name;
     this.notes = tree.notes;
-    this.include_no_matches = tree.include_no_matches;
+    this.strict_match = tree.strict_match;
     
     this.tree_id = tree.tree_id;
     this.rules = tree.rules;
@@ -378,17 +413,17 @@ public class MetaTree {
    * If no trees have been configured, it will return a 1
    * @return an ID greater than 0 if found, 0 if not found
    */
-  public int GetNewID(){
+  public static int GetNewID(final TsdbStore storage){
     TsdbScanner scanner = new TsdbScanner(null, null, TsdbStore.toBytes("tsdb-uid"));
     scanner.setFamily(TsdbStore.toBytes("name"));
     scanner.setStartRow(new byte[] { 0x01, 0x00} );
     scanner.setEndRow(new byte[] { 0x01, 0x00} );
     try {
-      scanner = this.storage.openScanner(scanner);
+      scanner = storage.openScanner(scanner);
       byte[] tree_id = null;
       
       ArrayList<ArrayList<KeyValue>> rows;
-      while ((rows = this.storage.nextRows(scanner).joinUninterruptibly()) != null) {
+      while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
         for (final ArrayList<KeyValue> row : rows) {
           for (KeyValue cell : row){
             tree_id = cell.qualifier();
@@ -398,7 +433,6 @@ public class MetaTree {
       
       // if null, we don't have any tree IDs! So return 1
       if (tree_id == null){
-        this.tree_id = 1;
         return 1;
       }
       
@@ -410,7 +444,6 @@ public class MetaTree {
         return 0;
       }
       id++;
-      this.tree_id = id;
       return id;
     } catch (HBaseException e) {
       throw e;
@@ -420,8 +453,8 @@ public class MetaTree {
     }
   }
 
-  public final MetaTreeBranchDisplay GetBranch(int branch){
-    MetaTreeBranch b = this.FetchBranch(branch);
+  public final MetaTreeBranchDisplay GetBranch(final TsdbStore storage, int branch){
+    MetaTreeBranch b = this.FetchBranch(storage, branch);
     if (b == null)
       return null;
     return new MetaTreeBranchDisplay(b);
@@ -447,7 +480,7 @@ public class MetaTree {
     
     TreeMap<Integer, MetaTreeRule> ruleset = this.rules.get(level);
     if (!ruleset.containsKey(order))
-      return "Level did not contain a rule at that order";
+      return "Rule at the given level and order did not exist";
     
     ruleset.remove(order);
     LOG.info(String.format("Removed rule [%d:%d] from tree [%d]", level, order, this.tree_id));
@@ -456,6 +489,40 @@ public class MetaTree {
       LOG.info(String.format("Level [%d] was empty, removed level from tree [%d]", level, this.tree_id));
     }
     return "";
+  }
+  
+  public static final ArrayList<MetaTree> GetTrees(final TsdbStore storage){
+    TsdbScanner scanner = new TsdbScanner(null, null, TsdbStore.toBytes("tsdb-uid"));
+    scanner.setFamily(TsdbStore.toBytes("name"));
+    scanner.setStartRow(new byte[] { 0x01, 0x00} );
+    scanner.setEndRow(new byte[] { 0x01, 0x00} );
+    try {
+      scanner = storage.openScanner(scanner);
+      ArrayList<MetaTree> trees = new ArrayList<MetaTree>();
+      MetaTree tree = new MetaTree();
+      JSON codec = new JSON(tree);      
+      
+      ArrayList<ArrayList<KeyValue>> rows;
+      while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
+        for (final ArrayList<KeyValue> row : rows) {
+          for (KeyValue cell : row){
+            if (!codec.parseObject(cell.value()))
+              LOG.error("Unable to parse tree at [" + UniqueId.IDtoString(cell.qualifier()) + "] " + codec.getError());
+            else{
+              tree = (MetaTree)codec.getObject();
+              trees.add(tree);
+            }
+          }
+        }
+      }
+      
+      return trees;
+    } catch (HBaseException e) {
+      throw e;
+    } catch (Exception e) {
+      e.printStackTrace();
+      throw new RuntimeException("Should never be here", e);
+    }
   }
   
 /* PRIVATE METHODS ----------------------------------- */   
@@ -474,7 +541,7 @@ public class MetaTree {
   private MetaTreeBranch ProcessTS(final TimeSeriesMeta ts, MetaTreeBranch branch, int depth, 
       TreeRecursionState state, boolean[] no_match){    
     // make sure we haven't exceeded the rule limit
-    if (state.rule_idx >= this.rules.size()){
+    if (state.rule_idx > this.max_rule_level){
       LOG.trace("Reached the final rule in the list");
       return null;
     }
@@ -484,14 +551,25 @@ public class MetaTree {
     current_branch.depth = depth;
     state.current_branch = current_branch;
     String message;
+    String idx = "";
     
     // get the current rule level
-    TreeMap<Integer, MetaTreeRule> current_rules = this.rules.get(state.rule_idx);
+    TreeMap<Integer, MetaTreeRule> current_rules = null;
+    while (current_rules == null && state.rule_idx <= this.max_rule_level){
+      current_rules = this.rules.get(state.rule_idx);
+      if (current_rules == null)
+        state.rule_idx++;
+    }
+    if (current_rules == null){
+      System.out.println("Ran out of rules [" + state.rule_idx + "]");
+      return null;
+    }
     
     int count=0;
     for (Map.Entry<Integer, MetaTreeRule> entry : current_rules.entrySet()){
       MetaTreeRule rule = entry.getValue();
-      message = String.format("Processing rule [%s]", rule);
+      idx = "[" + rule.getLevel() + ":" + rule.getOrder() +"]";
+      message = String.format("Processing rule [%s]", idx);
       this.parsing_messages.add(message);
       LOG.trace(message);
       if (rule.ruleType() == Tree_Rule_Type.METRIC){
@@ -510,26 +588,26 @@ public class MetaTree {
           }
         }
         if (found && !tag.isEmpty()){
-          message = String.format("Matched tagk [%s]", rule.getField());
+          message = String.format(idx + " Matched tagk [%s]", rule.getField());
           this.parsing_messages.add(message);
           LOG.trace(message);
           state = ProcessRule(state, branch, rule, tag, ts);
           current_branch = state.current_branch;
         }else{
-          message = String.format("No match on tagk [%s]", rule.getField());
+          message = String.format(idx + " No match on tagk [%s]", rule.getField());
           this.parsing_messages.add(message);
           LOG.trace(message);
         }   
       }else if (rule.ruleType() == Tree_Rule_Type.METRIC_CUSTOM){
         Map<String, String> custom = ts.getMetric().getCustom();
         if (custom != null && custom.containsKey(rule.getField())){
-          message = String.format("Matched metric custom tag [%s]", rule.getField());
+          message = String.format(idx + " Matched metric custom tag [%s]", rule.getField());
           this.parsing_messages.add(message);
           LOG.trace(message);
           state = ProcessRule(state, branch, rule, custom.get(rule.getField()), ts);
           current_branch = state.current_branch;
         }else{
-          message = String.format("No match on custom tag [%s]", rule.getField());
+          message = String.format(idx + " No match on custom tag [%s]", rule.getField());
           this.parsing_messages.add(message);
           LOG.trace(message);
         } 
@@ -542,23 +620,23 @@ public class MetaTree {
           }
         }
         if (tagk != null){
-          message = String.format("Matched tagk [%s]", rule.getField());
+          message = String.format(idx + " Matched tagk [%s]", rule.getField());
           this.parsing_messages.add(message);
           LOG.trace(message);
           Map<String, String> custom = tagk.getCustom();
           if (custom != null && custom.containsKey(rule.getCustom_field())){
-            message = String.format("Matched tagk custom tag [%s]", rule.getCustom_field());
+            message = String.format(idx + " Matched tagk custom tag [%s]", rule.getCustom_field());
             this.parsing_messages.add(message);
             LOG.trace(message);
             state = ProcessRule(state, branch, rule, custom.get(rule.getCustom_field()), ts);
             current_branch = state.current_branch;
           }else{
-            message = String.format("No match on tagk custom tag [%s]", rule.getCustom_field());
+            message = String.format(idx + " No match on tagk custom tag [%s]", rule.getCustom_field());
             this.parsing_messages.add(message);
             LOG.trace(message);
           } 
         }else{
-          message = String.format("No match on tagk [%s]", rule.getField());
+          message = String.format(idx + " No match on tagk [%s]", rule.getField());
           this.parsing_messages.add(message);
           LOG.trace(message);
         }   
@@ -571,35 +649,35 @@ public class MetaTree {
           }
         }
         if (tagv != null){
-          message = String.format("Matched tagv [%s]", rule.getField());
+          message = String.format(idx + " Matched tagv [%s]", rule.getField());
           this.parsing_messages.add(message);
           LOG.trace(message);
           Map<String, String> custom = tagv.getCustom();
           if (custom != null && custom.containsKey(rule.getCustom_field())){
-            message = String.format("Matched tagv custom tag [%s]", rule.getCustom_field());
+            message = String.format(idx + " Matched tagv custom tag [%s]", rule.getCustom_field());
             this.parsing_messages.add(message);
             LOG.trace(message);
             state = ProcessRule(state, branch, rule, custom.get(rule.getCustom_field()), ts);
             current_branch = state.current_branch;
           }else{
-            message = String.format("No match on tagv custom tag [%s]", rule.getCustom_field());
+            message = String.format(idx + " No match on tagv custom tag [%s]", rule.getCustom_field());
             this.parsing_messages.add(message);
             LOG.trace(message);
           } 
         }else{
-          message = String.format("No match on tagv [%s]", rule.getField());
+          message = String.format(idx + " No match on tagv [%s]", rule.getField());
           this.parsing_messages.add(message);
           LOG.trace(message);
         }   
       }else{
-        message = "Rule type is not currently supported: " + rule;
+        message = idx + " Rule type is not currently supported: " + rule;
         this.parsing_messages.add(message);
         LOG.warn(message);
       }
       
       // if we have successfully matched a rule out of multiple in the level, we need to bail
       if (!current_branch.name.isEmpty()){
-        message = String.format("Matched name [%s] on sub rule: %s", current_branch.name, rule);
+        message = String.format(idx + " Matched name [%s] on sub rule: %s", current_branch.name, rule);
         this.parsing_messages.add(message);
         LOG.trace(message);
         break;
@@ -608,11 +686,8 @@ public class MetaTree {
     }
     
     // if no match was detected, we need to set the flag to bubble up
-    if (current_branch.name.isEmpty()){
-      current_branch.name = (branch != null ? branch.name + tree_separator + no_match_name : no_match_name);
-      current_branch.display_name = no_match_name;
+    if (current_branch.name.isEmpty())
       no_match[0] = true;
-    }
     
     // determine if we need to increment the rule index or keep processing splits
     if (state.splits != null && state.split_idx >= state.splits.length){
@@ -629,34 +704,36 @@ public class MetaTree {
     MetaTreeBranch r_branch = ProcessTS(ts, current_branch, ++depth, state, no_match);
     
     // now we decide what to do with our results
-    if (r_branch == null){
+    if (r_branch == null || (r_branch.name.isEmpty() &&
+        r_branch.branch == null && r_branch.leaf == null)){
       // this means we reached the end of the recursion
-      if (current_branch.display_name.compareTo(no_match_name) == 0){
-        //System.out.println("cur_branch is a no-match, not a leaf, not appending to parent");
+      if (current_branch.name.isEmpty())
         return current_branch;
-      }
       
       // we have a leaf! Make a leaf and add it to parent
       MetaTreeLeaf leaf = new MetaTreeLeaf(current_branch, ts);
       if (branch == null){
-        LOG.error(String.format("Attempting to add a leaf to a NULL parent branch: %s", state));
+        LOG.error(String.format(idx + " Attempting to add a leaf to a NULL parent branch: %s", state));
       }else{
         branch.leaf = leaf;
-        message = String.format("Adding leaf [%s] to parent branch [%s]", leaf.name, branch);
+        message = String.format(idx + " Adding leaf [%s] to parent branch [%s]", leaf.name, branch);
         this.parsing_messages.add(message);
         LOG.trace(message);
       }
-    }else if (r_branch.display_name.compareTo(no_match_name) == 0 &&
-        r_branch.branch == null && r_branch.leaf == null){
-      LOG.warn(String.format("Returned branch did not have leaves or branches: %s", r_branch));
+    }else if (current_branch.name.isEmpty() && 
+        !r_branch.name.isEmpty()){
+      message = String.format(idx + " Skipping a no match branch, returning [%s]", r_branch);
+      this.parsing_messages.add(message);
+      LOG.trace(message);
+      return r_branch;
     }else{
       if (branch != null){
         branch.branch = current_branch;
-        message = String.format("Adding branch [%s] to parent branch [%s]", current_branch, branch);
+        message = String.format(idx + " Adding branch [%s] to parent branch [%s]", current_branch, branch);
         this.parsing_messages.add(message);
         LOG.trace(message);
       }else
-        LOG.trace(String.format("Found root branch [%s]", current_branch));
+        LOG.trace(String.format(idx + " Found root branch [%s]", current_branch));
     }
     
     return current_branch;
@@ -675,7 +752,7 @@ public class MetaTree {
       MetaTreeBranch branch, MetaTreeRule rule, String value, TimeSeriesMeta ts){
     if (rule.getRe() == null &&
         (rule.getSeparator() == null || rule.getSeparator().isEmpty())){
-      state.current_branch.name = (branch != null ? branch.name + tree_separator + value : value);     
+      state.current_branch.name = (branch != null && !branch.name.isEmpty() ? branch.name + tree_separator + value : value);     
       state.current_branch.display_name = ProcessDisplayFormatter(rule, ts, value, value);
     }else if(rule.getRe() != null){
       state = ProcessRegex(state, branch, rule, value, ts);
@@ -702,13 +779,13 @@ public class MetaTree {
     try{
       if(state.splits == null){
         state.splits = value.split(rule.getSeparator());
-        state.current_branch.name = (branch != null ? branch.name + tree_separator + 
+        state.current_branch.name = (branch != null && !branch.name.isEmpty() ? branch.name + tree_separator + 
             state.splits[state.split_idx] : state.splits[state.split_idx]);
         state.current_branch.display_name = ProcessDisplayFormatter(rule, ts, value, 
             state.splits[state.split_idx]);
         state.split_idx++;
       }else{
-        state.current_branch.name = (branch != null ? branch.name + tree_separator + 
+        state.current_branch.name = (branch != null && !branch.name.isEmpty() ? branch.name + tree_separator + 
             state.splits[state.split_idx] : state.splits[state.split_idx]);
         state.current_branch.display_name = ProcessDisplayFormatter(rule, ts, value, 
             state.splits[state.split_idx]);
@@ -744,7 +821,7 @@ public class MetaTree {
             LOG.warn(message);
             System.out.println("Warning: Extracted value was null or empty");
           }else{
-            state.current_branch.name = (branch != null ? branch.name + tree_separator + 
+            state.current_branch.name = (branch != null && !branch.name.isEmpty() ? branch.name + tree_separator + 
                 extracted : extracted);
             state.current_branch.display_name = ProcessDisplayFormatter(rule, ts, value, 
                 extracted);
@@ -810,13 +887,13 @@ public class MetaTree {
    * I'm sure there is a better way, just haven't gotten to it yet.
    * @param branch The branch to process. If calling the first time, give the root 
    */
-  private void UpdateCounts(MetaTreeBranch branch){
+  private void UpdateCounts(final TsdbStore storage, MetaTreeBranch branch){
     if (branch.branches == null || branch.branches.size() < 1)
       return;
     
     boolean updated = false;
     for (MetaTreeStoreBranch b : branch.branches){
-      MetaTreeBranch cb = FetchBranch(b.branch_id);
+      MetaTreeBranch cb = FetchBranch(storage, b.branch_id);
       if (cb == null){
         System.out.println("Error fetching branch [" + b.branch_id + "]");
       }else{
@@ -832,7 +909,7 @@ public class MetaTree {
       }
     }
     if (updated)
-      StoreBranch(branch);
+      StoreBranch(storage, branch);
   }
  
   /**
@@ -840,7 +917,7 @@ public class MetaTree {
    * @param hash The hash to fetch
    * @return A branch if found, null if not
    */
-  private final MetaTreeBranch FetchBranch(final int hash){
+  private final MetaTreeBranch FetchBranch(final TsdbStore storage, final int hash){
     if (this.tree_id < 1){
       LOG.error("Tree ID was not set");
       return null;
@@ -872,7 +949,7 @@ public class MetaTree {
    * @param branch The branch to store
    * @return The branch after reading from storage, use it as a verification step
    */
-  private MetaTreeBranch StoreBranch(MetaTreeBranch branch){
+  private MetaTreeBranch StoreBranch(final TsdbStore storage, MetaTreeBranch branch){
     if (this.tree_id < 1){
       LOG.error("Missing Tree ID");
       return null;
@@ -891,7 +968,7 @@ public class MetaTree {
       return null;
     }
     
-    return FetchBranch(branch.hashCode());
+    return FetchBranch(storage, branch.hashCode());
   }
   
   /**
@@ -900,17 +977,18 @@ public class MetaTree {
    * @param b The TS branch to process into the tree
    * @return True if processed successfully, false if there was an error
    */
-  private boolean AddBranchToTree(MetaTreeBranch b, final boolean testing){ 
+  private boolean AddBranchToTree(final TsdbStore storage, final MetaTreeBranch b, final boolean testing){ 
     String message;
     
     // if we have a parent, add the current branch to it
-    MetaTreeBranch parent = FetchBranch(b.parent_hash);
+    MetaTreeBranch parent = FetchBranch(storage, b.parent_hash);
     if (parent == null){
       LOG.warn(String.format("Unable to find the parent branch: %s", b));
       return false;
     }else{
       if (parent.branches == null)
         parent.branches = new TreeSet<MetaTreeStoreBranch>();
+      
       MetaTreeStoreBranch mtsb = new MetaTreeStoreBranch(b);
       if (!parent.branches.contains(mtsb)){
         parent.branches.add(mtsb);
@@ -927,22 +1005,30 @@ public class MetaTree {
     }
       
     // now check/store the branch
-    MetaTreeBranch local = FetchBranch(b.hashCode());
+    MetaTreeBranch local = FetchBranch(storage, b.hashCode());
     if (local == null){
       temp_branches.put(b.hashCode(), b);
       message = "Added a new branch to tree: " + b;
       this.parsing_messages.add(message);
       LOG.trace(message);
-      local = FetchBranch(b.hashCode());
+      local = FetchBranch(storage, b.hashCode());
     }
     
     // if this branch had a leaf, add it to the proper spot
     if (b.leaf != null){
+      LOG.trace(String.format("Branch [%d] has [%d] leaves", 
+          local.hashCode(), (local.leaves == null ? 0 : local.leaves.size())));
       MetaTreeStoreLeaf leaf = new MetaTreeStoreLeaf(b.leaf);
       if (local.leaves == null)
         local.leaves = new TreeSet<MetaTreeStoreLeaf>();
-      if (local.leaves.contains(leaf)){
-//        message = "Leaf collision: " + b.leaf;
+      if (!local.leaves.contains(leaf)){
+       local.leaves.add(leaf);
+        message = "Added new leaf to branch: " + b.leaf + "  It now has [" + local.leaves.size() + "] leaves";
+        this.parsing_messages.add(message);
+        LOG.trace(message);
+        this.temp_branches.put(local.hashCode(), local);
+      }else{
+//         message = "Leaf collision: " + b.leaf;
 //        if (testing){
 //          for (MetaTreeStoreLeaf l : local.leaves){
 //            LOG.debug("Have leaf: " + l.hash + " and new " + leaf.hash);
@@ -954,21 +1040,16 @@ public class MetaTree {
         this.parsing_messages.add(message);
         LOG.trace(message);
         //this.collissions.add(leaf.tsuid);
-        if (testing)
+        if (testing){
           local.leaves.add(leaf);
-        if (testing)
           this.temp_branches.put(local.hashCode(), local);
+        }
         return true;
-      }else{
-        local.leaves.add(leaf);
-        message = "Added new leaf to branch: " + b.leaf;
-        this.parsing_messages.add(message);
-        LOG.trace(message);
       }
     }
     
     if (b.branch != null)
-      return AddBranchToTree(b.branch, testing);
+      return AddBranchToTree(storage, b.branch, testing);
     else if (b.leaf == null){
       LOG.error("Ran into a null branch without leaves: " + b);
       return false;
@@ -994,11 +1075,16 @@ public class MetaTree {
     }
   }
   
-  public boolean StoreTree(){
+  public boolean StoreTree(final TsdbStore storage){
     if (this.tree_id < 1){
       LOG.error("Missing Tree ID");
       return false;
     }
+    this.last_update = System.currentTimeMillis() / 1000;
+    // fix missing creation values
+    if (this.created < 1)
+      this.created = this.last_update;
+    
     
     JSON codec = new JSON(this);
     byte[] json = codec.getJsonBytes();
@@ -1015,7 +1101,7 @@ public class MetaTree {
     }
   }
   
-  public boolean LoadTree(int id){
+  public boolean LoadTree(final TsdbStore storage, int id){
     if (id < 1){
       LOG.error("Tree ID was not set");
       return false;
@@ -1027,7 +1113,7 @@ public class MetaTree {
     final byte[] raw = storage.getValue(rowid, TsdbStore.toBytes("name"), c);
     final String json = (raw == null ? null : TsdbStore.fromBytes(raw));
     if (json != null){
-      JSON codec = new JSON(new MetaTree(this.storage));
+      JSON codec = new JSON(new MetaTree());
       if (codec.parseObject(json)) {
         MetaTree tree = (MetaTree)codec.getObject();
         this.copy(tree);
@@ -1073,22 +1159,35 @@ public class MetaTree {
     tree.put(branch.display_name, map);
   }
   
-/* GETTERS AND SETTERS ----------------------------------- */ 
+  private void FlushTemp(final TsdbStore storage){
+    for (Map.Entry<Integer, MetaTreeBranch> entry : this.temp_branches.entrySet()){
+      LOG.trace("Flushing branch: " + entry.getValue());
+      StoreBranch(storage, entry.getValue());
+    }
+    this.temp_branches.clear();
+  }
   
-  public String getNo_match_name() {
-    return no_match_name;
+  private void CalculateMaxLevel(){
+    if (this.rules == null)
+      return;
+    
+    for (Map.Entry<Integer, TreeMap<Integer, MetaTreeRule>> crs : this.rules.entrySet()){
+      for (Map.Entry<Integer, MetaTreeRule> entry : crs.getValue().entrySet()){
+        MetaTreeRule rule = entry.getValue();
+        if (rule.getLevel() > this.max_rule_level)
+          this.max_rule_level = rule.getLevel();
+      }
+    }
   }
-
-  public void setNo_match_name(String no_match_name) {
-    this.no_match_name = no_match_name;
-  }
-
+  
+/* GETTERS AND SETTERS ----------------------------------- */ 
   public String getName() {
     return name;
   }
 
   public void setName(String name) {
     this.name = name;
+    this.c_name = true;
   }
 
   public String getNotes() {
@@ -1097,14 +1196,16 @@ public class MetaTree {
 
   public void setNotes(String notes) {
     this.notes = notes;
+    this.c_notes = true;
   }
 
-  public boolean isInclude_no_matches() {
-    return include_no_matches;
+  public boolean getStrict_match() {
+    return strict_match;
   }
 
-  public void setInclude_no_matches(boolean include_no_matches) {
-    this.include_no_matches = include_no_matches;
+  public void setStrict_match(boolean strict_match) {
+    this.strict_match = strict_match;
+    this.c_strict_match = true;
   }
 
   public int getTree_id() {
@@ -1119,80 +1220,42 @@ public class MetaTree {
     return rules;
   }
 
-  public void setRules(TreeMap<Integer, TreeMap<Integer, MetaTreeRule>> rules) {
-    this.rules = rules;
-  }
-
   public HashSet<String> getNo_matches() {
     return no_matches;
-  }
-
-  public void setNo_matches(HashSet<String> no_matches) {
-    this.no_matches = no_matches;
-  }
-
-  public int getNum_branches() {
-    return num_branches;
   }
 
   public void setNum_branches(int num_branches) {
     this.num_branches = num_branches;
   }
 
-  public int getNum_leaves() {
-    return num_leaves;
-  }
-
-  public void setNum_leaves(int num_leaves) {
-    this.num_leaves = num_leaves;
-  }
-
   public long getCreated() {
     return created;
   }
 
-  public void setCreated(long created) {
-    this.created = created;
+  public void setCreated(){
+    this.created = System.currentTimeMillis() / 1000;
   }
-
+  
   public long getFull_sync_start() {
     return full_sync_start;
-  }
-
-  public void setFull_sync_start(long full_sync_start) {
-    this.full_sync_start = full_sync_start;
   }
 
   public long getFull_sync_completed() {
     return full_sync_completed;
   }
 
-  public void setFull_sync_completed(long full_sync_completed) {
-    this.full_sync_completed = full_sync_completed;
-  }
-
   public long getLast_update() {
     return last_update;
   }
 
-  public void setLast_update(long last_update) {
-    this.last_update = last_update;
-  }
-
+  @JsonIgnore
   public long getVersion() {
     return version;
   }
 
-  public void setVersion(long version) {
-    this.version = version;
-  }
-
+  @JsonIgnore
   public int getMax_depth() {
     return max_depth;
-  }
-
-  public void setMax_depth(int max_depth) {
-    this.max_depth = max_depth;
   }
 
   public String getTree_separator() {
@@ -1421,10 +1484,7 @@ public class MetaTree {
       if (obj.getClass() != getClass())
         return false;
     
-      MetaTreeStoreLeaf l = (MetaTreeStoreLeaf)obj;
-      if (this.tsuid == l.tsuid)
-        return true;
-      return false;
+      return this.tsuid == ((MetaTreeStoreLeaf)obj).tsuid;
     }
   
     /**

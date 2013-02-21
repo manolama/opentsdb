@@ -15,7 +15,7 @@
 
 JUNIT_VERSION := 4.10
 JUNIT := third_party/junit/junit-$(JUNIT_VERSION).jar
-JUNIT_BASE_URL := http://cloud.github.com/downloads/KentBeck/junit
+JUNIT_BASE_URL := http://downloads.sourceforge.net/project/junit/junit/$(JUNIT_VERSION)
 
 $(JUNIT): $(JUNIT).md5
 	set dummy "$(JUNIT_BASE_URL)" "$(JUNIT)"; shift; $(FETCH_DEPENDENCY)
