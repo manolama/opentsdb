@@ -12,22 +12,26 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.formatters;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.tsd.DataQuery;
 import net.opentsdb.tsd.HttpQuery;
+import net.opentsdb.utils.JSON;
 
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.annotate.JsonAnySetter;
 import org.codehaus.jackson.annotate.JsonAutoDetect;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.type.TypeReference;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
@@ -90,13 +94,19 @@ public class CollectdJSON extends TSDFormatter {
     // fix "nan" values
     json = json.replace("nan", "NaN");
     
-    List<CollectdJSONdps> datapoints = new ArrayList<CollectdJSONdps>();
-    JSON codec = new JSON(datapoints);
-    if (!codec.parseObject(json, dpsTypeRef)){
-      query.sendError(HttpResponseStatus.BAD_REQUEST, "Error parsing JSON data");
+    List<CollectdJSONdps> datapoints;
+    try {
+      datapoints = (List<CollectdJSONdps>)JSON.parseToObject(json, dpsTypeRef);
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return false;
+    } catch (JsonMappingException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return false;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
       return false;
     }
-    datapoints = (List<CollectdJSONdps>)codec.getObject();
     
     if (datapoints.size() < 1){
       query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse any data points");
@@ -244,14 +254,22 @@ public class CollectdJSON extends TSDFormatter {
       if (details)
         results.put("errors", errors);
       
-      codec = new JSON(results);
-      if (success < 1 || (fault && total != success))
-        query.sendReply(HttpResponseStatus.BAD_REQUEST, codec.getJsonString());
-      else
-        query.sendReply(codec.getJsonString());
+      try {
+        if (success < 1 || (fault && total != success))
+          query.sendReply(HttpResponseStatus.BAD_REQUEST, JSON.serializeToString(results));
+        else
+          query.sendReply(JSON.serializeToString(results));
+      } catch (JsonParseException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return false;
+      } catch (IOException e) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+        return false;
+      }
+      
+      return true;
     }
-    
-    return true;
+    return false;
   }
   
   public String contentType(){

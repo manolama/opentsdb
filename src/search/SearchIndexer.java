@@ -7,12 +7,12 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStore;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.JSON;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -166,10 +166,9 @@ public class SearchIndexer {
 
               //docs.add(meta.buildLuceneDoc());
               count++;
-              JSON codec = new JSON(meta);
               
               post_data.append("{\"index\":{\"_id\":\"").append(meta.getUID()).append("\"}}\n");
-              post_data.append(codec.getJsonString()).append("\n");
+              post_data.append(JSON.serializeToString(meta)).append("\n");
               
               // flush every X documents
               if (count % limit == 0){

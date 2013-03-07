@@ -30,13 +30,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.Annotation;
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.search.SearchQuery.SearchResults;
 import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStore;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.JSON;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
@@ -76,8 +76,7 @@ public class SearchES extends Search {
           this.tsmeta_type + "/" + meta.getUID() + "?replication=async");
       HttpContext context = new BasicHttpContext();
       
-      JSON codec = new JSON(meta);
-      httpPost.setEntity(new StringEntity(codec.getJsonString()));
+      httpPost.setEntity(new StringEntity(JSON.serializeToString(meta)));
       
       HttpResponse response = this.httpClient.execute(httpPost, context);
       HttpEntity entity = response.getEntity();
@@ -119,8 +118,7 @@ public class SearchES extends Search {
         this.tsmeta_type + "/_bulk?replication=async");
     HttpContext context = new BasicHttpContext();
     StringBuilder post_data = new StringBuilder();
-    JSON codec;
-    
+
     try {
       scanner = tsdb.uid_storage.openScanner(scanner);
 
@@ -141,10 +139,9 @@ public class SearchES extends Search {
                 continue;
               }
               count++;
-              codec = new JSON(meta);
-              
+
               post_data.append("{\"index\":{\"_id\":\"").append(meta.getUID()).append("\"}}\n");
-              post_data.append(codec.getJsonString()).append("\n");
+              post_data.append(JSON.serializeToString(meta)).append("\n");
               
               // flush every X documents
               if (count % limit == 0){
@@ -242,11 +239,10 @@ public class SearchES extends Search {
       HttpContext context = new BasicHttpContext();
       HttpResponse response = this.httpClient.execute(httpPost, context);
       HttpEntity entity = response.getEntity();
-      JSON codec = new JSON();
       SearchResults results = new SearchResults(query);
       if (entity != null) {
         
-        JsonParser jp = codec.parseStream(entity.getContent());
+        JsonParser jp = JSON.parseToStream(entity.getContent());
         if (jp == null){
           LOG.error("Unable to parse results from ES");
           EntityUtils.consume(entity);

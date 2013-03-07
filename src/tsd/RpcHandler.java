@@ -32,11 +32,11 @@ import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 
 import net.opentsdb.cache.Cache;
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.formatters.HTML;
 import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.utils.JSON;
 
 /**
  * Stateless handler for RPCs (telnet-style or HTTP).

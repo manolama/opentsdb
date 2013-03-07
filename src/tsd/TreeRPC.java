@@ -1,14 +1,18 @@
 package net.opentsdb.tsd;
 
+import java.io.IOException;
 import java.util.ArrayList;
 
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.meta.MetaTree;
 import net.opentsdb.meta.MetaTree.MetaTreeBranchDisplay;
 import net.opentsdb.meta.MetaTreeRule;
+import net.opentsdb.utils.JSON;
 
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
@@ -76,26 +80,43 @@ public class TreeRPC  implements HttpRpc {
     MetaTree tree = new MetaTree();
     tree.setTree_id(tree_id);
     
-    MetaTreeBranchDisplay br = tree.GetBranch(tsdb.uid_storage, branch_id);
-    if (br == null){
-      LOG.warn("Unable to find branch [" + branch_id + "]");
-      query.sendError(HttpResponseStatus.NOT_FOUND, "Branch was not found");
+    MetaTreeBranchDisplay br;
+    try {
+      br = tree.GetBranch(tsdb.uid_storage, branch_id);
+      if (br == null){
+        LOG.warn("Unable to find branch [" + branch_id + "]");
+        query.sendError(HttpResponseStatus.NOT_FOUND, "Branch was not found");
+        return;
+      }
+      query.sendReply(JSON.serializeToBytes(br));
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (JsonMappingException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
       return;
     }
-    JSON codec = new JSON(br);
-    query.sendReply(codec.getJsonBytes());
   }
 
   private void handleTreeCreate(final TSDB tsdb, final HttpQuery query){
     MetaTree tree = new MetaTree();
     String post = query.getPostData();
     if (post != null && post.length() > 1){
-      JSON codec = new JSON(tree);
-      if (!codec.parseObject(post)){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, codec.getError());
+      try {
+        tree = (MetaTree)JSON.parseToObject(post, MetaTree.class);
+      } catch (JsonParseException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (JsonMappingException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (IOException e) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
         return;
       }
-      tree = (MetaTree)codec.getObject();
     }else
       this.parseTreeQueryString(tsdb, query, tree);
     
@@ -124,8 +145,15 @@ public class TreeRPC  implements HttpRpc {
       return;
     }
     
-    JSON codec = new JSON(tree);
-    query.sendReply(codec.getJsonBytes());
+    try {
+      query.sendReply(JSON.serializeToBytes(tree));
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+      return;
+    }
     LOG.trace("Successfully created tree [" + tree.getTree_id() + "]");
   }
   
@@ -133,12 +161,18 @@ public class TreeRPC  implements HttpRpc {
     MetaTree tree = new MetaTree();
     String post = query.getPostData();
     if (post != null && post.length() > 1){
-      JSON codec = new JSON(tree);
-      if (!codec.parseObject(post)){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, codec.getError());
+      try {
+        tree = (MetaTree)JSON.parseToObject(post, MetaTree.class);
+      } catch (JsonParseException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (JsonMappingException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (IOException e) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
         return;
       }
-      tree = (MetaTree)codec.getObject();
     }else
       this.parseTreeQueryString(tsdb, query, tree);
     
@@ -149,9 +183,20 @@ public class TreeRPC  implements HttpRpc {
     }
     
     MetaTree stored_tree = new MetaTree();
-    if (!stored_tree.LoadTree(tsdb.uid_storage, tree.getTree_id())){
-      LOG.warn("Tree [" + tree.getTree_id() + "] does not exist in storage");
-      query.sendError(HttpResponseStatus.NOT_FOUND, "Tree does not exist");
+    try {
+      if (!stored_tree.LoadTree(tsdb.uid_storage, tree.getTree_id())){
+        LOG.warn("Tree [" + tree.getTree_id() + "] does not exist in storage");
+        query.sendError(HttpResponseStatus.NOT_FOUND, "Tree does not exist");
+        return;
+      }
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (JsonMappingException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
       return;
     }
     
@@ -162,8 +207,15 @@ public class TreeRPC  implements HttpRpc {
       return;
     }
     
-    JSON codec = new JSON(stored_tree);
-    query.sendReply(codec.getJsonBytes());
+    try {
+      query.sendReply(JSON.serializeToBytes(stored_tree));
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+      return;
+    }
     LOG.debug("Successfully edited tree [" + tree.getTree_id() + "]");
   }
   
@@ -171,12 +223,18 @@ public class TreeRPC  implements HttpRpc {
     MetaTreeRule rule = new MetaTreeRule();
     String post = query.getPostData();
     if (post != null && post.length() > 1){
-      JSON codec = new JSON(rule);
-      if (!codec.parseObject(post)){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, codec.getError());
+      try {
+        rule = (MetaTreeRule)JSON.parseToObject(post, MetaTreeRule.class);
+      } catch (JsonParseException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (JsonMappingException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (IOException e) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
         return;
       }
-      rule = (MetaTreeRule)codec.getObject();
     }else{
       if (!this.parseRuleQueryString(tsdb, query, rule))
         return;
@@ -189,8 +247,19 @@ public class TreeRPC  implements HttpRpc {
     
     // load tree
     MetaTree tree = new MetaTree();
-    if (!tree.LoadTree(tsdb.uid_storage, rule.getTree_id())){
-      query.sendError(HttpResponseStatus.NOT_FOUND, "The given tree was not found");
+    try {
+      if (!tree.LoadTree(tsdb.uid_storage, rule.getTree_id())){
+        query.sendError(HttpResponseStatus.NOT_FOUND, "The given tree was not found");
+        return;
+      }
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (JsonMappingException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
       return;
     }
     
@@ -222,8 +291,15 @@ public class TreeRPC  implements HttpRpc {
       return;
     }
     
-    JSON codec = new JSON(tree);
-    query.sendReply(codec.getJsonBytes());
+    try {
+      query.sendReply(JSON.serializeToBytes(tree));
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+      return;
+    }
     LOG.debug("Successfully updated rule: " + rule.toString());
     return;
   }
@@ -233,12 +309,18 @@ public class TreeRPC  implements HttpRpc {
     MetaTreeRule rule = new MetaTreeRule();
     String post = query.getPostData();
     if (post != null && post.length() > 1){
-      JSON codec = new JSON(rule);
-      if (!codec.parseObject(post)){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, codec.getError());
+      try {
+        rule = (MetaTreeRule)JSON.parseToObject(post, MetaTreeRule.class);
+      } catch (JsonParseException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (JsonMappingException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (IOException e) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
         return;
       }
-      rule = (MetaTreeRule)codec.getObject();
     }else{
       if (!this.parseRuleQueryString(tsdb, query, rule))
         return;
@@ -249,10 +331,21 @@ public class TreeRPC  implements HttpRpc {
     
     // load tree
     MetaTree tree = new MetaTree();
-    if (!tree.LoadTree(tsdb.uid_storage, rule.getTree_id())){
-      query.sendError(HttpResponseStatus.NOT_FOUND, "The given tree was not found");
+    try {
+      if (!tree.LoadTree(tsdb.uid_storage, rule.getTree_id())){
+        query.sendError(HttpResponseStatus.NOT_FOUND, "The given tree was not found");
+        return;
+      }
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
       return;
-    }  
+    } catch (JsonMappingException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } 
     
     String response = tree.DeleteRule(rule.getLevel(), rule.getOrder(), delete_level);
     if (!response.isEmpty()){
@@ -265,8 +358,15 @@ public class TreeRPC  implements HttpRpc {
       return;
     }
     
-    JSON codec = new JSON(tree);
-    query.sendReply(codec.getJsonBytes());
+    try {
+      query.sendReply(JSON.serializeToBytes(tree));
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+      return;
+    }
   }
   
   private void handleTest(final TSDB tsdb, final HttpQuery query){
@@ -282,13 +382,35 @@ public class TreeRPC  implements HttpRpc {
     
     String tsuid = query.getQueryStringParam("tsuid");
     MetaTree tree = new MetaTree();
-    if (!tree.LoadTree(tsdb.uid_storage, tree_id)){
-      query.sendError(HttpResponseStatus.NOT_FOUND, "Tree was not found");
+    try {
+      if (!tree.LoadTree(tsdb.uid_storage, tree_id)){
+        query.sendError(HttpResponseStatus.NOT_FOUND, "Tree was not found");
+        return;
+      }
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (JsonMappingException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
       return;
     }
     
     boolean save = query.hasQueryStringParam("save");
-    query.sendReply(tree.TestTS(tsdb, tsuid, save));
+    try {
+      query.sendReply(tree.TestTS(tsdb, tsuid, save));
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (JsonMappingException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+      return;
+    }
   }
   
   private void handleDefault(final TSDB tsdb, final HttpQuery query){
@@ -299,16 +421,33 @@ public class TreeRPC  implements HttpRpc {
     // DEFAULT: Return all or 1 tree meta data
     if (tree_id < 1){
       ArrayList<MetaTree> trees = MetaTree.GetTrees(tsdb.uid_storage);
-      JSON codec = new JSON(trees);
-      query.sendReply(codec.getJsonBytes());
+      try {
+        query.sendReply(JSON.serializeToBytes(trees));
+      } catch (JsonParseException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (IOException e) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+        return;
+      }
     }else{
       MetaTree tree = new MetaTree();
       tree.setTree_id(tree_id);
-      if (!tree.LoadTree(tsdb.uid_storage, tree_id)){
-        query.sendError(HttpResponseStatus.NOT_FOUND, "Tree with ID [" + tree_id + "] not found");
-      }else{
-        JSON codec = new JSON(tree);
-        query.sendReply(codec.getJsonBytes());
+      try {
+        if (!tree.LoadTree(tsdb.uid_storage, tree_id)){
+          query.sendError(HttpResponseStatus.NOT_FOUND, "Tree with ID [" + tree_id + "] not found");
+        }else{
+          query.sendReply(JSON.serializeToBytes(tree));
+        }
+      } catch (JsonParseException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (JsonMappingException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (IOException e) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+        return;
       }
     }
   }

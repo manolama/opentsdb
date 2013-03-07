@@ -40,6 +40,7 @@ import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.TimeseriesUID;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.JSON;
 
 /**
  * Non-synchronized implementation of {@link Query}.
@@ -442,7 +443,6 @@ final class TsdbQuery implements Query {
         LOG.info("Compactions enabled");
       else
         LOG.info("Compactions are disabled");
-      JSON codec = new JSON(new Annotation());
       ArrayList<ArrayList<KeyValue>> rows;
       while ((rows = tsdb.data_storage.nextRows(scanner).joinUninterruptibly()) != null) {
         hbase_time += (System.nanoTime() - starttime) / 1000000;
@@ -459,6 +459,7 @@ final class TsdbQuery implements Query {
             spans.put(key, datapoints);
           }
           datapoints.addRow(tsdb.compact(row));
+
 //          if (nrows >= 2)
 //            throw new Exception("blarg!!");
           nrows++;
@@ -548,7 +549,6 @@ final class TsdbQuery implements Query {
       return dps;
     }
     
-    JSON codec = new JSON(this);
     if (group_bys == null || agg_all) {
       // We haven't been asked to find groups, so let's put all the spans
       // together in the same group.
@@ -615,9 +615,8 @@ final class TsdbQuery implements Query {
     //for (final Map.Entry<byte[], SpanGroup> entry : groups) {
     //  LOG.info("group for " + Arrays.toString(entry.getKey()) + ": " + entry.getValue());
     //}
-    codec = new JSON(groups);
     LOG.trace("group bys");
-    LOG.trace(codec.getJsonString());
+    //LOG.trace(codec.getJsonString());
     return groups.values().toArray(new SpanGroup[groups.size()]);
   }
 
@@ -652,8 +651,7 @@ final class TsdbQuery implements Query {
     }
     scanner.setFamily(TsdbConfig.DP_FAMILY);
     // DEBUG TEMP
-    JSON codec = new JSON(scanner);
-    LOG.trace(codec.getJsonString());
+    //LOG.trace(codec.getJsonString());
     return tsdb.data_storage.openScanner(scanner);
   }
 

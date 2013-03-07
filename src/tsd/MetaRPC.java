@@ -12,10 +12,10 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDB.TSDRole;
 import net.opentsdb.formatters.TSDFormatter;
@@ -24,8 +24,12 @@ import net.opentsdb.meta.GeneralMeta.Meta_Type;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.JSON;
 
 import org.apache.lucene.document.Document;
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
@@ -164,16 +168,18 @@ public class MetaRPC implements HttpRpc {
       if (custom.size() > 0)
         meta.setCustom(custom);
     } else {
-      // parse
-      JSON parser = new JSON(meta);
-      if (!parser.parseObject(content)) {
-        LOG.error("Couldn't parse JSON content");
-        LOG.trace(content);
-        query.sendError(HttpResponseStatus.UNPROCESSABLE_ENTITY,
-            parser.getError());
+      try {
+        meta = (GeneralMeta) JSON.parseToObject(content, GeneralMeta.class);
+      } catch (JsonParseException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (JsonMappingException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (IOException e) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
         return;
       }
-      meta = (GeneralMeta) parser.getObject();
     }
 
     // sanity checks
@@ -220,9 +226,13 @@ public class MetaRPC implements HttpRpc {
       query.sendError(HttpResponseStatus.BAD_REQUEST, "UID was not found");
     }
 
-    JSON parser = new JSON(meta);
-    query.sendReply(parser.getJsonString());
-    return;
+    try {
+      query.sendReply(JSON.serializeToBytes(meta));
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+    }
   }
   
   /**
@@ -286,16 +296,18 @@ public class MetaRPC implements HttpRpc {
       if (custom.size() > 0)
         ts_meta.setCustom(custom);
     } else {
-      // parse
-      JSON parser = new JSON(ts_meta);
-      if (!parser.parseObject(content)) {
-        LOG.error("Couldn't parse JSON content");
-        LOG.trace(content);
-        query.sendError(HttpResponseStatus.UNPROCESSABLE_ENTITY,
-            parser.getError());
+      try {
+        ts_meta = (TimeSeriesMeta)JSON.parseToObject(content, TimeSeriesMeta.class);
+      } catch (JsonParseException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (JsonMappingException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+        return;
+      } catch (IOException e) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
         return;
       }
-      ts_meta = (TimeSeriesMeta)parser.getObject();
     }
 
     // sanity checks
@@ -319,8 +331,12 @@ public class MetaRPC implements HttpRpc {
 //    else
 //      tsdb.meta_search_writer.index(doc, "tsuid");
     
-    JSON parser = new JSON(ts_meta);
-    query.sendReply(parser.getJsonString());
-    return;
+    try {
+      query.sendReply(JSON.serializeToBytes(ts_meta));
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+    }
   }
 }

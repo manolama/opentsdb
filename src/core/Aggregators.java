@@ -16,6 +16,9 @@ import java.util.HashMap;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Utility class that provides common, generally useful aggregators.
  */
@@ -158,7 +161,7 @@ public final class Aggregators {
   }
 
   private static final class Avg implements Aggregator {
-
+    private static final Logger LOG = LoggerFactory.getLogger(Avg.class);
     public long runLong(final Longs values) {
       long result = values.nextLongValue();
       int n = 1;
@@ -176,6 +179,7 @@ public final class Aggregators {
         result += values.nextDoubleValue();
         n++;
       }
+      LOG.trace("have [" + n + "] values to avg with total [" + result + "]");
       return result / n;
     }
 

@@ -1,14 +1,18 @@
 package net.opentsdb.core;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.JSON;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.NumericField;
+import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.annotate.JsonIgnore;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.hbase.async.Bytes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,11 +40,10 @@ public class Annotation {
     try{
       final byte[] row = IncomingDataPoints.getNormalizedRow(tsuid, start_time);
       
-      final JSON codec = new JSON(this);
       final byte[] qualifier = getQualifier(start_time);
       
       tsdb.data_storage.putWithRetry(row, TsdbConfig.DP_FAMILY, 
-          qualifier, codec.getJsonBytes(), start_time * 1000).joinUninterruptibly();
+          qualifier, JSON.serializeToBytes(this), start_time * 1000).joinUninterruptibly();
       
       return true;
     }catch (Exception e){
@@ -72,8 +75,8 @@ public class Annotation {
     }
   }
   
-  public static Annotation getFromStorage(final TSDB tsdb, final String tsuid, final long timestamp){
-    try{
+  public static Annotation getFromStorage(final TSDB tsdb, final String tsuid, final long timestamp) 
+    throws JsonParseException, JsonMappingException, IOException{
       final byte[] row = IncomingDataPoints.getNormalizedRow(tsuid, timestamp);
       final byte[] qualifier = getQualifier(timestamp);
       
@@ -81,17 +84,8 @@ public class Annotation {
       if (data == null)
         return null;
       
-      final JSON codec = new JSON(new Annotation());
-      if (!codec.parseObject(data)){
-        LOG.warn(String.format("Unable to parse annotation from row [%s]", UniqueId.IDtoString(row)));
-        return null;
-      }
-      
-      return (Annotation)codec.getObject();
-    }catch (Exception e){
-      e.printStackTrace();
-      return null;
-    }
+      return (Annotation)JSON.parseToObject(data, Annotation.class);
+
   }
   
   public final Document buildLuceneDoc(){

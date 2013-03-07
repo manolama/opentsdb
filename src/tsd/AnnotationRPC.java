@@ -1,13 +1,17 @@
 package net.opentsdb.tsd;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
 import net.opentsdb.core.Annotation;
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.utils.JSON;
 
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
@@ -51,35 +55,39 @@ public class AnnotationRPC implements HttpRpc {
           response.put("delete", "successful");
           response.put("tsuid", note.getTsuid());
           response.put("start_time", Long.toString(note.getStart_time()));
-          JSON codec = new JSON(response);
-          query.sendReply(codec.getJsonBytes());
+          try {
+            query.sendReply(JSON.serializeToBytes(response));
+          } catch (JsonParseException e) {
+            query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+            return;
+          } catch (IOException e) {
+            query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+            return;
+          }
         }else{
           query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Error removing annotation from storage");
         }
         return;
       }
-      
-      // parse the data
-      JSON codec = new JSON(new Annotation());
-      if (!codec.parseObject(content)){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, codec.getError());
-        return;
+            
+      try {
+        Annotation note = (Annotation)JSON.parseToObject(content, Annotation.class);
+        if (!note.store(tsdb)){
+          query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Error saving to storage");
+          return;
+        }
+   
+        List<Annotation> notes = new ArrayList<Annotation>();
+        notes.add(note);
+        query.getFormatter().handleHTTPAnnotation(query, notes);
+        
+      } catch (JsonParseException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      } catch (JsonMappingException e) {
+        query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      } catch (IOException e) {
+        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
       }
-      
-      Annotation note = (Annotation)codec.getObject();
-      if (!note.store(tsdb)){
-        query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Error saving to storage");
-        return;
-      }
-      
-//      if (!tsdb.annotation_search_writer.index(note.buildLuceneDoc(), "uid")){
-//        LOG.warn("Unable to index annotation");
-//      }else
-//        LOG.trace("Indexed the annotation!!");
-//      
-      List<Annotation> notes = new ArrayList<Annotation>();
-      notes.add(note);
-      query.getFormatter().handleHTTPAnnotation(query, notes);
     }
   }
   
@@ -105,6 +113,12 @@ public class AnnotationRPC implements HttpRpc {
       return note;
     } catch (NumberFormatException nfe){
       query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse ts value");
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+    } catch (JsonMappingException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
     }
     return null;
   }

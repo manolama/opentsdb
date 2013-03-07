@@ -1,6 +1,11 @@
 package net.opentsdb.meta;
 
+import java.io.IOException;
 import java.util.Map;
+
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
 
 import net.opentsdb.uid.UniqueId;
 
@@ -22,15 +27,16 @@ public abstract class MetaData {
     this.uid = UniqueId.IDtoString(uid);
   }
   
-  public abstract String getJSON();
+  public abstract String getJSON() throws JsonGenerationException, IOException;
   
-  public abstract byte[] getJSONBytes();
+  public abstract byte[] getJSONBytes() throws JsonGenerationException, IOException;
   
   public abstract MetaData copyChanges(final MetaData metadata);
   
   public abstract void copy(final MetaData metadata);
   
-  public abstract boolean parseJSON(final String json);
+  public abstract void parseJSON(final String json) 
+    throws JsonParseException, JsonMappingException, IOException;
   
   // **** GETTERS AND SETTERS ****
   public String getUID(){

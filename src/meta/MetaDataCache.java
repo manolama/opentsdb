@@ -1,5 +1,6 @@
 package net.opentsdb.meta;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -9,13 +10,15 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import net.opentsdb.cache.Cache;
 import net.opentsdb.cache.Cache.CacheRegion;
-import net.opentsdb.core.JSON;
 import net.opentsdb.meta.GeneralMeta.Meta_Type;
 import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
 import net.opentsdb.storage.TsdbStoreHBase;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.JSON;
 
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.hbase.async.HBaseClient;
 import org.hbase.async.HBaseException;
 import org.slf4j.Logger;
@@ -215,13 +218,26 @@ public class MetaDataCache {
         // todo - log
         return null;
   
-      JSON codec = new JSON(new TimeSeriesMeta(id));
-      if (codec.parseObject(json)) {
-        TimeSeriesMeta meta = (TimeSeriesMeta) codec.getObject();
+      //JSON codec = new JSON(new TimeSeriesMeta(id));
+      //if (codec.parseObject(json)) {
+        TimeSeriesMeta meta;
+        try {
+          meta = (TimeSeriesMeta) JSON.parseToObject(json, TimeSeriesMeta.class);
+          return meta;
+        } catch (JsonParseException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        } catch (JsonMappingException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        } catch (IOException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
 //        if (cache)
 //          this.cache.put(CacheRegion.META, kind + UniqueId.IDtoString(id), meta);
-        return meta;
-      }
+        
+      //}
     }catch (TsdbStorageException tse){
       tse.printStackTrace();
     }
@@ -245,19 +261,32 @@ public class MetaDataCache {
     final String json = (raw_meta == null ? null : TsdbStore
         .fromBytes(raw_meta));
     if (json != null){
-      JSON codec = new JSON(new GeneralMeta(id));
-      if (codec.parseObject(json)) {
-        final GeneralMeta meta = (GeneralMeta) codec.getObject();
-        if (this.kind.compareTo("metrics") == 0)
-          meta.setType(Meta_Type.METRICS);
-        else if (this.kind.compareTo("tagk") == 0)
-          meta.setType(Meta_Type.TAGK);
-        else
-          meta.setType(Meta_Type.TAGV);
-//        if (cache)
-//          this.cache.put(UniqueId.IDtoString(id), meta);
-        return meta;
-      }
+//      JSON codec = new JSON(new GeneralMeta(id));
+//      if (codec.parseObject(json)) {
+        GeneralMeta meta;
+        try {
+          meta = (GeneralMeta) JSON.parseToObject(json, GeneralMeta.class);
+          if (this.kind.compareTo("metrics") == 0)
+            meta.setType(Meta_Type.METRICS);
+          else if (this.kind.compareTo("tagk") == 0)
+            meta.setType(Meta_Type.TAGK);
+          else
+            meta.setType(Meta_Type.TAGV);
+//          if (cache)
+//            this.cache.put(UniqueId.IDtoString(id), meta);
+          return meta;
+        } catch (JsonParseException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        } catch (JsonMappingException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        } catch (IOException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
+        
+      //}
     }
     // todo - log
     //this.cache.put(UniqueId.IDtoString(id), new GeneralMeta(id, type));
@@ -323,13 +352,12 @@ public class MetaDataCache {
           // otherwise, we will copy changes to the new meta entry
           if (this.is_ts) {
             TimeSeriesMeta m = new TimeSeriesMeta();
-            JSON codec = new JSON(m);
-            if (!codec.parseObject(TsdbStore.fromBytes(raw))) {
-              LOG.warn("Error parsing JSON from Hbase for ID [" + uid
-                  + "], replacing");
-              json = ((TimeSeriesMeta) meta).getJSON();
-            } else {
-              m = (TimeSeriesMeta) codec.getObject();
+//            if (!codec.parseObject(TsdbStore.fromBytes(raw))) {
+//              LOG.warn("Error parsing JSON from Hbase for ID [" + uid
+//                  + "], replacing"); 
+//              json = ((TimeSeriesMeta) meta).getJSON();
+//            } else {
+              m = (TimeSeriesMeta) JSON.parseToObject(raw, TimeSeriesMeta.class);
               // if no changes, skip
               if (m.equals((TimeSeriesMeta)meta)){
                 LOG.debug(String.format("No changes for meta [%s]", uid));
@@ -337,19 +365,18 @@ public class MetaDataCache {
               }
               m = (TimeSeriesMeta) ((TimeSeriesMeta) meta).copyChanges((MetaData)m);
               json = m.getJSON();
-            }
+            //}
             new_meta = m;
           } else {
             GeneralMeta m = new GeneralMeta();
-            JSON codec = new JSON(m);
-            if (!codec.parseObject(TsdbStore.fromBytes(raw))) {
-              LOG.warn("Error parsing JSON from Hbase for ID [" + uid
-                  + "], replacing");
-              // don't want to store the type field
-              ((GeneralMeta) meta).setType(Meta_Type.INVALID);
-              json = ((GeneralMeta) meta).getJSON();
-            } else {
-              m = (GeneralMeta) codec.getObject();
+//            if (!codec.parseObject(TsdbStore.fromBytes(raw))) {
+//              LOG.warn("Error parsing JSON from Hbase for ID [" + uid
+//                  + "], replacing");
+//              // don't want to store the type field
+//              ((GeneralMeta) meta).setType(Meta_Type.INVALID);
+//              json = ((GeneralMeta) meta).getJSON();
+//            } else {
+              m = (GeneralMeta) JSON.parseToObject(raw, GeneralMeta.class);
               // if no changes, skip
               if (m.equals((GeneralMeta)meta)){
                 LOG.debug(String.format("No changes for meta [%s]", uid));
@@ -361,7 +388,7 @@ public class MetaDataCache {
               json = m.getJSON();
               LOG.trace("GMO [" + ((GeneralMeta) meta).getName() + "] new [" + 
                   m.getName() + "]");
-            }
+            //}
             new_meta = m;
           }
         }

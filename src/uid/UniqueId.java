@@ -35,7 +35,6 @@ import java.util.regex.Pattern;
 import javax.xml.bind.DatatypeConverter;
 
 import net.opentsdb.cache.Cache;
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaDataCache;
@@ -44,6 +43,7 @@ import net.opentsdb.search.SearchQuery.SearchOperator;
 import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
+import net.opentsdb.utils.JSON;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -756,7 +756,6 @@ public final class UniqueId {
     this.last_full_meta_load = System.currentTimeMillis() / 1000;
 
     GeneralMeta meta = new GeneralMeta(new byte[] {0});
-    JSON codec = new JSON(meta);
     final TsdbScanner scanner = getFullScanner(ScanType.META);
     try {
       long count=0;
@@ -771,11 +770,7 @@ public final class UniqueId {
             }
           }
           meta = new GeneralMeta(row.get(0).key());
-          if (!codec.parseObject(row.get(0).value())){
-            LOG.error(String.format("Unable to parse metadata for [%s]", IDtoString(row.get(0).key())));
-            continue;
-          }
-          meta = (GeneralMeta)codec.getObject();
+          meta = (GeneralMeta)JSON.parseToObject(row.get(0).value(), GeneralMeta.class);
           this.metadata.putCache(row.get(0).key(), meta);
           count++;
         }

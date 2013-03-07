@@ -12,6 +12,7 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -27,6 +28,8 @@ import com.stumbleupon.async.Deferred;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.hbase.async.Bytes;
 import org.hbase.async.HBaseRpc;
 import org.hbase.async.KeyValue;
@@ -35,6 +38,7 @@ import org.hbase.async.PleaseThrottleException;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.storage.TsdbStore;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.JSON;
 
 /**
  * "Queue" of rows to compact.
@@ -249,7 +253,6 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
    */
   private Deferred<Object> compact(final ArrayList<KeyValue> row,
                                    final CompactedDPS compacted) {
-    JSON codec = new JSON(new Annotation());
     if (row.size() <= 1) {
       LOG.trace(String.format("Row has [%d] cells", row.size()));
       if (row.isEmpty()) {  // Maybe the row got deleted in the mean time?
@@ -262,14 +265,19 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
           compacted.values = row.get(0);
         }else{
           LOG.trace("Row only had an annotation in it");
-          if (!codec.parseObject(row.get(0).value())){
-            LOG.warn(String.format("Unable to parse annotation for ts [%s] at [%d]",
-                UniqueId.IDtoString(row.get(0).key()), row.get(0).timestamp()));
-          }else{
-            if (compacted.annotations == null)
-              compacted.annotations = new ArrayList<Annotation>();
-            compacted.annotations.add((Annotation)codec.getObject());
-            LOG.debug("Found an annotation: [" + ((Annotation)codec.getObject()).getDescription() + "]");
+          if (compacted.annotations == null)
+            compacted.annotations = new ArrayList<Annotation>();
+          try {
+            compacted.annotations.add((Annotation)JSON.parseToObject(row.get(0).value(), Annotation.class));
+          } catch (JsonParseException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+          } catch (JsonMappingException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+          } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
           }
         }
       }
@@ -307,13 +315,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
           if (compacted.annotations == null)
             compacted.annotations = new ArrayList<Annotation>();
           try{
-            if (!codec.parseObject(row.get(i).value())){
-              LOG.warn(String.format("Unable to parse annotation for ts [%s] at [%d]",
-                  UniqueId.IDtoString(row.get(i).key()), row.get(i).timestamp()));
-            }else{
-              compacted.annotations.add((Annotation)codec.getObject());
-              LOG.debug("Found an annotation: [" + ((Annotation)codec.getObject()).getDescription() + "]");
-            }
+            compacted.annotations.add((Annotation)JSON.parseToObject(row.get(0).value(), Annotation.class));
           } catch(Exception e){
             e.printStackTrace();
           }
@@ -328,7 +330,6 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
             longest_idx = i;
           }
         } else {
-          LOG.trace("Found a qualifier that's 2 bytes long, needs to be squished");
           // In the trivial case, do some sanity checking here.
           // For non-trivial cases, the sanity checking logic is more
           // complicated and is thus pushed down to `complexCompact'.
@@ -429,7 +430,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     }
 
     final byte[] key = compact.key();
-    LOG.trace("Compacting row " + UniqueId.IDtoString(key));//Arrays.toString(key));
+    LOG.info("Compacting row " + UniqueId.IDtoString(key));//Arrays.toString(key));
     deleted_cells.addAndGet(row.size());  // We're going to delete this.
     if (write) {
       final byte[] qual = compact.qualifier();

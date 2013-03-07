@@ -1,12 +1,16 @@
 package net.opentsdb.tsd;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.JSON;
 
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,13 +30,18 @@ public class UIDRPC implements HttpRpc {
     
     if (query.hasQueryStringParam("type"))
       type = query.getQueryStringParam("type");
-    
-    JSON codec = new JSON(incoming);
-    if (!codec.parseObject(content)){
-      query.sendError(HttpResponseStatus.BAD_REQUEST, codec.getError());
+    try {
+      incoming = (HashSet<String>)JSON.parseToObject(content, HashSet.class);
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (JsonMappingException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
       return;
     }
-    incoming = (HashSet<String>)codec.getObject();
     
     HashMap<String, String> uids = new HashMap<String, String>();
     for (String val : incoming){
@@ -48,7 +57,14 @@ public class UIDRPC implements HttpRpc {
       }
     }
     
-    codec = new JSON(uids);
-    query.sendReply(codec.getJsonBytes());
+    try {
+      query.sendReply(JSON.serializeToBytes(uids));
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+      return;
+    }
   }
 }

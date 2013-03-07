@@ -1,13 +1,17 @@
 package net.opentsdb.meta;
 
+import java.io.IOException;
 import java.util.Map;
 
-import net.opentsdb.core.JSON;
+import net.opentsdb.utils.JSON;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.NumericField;
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.annotate.JsonIgnore;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,15 +84,14 @@ public class GeneralMeta extends MetaData {
   
   // returns the contents as a JSON string
   @JsonIgnore
-  public String getJSON(){
-    JSON codec = new JSON(this);
-    return codec.getJsonString();
+  public String getJSON() throws JsonGenerationException, IOException {
+    return JSON.serializeToString(this);
   }
   
   @JsonIgnore
-  public byte[] getJSONBytes(){
-    JSON codec = new JSON(this);
-    return codec.getJsonBytes();
+  public byte[] getJSONBytes() 
+    throws JsonGenerationException, IOException {
+    return JSON.serializeToBytes(this);
   }
   
   // copies changed variables from the local object to the incoming object
@@ -132,26 +135,14 @@ public class GeneralMeta extends MetaData {
     }
   }
   
-  public boolean parseJSON(final String json){
-    try{
-      JSON codec = new JSON(this);
-      if (!codec.parseObject(json)){
-        LOG.warn("Unable to parse JSON");
-        return false;
-      }
-      
-      GeneralMeta meta = (GeneralMeta)codec.getObject();
-      if (meta == null){
-        LOG.error("Error parsing JSON");
-        return false;
-      }
-      
-      this.copy(meta);
-      return true;
-    }catch (Exception e){
-      e.printStackTrace();
-    }
-    return false;
+  public void parseJSON(final String json) 
+    throws JsonParseException, JsonMappingException, IOException {
+    if (json.isEmpty())
+      throw new IllegalArgumentException("Missing JSON data");
+    GeneralMeta meta = (GeneralMeta)JSON.parseToObject(json, GeneralMeta.class);
+    if (meta == null)
+      throw new NullPointerException("Unable to deserialize the JSON data");
+    this.copy(meta);
   }
   
   public final boolean appendFields(Document doc, StringBuilder flatten){

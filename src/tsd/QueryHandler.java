@@ -26,10 +26,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.DataPoints;
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDB.TSDRole;
+import net.opentsdb.utils.JSON;
 
 /**
  * Used to be the GraphHandler, but we won't always be requesting graphs. Instead we'll
@@ -81,13 +81,7 @@ public class QueryHandler implements HttpRpc {
     DataQuery dq = null;
     if (query.getMethod() == HttpMethod.POST){
       LOG.trace("Parsing POST data: " + query.getPostData());
-      JSON codec = new JSON(new DataQuery());
-      if (!codec.parseObject(query.getPostData(), dqTypeRef)){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse JSON data: " + codec.getError());
-        return;
-      }
-      dq = (DataQuery)codec.getObject();
-      LOG.trace(codec.getJsonString());
+      dq = (DataQuery)JSON.parseToObject(query.getPostData(), dqTypeRef);
       if (!dq.parseQuery(tsdb, query)){
         query.sendError(HttpResponseStatus.BAD_REQUEST, dq.error);
         return;

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -13,15 +14,17 @@ import java.lang.reflect.Modifier;
 
 import net.opentsdb.core.Annotation;
 import net.opentsdb.core.DataPoints;
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.stats.StatsCollector.StatsDP;
 import net.opentsdb.tsd.DataQuery;
 import net.opentsdb.tsd.HttpQuery;
 import net.opentsdb.tsd.HttpQuery.HttpError;
+import net.opentsdb.utils.JSON;
 import net.opentsdb.search.SearchQuery.SearchResults;
 
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
@@ -162,8 +165,15 @@ public abstract class TSDFormatter {
   }
   
   public boolean handleHTTPError(final HttpQuery query, final HttpError error){
-    JSON codec = new JSON(error);
-    query.sendReply(error.status, codec.getJsonString());
+    try {
+      query.sendReply(error.status, JSON.serializeToString(error));
+    } catch (JsonParseException e) {
+      query.sendError(HttpResponseStatus.BAD_REQUEST, e.getMessage(), e.getStackTrace().toString());
+      return false;
+    } catch (IOException e) {
+      query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage(), e.getStackTrace().toString());
+      return false;
+    }
     return true;
   }
   

@@ -3,7 +3,7 @@ package net.opentsdb.storage;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 
-import net.opentsdb.core.JSON;
+import net.opentsdb.utils.JSON;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,20 +68,17 @@ public class RTRabbitMQ extends RTPublisher {
     }
     
     public void run(){
-      JSON codec = null;
       Channel channel = null;
       DataPoint dp = null;
       while (true){
         try {
           dp = datapoint_queue.take();
-          codec = new JSON(dp);
-          
           channel = this.connection.getChannel();
           if (channel == null){
             // log and fail
           }else{
             channel.basicPublish(connection.exchange, dp.metric
-                ,MessageProperties.BASIC, codec.getJsonBytes()) ;
+                ,MessageProperties.BASIC, JSON.serializeToBytes(dp)) ;
           }          
         } catch (InterruptedException e) {
           // TODO Auto-generated catch block

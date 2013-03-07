@@ -12,6 +12,7 @@ import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.uid.UniqueId;
 
 import org.apache.thrift.TException;
+import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.protocol.TProtocolException;
 import org.apache.thrift.transport.TFramedTransport;

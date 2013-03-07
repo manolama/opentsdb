@@ -16,7 +16,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import net.ontopia.utils.CompactHashSet;
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaDataCache;
@@ -26,6 +25,7 @@ import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStorageException;
 import net.opentsdb.storage.TsdbStore;
+import net.opentsdb.utils.JSON;
 
 import org.apache.lucene.document.Document;
 import org.hbase.async.HBaseException;
@@ -186,7 +186,6 @@ public class TimeseriesUID {
     
     try {
       ArrayList<ArrayList<KeyValue>> rows;
-      JSON codec = new JSON(new HashSet<String>());
       while ((rows = this.uid_storage.nextRows(scanner).joinUninterruptibly()) != null) {
         for (final ArrayList<KeyValue> row : rows) {
           if (row.size() != 1) {
@@ -197,12 +196,7 @@ public class TimeseriesUID {
             }
           }
           final String metric = tsdb.metrics.getName(row.get(0).key());
-          if (!codec.parseObject(row.get(0).value())){
-            LOG.warn(String.format("Unable to parse tsuids for metric [%s]", metric));
-            continue;
-          }
-          
-          HashSet<String> uids = (HashSet<String>)codec.getObject();
+          HashSet<String> uids = (HashSet<String>)JSON.parseToObject(row.get(0).value(), HashSet.class);
           if (uids == null){
             LOG.debug(String.format("No timeseries UIDs for metric [%s]", metric));
             continue;

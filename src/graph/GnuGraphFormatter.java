@@ -33,13 +33,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.Const;
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.formatters.TSDFormatter;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.tsd.BadRequestException;
 import net.opentsdb.tsd.DataQuery;
 import net.opentsdb.tsd.HttpQuery;
+import net.opentsdb.utils.JSON;
 
 /**
  * Refactors/Replaces the previous GraphHandler class
@@ -236,9 +236,7 @@ public class GnuGraphFormatter extends TSDFormatter {
         results.put("image", image);
         results.put("tsuids", tsuids);
         
-        JSON codec = new JSON(results);
-        query.sendReply(codec.getJsonBytes());
-        LOG.trace("Send graph request reply [" + codec.getJsonString() + "]");
+        query.sendReply(JSON.serializeToBytes(results));
         return true;
       }else{
         query.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Unable to find the graph");

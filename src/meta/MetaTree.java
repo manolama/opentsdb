@@ -1,5 +1,6 @@
 package net.opentsdb.meta;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -8,17 +9,20 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 
-import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.GeneralMeta.Meta_Type;
 import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStore;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.JSON;
 
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.annotate.JsonAutoDetect;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
 import org.hbase.async.Bytes;
 import org.hbase.async.HBaseException;
@@ -168,14 +172,26 @@ public class MetaTree {
     this.setLoadMeta();
     
     // put new root
-    MetaTreeBranch root = this.FetchBranch(tsdb.uid_storage, 0);
-    if (root == null){
-      root = new MetaTreeBranch(0);
-      root.tree_id = this.tree_id;
-      root.display_name = "ROOT";
+    MetaTreeBranch root;
+    try {
+      root = this.FetchBranch(tsdb.uid_storage, 0);
+      if (root == null){
+        root = new MetaTreeBranch(0);
+        root.tree_id = this.tree_id;
+        root.display_name = "ROOT";
+      }
+      root.tree_version = this.version;
+      this.StoreBranch(tsdb.uid_storage, root);
+    } catch (JsonParseException e1) {
+      // TODO Auto-generated catch block
+      e1.printStackTrace();
+    } catch (JsonMappingException e1) {
+      // TODO Auto-generated catch block
+      e1.printStackTrace();
+    } catch (IOException e1) {
+      // TODO Auto-generated catch block
+      e1.printStackTrace();
     }
-    root.tree_version = this.version;
-    this.StoreBranch(tsdb.uid_storage, root);
     
     this.CalculateMaxLevel();
     
@@ -185,8 +201,7 @@ public class MetaTree {
     
     try {
       scanner = tsdb.uid_storage.openScanner(scanner);
-      JSON codec = new JSON(new TimeSeriesMeta());
- 
+
       long count=0;
       ArrayList<ArrayList<KeyValue>> rows;
       while ((rows = tsdb.uid_storage.nextRows(scanner).joinUninterruptibly()) != null) {
@@ -200,11 +215,7 @@ public class MetaTree {
                 continue;
               }
               
-              if (!codec.parseObject(cell.value())){
-                LOG.warn(String.format("Unable to parse metadata [%s]", uid));
-                continue;
-              }
-              TimeSeriesMeta meta = (TimeSeriesMeta)codec.getObject();
+              TimeSeriesMeta meta = (TimeSeriesMeta)JSON.parseToObject(cell.value(), TimeSeriesMeta.class);
               if (meta == null){
                 LOG.warn(String.format("Error retrieving TSUID metadata [%s]", uid));
                 continue;
@@ -320,8 +331,12 @@ public class MetaTree {
    * Tests a tree's ruleset on a timeseries ID to see what would happen
    * @param tsuid
    * @return
+   * @throws IOException 
+   * @throws JsonMappingException 
+   * @throws JsonParseException 
    */
-  public String TestTS(final TSDB tsdb, final String tsuid, final boolean save){
+  public String TestTS(final TSDB tsdb, final String tsuid, final boolean save) 
+    throws JsonParseException, JsonMappingException, IOException{
     TimeSeriesMeta meta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
     if (meta == null){
       LOG.debug(String.format("Unable to locate TSUID [%s]", tsuid));
@@ -349,8 +364,7 @@ public class MetaTree {
     if (save)
       this.FlushTemp(tsdb.uid_storage);
     
-    JSON codec = new JSON(tree);
-    return codec.getJsonString();
+    return JSON.serializeToString(tree);
   }
   
   /**
@@ -358,8 +372,12 @@ public class MetaTree {
    * @param ts The timeseries metadata to process
    * @return True if processed successfully, false if there was an error or the
    * timeseries didn't match any of the rules and NMs are disabled for the tree
+   * @throws IOException 
+   * @throws JsonMappingException 
+   * @throws JsonParseException 
    */
-  public boolean ProcessTS(final TsdbStore storage, final TimeSeriesMeta ts){
+  public boolean ProcessTS(final TsdbStore storage, final TimeSeriesMeta ts) 
+    throws JsonParseException, JsonMappingException, IOException{
     if (ts.getUID().isEmpty()){
       LOG.warn("Encountered an emtpy TS UID");
       return false;
@@ -453,7 +471,8 @@ public class MetaTree {
     }
   }
 
-  public final MetaTreeBranchDisplay GetBranch(final TsdbStore storage, int branch){
+  public final MetaTreeBranchDisplay GetBranch(final TsdbStore storage, int branch) 
+    throws JsonParseException, JsonMappingException, IOException{
     MetaTreeBranch b = this.FetchBranch(storage, branch);
     if (b == null)
       return null;
@@ -499,19 +518,14 @@ public class MetaTree {
     try {
       scanner = storage.openScanner(scanner);
       ArrayList<MetaTree> trees = new ArrayList<MetaTree>();
-      MetaTree tree = new MetaTree();
-      JSON codec = new JSON(tree);      
+      MetaTree tree = new MetaTree();  
       
       ArrayList<ArrayList<KeyValue>> rows;
       while ((rows = storage.nextRows(scanner).joinUninterruptibly()) != null) {
         for (final ArrayList<KeyValue> row : rows) {
           for (KeyValue cell : row){
-            if (!codec.parseObject(cell.value()))
-              LOG.error("Unable to parse tree at [" + UniqueId.IDtoString(cell.qualifier()) + "] " + codec.getError());
-            else{
-              tree = (MetaTree)codec.getObject();
-              trees.add(tree);
-            }
+            tree = (MetaTree)JSON.parseToObject(cell.value(), MetaTree.class);
+            trees.add(tree);
           }
         }
       }
@@ -893,31 +907,59 @@ public class MetaTree {
     
     boolean updated = false;
     for (MetaTreeStoreBranch b : branch.branches){
-      MetaTreeBranch cb = FetchBranch(storage, b.branch_id);
-      if (cb == null){
-        System.out.println("Error fetching branch [" + b.branch_id + "]");
-      }else{
-        b.num_branches = cb.branches == null ? 0 : cb.branches.size();
-        b.num_leaves = cb.leaves == null ? 0 : cb.leaves.size();
-        
-        this.num_branches += b.num_branches;
-        this.num_leaves += b.num_leaves;
-        
-        if (branch.depth + 1 > this.max_depth)
-          this.max_depth = branch.depth + 1;
-        updated = true;
+      MetaTreeBranch cb;
+      try {
+        cb = FetchBranch(storage, b.branch_id);
+        if (cb == null){
+          System.out.println("Error fetching branch [" + b.branch_id + "]");
+        }else{
+          b.num_branches = cb.branches == null ? 0 : cb.branches.size();
+          b.num_leaves = cb.leaves == null ? 0 : cb.leaves.size();
+          
+          this.num_branches += b.num_branches;
+          this.num_leaves += b.num_leaves;
+          
+          if (branch.depth + 1 > this.max_depth)
+            this.max_depth = branch.depth + 1;
+          updated = true;
+        }
+      } catch (JsonParseException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      } catch (JsonMappingException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      } catch (IOException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
       }
+      
     }
     if (updated)
-      StoreBranch(storage, branch);
+      try {
+        StoreBranch(storage, branch);
+      } catch (JsonParseException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      } catch (JsonMappingException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      } catch (IOException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
   }
  
   /**
    * Attempts to retrieve the given branch from cache or storage
    * @param hash The hash to fetch
    * @return A branch if found, null if not
+   * @throws IOException 
+   * @throws JsonMappingException 
+   * @throws JsonParseException 
    */
-  private final MetaTreeBranch FetchBranch(final TsdbStore storage, final int hash){
+  private final MetaTreeBranch FetchBranch(final TsdbStore storage, final int hash) 
+    throws JsonParseException, JsonMappingException, IOException{
     if (this.tree_id < 1){
       LOG.error("Tree ID was not set");
       return null;
@@ -933,11 +975,7 @@ public class MetaTree {
     final byte[] raw = storage.getValue(id, TsdbStore.toBytes("name"), c);
     final String json = (raw == null ? null : TsdbStore.fromBytes(raw));
     if (json != null){
-      JSON codec = new JSON(new MetaTreeBranch(hash));
-      if (codec.parseObject(json)) {
-        return (MetaTreeBranch)codec.getObject();
-      }
-      LOG.error("Unable to parse branch");
+      return (MetaTreeBranch)JSON.parseToObject(json, MetaTreeBranch.class);
     }    
     LOG.debug(String.format("Unable to locate branch [%d] in storage for tree [%d]", 
         hash, this.tree_id));
@@ -948,15 +986,18 @@ public class MetaTree {
    * Attempts to store the branch in storage
    * @param branch The branch to store
    * @return The branch after reading from storage, use it as a verification step
+   * @throws IOException 
+   * @throws JsonMappingException 
+   * @throws JsonParseException 
    */
-  private MetaTreeBranch StoreBranch(final TsdbStore storage, MetaTreeBranch branch){
+  private MetaTreeBranch StoreBranch(final TsdbStore storage, MetaTreeBranch branch) 
+    throws JsonParseException, JsonMappingException, IOException{
     if (this.tree_id < 1){
       LOG.error("Missing Tree ID");
       return null;
     }
     
-    JSON codec = new JSON(branch);
-    byte[] json = codec.getJsonBytes();
+    byte[] json = JSON.serializeToBytes(branch);
     byte[] id = { 0x01, ((Integer)this.tree_id).byteValue()};
     byte[] c = Bytes.fromInt(branch.hashCode());
     
@@ -976,8 +1017,12 @@ public class MetaTree {
    * Should be called with the results of the ProcessTS() method
    * @param b The TS branch to process into the tree
    * @return True if processed successfully, false if there was an error
+   * @throws IOException 
+   * @throws JsonMappingException 
+   * @throws JsonParseException 
    */
-  private boolean AddBranchToTree(final TsdbStore storage, final MetaTreeBranch b, final boolean testing){ 
+  private boolean AddBranchToTree(final TsdbStore storage, final MetaTreeBranch b, final boolean testing) 
+  throws JsonParseException, JsonMappingException, IOException{ 
     String message;
     
     // if we have a parent, add the current branch to it
@@ -1085,23 +1130,29 @@ public class MetaTree {
     if (this.created < 1)
       this.created = this.last_update;
     
-    
-    JSON codec = new JSON(this);
-    byte[] json = codec.getJsonBytes();
-    byte[] rowid = { 0x01, 0x00};
-    byte[] c = {((Integer)this.tree_id).byteValue()};
-    
-    try {
+    try { 
+      byte[] json = JSON.serializeToBytes(this);
+      byte[] rowid = { 0x01, 0x00};
+      byte[] c = {((Integer)this.tree_id).byteValue()};
+      
       storage.putWithRetry(rowid, TsdbStore.toBytes("name"), c, json);
       LOG.debug("Updated tree in storage: " + this);
       return true;
     } catch (HBaseException e) {
       LOG.error("Failed to Put tree [" + this + "]: " + e);
       return false;
+    } catch (JsonGenerationException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    } catch (IOException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
     }
+    return false;
   }
   
-  public boolean LoadTree(final TsdbStore storage, int id){
+  public boolean LoadTree(final TsdbStore storage, int id) 
+    throws JsonParseException, JsonMappingException, IOException{
     if (id < 1){
       LOG.error("Tree ID was not set");
       return false;
@@ -1113,15 +1164,10 @@ public class MetaTree {
     final byte[] raw = storage.getValue(rowid, TsdbStore.toBytes("name"), c);
     final String json = (raw == null ? null : TsdbStore.fromBytes(raw));
     if (json != null){
-      JSON codec = new JSON(new MetaTree());
-      if (codec.parseObject(json)) {
-        MetaTree tree = (MetaTree)codec.getObject();
-        this.copy(tree);
-        this.setLoadMeta();
-        return true;
-      }
-      LOG.error("Unable to parse tree");
-      return false;
+      MetaTree tree = (MetaTree)JSON.parseToObject(json, MetaTree.class);
+      this.copy(tree);
+      this.setLoadMeta();
+      return true;
     }    
     LOG.debug(String.format("Unable to locate tree [%d] in storage", id));
     return false;
@@ -1162,7 +1208,18 @@ public class MetaTree {
   private void FlushTemp(final TsdbStore storage){
     for (Map.Entry<Integer, MetaTreeBranch> entry : this.temp_branches.entrySet()){
       LOG.trace("Flushing branch: " + entry.getValue());
-      StoreBranch(storage, entry.getValue());
+      try {
+        StoreBranch(storage, entry.getValue());
+      } catch (JsonParseException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      } catch (JsonMappingException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      } catch (IOException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
     }
     this.temp_branches.clear();
   }

@@ -1,18 +1,22 @@
 package net.opentsdb.meta;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
 
-import net.opentsdb.core.JSON;
 import net.opentsdb.meta.GeneralMeta.Meta_Type;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.JSON;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.NumericField;
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 import org.codehaus.jackson.annotate.JsonProperty;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,46 +95,31 @@ final public class TimeSeriesMeta extends MetaData {
   
   // returns the entire object as a JSON string
   @JsonIgnore  
-  public String getJSON(){
-    JSON codec = new JSON(this);
-    return codec.getJsonString();
+  public String getJSON() throws JsonGenerationException, IOException{
+    return JSON.serializeToString(this);
   }
   
   @JsonIgnore
-  public byte[] getJSONBytes(){
-    JSON codec = new JSON(this);
-    return codec.getJsonBytes();
+  public byte[] getJSONBytes() throws JsonGenerationException, IOException{
+    return JSON.serializeToBytes(this);
   }
   
   // returns just the data we should put in storage
   @JsonIgnore  
-  public String getStorageJSON(){
+  public String getStorageJSON() throws JsonGenerationException, IOException{
     this.metric = null;
     this.tags = null;
-    JSON json = new JSON(this);
-    return json.getJsonString();    
+    return JSON.serializeToString(this);    
   }
   
-  public boolean parseJSON(final String json){
-    try{
-      JSON codec = new JSON(this);
-      if (!codec.parseObject(json)){
-        LOG.warn("Unable to parse JSON");
-        return false;
-      }
-      
-      TimeSeriesMeta meta = (TimeSeriesMeta)codec.getObject();
-      if (meta == null){
-        LOG.error("Error parsing JSON");
-        return false;
-      }
-      
-      this.copy(meta);
-      return true;
-    }catch (Exception e){
-      e.printStackTrace();
-    }
-    return false;
+  public void parseJSON(final String json)
+    throws JsonParseException, JsonMappingException, IOException {
+    if (json.isEmpty())
+      throw new IllegalArgumentException("Missing JSON data");
+    TimeSeriesMeta meta = (TimeSeriesMeta)JSON.parseToObject(json, TimeSeriesMeta.class);
+    if (meta == null)
+      throw new NullPointerException("Unable to deserialize the JSON data");
+    this.copy(meta);
   }
   
   //copies changed variables from the local object to the incoming object
