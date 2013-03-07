@@ -164,7 +164,7 @@ public class TreeRPC  implements HttpRpc {
     
     JSON codec = new JSON(stored_tree);
     query.sendReply(codec.getJsonBytes());
-    LOG.trace("Successfully edited tree [" + tree.getTree_id() + "]");
+    LOG.debug("Successfully edited tree [" + tree.getTree_id() + "]");
   }
   
   private void handleRuleEdit(final TSDB tsdb, final HttpQuery query){  

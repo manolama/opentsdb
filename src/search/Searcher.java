@@ -6,12 +6,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 import net.opentsdb.cache.Cache;
 import net.opentsdb.cache.Cache.CacheRegion;
 import net.opentsdb.core.Annotation;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.search.SearchQuery.SearchResults;
+import net.opentsdb.uid.UniqueId;
 
 import org.apache.lucene.analysis.KeywordAnalyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
@@ -31,6 +34,8 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TopDocsCollector;
+import org.apache.lucene.search.TopScoreDocCollector;
 import org.apache.lucene.search.grouping.GroupDocs;
 import org.apache.lucene.search.grouping.SearchGroup;
 import org.apache.lucene.search.grouping.TermAllGroupsCollector;
@@ -54,12 +59,12 @@ public class Searcher {
   private final String directory;
   private Directory idx_directory = null;
   private IndexSearcher searcher = null;
-  private final Cache cache;
+  //private final Cache cache;
   private String error;
   
   public Searcher(final String directory, final Cache cache){
     this.directory = directory;
-    this.cache = cache;
+    //this.cache = cache;
   }
   
   public final SearchResults searchTSUIDs(final SearchQuery query){
@@ -67,13 +72,14 @@ public class Searcher {
       return null;
     }
     
-    boolean cached = false;
-    TopDocs hits = (TopDocs)this.cache.get(CacheRegion.SEARCH, query.hashCode());
-    if (hits == null)
-      hits = this.search(query, null, "created");
-    else{
-      cached = true;
-    }
+//    boolean cached = false;
+//    TopDocs hits = (TopDocs)this.cache.get(CacheRegion.SEARCH, query.hashCode());
+//    if (hits == null)
+//      hits = this.search(query, "created");
+//    else{
+//      cached = true;
+//    }
+    TopDocs hits = this.search(query, "created");
     
     if (hits == null){
       LOG.error(String.format("Unable to execute query [%s]", query.getQuery()));
@@ -82,12 +88,12 @@ public class Searcher {
     
     SearchResults sr = new SearchResults(query);
     if (hits.totalHits < 1){
-      if (!cached)
-        this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
+//      if (!cached)
+//        this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
       return sr;
     }
     
-    final int page = query.getPage();
+    final int page = query.getStartIndex();
     final int limit = query.getLimit();
     
     if (hits.totalHits < (page * limit)){
@@ -117,10 +123,10 @@ public class Searcher {
         break;
     }
     sr.tsuids = tsuids;
-    sr.setTotalHits(hits.totalHits);
+    sr.total_hits = hits.totalHits;
     
-    if (!cached)
-      this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
+//    if (!cached)
+//      this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
     return sr;
   }
   
@@ -128,53 +134,63 @@ public class Searcher {
     if (!this.checkSearcher()){
       return null;
     }
+    try{
 
-    boolean cached = false;
-    TopDocs hits = (TopDocs)this.cache.get(CacheRegion.SEARCH, query.hashCode());
-    if (hits == null)
-      hits = this.search(query, null, "created");
-    else{
-      cached = true;
-      LOG.trace("Got Cached search!!!");
-    }
-    
-    if (hits == null){
-      LOG.error(String.format("Unable to execute query [%s]", query.getQuery()));
-      return null;
-    }
-
-    SearchResults sr = new SearchResults(query);
-    if (hits.totalHits < 1){
-      if (!cached)
-        this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
+  //    boolean cached = false;
+  //    TopDocs hits = (TopDocs)this.cache.get(CacheRegion.SEARCH, query.hashCode());
+  //    if (hits == null)
+  //      hits = this.search(query, "created");
+  //    else{
+  //      cached = true;
+  //      LOG.trace("Got Cached search!!!");
+  //    }
+      TopDocs hits = this.search(query, "created");
+      
+      if (hits == null){
+        LOG.error(String.format("Unable to execute query [%s]", query.getQuery()));
+        return null;
+      }
+  
+      SearchResults sr = new SearchResults(query);
+      if (hits.totalHits < 1){
+  //      if (!cached)
+  //        this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
+        return sr;
+      }
+      
+      final int page = query.getStartIndex();
+      final int limit = query.getLimit();
+      
+      if (hits.totalHits < (page * limit)){
+        query.setError(String.format("Page [%d] starting at result [%d] is greater than total results [%d]", 
+            page, (page * limit), hits.totalHits));
+        LOG.warn(query.getError());
+        return null;
+      }
+      
+      // return an array of TSUIDs
+      ArrayList<Map<String, Object>> metas = new ArrayList<Map<String, Object>>();
+      for(int i = (page * limit); i < ((page + 1) * limit); i++) {
+        if (i >= hits.scoreDocs.length){
+          LOG.warn("Doc index [" + i + "] was larger than the actual document array size [" + hits.scoreDocs.length + "]");
+          break;
+        }
+        Map<String, Object> meta = this.getMeta(hits.scoreDocs[i].doc);
+        if (meta != null)
+          metas.add(meta);
+        // bail if we exceed the bounds
+        if (i+2 > hits.totalHits)
+          break;
+      }
+      sr.short_meta = metas;
+      sr.total_hits = hits.totalHits;
+  //    if (!cached)
+  //      this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
       return sr;
-    }
-    
-    final int page = query.getPage();
-    final int limit = query.getLimit();
-    
-    if (hits.totalHits < (page * limit)){
-      query.setError(String.format("Page [%d] starting at result [%d] is greater than total results [%d]", 
-          page, (page * limit), hits.totalHits));
-      LOG.warn(query.getError());
+    }catch (Exception e){
+      e.printStackTrace();
       return null;
     }
-    
-    // return an array of TSUIDs
-    ArrayList<Map<String, Object>> metas = new ArrayList<Map<String, Object>>();
-    for(int i = (page * limit); i < ((page + 1) * limit); i++) {
-      Map<String, Object> meta = this.getMeta(hits.scoreDocs[i].doc);
-      if (meta != null)
-        metas.add(meta);
-      // bail if we exceed the bounds
-      if (i+2 > hits.totalHits)
-        break;
-    }
-    sr.short_meta = metas;
-    sr.setTotalHits(hits.totalHits);
-    if (!cached)
-      this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
-    return sr;
   }
 
   public final SearchResults groupBy(final SearchQuery query){
@@ -186,15 +202,15 @@ public class Searcher {
       return null;
     }
 
-    final int page = query.getPage();
+    final int page = query.getStartIndex();
     final int limit = query.getLimit();
     
     try {
-      boolean cached = false;
-      TopGroups<String> groupsResult = (TopGroups<String>)this.cache.get(CacheRegion.SEARCH, query.hashCode());
-      if (groupsResult != null)
-        cached = true;
-      else{
+//      boolean cached = false;
+//      TopGroups<String> groupsResult = (TopGroups<String>)this.cache.get(CacheRegion.SEARCH, query.hashCode());
+//      if (groupsResult != null)
+//        cached = true;
+//      else{
         SortField group_sort = new SortField(query.getGroup(), SortField.STRING);
         SortField doc_sort = null;
         if (query.getSubGroup() != null)
@@ -238,14 +254,14 @@ public class Searcher {
           searcher.search(q, c2);
         }
 
-        groupsResult = c2.getTopGroups(0);
+        TopGroups<String> groupsResult = c2.getTopGroups(0);
         groupsResult = new TopGroups<String>(groupsResult, allGroupsCollector.getGroupCount());   
         
         // TODO - figure this out. 
         // org.apache.lucene.search.grouping.TopGroups cannot be cast to java.io.Serializable
 //        if (groupsResult != null)
 //          cache.put(CacheRegion.SEARCH, query.hashCode(), groupsResult);
-      }
+//      }
       
       Map<String, Object> group_map = new HashMap<String, Object>();
       for(int i = (page * limit); i < ((page + 1) * limit); i++) {
@@ -284,7 +300,7 @@ public class Searcher {
       SearchResults sr = new SearchResults(query);
       sr.groups = group_map;
       sr.total_groups = groupsResult.totalGroupedHitCount;   
-      sr.setTotalHits(groupsResult.totalHitCount);         
+      sr.total_hits = groupsResult.totalHitCount;         
       return sr;
     } catch (IOException e) {
       // TODO Auto-generated catch block
@@ -293,7 +309,7 @@ public class Searcher {
     return null;
   }
   
-  public final SearchResults getTerms(final SearchQuery query){
+  public final SearchResults getTerms(final TSDB tsdb, final SearchQuery query){
     if (!this.checkSearcher()){
       return null;
     }
@@ -303,12 +319,12 @@ public class Searcher {
     }
     
     try {
-      TreeSet<String> uniqueTerms = null;
-      boolean cached = false;
-      
-      uniqueTerms = (TreeSet<String>)this.cache.get(CacheRegion.SEARCH, query.hashCode());
-      if (uniqueTerms == null){
-        uniqueTerms = new TreeSet<String>();
+      TreeMap<String, String> uniqueTerms = null;
+//      boolean cached = false;
+//      
+//      uniqueTerms = (TreeMap<String, String>)this.cache.get(CacheRegion.SEARCH, query.hashCode());
+//      if (uniqueTerms == null){
+        uniqueTerms = new TreeMap<String, String>();
         TermEnum terms = searcher.getIndexReader().terms();
         if (terms == null)
           return null;
@@ -316,20 +332,36 @@ public class Searcher {
         while (terms.next()) {
           final Term term = terms.term();
           if (term.field().equals(query.getGroup())) {
-            uniqueTerms.add(term.text());
+            if (query.getGroup().compareTo("metric") == 0 || 
+                query.getGroup().compareTo("tagk") == 0 || 
+                query.getGroup().compareTo("tagv") == 0){
+              try{
+                if (query.getGroup().compareTo("metric") == 0)
+                  uniqueTerms.put(term.text(), UniqueId.IDtoString(tsdb.metrics.getId(term.text())));
+                else if (query.getGroup().compareTo("tagk") == 0)
+                  uniqueTerms.put(term.text(), UniqueId.IDtoString(tsdb.tag_names.getId(term.text())));
+                else if (query.getGroup().compareTo("tagv") == 0)
+                  uniqueTerms.put(term.text(), UniqueId.IDtoString(tsdb.tag_values.getId(term.text())));
+              }catch (Exception e){
+                LOG.error(e.toString());
+                uniqueTerms.put(term.text(), "UIDNOTFOUND");
+              }
+            }else{
+              uniqueTerms.put(term.text(), "");
+            }
           }
         }
-      }else{
-        cached = true;
-      }  
+//      }else{
+//        cached = true;
+//      }  
       
       SearchResults sr = new SearchResults(query);
       sr.terms = uniqueTerms;
       sr.limit = 0;
-      sr.setTotalHits(uniqueTerms.size());   
+      sr.total_hits = uniqueTerms.size();   
       
-      if (!cached)
-        this.cache.put(CacheRegion.SEARCH, query.hashCode(), uniqueTerms);
+//      if (!cached)
+//        this.cache.put(CacheRegion.SEARCH, query.hashCode(), uniqueTerms);
       return sr;
     } catch (IOException e) {
       // TODO Auto-generated catch block
@@ -343,13 +375,14 @@ public class Searcher {
       return null;
     }
     
-    boolean cached = false;
-    TopDocs hits = (TopDocs)this.cache.get(CacheRegion.SEARCH, query.hashCode());
-    if (hits == null)
-      hits = this.search(query, null, "start_time");
-    else{
-      cached = true;
-    }
+//    boolean cached = false;
+//    TopDocs hits = (TopDocs)this.cache.get(CacheRegion.SEARCH, query.hashCode());
+//    if (hits == null)
+//      hits = this.search(query, "start_time");
+//    else{
+//      cached = true;
+//    }
+    TopDocs hits = this.search(query, "start_time");
     
     if (hits == null){
       LOG.error(String.format("Unable to execute query [%s]", query.getQuery()));
@@ -358,12 +391,12 @@ public class Searcher {
     
     SearchResults sr = new SearchResults(query);
     if (hits.totalHits < 1){
-      if (!cached)
-        this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
+//      if (!cached)
+//        this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
       return sr;
     }
     
-    final int page = query.getPage();
+    final int page = query.getStartIndex();
     final int limit = query.getLimit();
     
     if (hits.totalHits < (page * limit)){
@@ -413,10 +446,10 @@ public class Searcher {
         break;
     }
     sr.annotations = annotations;
-    sr.setTotalHits(hits.totalHits);
+    sr.total_hits = hits.totalHits;
     
-    if (!cached)
-      this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
+//    if (!cached)
+//      this.cache.put(CacheRegion.SEARCH, query.hashCode(), hits);
     return sr;
   }
   
@@ -444,6 +477,7 @@ public class Searcher {
       return false;
     }
     
+    // told to close the searcher
     this.closeSearcher();
     
     return this.openSearcher();
@@ -507,9 +541,13 @@ public class Searcher {
    * @param query
    * @return
    */
-  private final TopDocs search(final SearchQuery query, final ScoreDoc last_result, final String get_all_field){
+  private final TopDocs search(final SearchQuery query, final String get_all_field){
     try {
+      boolean cached = false;
+      long start = System.currentTimeMillis();
       Query q = null;
+      TopScoreDocCollector topDocs = TopScoreDocCollector.create(8000000, false);
+      //CachingCollector cachedCollector = CachingCollector.create(topDocs, true, 8000000);
       QueryParser parser = new QueryParser(Version.LUCENE_36, "content", 
           new KeywordAnalyzer());
       parser.setAllowLeadingWildcard(true);
@@ -524,11 +562,16 @@ public class Searcher {
         q = parser.parse(query.getQuery());
 
       LOG.trace("Query: " + q.toString());
-      if (last_result == null)
+//      searcher.search(new ConstantScoreQuery(q), cachedCollector);
+//      if (cachedCollector.isCached()){
+//        cachedCollector.replay(topDocs);
+//        float ts = ((float)System.currentTimeMillis() - start) / (float)1000;
+//        LOG.trace("Cached query and replaying data in [" + ts + "] ms");
+//        return topDocs.topDocs();
+//      }else{
+        //LOG.debug("Query results were too large to cache, returning straight query");
         return searcher.search(new ConstantScoreQuery(q), Integer.MAX_VALUE);
-      else
-        return searcher.searchAfter(last_result, new ConstantScoreQuery(q), Integer.MAX_VALUE);
-      
+//      }
     } catch (ParseException e) {
       this.error = e.getMessage();
       // TODO Auto-generated catch block
@@ -536,6 +579,8 @@ public class Searcher {
     } catch (IOException e) {
       this.error = e.getMessage();
       // TODO Auto-generated catch block
+      e.printStackTrace();
+    } catch (Exception e){
       e.printStackTrace();
     }
     return null;

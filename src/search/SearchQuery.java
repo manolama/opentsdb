@@ -16,6 +16,7 @@ import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -53,7 +54,7 @@ public class SearchQuery {
   private String field = "content";
   private String query;
   private int limit = 25;
-  private int page = 0;
+  private int start_index = 0;
   private boolean return_meta = false;
   private String error = "";
   //private Pattern query_regex = null;
@@ -407,11 +408,11 @@ public class SearchQuery {
         return false;
       }
     }
-    if (query.hasQueryStringParam("page")){
+    if (query.hasQueryStringParam("start_index")){
       try{
-        this.page = Integer.parseInt(query.getQueryStringParam("page"));
+        this.start_index = Integer.parseInt(query.getQueryStringParam("start_index"));
       } catch (NumberFormatException nfe){
-        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the page value");
+        query.sendError(HttpResponseStatus.BAD_REQUEST, "Unable to parse the start_index value");
         return false;
       }
     }
@@ -601,12 +602,12 @@ public class SearchQuery {
     this.limit = limit;
   }
 
-  public int getPage() {
-    return page;
+  public int getStartIndex() {
+    return start_index;
   }
 
-  public void setPage(int page) {
-    this.page = page;
+  public void setStartIndex(int idx) {
+    this.start_index = idx;
   }
 
   public Boolean getReturnMeta() {
@@ -699,35 +700,22 @@ public class SearchQuery {
 
   public static class SearchResults {
     public int limit;
-    public int page;
     public double time;
     public int total_groups;
     public int total_hits = 0;
-    public int pages = 0;
+    public SearchQuery query;
     
     public SearchResults(final SearchQuery query){
       this.limit = query.getLimit();
-      this.page = query.getPage();
+      this.query = query;
     }
     
     // Pick one and ONLY one of these to use at any time
     public ArrayList<Map<String, Object>> short_meta;
     public ArrayList<String> tsuids;
     public ArrayList<TimeSeriesMeta> ts_meta;
-    public TreeSet<String> terms;
+    public TreeMap<String, String> terms;
     public Map<String, Object> groups;
     public ArrayList<Annotation> annotations;
-    
-    public void setTotalHits(int total_hits) {
-      this.total_hits = total_hits;
-      if (limit == 0)
-        this.pages = 1;
-      else if (this.groups != null){
-        this.pages = (this.total_groups / this.limit) + 1;
-      }else{
-        if (total_hits > 0)
-          this.pages = (total_hits / this.limit) + 1;
-      }
-    }
   }
 }

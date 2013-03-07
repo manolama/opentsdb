@@ -39,11 +39,15 @@ import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaDataCache;
 import net.opentsdb.meta.MetaManager;
 import net.opentsdb.meta.TimeSeriesMeta;
+import net.opentsdb.search.Search;
+import net.opentsdb.search.SearchES;
 import net.opentsdb.search.SearchIndexer;
 import net.opentsdb.search.SearchManager;
 import net.opentsdb.search.Searcher;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.storage.RTPublisher;
+import net.opentsdb.storage.RTRabbitMQ;
 import net.opentsdb.storage.TsdbMemcache;
 import net.opentsdb.storage.TsdbStore;
 
@@ -109,14 +113,15 @@ public final class TSDB {
    */
   private final CompactionQueue compactionq;
   
-  public final SearchIndexer meta_search_writer;
-  public final SearchIndexer annotation_search_writer;
-  public final Searcher meta_searcher;
-  public final Searcher annotation_searcher;
+  public final Search search_handler;
+//  public final SearchIndexer meta_search_writer;
+//  public final SearchIndexer annotation_search_writer;
+//  public final Searcher meta_searcher;
+//  public final Searcher annotation_searcher;
   
   public static TSDRole role = TSDRole.Full;
   public final boolean time_puts = true;
-  public final MQTest mq;
+  public final RTPublisher mq;
   public boolean use_mq = false;
   public final boolean enable_memcache;
   
@@ -150,24 +155,29 @@ public final class TSDB {
         TsdbConfig.TAG_VALUE_WIDTH, this.cache);
     compactionq = new CompactionQueue(this);
     ts_uids = new TimeseriesUID(this.uid_storage);
-    enable_compactions = config.enableCompactions();
-    this.memcache = new TsdbMemcache(config);
+    enable_compactions = config.enableCompactions();    
     this.enable_memcache = config.storageMemcacheEnable();
-
-    if (role == TSDRole.API || role == TSDRole.Full){
-      meta_search_writer = new SearchIndexer(config.searchIndexPath() + "meta");
-      annotation_search_writer = new SearchIndexer(config.searchIndexPath() + "annotation");
-      meta_searcher = new Searcher(config.searchIndexPath() + "meta", cache);
-      annotation_searcher = new Searcher(config.searchIndexPath() + "annotation", cache);
-    }else{
-      meta_search_writer = null;
-      annotation_search_writer = null;
-      meta_searcher = null;
-      annotation_searcher = null;
-    }
+    if (this.enable_memcache){
+      this.memcache = new TsdbMemcache(config);
+      this.memcache.start();
+    }else
+      this.memcache = null;
+    
+    this.search_handler = new SearchES();
+//    if (role == TSDRole.API || role == TSDRole.Full){
+//      meta_search_writer = new SearchIndexer(config.searchIndexPath() + "meta");
+//      annotation_search_writer = new SearchIndexer(config.searchIndexPath() + "annotation");
+//      meta_searcher = new Searcher(config.searchIndexPath() + "meta", cache);
+//      annotation_searcher = new Searcher(config.searchIndexPath() + "annotation", cache);
+//    }else{
+//      meta_search_writer = null;
+//      annotation_search_writer = null;
+//      meta_searcher = null;
+//      annotation_searcher = null;
+//    }
     timeseries_meta = new MetaDataCache(uid_storage, uidtable, true, "ts", this.cache);
     if (config.mqEnable()){
-      mq = new MQTest("localhost");
+      mq = new RTRabbitMQ("127.0.0.1");
       this.use_mq = true;
     }else
       mq = null;
@@ -180,17 +190,20 @@ public final class TSDB {
    * utilities.
    */
   public void startManagementThreads(){
+    LOG.info("Told to start management threads");
     uid_manager = new UIDManager();
     uid_manager.start();
 //    tsuid_manager = new TSUIDManager();
 //    tsuid_manager.start();
-    if (role != TSDRole.Ingest && role != TSDRole.Forwarder){
+    if (role != TSDRole.Ingest){
       if (config.searchEnableIndexer()){
+        LOG.info("Starting search manager...");
         search_manager = new SearchManager(this);
         search_manager.start();
       }
       
       if (config.searchEnableTreeIndexer()){
+        LOG.info("Starting tree indexer...");
         meta_manager = new MetaManager(this);
         meta_manager.start();
       }
@@ -294,6 +307,8 @@ public final class TSDB {
     this.ts_uids.collectStats(collector);
     if (this.cache != null)
       this.cache.collectStats(collector);
+    if (this.memcache != null)
+      TsdbMemcache.collectStats(collector);
     IncomingDataPoints.collectStats(collector);
     {
       final Runtime runtime = Runtime.getRuntime();
@@ -396,7 +411,7 @@ public final class TSDB {
                                    final Map<String, String> tags) {
     final short flags = 0x7;  // An int stored on 8 bytes.
     return addPointInternal(metric, timestamp, Bytes.fromLong(value),
-                            tags, flags);
+                            tags, flags, Long.toString(value));
   }
 
   /**
@@ -432,7 +447,7 @@ public final class TSDB {
     final short flags = Const.FLAG_FLOAT | 0x3;  // A float stored on 4 bytes.
     return addPointInternal(metric, timestamp,
                             Bytes.fromInt(Float.floatToRawIntBits(value)),
-                            tags, flags);
+                            tags, flags, Float.toString(value));
   }
   
   /**
@@ -467,7 +482,8 @@ public final class TSDB {
                                             final long timestamp,
                                             final byte[] value,
                                             final Map<String, String> tags,
-                                            final short flags) {
+                                            final short flags, 
+                                            final String sval) {
     if ((timestamp & 0xFFFFFFFF00000000L) != 0) {
       // => timestamp < 0 || timestamp > Integer.MAX_VALUE
       throw new IllegalArgumentException((timestamp < 0 ? "negative " : "bad")
@@ -490,15 +506,11 @@ public final class TSDB {
 
     // MQ publish
     if (use_mq){
-      StringBuilder msg = new StringBuilder();
-      msg.append(timestamp).append(" ").append(value);
-      for (Map.Entry<String, String> entry : tags.entrySet())
-        msg.append(entry.getKey()).append("=").append(entry.getValue());
-      mq.publish(metric, msg.toString().getBytes());
+      this.mq.publishDatapoint(metric, timestamp, sval, tags, tsuid);
     }
     
     if (this.enable_memcache){
-      this.memcache.AsyncSetKey("tsdb:" + tsuid, value.toString(), 2592000);
+      this.memcache.AsyncSetKey("tsdb:" + tsuid, timestamp + ":" + sval, 86400);
     }
     
 //    final PutRequest point = new PutRequest(table, row, FAMILY,

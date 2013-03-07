@@ -78,30 +78,10 @@ public class SearchRPC implements HttpRpc {
     LOG.trace(codec.getJsonString());
  
     SearchResults results = null;
-    if (endpoint != null && endpoint.toLowerCase().compareTo("annotations") == 0)
-      results = tsdb.annotation_searcher.getAnnotations(search_query);
-    else if (search_query.getReturnTSUIDs())
-      results = tsdb.meta_searcher.searchTSUIDs(search_query);
-    else if (search_query.getReturnMeta()){
-      SearchResults tsuids = tsdb.meta_searcher.searchTSUIDs(search_query);
-      if (tsuids.tsuids == null){
-        LOG.warn("No timeseres found to load metadata for");
-      }else{
-        ArrayList<TimeSeriesMeta> metas = new ArrayList<TimeSeriesMeta>();
-        
-        for (String tsuid : tsuids.tsuids){
-          TimeSeriesMeta tmeta = tsdb.getTimeSeriesMeta(UniqueId.StringtoID(tsuid));
-          if (tmeta == null){
-            LOG.warn(String.format("Unable to load metadata for [%s]", tsuid));
-            continue;
-          }
-          metas.add(tmeta);
-        }
-        results = new SearchResults(search_query);
-        results.ts_meta = metas;
-      }
-    }else
-      results = tsdb.meta_searcher.searchShortMeta(search_query);
+    if (endpoint != null && endpoint.toLowerCase().compareTo("annotations") == 0){
+      //results = tsdb.search_handler.getAnnotations(search_query);
+    } else
+      results = tsdb.search_handler.searchTSMeta(search_query);
     if (results == null){
       query.sendError(HttpResponseStatus.BAD_REQUEST, search_query.getError());
       return;

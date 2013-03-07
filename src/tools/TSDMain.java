@@ -22,14 +22,7 @@ import org.slf4j.LoggerFactory;
 import org.jboss.netty.bootstrap.ServerBootstrap;
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 
-import org.apache.cassandra.thrift.Cassandra;
-import org.apache.cassandra.thrift.TBinaryProtocol;
-import org.apache.thrift.TException;
-import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TFramedTransport;
-import org.apache.thrift.transport.TSocket;
-import org.apache.thrift.transport.TTransport;
-import org.hbase.async.HBaseClient;
+import org.apache.cassandra.thrift.*;
 
 import net.opentsdb.BuildData;
 import net.opentsdb.core.TSDB;
@@ -203,8 +196,8 @@ final class TSDMain {
       }
       
       // load the tsuid hashes first!
-      if (tsdb.role == TSDRole.Ingest)
-        tsdb.ts_uids.loadAllHashes();
+      //if (tsdb.role == TSDRole.Ingest)
+        //tsdb.ts_uids.loadAllHashes();
 //      log.info("Loaded all hashes, shutting down");
 //      tsdb.shutdown().joinUninterruptibly();
 //      if (true)

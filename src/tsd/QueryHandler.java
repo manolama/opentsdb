@@ -123,7 +123,10 @@ public class QueryHandler implements HttpRpc {
         // XXX This is slow and will block Netty.  TODO(tsuna): Don't block.
         // TODO(tsuna): Optimization: run each query in parallel.
         final DataPoints[] series = tsdbqueries[i].run();
-        
+        if (series.length < 1){
+          continue;
+        }
+        LOG.trace(series[0].toString());
         // loop through the series and add them to the formatter
         for (final DataPoints datapoints : series) {
           query.getFormatter().putDatapoints(datapoints);

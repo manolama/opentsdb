@@ -16,9 +16,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.Annotation;
+import net.opentsdb.core.DataPoint;
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.meta.GeneralMeta;
+import net.opentsdb.meta.TimeSeriesMeta;
+import net.opentsdb.meta.GeneralMeta.Meta_Type;
 import net.opentsdb.search.SearchQuery.SearchResults;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.stats.StatsCollector.StatsDP;
@@ -77,9 +81,19 @@ public class TsdbJSON extends TSDFormatter {
       }
       
       ts.dps = new TreeMap<Long, Object>();
-      for(int i=0; i<dp.size(); i++)
-        ts.dps.put(dp.timestamp(i), 
-            dp.isInteger(i) ? dp.longValue(i) : dp.doubleValue(i));
+//      for(int i=0; i<dp.size(); i++)
+//        ts.dps.put(dp.timestamp(i), 
+//            dp.isInteger(i) ? dp.longValue(i) : dp.doubleValue(i));
+      for(final DataPoint d : dp)
+        ts.dps.put(d.timestamp(), 
+            d.isInteger() ? d.longValue() : d.doubleValue());
+      
+      // tracing to find out where crap is falling aapart
+      StringBuilder temp = new StringBuilder();
+      for (Map.Entry<Long, Object> e : ts.dps.entrySet()){
+        temp.append(e.getKey() + ":" + e.getValue() + " | ");
+      }
+      LOG.trace(temp.toString());
       
       if (return_uids)
         ts.tsuids = dp.getUID();
@@ -251,22 +265,56 @@ public class TsdbJSON extends TSDFormatter {
     // build a response map and send away!
     Map<String, Object> response = new HashMap<String, Object>();
     response.put("limit", results.limit);
-    response.put("page", results.page);
+    response.put("start_index", results.query.getStartIndex());
     response.put("total_uids", results.total_hits);
-    response.put("total_pages", results.pages);
+    response.put("total_results", results.ts_meta == null ? 0 : results.ts_meta.size());
     response.put("time", results.time);
-    if (results.short_meta != null)
-      response.put("results", results.short_meta);
-    else if (results.tsuids != null)
-      response.put("results", results.tsuids);
-    else if (results.ts_meta != null)
+    if (results.query.getReturnTSUIDs()){
+      if (results.ts_meta == null){
+        response.put("results", null);
+      }else{
+        ArrayList<String> tsuids = new ArrayList<String>();
+        for (TimeSeriesMeta meta : results.ts_meta){
+          tsuids.add(meta.getUID());
+        }
+        response.put("results", tsuids);
+      }      
+    } else if (results.query.getReturnMeta())
       response.put("results", results.ts_meta);
-    else if (results.terms != null)
-      response.put("results", results.terms);
-    else if (results.annotations != null)
-      response.put("results", results.annotations);
-    else
-      response.put("results", null);
+//    else if (results.ts_meta != null)
+//      response.put("results", results.ts_meta);
+//    else if (results.terms != null)
+//      response.put("results", results.terms);
+//    else if (results.annotations != null)
+//      response.put("results", results.annotations);
+    else{
+      if (results.ts_meta == null){
+        response.put("results", null);
+      }else{
+        ArrayList<Map<String, Object>> short_meta = new ArrayList<Map<String, Object>>();
+        for (TimeSeriesMeta meta : results.ts_meta){
+          Map<String, Object> meta_entry = new HashMap<String, Object>();
+          meta_entry.put("tsuid", meta.getUID().toUpperCase());
+          if (meta.getMetric() == null)
+            continue;
+          meta_entry.put("metric", meta.getMetric().getName());
+          
+          HashMap<String, String> tag_list = new HashMap<String, String>();
+          String tagk = "";
+          for (GeneralMeta tag : meta.getTags()){
+            if (tagk.isEmpty() && tag.getType() == Meta_Type.TAGK)
+              tagk = tag.getName();
+            else if (!tagk.isEmpty()){
+              tag_list.put(tagk, tag.getName());
+              tagk = "";
+            }
+          }
+          meta_entry.put("tags", tag_list);
+          short_meta.add(meta_entry);
+        }
+        response.put("results", short_meta);
+      }   
+    }
     JSON codec = new JSON(response);
     query.sendReply(codec.getJsonBytes());
     return true;
@@ -275,16 +323,15 @@ public class TsdbJSON extends TSDFormatter {
   public boolean handleHTTPGroupby(final HttpQuery query, SearchResults results){
     Map<String, Object> response = new HashMap<String, Object>();
     response.put("limit", results.limit);
-    response.put("page", results.page);
-    response.put("total_pages", results.pages);
     response.put("time", results.time);
+    response.put("total_uids", results.total_hits);
     if (results.terms != null){
       response.put("total_terms", results.terms.size());
       response.put("results", results.terms);
     }else if (results.groups != null){
       response.put("total_groups", results.total_groups);
       response.put("results", results.groups); 
-      response.put("total_uids", results.total_hits);
+      
     }else
       response.put("results", null); 
     JSON codec = new JSON(response);

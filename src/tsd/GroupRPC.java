@@ -28,10 +28,10 @@ public class GroupRPC implements HttpRpc {
   private static final Logger LOG = LoggerFactory.getLogger(GroupRPC.class);
   
   public void execute(final TSDB tsdb, final HttpQuery query) {
-    if (tsdb.role != TSDRole.API){
-      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
-      return;
-    }
+//    if (tsdb.role != TSDRole.API){
+//      query.sendError(HttpResponseStatus.NOT_IMPLEMENTED, "Not implemented for role [" + tsdb.role + "]");
+//      return;
+//    }
     
     // get formatter
     TSDFormatter formatter = query.getFormatter();
@@ -64,14 +64,14 @@ public class GroupRPC implements HttpRpc {
     LOG.trace(codec.getJsonString());
 
     SearchResults results = null;
-    if (search_query.getTerms())
-      results = tsdb.meta_searcher.getTerms(search_query);
-    else
-      results = tsdb.meta_searcher.groupBy(search_query);
-    if (results == null){
-      query.sendError(HttpResponseStatus.BAD_REQUEST, search_query.getError());
-      return;
-    }
+//    if (search_query.getTerms())
+//      results = tsdb.meta_searcher.getTerms(tsdb, search_query);
+//    else
+//      results = tsdb.meta_searcher.groupBy(search_query);
+//    if (results == null){
+//      query.sendError(HttpResponseStatus.BAD_REQUEST, search_query.getError());
+//      return;
+//    }
     
     results.time = ((double)(System.nanoTime() - query.start_time) / (double)1000000);
     formatter.handleHTTPGroupby(query, results);

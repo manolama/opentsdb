@@ -2,15 +2,24 @@ package net.opentsdb.search;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.opentsdb.core.JSON;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.TimeSeriesMeta;
 import net.opentsdb.storage.TsdbScanner;
 import net.opentsdb.storage.TsdbStore;
 import net.opentsdb.uid.UniqueId;
 
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.CorruptIndexException;
@@ -35,9 +44,11 @@ public class SearchIndexer {
   private final String directory;
   private IndexWriter idx = null;
   private Directory idx_directory = null;
+  private int flush_limit;
 
   public SearchIndexer(final String directory){
     this.directory = directory;
+    this.flush_limit = 0;
   }
   
   public final boolean index(final Document doc, final String update_field){
@@ -64,6 +75,7 @@ public class SearchIndexer {
       return false;
     }
     
+    int count = 0;
     for (Document doc : docs){
       try {
         if (update_field == null || update_field.isEmpty()){
@@ -78,6 +90,13 @@ public class SearchIndexer {
             idx.updateDocument(term, doc);
           }
         }
+        
+        // flush every so often so we aren't maintaining crap forever
+        if (this.flush_limit > 0 && count >= this.flush_limit){
+          idx.commit();
+          count = 0;
+        }else
+          count++;
       } catch (CorruptIndexException e) {
         // TODO Auto-generated catch block
         e.printStackTrace();
@@ -118,11 +137,17 @@ public class SearchIndexer {
   public final boolean reindexTSUIDs(final TSDB tsdb){
     TsdbScanner scanner = new TsdbScanner(null, null, TsdbStore.toBytes("tsdb-uid"));
     scanner.setFamily(TsdbStore.toBytes("name"));
-    
+    DefaultHttpClient httpclient = new DefaultHttpClient();
+    String uri_base = "http://wtdb-1-3.phx3.llnw.net:9200/opentsdb/tsmetadata/";
+    String uri_suffix = "?replication=async";
+    HttpPost httpPost = new HttpPost(uri_base);
+    HttpResponse response2 = null;
+    HttpEntity entity2 = null;
+    StringBuilder post_data = new StringBuilder();
     try {
       scanner = tsdb.uid_storage.openScanner(scanner);
 
-      final int limit = 1000; 
+      final int limit = 10; 
       long count=0;
       ArrayList<Document> docs = new ArrayList<Document>();
       
@@ -138,15 +163,47 @@ public class SearchIndexer {
                 LOG.warn(String.format("Error retrieving TSUID metadata [%s]", uid));
                 continue;
               }
-              
-              docs.add(meta.buildLuceneDoc());
+
+              //docs.add(meta.buildLuceneDoc());
               count++;
+              JSON codec = new JSON(meta);
+              
+              post_data.append("{\"index\":{\"_id\":\"").append(meta.getUID()).append("\"}}\n");
+              post_data.append(codec.getJsonString()).append("\n");
               
               // flush every X documents
               if (count % limit == 0){
-                LOG.trace(String.format("Flushing [%d] docs to index", docs.size()));
-                this.index(docs, "tsuid");
-                docs.clear();
+                //LOG.debug(String.format("Flushing [%d] docs to index", docs.size()));
+                //this.index(docs, "tsuid");
+                //docs.clear();
+                
+              LOG.debug(String.format("Flushing [%d] docs to index", count));
+              
+               try {
+                 httpPost.setURI(new URI(uri_base + "_bulk" + uri_suffix));
+                 
+                 httpPost.setEntity(new StringEntity(post_data.toString()));
+                 response2 = httpclient.execute(httpPost);
+                 LOG.debug(response2.getStatusLine().toString());
+                 entity2 = response2.getEntity();
+                   // do something useful with the response body
+                   // and ensure it is fully consumed
+                   //EntityUtils.consume(entity2);
+               } catch (UnsupportedEncodingException e) {
+                 // TODO Auto-generated catch block
+                 e.printStackTrace();
+               } catch (ClientProtocolException e) {
+                 // TODO Auto-generated catch block
+                 e.printStackTrace();
+               } catch (IOException e) {
+                 // TODO Auto-generated catch block
+                 e.printStackTrace();
+               } finally{
+                 if (entity2 != null)
+                   entity2.consumeContent();
+               }
+               post_data = new StringBuilder();
+               
               }
             }
           }
@@ -154,10 +211,10 @@ public class SearchIndexer {
       }
       
       // anything leftover, flush it!
-      if (docs.size() > 0){
-        LOG.trace(String.format("Flushing [%d] docs to index", docs.size()));
-        this.index(docs, "tsuid");
-      }
+//      if (docs.size() > 0){
+//        LOG.debug(String.format("Flushing [%d] docs to index", docs.size()));
+//        this.index(docs, "tsuid");
+//      }
       
       LOG.info(String.format("Indexed [%d] TSUID metadata", count));
       return true;

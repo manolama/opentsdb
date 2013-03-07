@@ -13,11 +13,15 @@
 package net.opentsdb.core;
 
 import java.io.IOException;
+import java.io.InputStream;
 
 import net.opentsdb.storage.TsdbStore;
 
+import org.codehaus.jackson.map.MappingJsonFactory;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
+import org.codehaus.jackson.JsonFactory;
+import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.JsonParser;
 
 import org.slf4j.Logger;
@@ -35,8 +39,8 @@ public class JSON {
   protected static final Logger LOG = LoggerFactory.getLogger(JSON.class);
 
   /**
-   * Jackson serializer This is public so that other JSON dependencies can use
-   * it
+   * Jackson de/serializer This is public so that other JSON dependencies can use
+   * it. Construction is heavy so it's recommended to implement one and share it
    */
   protected static ObjectMapper JsonMapper = new ObjectMapper();
 
@@ -159,7 +163,46 @@ public class JSON {
     }
     return false;
   }
+  
+  public final JsonParser parseString(final String json){
+    try{
+      return JsonMapper.getJsonFactory().createJsonParser(json);
+    } catch (JsonParseException e) {
+      error = "Failed to parse JSON string: " + e.getMessage();
+      LOG.error(error);
+    } catch (IOException e) {
+      error = "Failed to access stream: " + e.getMessage();
+      LOG.error(error);
+    }
+    return null;
+  }
+  
+  public final JsonParser parseByteArray(final byte[] bytes){
+    try{
+      return JsonMapper.getJsonFactory().createJsonParser(bytes);
+    } catch (JsonParseException e) {
+      error = "Failed to parse JSON byte array: " + e.getMessage();
+      LOG.error(error);
+    } catch (IOException e) {
+      error = "Failed to access stream: " + e.getMessage();
+      LOG.error(error);
+    }
+    return null;
+  }
 
+  public final JsonParser parseStream(final InputStream stream){
+    try {
+      return JsonMapper.getJsonFactory().createJsonParser(stream);
+    } catch (JsonParseException e) {
+      error = "Failed to parse JSON stream: " + e.getMessage();
+      LOG.error(error);
+    } catch (IOException e) {
+      error = "Failed to access stream: " + e.getMessage();
+      LOG.error(error);
+    }
+    return null;
+  }
+  
   /**
    * Returns a JSON formatted string of the Object provided in the constructor.
    * @return A JSON formatted string if successful, an empty string if there was

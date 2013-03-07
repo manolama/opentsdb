@@ -45,7 +45,7 @@ public class AnnotationRPC implements HttpRpc {
         
         if (note.delete(tsdb)){
           // remove from index
-          tsdb.annotation_search_writer.deleteDoc("uid", note.getSearchUID());
+          //tsdb.annotation_search_writer.deleteDoc("uid", note.getSearchUID());
           
           HashMap<String, String> response = new HashMap<String, String>();
           response.put("delete", "successful");
@@ -72,11 +72,11 @@ public class AnnotationRPC implements HttpRpc {
         return;
       }
       
-      if (!tsdb.annotation_search_writer.index(note.buildLuceneDoc(), "uid")){
-        LOG.warn("Unable to index annotation");
-      }else
-        LOG.trace("Indexed the annotation!!");
-      
+//      if (!tsdb.annotation_search_writer.index(note.buildLuceneDoc(), "uid")){
+//        LOG.warn("Unable to index annotation");
+//      }else
+//        LOG.trace("Indexed the annotation!!");
+//      
       List<Annotation> notes = new ArrayList<Annotation>();
       notes.add(note);
       query.getFormatter().handleHTTPAnnotation(query, notes);

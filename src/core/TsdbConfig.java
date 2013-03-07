@@ -67,6 +67,7 @@ public class TsdbConfig {
   /** Default role for the TSD */
   private TSDRole role = TSDRole.Full;
   private int uid_flush_interval = 5000;
+  private int uid_pool_size = 250;
 
   // -------- Storage -------
   /** The name of the HBase table metric values are stored in */
@@ -329,6 +330,17 @@ public class TsdbConfig {
       LOG.warn(nfe.getLocalizedMessage());
     }
     return this.uid_flush_interval;
+  }
+  
+  public final int uidPoolSize() {
+    try {
+      return this.config.getInt("tsd.uid.poolsize", 1, 1024);
+    } catch (NullPointerException npe) {
+      // return the default below
+    } catch (NumberFormatException nfe) {
+      LOG.warn(nfe.getLocalizedMessage());
+    }
+    return this.uid_pool_size;
   }
   
   //-------- Storage -------

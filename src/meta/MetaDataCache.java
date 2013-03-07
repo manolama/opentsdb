@@ -283,30 +283,30 @@ public class MetaDataCache {
     short attempt = 5;
     while (attempt-- > 0) {
       // lock and get the latest from Hbase
-      Object lock;
-      try {
-        lock = storage.getRowLock(id);
-      } catch (HBaseException e) {
-        try {
-          Thread.sleep(61000 / 5);
-        } catch (InterruptedException ie) {
-          break; // We've been asked to stop here, let's bail out.
-        }
-        continue;
-      } catch (Exception e) {
-        throw new RuntimeException("Should never be here", e);
-      }
-      if (lock == null) { // Should not happen.
-        LOG.error("WTF, got a null pointer as a RowLock!");
-        continue;
-      }
+      //Object lock;
+//      try {
+//        lock = storage.getRowLock(id);
+//      } catch (HBaseException e) {
+//        try {
+//          Thread.sleep(61000 / 5);
+//        } catch (InterruptedException ie) {
+//          break; // We've been asked to stop here, let's bail out.
+//        }
+//        continue;
+//      } catch (Exception e) {
+//        throw new RuntimeException("Should never be here", e);
+//      }
+//      if (lock == null) { // Should not happen.
+//        LOG.error("WTF, got a null pointer as a RowLock!");
+//        continue;
+//      }
 
       try {
         MetaData new_meta = meta;
         // fetch from hbase so we know we have the latest value
         final String cell = this.kind + "_meta";
         final byte[] raw = storage.getValue(id, TsdbStore.toBytes("name"),
-            TsdbStore.toBytes(cell), lock);
+            TsdbStore.toBytes(cell));
 
         String json = "";
         if (raw == null) {
@@ -370,7 +370,7 @@ public class MetaDataCache {
         try {
           storage.putWithRetry(id, TsdbStore.toBytes("name"),
               TsdbStore.toBytes(this.kind + "_meta"), TsdbStore.toBytes(json),
-              0, lock);
+              0);
           LOG.debug("Updated meta in storage for [" + this.kind + "] on UID [" + UniqueId.IDtoString(id) + "]");
         } catch (HBaseException e) {
           LOG.error("Failed to Put Meta Data [" + uid + "]: " + e);
@@ -378,8 +378,12 @@ public class MetaDataCache {
         }
 
         return new_meta;
-      } finally {
+      } /*finally {
         storage.releaseRowLock(lock);
+      } */
+      catch (Exception e){
+        e.printStackTrace();
+        return null;
       }
     }
 

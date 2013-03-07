@@ -37,3 +37,4 @@ include third_party/lucene/include.mk
 include third_party/apache/include.mk
 include third_party/testing/include.mk
 include third_party/jcs/include.mk
+include third_party/http/include.mk

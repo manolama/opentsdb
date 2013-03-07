@@ -314,10 +314,10 @@ public class MetaRPC implements HttpRpc {
     
     // update the search index
     Document doc = ts_meta.buildLuceneDoc();
-    if (doc == null)
-      LOG.warn(String.format("Unable to get Lucene doc for TSUID [%s]", ts_meta.getUID()));
-    else
-      tsdb.meta_search_writer.index(doc, "tsuid");
+//    if (doc == null)
+//      LOG.warn(String.format("Unable to get Lucene doc for TSUID [%s]", ts_meta.getUID()));
+//    else
+//      tsdb.meta_search_writer.index(doc, "tsuid");
     
     JSON parser = new JSON(ts_meta);
     query.sendReply(parser.getJsonString());

@@ -16,7 +16,7 @@ public final class SearchManager extends Thread {
   public void run(){
     while(true){
       LOG.info("Reindexing metadata");
-      tsdb.meta_search_writer.reindexTSUIDs(tsdb);
+      tsdb.search_handler.reindexTSUIDs(tsdb);
       LOG.info("Finished reindexing metadata");
       
       try {

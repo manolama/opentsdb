@@ -36,6 +36,7 @@ import javax.xml.bind.DatatypeConverter;
 
 import net.opentsdb.cache.Cache;
 import net.opentsdb.core.JSON;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.GeneralMeta;
 import net.opentsdb.meta.MetaDataCache;
 import net.opentsdb.search.SearchQuery;
@@ -117,6 +118,8 @@ public final class UniqueId {
 
   private final ReentrantLock locker = new ReentrantLock();
   private long last_uid = 0;
+  private long uid_pool_max = 0;
+  private int uid_pool_size = 250;
   
   /**
    * Constructor.
@@ -139,7 +142,7 @@ public final class UniqueId {
       throw new IllegalArgumentException("Invalid width: " + width);
     }
     this.idWidth = (short) width;
-    this.metadata = new MetaDataCache(client, table, false, kind, cache);
+    this.metadata = new MetaDataCache(this.storage, table, false, kind, cache);
   }
 
   /** Returns a human readable string representation of the object. */
@@ -452,23 +455,27 @@ public final class UniqueId {
     
     while (attempt-- > 0) {
       // The dance to assign an ID.
-      Object lock;
-      try {
-        lock = storage.getRowLock(MAXID_ROW);
-      } catch (TsdbStorageException e) {
+      Object lock = null;
+      // don't lock if we have space in our ID pool
+      if (this.last_uid >= this.uid_pool_max){
+        LOG.trace("[" + kind() + "] We've reached the UID pool max [" + this.uid_pool_max + "], acquiring lock");
         try {
-          Thread.sleep(61000 / MAX_ATTEMPTS_ASSIGN_ID);
-        } catch (InterruptedException ie) {
-          break; // We've been asked to stop here, let's bail out.
+          lock = storage.getRowLock(MAXID_ROW);
+        } catch (TsdbStorageException e) {
+          try {
+            Thread.sleep(61000 / MAX_ATTEMPTS_ASSIGN_ID);
+          } catch (InterruptedException ie) {
+            break; // We've been asked to stop here, let's bail out.
+          }
+          hbe = e;
+          continue;
         }
-        hbe = e;
-        continue;
-      }
-      if (lock == null) { // Should not happen.
-        LOG.error("WTF, got a null pointer as a RowLock!");
-        continue;
-      }
+        if (lock == null) { // Should not happen.
+          LOG.error("WTF, got a null pointer as a RowLock!");
+          continue;
+        }
       // We now have hbase.regionserver.lease.period ms to complete the loop.
+      }
 
       try {
         // Verify that the row still doesn't exist (to avoid re-creating it if
@@ -498,7 +505,10 @@ public final class UniqueId {
             // To be fixed by HBASE-2292.
             { // HACK HACK HACK
               this.last_uid++;
-              {
+              
+              if (this.last_uid >= this.uid_pool_max){
+                LOG.trace("[" + kind() + "] We've reached the UID pool max [" + 
+                    this.uid_pool_max + "], grabbing another pool of UIDs");
                 final byte[] current_maxid = storage.getValue(MAXID_ROW,
                     ID_FAMILY, kind, lock);
                 if (current_maxid != null) {
@@ -511,30 +521,36 @@ public final class UniqueId {
                 } else {
                   id = 1;
                 }
-                row = Bytes.fromLong(id);
                 
                 // NOTE: Older versions of HBase may screw up if you are incrementing the 
                 // UID very fast in that it may return a cached or stale value from a different
                 // region. The solution is to use a local counter as a sanity check.
-                if (Bytes.getLong(row) > this.last_uid){
-                  LOG.debug("Storage UID [" + Bytes.getLong(row) + 
+                if (id > this.last_uid){
+                  LOG.debug("Storage UID [" + id + 
                       "] was greater than local [" + this.last_uid + "]");
-                  this.last_uid = Bytes.getLong(row);
-                }else if (Bytes.getLong(row) < this.last_uid){
-                  LOG.warn("Storage UID [" + Bytes.getLong(row) + 
+                  this.last_uid = id;
+                }else if (id < this.last_uid){
+                  LOG.warn("Storage UID [" + id + 
                       "] was less than local [" + this.last_uid + "]");
-                  row = Bytes.fromLong(this.last_uid);
                 }
                 
-              }
-              // final PutRequest update_maxid = new PutRequest(
-              // table, MAXID_ROW, ID_FAMILY, kind, row, lock);
-              // hbasePutWithRetry(update_maxid, MAX_ATTEMPTS_PUT,
-              // INITIAL_EXP_BACKOFF_DELAY);
-              storage.putWithRetry(MAXID_ROW, ID_FAMILY, kind, row, 0, lock);
+                this.uid_pool_max = (this.last_uid + this.uid_pool_size) - 1;
+                row = Bytes.fromLong(this.last_uid + this.uid_pool_size);
+                
+                // final PutRequest update_maxid = new PutRequest(
+                // table, MAXID_ROW, ID_FAMILY, kind, row, lock);
+                // hbasePutWithRetry(update_maxid, MAX_ATTEMPTS_PUT,
+                // INITIAL_EXP_BACKOFF_DELAY);
+                storage.putWithRetry(MAXID_ROW, ID_FAMILY, kind, row, 0, lock);
+                LOG.trace("[" + kind() + "] New pool of UIDs from [" + 
+                    this.last_uid + "] to [" + this.uid_pool_max + "]");     
+              }else
+                row = Bytes.fromLong(this.last_uid);
+              
             } // end HACK HACK HACK.
-            LOG.info("Got ID=" + id + " for kind='" + kind() + "' name='" + name
+            LOG.info("Got ID=" + last_uid + " for kind='" + kind() + "' name='" + name
                 + "'");
+            
             // row.length should actually be 8.
             if (row.length < idWidth) {
               throw new IllegalStateException("OMG, row.length = " + row.length
@@ -589,7 +605,7 @@ public final class UniqueId {
           // INITIAL_EXP_BACKOFF_DELAY);
           storage.putWithRetry(row, NAME_FAMILY, kind, toBytes(name), 0);
         } catch (TsdbStorageException e) {
-          LOG.error("Failed to Put reverse mapping!  ID leaked: " + id, e);
+          LOG.error("Failed to Put reverse mapping!  ID leaked: " + last_uid, e);
           hbe = e;
           continue;
         }
@@ -602,7 +618,7 @@ public final class UniqueId {
           // INITIAL_EXP_BACKOFF_DELAY);
           storage.putWithRetry(toBytes(name), ID_FAMILY, kind, row, 0);
         } catch (TsdbStorageException e) {
-          LOG.error("Failed to Put forward mapping!  ID leaked: " + id, e);
+          LOG.error("Failed to Put forward mapping!  ID leaked: " + last_uid, e);
           hbe = e;
           continue;
         }
