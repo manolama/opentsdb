@@ -641,12 +641,12 @@ public class QueryUi implements EntryPoint, HistoryListener {
   private void addLabels(final StringBuilder url) {
     final String ylabel = this.ylabel.getText();
     if (!ylabel.isEmpty()) {
-      url.append("&ylabel=").append(URL.encodeComponent(ylabel));
+      url.append("&ylabel=").append(ylabel);
     }
     if (y2label.isEnabled()) {
       final String y2label = this.y2label.getText();
       if (!y2label.isEmpty()) {
-        url.append("&y2label=").append(URL.encodeComponent(y2label));
+        url.append("&y2label=").append(y2label);
       }
     }
   }
@@ -654,12 +654,12 @@ public class QueryUi implements EntryPoint, HistoryListener {
   private void addFormats(final StringBuilder url) {
     final String yformat = this.yformat.getText();
     if (!yformat.isEmpty()) {
-      url.append("&yformat=").append(URL.encodeComponent(yformat));
+      url.append("&yformat=").append(yformat);
     }
     if (y2format.isEnabled()) {
       final String y2format = this.y2format.getText();
       if (!y2format.isEmpty()) {
-        url.append("&y2format=").append(URL.encodeComponent(y2format));
+        url.append("&y2format=").append(y2format);
       }
     }
   }
@@ -848,7 +848,8 @@ public class QueryUi implements EntryPoint, HistoryListener {
     if (smooth.getValue()) {
       url.append("&smooth=csplines");
     }
-    final String uri = url.toString();
+    final String unencodedUri = url.toString();
+    final String uri = URL.encode(unencodedUri);
     if (uri.equals(lastgraphuri)) {
       return;  // Don't re-request the same graph.
     } else if (pending_requests++ > 0) {
@@ -872,7 +873,7 @@ public class QueryUi implements EntryPoint, HistoryListener {
         } else {
           clearError();
 
-          String history = uri.substring(3)      // Remove "/q?".
+          String history = unencodedUri.substring(3)      // Remove "/q?".
             .replaceFirst("ignore=[^&]*&", "");  // Unnecessary cruft.
           if (autoreload.getValue()) {
             history += "&autoreload=" + autoreoload_interval.getText();
@@ -1080,10 +1081,14 @@ public class QueryUi implements EntryPoint, HistoryListener {
       style.setProperty("background", "red");
       style.setProperty("filter", "alpha(opacity=50)");
       style.setProperty("opacity", "0.4");
+      // Needed to make this object focusable.
+      super.getElement().setAttribute("tabindex", "-1");
     }
 
     @Override
     public void onMouseDown(final MouseDownEvent event) {
+      event.preventDefault();
+
       // Check if the zoom selection is active, if so, it's possible that the
       // mouse left the browser mid-selection and got stuck enabled even
       // though the mouse isn't still pressed. If that's the case, do a similar
@@ -1104,6 +1109,9 @@ public class QueryUi implements EntryPoint, HistoryListener {
       super.setWidth("0px");
       super.setHeight("0px");
       super.setVisible(true);
+      // Workaround to steal the focus from whatever had it previously,
+      // which may cause the graph to reload as a side effect.
+      super.getElement().focus();
 
       graph_move_handler = graph.addMouseMoveHandler(this);
       box_move_handler = super.addMouseMoveHandler(this);

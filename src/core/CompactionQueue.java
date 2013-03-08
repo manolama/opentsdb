@@ -246,22 +246,24 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       if (row.isEmpty()) {  // Maybe the row got deleted in the mean time?
         LOG.debug("Attempted to compact a row that doesn't exist.");
       } else if (compacted != null) {
-        // skip future cell qualifier types
-        if (row.get(0).qualifier().length == 2 || 
-            row.get(0).qualifier().length > 3){
-          // no need to re-compact rows containing a single value.
-          KeyValue kv = row.get(0);
-          final byte[] qual = kv.qualifier();
-          final byte[] val = kv.value();
-          if (floatingPointValueToFix(qual[1], val)) {
-            // Fix up old, incorrectly encoded floating point value.
-            final byte[] newval = fixFloatingPointValue(qual[1], val);
-            final byte[] newqual = new byte[] { qual[0],
-              fixQualifierFlags(qual[1], newval.length) };
-            kv = new KeyValue(kv.key(), kv.family(), newqual, newval);
-          }
-          compacted[0] = kv;
+        // no need to re-compact rows containing a single value.
+        KeyValue kv = row.get(0);
+        final byte[] qual = kv.qualifier();
+        if (qual.length % 2 != 0 || qual.length == 0) {
+          // Right now we expect all qualifiers to have an even number of
+          // bytes.  We only have one KV and it doesn't look valid so just
+          // ignore this whole row.
+          return null;
         }
+        final byte[] val = kv.value();
+        if (qual.length == 2 && floatingPointValueToFix(qual[1], val)) {
+          // Fix up old, incorrectly encoded floating point value.
+          final byte[] newval = fixFloatingPointValue(qual[1], val);
+          final byte[] newqual = new byte[] { qual[0],
+            fixQualifierFlags(qual[1], newval.length) };
+          kv = new KeyValue(kv.key(), kv.family(), newqual, newval);
+        }
+        compacted[0] = kv;
       }
       return null;
     }
@@ -280,8 +282,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       short last_delta = -1;  // Time delta, extracted from the qualifier.
       KeyValue longest = row.get(0);  // KV with the longest qualifier.
       int longest_idx = 0;            // Index of `longest'.
-      final int nkvs = row.size();
-      final ArrayList<Integer> remove_invalid = new ArrayList<Integer>();
+      int nkvs = row.size();
       for (int i = 0; i < nkvs; i++) {
         final KeyValue kv = row.get(i);
         final byte[] qual = kv.qualifier();
@@ -289,11 +290,20 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
         // been compacted, potentially partially, so we need to merge the
         // partially compacted set of cells, with the rest.
         final int len = qual.length;
-        if (len == 3){
-          // handle future formats
-          remove_invalid.add(i);
-          continue;
-        } else if (len != 2) {
+        if (len != 2) {
+          // Right now we expect all qualifiers to have an even number of
+          // bytes.  If we find one with an odd number of bytes, or an empty
+          // qualifier (which is possible), just skip it, we don't know what
+          // this is.  It could be some junk that somehow got in the table,
+          // or it could be something from a future version of OpenTSDB that
+          // we don't know how to handle, so silently ignore it in order to
+          // help be forward compatible with it.
+          if (len % 2 != 0 || len == 0) {
+            row.remove(i);  // This is O(n) but should happen *very* rarely.
+            nkvs--;
+            i--;
+            continue;
+          }
           trivial = false;
           // We only do this here because no qualifier can be < 2 bytes.
           if (len > longest.qualifier().length) {
@@ -323,23 +333,20 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
         }
         qual_len += len;
       }
-      
-      // strip future type values so they don't get compacted
-      // note that we have to decrement the index value each time through so we
-      // remove the right object
-      int location = 0;
-      for (int i : remove_invalid){
-        row.remove(i - location);
-        location++;
-      }
-      // if there is only one valid cell after removing future types, then we just
-      // need to return avoid attempting to re-compact
-      if (row.size() == 1){
-        compacted[0] = row.get(0);
-        return null;
-      }
 
-      if (trivial) {
+      if (row.size() < 2) {
+        // We got here because we started off with at least 2 KV, but we
+        // chose to ignore some in the mean time, so now we're left with
+        // either none, or just one.
+        if (row.isEmpty()) {
+          return null;  // No KV left, just ignore this whole row.
+        } // else: row.size() == 1
+        // We have only one KV left, we call ourselves recursively to handle
+        // the case where this KV is an old, incorrectly encoded floating
+        // point value that needs to be fixed.  This is guaranteed to not
+        // recurse again.
+        return compact(row, compacted);
+      } else if (trivial) {
         trivial_compactions.incrementAndGet();
         compact = trivialCompact(row, qual_len, val_len);
       } else {
