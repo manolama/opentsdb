@@ -76,7 +76,8 @@ tsdb_SRC := \
 	src/uid/NoSuchUniqueId.java	\
 	src/uid/NoSuchUniqueName.java	\
 	src/uid/UniqueId.java	\
-	src/uid/UniqueIdInterface.java
+	src/uid/UniqueIdInterface.java \
+	src/utils/JSON.java
 
 tsdb_DEPS = \
 	$(ASYNCHBASE)	\
@@ -84,6 +85,8 @@ tsdb_DEPS = \
 	$(LOG4J_OVER_SLF4J)	\
 	$(LOGBACK_CLASSIC)	\
 	$(LOGBACK_CORE)	\
+	$(JACKSON_CORE)	\
+	$(JACKSON_MAPPER)	\
 	$(NETTY)	\
 	$(SLF4J_API)	\
 	$(SUASYNC)	\
@@ -99,7 +102,8 @@ test_SRC := \
 	test/stats/TestHistogram.java	\
 	test/tsd/TestGraphHandler.java	\
 	test/uid/TestNoSuchUniqueId.java	\
-	test/uid/TestUniqueId.java
+	test/uid/TestUniqueId.java \
+	test/utils/TestJSON.java
 
 test_DEPS = \
 	$(tsdb_DEPS) \
@@ -377,6 +381,7 @@ pom.xml: pom.xml.in Makefile
 	    -e 's/@GUAVA_VERSION@/$(GUAVA_VERSION)/' \
 	    -e 's/@GWT_VERSION@/$(GWT_VERSION)/' \
 	    -e 's/@HAMCREST_VERSION@/$(HAMCREST_VERSION)/' \
+	    -e 's/@JACKSON_VERSION@/$(JACKSON_VERSION)/' \
 	    -e 's/@JAVASSIST_VERSION@/$(JAVASSIST_VERSION)/' \
 	    -e 's/@JUNIT_VERSION@/$(JUNIT_VERSION)/' \
 	    -e 's/@LOG4J_OVER_SLF4J_VERSION@/$(LOG4J_OVER_SLF4J_VERSION)/' \

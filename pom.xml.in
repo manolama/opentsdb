@@ -245,6 +245,18 @@
       <artifactId>guava</artifactId>
       <version>@GUAVA_VERSION@</version>
     </dependency>
+    
+    <dependency>
+      <groupId>org.codehaus.jackson</groupId>
+      <artifactId>jackson-core-lgpl</artifactId>
+      <version>@JACKSON_VERSION@</version>
+    </dependency>
+    
+    <dependency>
+      <groupId>org.codehaus.jackson</groupId>
+      <artifactId>jackson-mapper-lgpl</artifactId>
+      <version>@JACKSON_VERSION@</version>
+    </dependency>
 
     <dependency>
       <groupId>io.netty</groupId>
