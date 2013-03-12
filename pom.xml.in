@@ -136,6 +136,8 @@
               <target>
                 <copy file="${basedir}/src/mygnuplot.sh" todir="${basedir}/target/classes"/>
                 <chmod file="${basedir}/target/classes/mygnuplot.sh" perm="ugo+rx"/>
+                <copy file="${basedir}/src/mygnuplot.bat" todir="${basedir}/target/classes"/>
+                <chmod file="${basedir}/target/classes/mygnuplot.bat" perm="ugo+rx"/>
               </target>
             </configuration>
             <goals>

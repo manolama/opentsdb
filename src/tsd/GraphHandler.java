@@ -262,7 +262,10 @@ final class GraphHandler implements HttpRpc {
       this.query = query;
       this.max_age = max_age;
       this.plot = plot;
-      this.basepath = basepath;
+      if (System.getProperty("os.name").contains("Windows"))
+        this.basepath = basepath.replace("\\", "\\\\").replace("/", "\\\\");
+      else
+        this.basepath = basepath;
       this.aggregated_tags = aggregated_tags;
       this.npoints = npoints;
     }
@@ -1035,7 +1038,10 @@ final class GraphHandler implements HttpRpc {
   }
 
   /** Name of the wrapper script we use to execute Gnuplot.  */
-  private static final String WRAPPER = "mygnuplot.sh";
+  private static final String WRAPPER = 
+    System.getProperty("os.name").contains("Windows") ? 
+        "mygnuplot.bat" : "mygnuplot.sh";
+  
   /** Path to the wrapper script.  */
   private static final String GNUPLOT;
   static {
