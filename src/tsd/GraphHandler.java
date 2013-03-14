@@ -77,9 +77,6 @@ final class GraphHandler implements HttpRpc {
   /** Executor to run Gnuplot in separate bounded thread pool. */
   private final ThreadPoolExecutor gnuplot;
 
-  /** Directory where to cache query results. */
-  private final String cachedir;
-
   /**
    * Constructor.
    */
@@ -100,7 +97,6 @@ final class GraphHandler implements HttpRpc {
     // ArrayBlockingQueue does not scale as much as LinkedBlockingQueue in terms
     // of throughput but we don't need high throughput here.  We use ABQ instead
     // of LBQ because it creates far fewer references.
-    cachedir = RpcHandler.getDirectoryFromSystemProp("tsd.http.cachedir");
   }
 
   public void execute(final TSDB tsdb, final HttpQuery query) {
@@ -127,7 +123,7 @@ final class GraphHandler implements HttpRpc {
 
   private void doGraph(final TSDB tsdb, final HttpQuery query)
     throws IOException {
-    final String basepath = getGnuplotBasePath(query);
+    final String basepath = getGnuplotBasePath(tsdb, query); 
     final long start_time = getQueryStringDate(query, "start");
     final boolean nocache = query.hasQueryStringParam("nocache");
     if (start_time == -1) {
@@ -335,7 +331,7 @@ final class GraphHandler implements HttpRpc {
   }
 
   /** Returns the base path to use for the Gnuplot files. */
-  private String getGnuplotBasePath(final HttpQuery query) {
+  private String getGnuplotBasePath(final TSDB tsdb, final HttpQuery query) { 
     final Map<String, List<String>> q = query.getQueryString();
     q.remove("ignore");
     // Super cheap caching mechanism: hash the query string.
@@ -345,7 +341,7 @@ final class GraphHandler implements HttpRpc {
     qs.remove("png");
     qs.remove("json");
     qs.remove("ascii");
-    return cachedir + Integer.toHexString(qs.hashCode());
+    return tsdb.getConfig().getString("tsd.http.cachedir") + Integer.toHexString(qs.hashCode()); 
   }
 
   /**

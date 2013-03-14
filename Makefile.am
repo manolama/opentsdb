@@ -25,7 +25,7 @@ builddata_SRC := src/BuildData.java
 BUILT_SOURCES = $(builddata_SRC)
 nodist_bin_SCRIPTS = tsdb
 dist_noinst_SCRIPTS = src/create_table.sh
-dist_pkgdata_SCRIPTS := src/mygnuplot.sh src/mygnuplot.bat
+dist_pkgdata_SCRIPTS := src/mygnuplot.sh src/mygnuplot.bat src/opentsdb.conf
 dist_noinst_DATA = pom.xml.in
 tsdb_SRC := \
 	src/core/Aggregator.java	\
@@ -77,6 +77,7 @@ tsdb_SRC := \
 	src/uid/NoSuchUniqueName.java	\
 	src/uid/UniqueId.java	\
 	src/uid/UniqueIdInterface.java \
+	src/utils/Config.java \ 
 	src/utils/JSON.java
 
 tsdb_DEPS = \
@@ -103,6 +104,7 @@ test_SRC := \
 	test/tsd/TestGraphHandler.java	\
 	test/uid/TestNoSuchUniqueId.java	\
 	test/uid/TestUniqueId.java \
+	test/utils/TestConfig.java \ 
 	test/utils/TestJSON.java
 
 test_DEPS = \
