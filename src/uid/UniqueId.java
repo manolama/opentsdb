@@ -44,6 +44,13 @@ public final class UniqueId implements UniqueIdInterface {
 
   private static final Logger LOG = LoggerFactory.getLogger(UniqueId.class);
 
+  /** Identifies the type of UID being used */
+  public enum UIDType{
+    METRIC,
+    TAGK,
+    TAGV
+  };
+  
   /** Charset used to convert Strings to byte arrays and back. */
   private static final Charset CHARSET = Charset.forName("ISO-8859-1");
   /** The single column family used by this class. */
