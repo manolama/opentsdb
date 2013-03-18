@@ -59,6 +59,9 @@ final class GraphHandler implements HttpRpc {
   private static final Logger LOG =
     LoggerFactory.getLogger(GraphHandler.class);
 
+  private static final boolean IS_WINDOWS = 
+    System.getProperty("os.name").contains("Windows");
+  
   /** Number of times we had to do all the work up to running Gnuplot. */
   private static final AtomicInteger graphs_generated
     = new AtomicInteger();
@@ -258,7 +261,7 @@ final class GraphHandler implements HttpRpc {
       this.query = query;
       this.max_age = max_age;
       this.plot = plot;
-      if (System.getProperty("os.name").contains("Windows"))
+      if (IS_WINDOWS)
         this.basepath = basepath.replace("\\", "\\\\").replace("/", "\\\\");
       else
         this.basepath = basepath;
@@ -1035,8 +1038,7 @@ final class GraphHandler implements HttpRpc {
 
   /** Name of the wrapper script we use to execute Gnuplot.  */
   private static final String WRAPPER = 
-    System.getProperty("os.name").contains("Windows") ? 
-        "mygnuplot.bat" : "mygnuplot.sh";
+    IS_WINDOWS ? "mygnuplot.bat" : "mygnuplot.sh";
   
   /** Path to the wrapper script.  */
   private static final String GNUPLOT;

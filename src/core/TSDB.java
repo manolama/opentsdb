@@ -114,6 +114,18 @@ public final class TSDB {
     return this.config;
   }
 
+  /**
+   * Verifies that the data and UID tables exist in HBase
+   * @return An ArrayList of objects to wait for
+   * @throws TableNotFoundException
+   */
+  public Deferred<ArrayList<Object>> checkNecessaryTablesExist() {
+    return Deferred.group(client.ensureTableExists(
+        config.getString("tsd.storage.hbase.data_table")),
+        client.ensureTableExists(
+            config.getString("tsd.storage.hbase.uid_table")));
+  }
+  
   /** Number of cache hits during lookups involving UIDs. */
   public int uidCacheHits() {
     return (metrics.cacheHits() + tag_names.cacheHits()
@@ -374,7 +386,7 @@ public final class TSDB {
       }
     }
     // First flush the compaction queue, then shutdown the HBase client.
-    return Config.ENABLE_COMPACTIONS
+    return config.ENABLE_COMPACTIONS
       ? compactionq.flush().addCallbacks(new HClientShutdown(),
                                          new ShutdownErrback())
       : client.shutdown();
@@ -431,7 +443,7 @@ public final class TSDB {
    * @param base_time The 32-bit unsigned UNIX timestamp.
    */
   final void scheduleForCompaction(final byte[] row, final int base_time) {
-    if (Config.ENABLE_COMPACTIONS) {
+    if (config.ENABLE_COMPACTIONS) {
       compactionq.add(row);
     }
   }

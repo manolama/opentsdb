@@ -1,3 +1,15 @@
+// This file is part of OpenTSDB.
+// Copyright (C) 2010-2012  The OpenTSDB Authors.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 2.1 of the License, or (at your
+// option) any later version.  This program is distributed in the hope that it
+// will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser
+// General Public License for more details.  You should have received a copy
+// of the GNU Lesser General Public License along with this program.  If not,
+// see <http://www.gnu.org/licenses/>.
 package net.opentsdb.utils;
 
 import java.io.FileInputStream;
@@ -37,20 +49,22 @@ import org.slf4j.LoggerFactory;
 public class Config {
   private static final Logger LOG = LoggerFactory.getLogger(Config.class);
 
-  // STATICS - these are accessed often so need a static address for quick
-  // access. Their value will be changed when the config is loaded
-  // NOTE: edit the setDefaults() method if you add a static
+  // These are accessed often so need a set address for fast access (faster
+  // than accessing the map. Their value will be changed when the config is 
+  // loaded
+  // NOTE: edit the setDefaults() method if you add a public field
 
   /** tsd.core.auto_create_metrics */
-  public static boolean AUTO_METRIC = false;
+  public boolean AUTO_METRIC = false;
 
   /** tsd.storage.enable_compaction */
-  public static boolean ENABLE_COMPACTIONS = true;
-
+  public boolean ENABLE_COMPACTIONS = true;
+  
   /**
    * The list of properties configured to their defaults or modified by users
    */
-  protected final Properties properties = new Properties();
+  protected final HashMap<String, String> properties = 
+    new HashMap<String, String>();
 
   /** Tracks the location of the file that was actually loaded */
   private String config_location;
@@ -116,7 +130,7 @@ public class Config {
    * @throws NullPointerException if the property did not exist
    */
   public final String getString(final String property) {
-    return this.properties.getProperty(property);
+    return this.properties.get(property);
   }
 
   /**
@@ -127,7 +141,7 @@ public class Config {
    * @throws NullPointerException if the property did not exist
    */
   public final int getInt(final String property) {
-    return Integer.parseInt(this.properties.getProperty(property));
+    return Integer.parseInt(this.properties.get(property));
   }
 
   /**
@@ -138,7 +152,7 @@ public class Config {
    * @throws NullPointerException if the property did not exist
    */
   public final short getShort(final String property) {
-    return Short.parseShort(this.properties.getProperty(property));
+    return Short.parseShort(this.properties.get(property));
   }
 
   /**
@@ -149,7 +163,7 @@ public class Config {
    * @throws NullPointerException if the property did not exist
    */
   public final long getLong(final String property) {
-    return Long.parseLong(this.properties.getProperty(property));
+    return Long.parseLong(this.properties.get(property));
   }
 
   /**
@@ -160,7 +174,7 @@ public class Config {
    * @throws NullPointerException if the property did not exist
    */
   public final float getFloat(final String property) {
-    return Float.parseFloat(this.properties.getProperty(property));
+    return Float.parseFloat(this.properties.get(property));
   }
 
   /**
@@ -171,7 +185,7 @@ public class Config {
    * @throws NullPointerException if the property did not exist
    */
   public final double getDouble(final String property) {
-    return Double.parseDouble(this.properties.getProperty(property));
+    return Double.parseDouble(this.properties.get(property));
   }
 
   /**
@@ -187,10 +201,7 @@ public class Config {
    * @throws NullPointerException if the property was not found
    */
   public final boolean getBoolean(final String property) {
-    final String val = this.properties.getProperty(property).toUpperCase();
-    if (val == null)
-      throw new NullPointerException();
-
+    final String val = this.properties.get(property).toUpperCase();
     if (val.equals("1"))
       return true;
     if (val.equals("TRUE"))
@@ -206,7 +217,7 @@ public class Config {
    * @return True if the property exists and has a value, not an empty string
    */
   public final boolean hasProperty(final String property) {
-    final String val = this.properties.getProperty(property).toUpperCase();
+    final String val = this.properties.get(property).toUpperCase();
     if (val == null)
       return false;
     if (val.isEmpty())
@@ -222,16 +233,13 @@ public class Config {
     if (this.properties.isEmpty())
       return "No configuration settings stored";
 
-    @SuppressWarnings("rawtypes")
-    Enumeration e = this.properties.propertyNames();
-    String response = "TSD Configuration:\n";
-    response += "File [" + this.config_location + "]\n";
-    while (e.hasMoreElements()) {
-      String key = (String) e.nextElement();
-      response += "Key [" + key + "]  Value ["
-          + this.properties.getProperty(key) + "]\n";
+    StringBuilder response = new StringBuilder("TSD Configuration:\n");
+    response.append("File [" + this.config_location + "]\n");
+    for (Map.Entry<String, String> entry : this.properties.entrySet()) {
+      response.append("Key [" + entry.getKey() + "]  Value [").
+          append(entry.getValue() + "]\n");
     }
-    return response;
+    return response.toString();
   }
 
   /**
@@ -304,11 +312,14 @@ public class Config {
     for (String file : file_locations) {
       try {
         FileInputStream file_stream = new FileInputStream(file);
-        this.properties.clear();
-        this.properties.load(file_stream);
+        Properties props = new Properties();
+        props.load(file_stream);
+        
+        // load the hash map
+        this.loadHashMap(props);        
       } catch (Exception e) {
         // don't do anything, the file may be missing and that's fine
-        LOG.debug("Unable to find or load " + file);
+        LOG.debug("Unable to find or load " + file, e);
         continue;
       }
 
@@ -331,12 +342,25 @@ public class Config {
       IOException {
     FileInputStream file_stream;
     file_stream = new FileInputStream(file);
-    this.properties.clear();
-    this.properties.load(file_stream);
+    Properties props = new Properties();
+    props.load(file_stream);
+    
+    // load the hash map
+    this.loadHashMap(props);
 
     // no exceptions thrown, so save the valid path and exit
     LOG.info("Successfully loaded configuration file: " + file);
     this.config_location = file;
   }
 
+  protected void loadHashMap(final Properties props){
+    this.properties.clear();
+    
+    @SuppressWarnings("rawtypes")
+    Enumeration e = props.propertyNames();
+    while (e.hasMoreElements()) {
+      String key = (String) e.nextElement();
+      this.properties.put(key, props.getProperty(key));
+    }
+  }
 }

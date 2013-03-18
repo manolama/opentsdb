@@ -64,10 +64,7 @@ final class TextImporter {
     Config config = CliOptions.getConfig(argp);
     
     final TSDB tsdb = new TSDB(config);
-    tsdb.getClient().ensureTableExists(
-        config.getString("tsd.storage.hbase.data_table")).joinUninterruptibly();
-    tsdb.getClient().ensureTableExists(
-        config.getString("tsd.storage.hbase.uid_table")).joinUninterruptibly();
+    tsdb.checkNecessaryTablesExist().joinUninterruptibly();
     argp = null;
     try {
       int points = 0;
