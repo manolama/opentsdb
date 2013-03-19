@@ -16,6 +16,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -198,6 +199,36 @@ final class HttpQuery {
     return getQueryString().get(paramname);
   }
 
+  /**
+   * Attempts to parse the character set from the request header. If not set
+   * defaults to UTF-8
+   * @return A Charset object
+   * @throws UnsupportedCharsetException if the parsed character set is invalid
+   * @since 2.0
+   */
+  public Charset getCharset(){
+    // RFC2616 3.7
+    for (String type : this.request.getHeaders("Content-Type")){
+      int idx = type.toUpperCase().indexOf("CHARSET=");
+      if (idx > 1){
+        String charset = type.substring(idx+8);
+        return Charset.forName(charset);
+      }
+    }
+    return Charset.forName("UTF-8");
+  }
+  
+  /**
+   * Decodes the request content to a string using the appropriate character set
+   * @return Decoded content or an empty string if the request did not include
+   * content
+   * @throws UnsupportedCharsetException if the parsed character set is invalid
+   * @since 2.0
+   */
+  public String getContent(){
+    return this.request.getContent().toString(this.getCharset());
+  }
+  
   /**
    * Sends a 500 error page to the client.
    * @param cause The unexpected exception that caused this error.
