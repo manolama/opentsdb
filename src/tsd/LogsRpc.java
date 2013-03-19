@@ -12,8 +12,12 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonGenerator;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
@@ -25,14 +29,22 @@ import ch.qos.logback.classic.spi.ThrowableProxyUtil;
 import ch.qos.logback.core.read.CyclicBufferAppender;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.utils.JSON;
 
 /** The "/logs" endpoint. */
 final class LogsRpc implements HttpRpc {
 
-  public void execute(final TSDB tsdb, final HttpQuery query) {
+  public void execute(final TSDB tsdb, final HttpQuery query) 
+    throws JsonGenerationException, IOException {
     LogIterator logmsgs = new LogIterator();
     if (query.hasQueryStringParam("json")) {
-      query.sendJsonArray(logmsgs);
+      // todo This should be streamed out, need to use Jackson for streaming,
+      // add a streaming method to HttpQuery, and add a ChunkedWriter to the
+      // pipeline
+      ArrayList<String> logs = new ArrayList<String>();
+      for (String log : logmsgs)
+        logs.add(log);
+      query.sendReply(JSON.serializeToBytes(logs));
     } else if (query.hasQueryStringParam("level")) {
       final Level level = Level.toLevel(query.getQueryStringParam("level"),
                                         null);

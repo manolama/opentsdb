@@ -280,31 +280,6 @@ final class HttpQuery {
                        "Redirecting...", "Redirecting...", "Loading..."));
   }
 
-  /** An empty JSON array ready to be sent. */
-  private static final byte[] EMPTY_JSON_ARRAY = new byte[] { '[', ']' };
-
-  /**
-   * Sends the given sequence of strings as a JSON array.
-   * @param strings A possibly empty sequence of strings.
-   */
-  public void sendJsonArray(final Iterable<String> strings) {
-    int nstrings = 0;
-    int sz = 0;  // Pre-compute the buffer size to avoid re-allocations.
-    for (final String string : strings) {
-      sz += string.length();
-      nstrings++;
-    }
-    if (nstrings == 0) {
-      sendReply(EMPTY_JSON_ARRAY);
-      return;
-    }
-    final StringBuilder buf = new StringBuilder(sz // All the strings
-                                                + nstrings * 3  // "",
-                                                + 1);  // Leading `['
-    toJsonArray(strings, buf);
-    sendReply(buf);
-  }
-
   /**
    * Escapes a string appropriately to be a valid in JSON.
    * Valid JSON strings are defined in RFC 4627, Section 2.5.
@@ -356,23 +331,6 @@ final class HttpQuery {
         buf.append(c);
       }
     }
-  }
-
-  /**
-   * Transforms a non-empty sequence of strings into a JSON array.
-   * The behavior of this method is undefined if the input sequence is empty.
-   * @param strings The strings to transform into a JSON array.
-   * @param buf The buffer where to write the JSON array.
-   */
-  public static void toJsonArray(final Iterable<String> strings,
-                                 final StringBuilder buf) {
-    buf.append('[');
-    for (final String string : strings) {
-      buf.append('"');
-      escapeJson(string, buf);
-      buf.append("\",");
-    }
-    buf.setCharAt(buf.length() - 1, ']');
   }
 
   /**
