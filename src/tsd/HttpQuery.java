@@ -200,6 +200,41 @@ final class HttpQuery {
   }
 
   /**
+   * Returns only the path component of the URI as a string
+   * This call strips the protocol, host, port and query string parameters 
+   * leaving only the path e.g. "/path/starts/here"
+   * @return The path component of the URI
+   * @throws NullPointerException if the URI is bad
+   * @since 2.0
+   */
+  public String getQueryPath(){
+    return new QueryStringDecoder(request.getUri()).getPath();
+  }
+  
+  /**
+   * Returns the path component of the URI as an array of strings, split on the
+   * forward slash
+   * Similar to the {@link getQueryPath()} call, this returns only the path 
+   * without the protocol, host, port or query string params. E.g. 
+   * "/path/starts/here" will return an array of {"path", "starts", "here"}
+   * @return An array with 0 or more components
+   * @throws IllegalArgumentException if the URI is bad
+   * @since 2.0
+   */
+  public String[] explodePath() {
+    final String path = this.getQueryPath();
+    // split may be a tad slower than other methods, but since the URIs are
+    // usually pretty short and not every request will make this call, we 
+    // probably don't need any premature optimization
+    String[] exploded_path = path.startsWith("/") ? 
+        path.substring(1).split("/") : path.split("/");
+    if (exploded_path.length == 1 && exploded_path[0].isEmpty())
+      // split will return an empty string if the path is /, so clean it up
+      return new String[0];
+    return exploded_path;
+  }
+  
+  /**
    * Attempts to parse the character set from the request header. If not set
    * defaults to UTF-8
    * @return A Charset object
