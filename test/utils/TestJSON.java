@@ -1,6 +1,21 @@
+// This file is part of OpenTSDB.
+// Copyright (C) 2013  The OpenTSDB Authors.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.  This program is distributed in the hope that it
+// will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser
+// General Public License for more details.  You should have received a copy
+// of the GNU Lesser General Public License along with this program.  If not,
+// see <http://www.gnu.org/licenses/>.
 package net.opentsdb.utils;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -17,187 +32,161 @@ import org.junit.Test;
 public final class TestJSON {
 
   @Test
-  public void getMapperNotNull(){
+  public void getMapperNotNull() {
     assertNotNull(JSON.getMapper());
   }
   
   @Test
-  public void getFactoryNotNull(){
+  public void getFactoryNotNull() {
     assertNotNull(JSON.getFactory());
   }
   
   @Test
-  public void mapperAllowNonNumerics(){
-    assertTrue(JSON.getMapper().isEnabled(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS));
+  public void mapperAllowNonNumerics() {
+    assertTrue(JSON.getMapper().isEnabled(
+        JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS));
   }
   
   // parseToObject - Strings && Class
   @Test
   public void parseToObjectStringUTFString() throws Exception {
     @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}", HashMap.class);
-    assertTrue(map.get("utf").equals("aériennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    HashMap<String, String> map = JSON.parseToObject(
+        "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}", HashMap.class);
+    assertEquals(map.get("utf"), "aériennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test
   public void parseToObjectStringAsciiString() throws Exception {
     @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject("{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}", HashMap.class);
-    assertTrue(map.get("utf").equals("aeriennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    HashMap<String, String> map = JSON.parseToObject(
+        "{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}", HashMap.class);
+    assertEquals(map.get("utf"), "aeriennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseToObjectStringNull() throws Exception {
     String json = null;
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject(json, HashMap.class);
+    @SuppressWarnings({ "unused", "unchecked" })
+    HashMap<String, String> map = 
+      JSON.parseToObject(json, HashMap.class);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseToObjectStringEmpty() throws Exception {
     String json = "";
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject(json, HashMap.class);
+    @SuppressWarnings({ "unused", "unchecked" })
+    HashMap<String, String> map = 
+      JSON.parseToObject(json, HashMap.class);
   }
   
   @Test (expected = JsonParseException.class)
   public void parseToObjectStringBad() throws Exception {
     String json = "{\"notgonnafinish";
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject(json, HashMap.class);
+    @SuppressWarnings({ "unused", "unchecked" })
+    HashMap<String, String> map = 
+      JSON.parseToObject(json, HashMap.class);
   }
-
-  @Test (expected = ClassCastException.class)
-  public void parseToObjectStringBadCast() throws Exception {
-    @SuppressWarnings("unchecked")
-    HashSet<String> set = (HashSet<String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}", HashMap.class);
-  }
-  
+ 
   @Test (expected = JsonMappingException.class)
   public void parseToObjectStringBadMap() throws Exception {
-    @SuppressWarnings("unchecked")
-    HashSet<String> set = (HashSet<String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}", HashSet.class);
+    @SuppressWarnings({ "unused", "unchecked" })
+    HashSet<String> set = JSON.parseToObject(
+        "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}", HashSet.class);
   }
 
   // parseToObject - Byte && Class
   public void parseToObjectByteUTFString() throws Exception {
     @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes(), HashMap.class);
-    assertTrue(map.get("utf").equals("aériennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    HashMap<String, String> map = JSON.parseToObject(
+        "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes(), 
+        HashMap.class);
+    assertEquals(map.get("utf"), "aériennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test
   public void parseToObjectByteString() throws Exception {
     @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject("{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}".getBytes(), HashMap.class);
-    assertTrue(map.get("utf").equals("aeriennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    HashMap<String, String> map = JSON.parseToObject(
+        "{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}".getBytes(), 
+        HashMap.class);
+    assertEquals(map.get("utf"), "aeriennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseToObjectByteNull() throws Exception {
     byte[] json = null;
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject(json, HashMap.class);
+    @SuppressWarnings({ "unused", "unchecked" })
+    HashMap<String, String> map = 
+      JSON.parseToObject(json, HashMap.class);
   }
 
   @Test (expected = JsonParseException.class)
   public void parseToObjectByteBad() throws Exception {
     byte[] json = "{\"notgonnafinish".getBytes();
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject(json, HashMap.class);
+    @SuppressWarnings({ "unused", "unchecked" })
+    HashMap<String, String> map = 
+      JSON.parseToObject(json, HashMap.class);
   }
 
-  @Test (expected = ClassCastException.class)
-  public void parseToObjectByteBadCast() throws Exception {
-    @SuppressWarnings("unchecked")
-    HashSet<String> set = (HashSet<String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes("UTF-8"), HashMap.class);
-  }
-  
-//  @Test (expected = JsonParseException.class)
-//  public void parseToObjectByteBadEncoding() throws Exception {
-//    @SuppressWarnings("unchecked")
-//    HashSet<String> set = (HashSet<String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes(), HashMap.class);
-//  }
-  
   @Test (expected = JsonMappingException.class)
   public void parseToObjectByteBadMap() throws Exception {
-    @SuppressWarnings("unchecked")
-    HashSet<String> set = (HashSet<String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes(), HashSet.class);
+    @SuppressWarnings({ "unused", "unchecked" })
+    HashSet<String> set = JSON.parseToObject(
+        "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes(), 
+        HashSet.class);
   }
 
   //parseToObject - Strings && Type
   @Test
   public void parseToObjectStringTypeUTFString() throws Exception {
-    final TypeReference<HashMap<String, String>> tr = 
-      new TypeReference<HashMap<String, String>>() {
-    };
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}", tr);
-    assertTrue(map.get("utf").equals("aériennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    HashMap<String, String> map = JSON.parseToObject(
+        "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}", getTRMap());
+    assertEquals(map.get("utf"), "aériennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test
   public void parseToObjectStringTypeAsciiString() throws Exception {
-    final TypeReference<HashMap<String, String>> tr = 
-      new TypeReference<HashMap<String, String>>() {
-    };
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject("{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}", tr);
-    assertTrue(map.get("utf").equals("aeriennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    HashMap<String, String> map = JSON.parseToObject(
+        "{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}", getTRMap());
+    assertEquals(map.get("utf"), "aeriennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseToObjectStringTypeNull() throws Exception {
-    final TypeReference<HashMap<String, String>> tr = 
-      new TypeReference<HashMap<String, String>>() {
-    };
     String json = null;
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject(json, tr);
+    @SuppressWarnings("unused")
+    HashMap<String, String> map = 
+      JSON.parseToObject(json, getTRMap());
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseToObjectStringTypeEmpty() throws Exception {
-    final TypeReference<HashMap<String, String>> tr = 
-      new TypeReference<HashMap<String, String>>() {
-    };
     String json = "";
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject(json, tr);
+    @SuppressWarnings("unused")
+    HashMap<String, String> map = 
+      JSON.parseToObject(json, getTRMap());
   }
   
   @Test (expected = JsonParseException.class)
   public void parseToObjectStringTypeBad() throws Exception {
-    final TypeReference<HashMap<String, String>> tr = 
-      new TypeReference<HashMap<String, String>>() {
-    };
     String json = "{\"notgonnafinish";
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject(json, tr);
+    @SuppressWarnings("unused")
+    HashMap<String, String> map = 
+      JSON.parseToObject(json, getTRMap());
   }
 
-  @Test (expected = ClassCastException.class)
-  public void parseToObjectStringTypeBadCast() throws Exception {
-    final TypeReference<HashMap<String, String>> tr = 
-      new TypeReference<HashMap<String, String>>() {
-    };
-    @SuppressWarnings("unchecked")
-    HashSet<String> set = (HashSet<String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}", tr);
-  }
-  
   @Test (expected = JsonMappingException.class)
   public void parseToObjectStringTypeBadMap() throws Exception {
-    final TypeReference<HashSet<String>> tr = 
-      new TypeReference<HashSet<String>>() {
-    };
-    @SuppressWarnings("unchecked")
-    HashSet<String> set = (HashSet<String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}", tr);
+    @SuppressWarnings("unused")
+    HashSet<String> set = JSON.parseToObject(
+        "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}", getTRSet());
   }
 
   // parseToObject - Byte && Class
@@ -205,124 +194,78 @@ public final class TestJSON {
     final TypeReference<HashMap<String, String>> tr = 
       new TypeReference<HashMap<String, String>>() {
     };
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes(), tr);
-    assertTrue(map.get("utf").equals("aériennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    HashMap<String, String> map = 
+      JSON.parseToObject(
+          "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes(), 
+          getTRMap());
+    assertEquals(map.get("utf"), "aériennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test
   public void parseToObjectByteTypeString() throws Exception {
-    final TypeReference<HashMap<String, String>> tr = 
-      new TypeReference<HashMap<String, String>>() {
-    };
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject("{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}".getBytes(), tr);
-    assertTrue(map.get("utf").equals("aeriennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    HashMap<String, String> map = 
+      JSON.parseToObject(
+          "{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}".getBytes(), 
+          getTRMap());
+    assertEquals(map.get("utf"), "aeriennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseToObjectByteTypeNull() throws Exception {
-    final TypeReference<HashMap<String, String>> tr = 
-      new TypeReference<HashMap<String, String>>() {
-    };
     byte[] json = null;
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject(json, tr);
+    @SuppressWarnings("unused")
+    HashMap<String, String> map = 
+      JSON.parseToObject(json, getTRMap());
   }
 
   @Test (expected = JsonParseException.class)
   public void parseToObjectByteTypeBad() throws Exception {
-    final TypeReference<HashMap<String, String>> tr = 
-      new TypeReference<HashMap<String, String>>() {
-    };
     byte[] json = "{\"notgonnafinish".getBytes();
-    @SuppressWarnings("unchecked")
-    HashMap<String, String> map = (HashMap<String, String>) JSON.parseToObject(json, tr);
+    @SuppressWarnings("unused")
+    HashMap<String, String> map = 
+      JSON.parseToObject(json, getTRMap());
   }
 
-  @Test (expected = ClassCastException.class)
-  public void parseToObjectByteTypeBadCast() throws Exception {
-    final TypeReference<HashMap<String, String>> tr = 
-      new TypeReference<HashMap<String, String>>() {
-    };
-    @SuppressWarnings("unchecked")
-    HashSet<String> set = (HashSet<String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes("UTF-8"), tr);
-  }
-  
-//  @Test (expected = JsonParseException.class)
-//  public void parseToObjectByteBadTypeEncoding() throws Exception {
-//    final TypeReference<HashMap<String, String>> tr = 
-//      new TypeReference<HashMap<String, String>>() {
-//    };
-//    @SuppressWarnings("unchecked")
-//    HashSet<String> set = (HashSet<String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes(), tr);
-//  }
-  
   @Test (expected = JsonMappingException.class)
   public void parseToObjectByteTypeBadMap() throws Exception {
-    final TypeReference<HashSet<String>> tr = 
-      new TypeReference<HashSet<String>>() {
-    };
-    @SuppressWarnings("unchecked")
-    HashSet<String> set = (HashSet<String>) JSON.parseToObject("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes(), tr);
+    @SuppressWarnings("unused")
+    HashSet<String> set = JSON.parseToObject(
+        "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes(), 
+        getTRSet());
   }
 
   // parseToStream - String
   @Test
   public void parseToStreamUTFString() throws Exception {
-    JsonParser jp = JSON.parseToStream("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}");
-    assertNotNull(jp);
-    
-    HashMap<String, String> map = new HashMap<String, String>();
-    String field = "";
-    String value;
-    while (jp.nextToken() != null) {
-      if (jp.getCurrentToken() == JsonToken.FIELD_NAME && 
-          jp.getCurrentName() != null)
-        field = jp.getCurrentName();
-      else if (jp.getCurrentToken() == JsonToken.VALUE_STRING){
-        value = jp.getText();
-        map.put(field, value);
-      }        
-    }
-    
-    assertTrue(map.get("utf").equals("aériennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    JsonParser jp = JSON.parseToStream(
+        "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}");
+    HashMap<String, String> map = this.parseToMap(jp);
+    assertEquals(map.get("utf"), "aériennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test
   public void parseToStreamASCIIString() throws Exception {
-    JsonParser jp = JSON.parseToStream("{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}");
-    assertNotNull(jp);
-    
-    HashMap<String, String> map = new HashMap<String, String>();
-    String field = "";
-    String value;
-    while (jp.nextToken() != null) {
-      if (jp.getCurrentToken() == JsonToken.FIELD_NAME && 
-          jp.getCurrentName() != null)
-        field = jp.getCurrentName();
-      else if (jp.getCurrentToken() == JsonToken.VALUE_STRING){
-        value = jp.getText();
-        map.put(field, value);
-      }        
-    }
-    
-    assertTrue(map.get("utf").equals("aeriennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    JsonParser jp = JSON.parseToStream(
+        "{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}");
+    HashMap<String, String> map = this.parseToMap(jp);
+    assertEquals(map.get("utf"), "aeriennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseToStreamStringNull() throws Exception {
     String json = null;
+    @SuppressWarnings("unused")
     JsonParser jp = JSON.parseToStream(json);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseToStreamStringEmpty() throws Exception {
     String json = "";
+    @SuppressWarnings("unused")
     JsonParser jp = JSON.parseToStream(json);
   }
 
@@ -336,104 +279,52 @@ public final class TestJSON {
   // parseToStream - Byte
   @Test
   public void parseToStreamUTFSByte() throws Exception {
-    JsonParser jp = JSON.parseToStream("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes("UTF8"));
-    assertNotNull(jp);
-    
-    HashMap<String, String> map = new HashMap<String, String>();
-    String field = "";
-    String value;
-    while (jp.nextToken() != null) {
-      if (jp.getCurrentToken() == JsonToken.FIELD_NAME && 
-          jp.getCurrentName() != null)
-        field = jp.getCurrentName();
-      else if (jp.getCurrentToken() == JsonToken.VALUE_STRING){
-        value = jp.getText();
-        map.put(field, value);
-      }        
-    }
-    
-    assertTrue(map.get("utf").equals("aériennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    JsonParser jp = JSON.parseToStream(
+        "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes("UTF8"));
+    HashMap<String, String> map = this.parseToMap(jp);
+    assertEquals(map.get("utf"), "aériennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test
   public void parseToStreamASCIIByte() throws Exception {
-    JsonParser jp = JSON.parseToStream("{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}".getBytes());
-    assertNotNull(jp);
-    
-    HashMap<String, String> map = new HashMap<String, String>();
-    String field = "";
-    String value;
-    while (jp.nextToken() != null) {
-      if (jp.getCurrentToken() == JsonToken.FIELD_NAME && 
-          jp.getCurrentName() != null)
-        field = jp.getCurrentName();
-      else if (jp.getCurrentToken() == JsonToken.VALUE_STRING){
-        value = jp.getText();
-        map.put(field, value);
-      }        
-    }
-    
-    assertTrue(map.get("utf").equals("aeriennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    JsonParser jp = JSON.parseToStream(
+        "{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}".getBytes());
+    HashMap<String, String> map = this.parseToMap(jp);
+    assertEquals(map.get("utf"), "aeriennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseToStreamByteNull() throws Exception {
     byte[] json = null;
+    @SuppressWarnings("unused")
     JsonParser jp = JSON.parseToStream(json);
   }
 
   // parseToStream - Stream
   @Test
   public void parseToStreamUTFSStream() throws Exception {
-    InputStream is = new ByteArrayInputStream("{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes("UTF8"));
-    JsonParser jp = JSON.parseToStream(is);
-    assertNotNull(jp);
-    
-    HashMap<String, String> map = new HashMap<String, String>();
-    String field = "";
-    String value;
-    while (jp.nextToken() != null) {
-      if (jp.getCurrentToken() == JsonToken.FIELD_NAME && 
-          jp.getCurrentName() != null)
-        field = jp.getCurrentName();
-      else if (jp.getCurrentToken() == JsonToken.VALUE_STRING){
-        value = jp.getText();
-        map.put(field, value);
-      }        
-    }
-    
-    assertTrue(map.get("utf").equals("aériennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    InputStream is = new ByteArrayInputStream(
+        "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes("UTF8"));
+    HashMap<String, String> map = this.parseToMap(is);
+    assertEquals(map.get("utf"), "aériennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test
   public void parseToStreamASCIIStream() throws Exception {
-    InputStream is = new ByteArrayInputStream("{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}".getBytes());
-    JsonParser jp = JSON.parseToStream(is);
-    assertNotNull(jp);
-    
-    HashMap<String, String> map = new HashMap<String, String>();
-    String field = "";
-    String value;
-    while (jp.nextToken() != null) {
-      if (jp.getCurrentToken() == JsonToken.FIELD_NAME && 
-          jp.getCurrentName() != null)
-        field = jp.getCurrentName();
-      else if (jp.getCurrentToken() == JsonToken.VALUE_STRING){
-        value = jp.getText();
-        map.put(field, value);
-      }        
-    }
-    
-    assertTrue(map.get("utf").equals("aeriennes"));
-    assertTrue(map.get("ascii").equals("aariennes"));
+    InputStream is = new ByteArrayInputStream(
+        "{\"utf\":\"aeriennes\",\"ascii\":\"aariennes\"}".getBytes());
+    HashMap<String, String> map = this.parseToMap(is);
+    assertEquals(map.get("utf"), "aeriennes");
+    assertEquals(map.get("ascii"), "aariennes");
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseToStreamStreamNull() throws Exception {
     InputStream is = null;
+    @SuppressWarnings("unused")
     JsonParser jp = JSON.parseToStream(is);
   }
 
@@ -539,5 +430,52 @@ public final class TestJSON {
     HashMap<String, String> map = null;
     String cb = "";
     JSON.serializeToJSONPBytes(cb, map);
+  }
+
+  /** Helper to parse an input stream into a map */
+  private HashMap<String, String> parseToMap(final InputStream is) 
+    throws Exception {
+    JsonParser jp = JSON.parseToStream(is);
+    HashMap<String, String> map = new HashMap<String, String>();
+    String field = "";
+    String value;
+    while (jp.nextToken() != null) {
+      if (jp.getCurrentToken() == JsonToken.FIELD_NAME && 
+          jp.getCurrentName() != null) {
+        field = jp.getCurrentName();
+      } else if (jp.getCurrentToken() == JsonToken.VALUE_STRING) {
+        value = jp.getText();
+        map.put(field, value);
+      }        
+    }
+    return map;
+  }
+  
+  /** Helper to parse an input stream into a map */
+  private HashMap<String, String> parseToMap(final JsonParser jp) 
+    throws Exception {
+    HashMap<String, String> map = new HashMap<String, String>();
+    String field = "";
+    String value;
+    while (jp.nextToken() != null) {
+      if (jp.getCurrentToken() == JsonToken.FIELD_NAME && 
+          jp.getCurrentName() != null) {
+        field = jp.getCurrentName();
+      } else if (jp.getCurrentToken() == JsonToken.VALUE_STRING) {
+        value = jp.getText();
+        map.put(field, value);
+      }        
+    }
+    return map;
+  }
+  
+  /** Helper to return a TypeReference for a Hash Map */
+  private final TypeReference<HashMap<String, String>> getTRMap(){
+    return new TypeReference<HashMap<String, String>>() {};
+  }
+  
+  /** Helper to return a TypeReference for a Hash Set */
+  private final TypeReference<HashSet<String>> getTRSet(){
+    return new TypeReference<HashSet<String>>() {};
   }
 }

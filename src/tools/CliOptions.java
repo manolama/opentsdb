@@ -89,6 +89,7 @@ final class CliOptions {
    * @return A config object with user settings or defaults
    * @throws IOException If there was an error opening any of the config files
    * @throws FileNotFoundException If the user provided config file was not found
+   * @since 2.0
    */
   static final Config getConfig(final ArgP argp) throws IOException {
     // load configuration
@@ -107,6 +108,7 @@ final class CliOptions {
   /**
    * Copies the parsed command line options to the {@link Config} class
    * @param config Configuration instance to override
+   * @since 2.0
    */
   static void overloadConfig(final ArgP argp, final Config config) {
 

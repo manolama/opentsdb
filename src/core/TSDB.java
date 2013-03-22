@@ -104,12 +104,20 @@ public final class TSDB {
     LOG.debug(config.dumpConfiguration());
   }
   
-  /** Returns the configured HBase client */
-  public final HBaseClient getClient(){
+  /** 
+   * Returns the configured HBase client 
+   * @return The HBase client
+   * @since 2.0 
+   */
+  public final HBaseClient getClient() {
     return this.client;
   }
   
-  /** Getter that returns the configuration object */
+  /** 
+   * Getter that returns the configuration object
+   * @return The configuration object
+   * @since 2.0 
+   */
   public final Config getConfig() {
     return this.config;
   }
@@ -118,6 +126,7 @@ public final class TSDB {
    * Verifies that the data and UID tables exist in HBase
    * @return An ArrayList of objects to wait for
    * @throws TableNotFoundException
+   * @since 2.0
    */
   public Deferred<ArrayList<Object>> checkNecessaryTablesExist() {
     return Deferred.group(client.ensureTableExists(
@@ -386,7 +395,7 @@ public final class TSDB {
       }
     }
     // First flush the compaction queue, then shutdown the HBase client.
-    return config.ENABLE_COMPACTIONS
+    return config.enable_compactions()
       ? compactionq.flush().addCallbacks(new HClientShutdown(),
                                          new ShutdownErrback())
       : client.shutdown();
@@ -443,7 +452,7 @@ public final class TSDB {
    * @param base_time The 32-bit unsigned UNIX timestamp.
    */
   final void scheduleForCompaction(final byte[] row, final int base_time) {
-    if (config.ENABLE_COMPACTIONS) {
+    if (config.enable_compactions()) {
       compactionq.add(row);
     }
   }
