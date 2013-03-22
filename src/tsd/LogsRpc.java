@@ -12,9 +12,9 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
-import org.codehaus.jackson.JsonGenerationException;
-import org.codehaus.jackson.JsonGenerator;
 import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.core.JsonGenerationException;
 
 import java.io.IOException;
 import java.util.ArrayList;
