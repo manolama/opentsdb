@@ -32,51 +32,53 @@ import org.slf4j.LoggerFactory;
  * a specific plugin type or any plugins that match a given class. This isn't 
  * meant to be a rich plugin manager, it only handles the basics of searching
  * and instantiating a given class.
- * 
+ * <p>
  * Before attempting any of the plugin loader calls, users should call one or 
  * more of the jar loader methods to append files to the class path that may
  * have not been loaded on startup. This is particularly useful for plugins that
  * have dependencies not included by OpenTSDB. 
- * 
+ * <p>
  * For example, a typical process may be:
- *  - loadJARs(<plugin_path>) where <plugin_path> contains JARs of the plugins
- *    and their dependencies
- *  - loadSpecificPlugin() or loadPlugins() to instantiate the proper plugin
- *    types  
- *    
+ * <ul>
+ * <li>loadJARs(&lt;plugin_path&gt;) where &lt;plugin_path&gt; contains JARs of 
+ * the plugins and their dependencies</li>
+ * <li>loadSpecificPlugin() or loadPlugins() to instantiate the proper plugin
+ * types</li>
+ * </ul>     
+ * <p>   
  * Plugin creation is pretty simple, just implement the abstract plugin class,
  * create a Manifest file, add the "services" folder and plugin file and export 
  * a jar file.
- * 
- * @note All plugins must have a parameterless constructor for the 
+ * <p>
+ * <b>Note:</b> All plugins must have a parameterless constructor for the 
  * ServiceLoader to work. This means you can't have final class variables, but
  * we'll make a promise to call an initialize() method with the proper 
  * parameters, such as configs or the TSDB object, immediately after loading a
- * plugin and before trying to access any of it's methods. 
- * 
- * @note All plugins must also implement a shutdown() method to clean up 
+ * plugin and before trying to access any of its methods. 
+ * <p>
+ * <b>Note:</b> All plugins must also implement a shutdown() method to clean up 
  * gracefully.
  * 
  * @since 2.0
  */
-public class PluginLoader {
+public final class PluginLoader {
   private static final Logger LOG = LoggerFactory.getLogger(PluginLoader.class);
   
   /** Static list of types for the class loader */
-  private static final Class<?>[] parameter_types = new Class[] {
+  private static final Class<?>[] PARAMETER_TYPES = new Class[] {
     URL.class
   };
   
   /**
    * Searches the class path for the specific plugin of a given type
-   * 
-   * @note If you want to load JARs dynamically, you need to call 
-   * {@link #loadJAR()} or {@link #loadJARs()} methods with the proper file
+   * <p>
+   * <b>Note:</b> If you want to load JARs dynamically, you need to call 
+   * {@link #loadJAR} or {@link #loadJARs} methods with the proper file
    * or directory first, otherwise this will only search whatever was loaded
    * on startup.
-   * 
-   * @warn If there are multiple versions of the request plugin in the class
-   * path, only one will be returned, so check the logs to see that the
+   * <p>
+   * <b>WARNING:</b> If there are multiple versions of the request plugin in the
+   * class path, only one will be returned, so check the logs to see that the
    * correct version was loaded.
    * 
    * @param name The specific name of a plugin to search for, e.g. 
@@ -89,7 +91,7 @@ public class PluginLoader {
    */
   public static <T> T loadSpecificPlugin(final String name, 
       final Class<T> type) {
-    if (name == null || name.isEmpty()) {
+    if (name.isEmpty()) {
       throw new IllegalArgumentException("Missing plugin name");
     }
     ServiceLoader<T> serviceLoader = ServiceLoader.load(type);
@@ -99,9 +101,10 @@ public class PluginLoader {
       return null;
     }
     
-    while(it.hasNext()){
-      if (it.next().getClass().getName().equals(name)) {
-        return it.next();
+    while(it.hasNext()) {
+      T plugin = it.next();
+      if (plugin.getClass().getName().equals(name)) {
+        return plugin;
       }
     }
     
@@ -110,16 +113,16 @@ public class PluginLoader {
   }
   
   /**
-   * Searches the class path for implementations of the given type, returing a 
+   * Searches the class path for implementations of the given type, returning a 
    * list of all plugins that were found
-   * 
-   * @note If you want to load JARs dynamically, you need to call 
-   * {@link #loadJAR()} or {@link #loadJARs()} methods with the proper file
+   * <p>
+   * <b>Note:</b> If you want to load JARs dynamically, you need to call 
+   * {@link #loadJAR} or {@link #loadJARs} methods with the proper file
    * or directory first, otherwise this will only search whatever was loaded
    * on startup.
-   * 
-   * @warn If there are multiple versions of the request plugin in the class
-   * path, only one will be returned, so check the logs to see that the
+   * <p>
+   * <b>WARNING:</b> If there are multiple versions of the request plugin in the 
+   * class path, only one will be returned, so check the logs to see that the
    * correct version was loaded.
    * 
    * @param type The class type to search for
@@ -128,7 +131,7 @@ public class PluginLoader {
    * @throws ServiceConfigurationError if any of the plugins could not be 
    * instantiated
    */
-  public static <T> List<T> loadPlugins(final Class<T> type){
+  public static <T> List<T> loadPlugins(final Class<T> type) {
     ServiceLoader<T> serviceLoader = ServiceLoader.load(type);
     Iterator<T> it = serviceLoader.iterator();
     if (!it.hasNext()) {
@@ -174,8 +177,8 @@ public class PluginLoader {
   /**
    * Recursively traverses a directory searching for files ending with .jar and
    * loads them into the class path
-   * 
-   * @warn This can be pretty slow if you have a directory with many 
+   * <p>
+   * <b>WARNING:</b> This can be pretty slow if you have a directory with many 
    * sub-directories. Keep the directory structure shallow.
    * 
    * @param directory The directory 
@@ -204,7 +207,7 @@ public class PluginLoader {
       return;
     }
     
-    for (File jar : jars){
+    for (File jar : jars) {
       addFile(jar);
     }
   }
@@ -228,7 +231,7 @@ public class PluginLoader {
         // if this is null, it's due to a security issue
         LOG.warn("Access denied to directory: " + file.getAbsolutePath());
       } else {
-        for (File f : files){
+        for (File f : files) {
           searchForJars(f, jars);
         }
       }
@@ -270,7 +273,7 @@ public class PluginLoader {
     URLClassLoader sysloader = (URLClassLoader)ClassLoader.getSystemClassLoader();
     Class<?> sysclass = URLClassLoader.class;
     
-    Method method = sysclass.getDeclaredMethod("addURL", parameter_types);
+    Method method = sysclass.getDeclaredMethod("addURL", PARAMETER_TYPES);
     method.setAccessible(true);
     method.invoke(sysloader, new Object[]{ url }); 
     LOG.debug("Successfully added JAR to class loader: " + url.getFile());
