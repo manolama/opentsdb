@@ -13,6 +13,7 @@
 package net.opentsdb.utils;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -171,6 +172,9 @@ public final class PluginLoader {
           "File specified did not end with .jar");
     }
     File file = new File(jar);
+    if (!file.exists()) {
+      throw new FileNotFoundException(jar);
+    }
     addFile(file);
   }
   
