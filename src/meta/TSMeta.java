@@ -15,6 +15,10 @@ package net.opentsdb.meta;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 /**
  * Timeseries Metadata is associated with a particular series of data points
  * and includes user configurable values and some stats calculated by OpenTSDB.
@@ -25,55 +29,57 @@ import java.util.HashMap;
  * in the data storage system.
  * @since 2.0
  */
+@JsonAutoDetect(fieldVisibility = Visibility.PUBLIC_ONLY)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public final class TSMeta {
 
   /** Hexadecimal representation of the TSUID this metadata is associated with */
-  private String tsuid;
+  private String tsuid = "";
   
   /** The metric associated with this timeseries */
-  private UIDMeta metric;
+  private UIDMeta metric = null;
   
   /** A list of tagk/tagv pairs of UIDMetadata associated with this timeseries */
-  private ArrayList<UIDMeta> tags;
+  private ArrayList<UIDMeta> tags = null;
   
   /** An optional, user supplied descriptive name */
-  private String display_name;
+  private String display_name = "";
   
   /** An optional short description of the timeseries */
-  private String description;
+  private String description = "";
   
   /** Optional detailed notes about the timeseries */
-  private String notes;
+  private String notes = "";
   
   /** A timestamp of when this timeseries was first recorded in seconds */
-  private long created;
+  private long created = 0;
   
   /** Optional user supplied key/values */
-  private HashMap<String, String> custom;
+  private HashMap<String, String> custom = null;
   
   /** An optional field recording the units of data in this timeseries */
-  private String units;
+  private String units = "";
   
   /** An optional field used to record the type of data, e.g. counter, gauge */
-  private String data_type;
+  private String data_type = "";
   
   /** How long to keep raw data in this timeseries */
-  private int retention;
+  private int retention = 0;
   
   /** 
    * A user defined maximum value for this timeseries, can be used to 
    * calculate percentages
    */
-  private double max;
+  private double max = Double.NaN;
   
   /** 
    * A user defined minimum value for this timeseries, can be used to 
    * calculate percentages
    */
-  private double min; 
+  private double min = Double.NaN; 
   
   /** The last time this data was recorded in seconds */
-  private long last_received;
+  private long last_received = 0;
 
   /** @return the tsuid */
   public final String getTSUID() {

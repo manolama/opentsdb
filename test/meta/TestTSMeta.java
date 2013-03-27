@@ -19,6 +19,8 @@ import static org.junit.Assert.assertNull;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import net.opentsdb.utils.JSON;
+
 import org.junit.Test;
 
 public final class TestTSMeta {
@@ -110,6 +112,12 @@ public final class TestTSMeta {
   }
   
   @Test
+  public void retention() {
+    meta.setRetention(42);
+    assertEquals(meta.getRetention(), 42);
+  }
+  
+  @Test
   public void max() {
     meta.setMax(42.5);
     assertEquals(meta.getMax(), 42.5, 0.000001);
@@ -125,5 +133,22 @@ public final class TestTSMeta {
   public void lastReceived() {
     meta.setLastReceived(1328140801L);
     assertEquals(meta.getLastReceived(), 1328140801L);
+  }
+
+  @Test
+  public void serialize() throws Exception {
+    assertNotNull(JSON.serializeToString(meta));
+  }
+  
+  @Test
+  public void deserialize() throws Exception {
+    String json = "{\"tsuid\":\"ABCD\",\"metric\":null,\"tags\":null,\"" +
+     "description\":\"Description\",\"notes\":\"Notes\",\"created\":1328140800," +
+     "\"custom\":null,\"units\":\"\",\"retention\":42,\"max\":1.0,\"min\":" +
+     "\"NaN\",\"displayName\":\"Display\",\"dataType\":\"Data\",\"lastReceived" +
+     "\":1328140801}";
+    TSMeta tsmeta = JSON.parseToObject(json, TSMeta.class);
+    assertNotNull(tsmeta);
+    assertEquals(tsmeta.getTSUID(), "ABCD");
   }
 }
