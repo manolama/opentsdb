@@ -14,19 +14,15 @@ package net.opentsdb.meta;
 
 import java.util.HashMap;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
- * UIDMeta objects are associated with the {@link #UniqueId} of metrics, tag names
- * or tag values. When a new metric, tagk or tagv is generated, a  UIDMeta object
- * will also be written to storage with only the {@link #uid}, {@link #type} and
- * {@link #name} filled out. Users can then modify mutable fields
+ * UIDMeta objects are associated with the UniqueId of metrics, tag names
+ * or tag values. When a new metric, tagk or tagv is generated, a UIDMeta object
+ * will also be written to storage with only the uid, type and name filled out. 
+ * Users can then modify mutable fields.
  * @since 2.0
  */
-public class UIDMeta {
-  protected static final Logger LOG = LoggerFactory.getLogger(UIDMeta.class);
-  
+public final class UIDMeta {
+
   /** A hexadecimal representation of the UID this metadata is associated with */
   private String uid;
   
@@ -56,4 +52,84 @@ public class UIDMeta {
   
   /** Optional user supplied key/values */
   private HashMap<String, String> custom;
+  
+  /** @return the uid */
+  public final String getUID() {
+    return uid;
+  }
+
+  /** @return the type */
+  public final int getType() {
+    return type;
+  }
+
+  /** @return the name */
+  public final String getName() {
+    return name;
+  }
+
+  /** @return the display name */
+  public final String getDisplayName() {
+    return display_name;
+  }
+
+  /** @return the description */
+  public final String getDescription() {
+    return description;
+  }
+
+  /** @return the notes */
+  public final String getNotes() {
+    return notes;
+  }
+
+  /** @return the created timestamp */
+  public final long getCreated() {
+    return created;
+  }
+
+  /** @return the custom */
+  public final HashMap<String, String> getCustom() {
+    return custom;
+  }
+
+  /** @param uid the uid to set */
+  public final void setUID(final String uid) {
+    this.uid = uid;
+  }
+
+  /** @param type the type to set */
+  public final void setType(final int type) {
+    this.type = type;
+  }
+
+  /** @param name the name to set */
+  public final void setName(final String name) {
+    this.name = name;
+  }
+
+  /** @param display_name the display name to set */
+  public final void setDisplayName(final String display_name) {
+    this.display_name = display_name;
+  }
+
+  /** @param description the description to set */
+  public final void setDescription(final String description) {
+    this.description = description;
+  }
+
+  /** @param notes the notes to set */
+  public final void setNotes(final String notes) {
+    this.notes = notes;
+  }
+
+  /** @param created the created to set */
+  public final void setCreated(final long created) {
+    this.created = created;
+  }
+
+  /** @param custom the custom to set */
+  public final void setCustom(final HashMap<String, String> custom) {
+    this.custom = custom;
+  }
 }
