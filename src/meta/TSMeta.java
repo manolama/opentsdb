@@ -73,7 +73,7 @@ public final class TSMeta {
   private double min; 
   
   /** The last time this data was recorded in seconds */
-  private double last_received;
+  private long last_received;
 
   /** @return the tsuid */
   public final String getTSUID() {
@@ -141,7 +141,7 @@ public final class TSMeta {
   }
 
   /** @return the last received timestamp */
-  public final double getLastReceived() {
+  public final long getLastReceived() {
     return last_received;
   }
 
@@ -212,7 +212,7 @@ public final class TSMeta {
   }
 
   /** @param last_received the last received timestamp */
-  public final void setLastReceived(final double last_received) {
+  public final void setLastReceived(final long last_received) {
     this.last_received = last_received;
   }
 }
