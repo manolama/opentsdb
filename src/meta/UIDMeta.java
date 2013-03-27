@@ -14,6 +14,10 @@ package net.opentsdb.meta;
 
 import java.util.HashMap;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
+
 /**
  * UIDMeta objects are associated with the UniqueId of metrics, tag names
  * or tag values. When a new metric, tagk or tagv is generated, a UIDMeta object
@@ -21,37 +25,39 @@ import java.util.HashMap;
  * Users can then modify mutable fields.
  * @since 2.0
  */
+@JsonAutoDetect(fieldVisibility = Visibility.PUBLIC_ONLY)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public final class UIDMeta {
 
   /** A hexadecimal representation of the UID this metadata is associated with */
-  private String uid;
+  private String uid = "";
   
   /** The type of UID this metadata represents */
-  private int type;
+  private int type = 0;
   
   /** 
    * This is the identical name of what is stored in the UID table
    * It cannot be overridden 
    */
-  private String name;
+  private String name = "";
   
   /** 
    * An optional, user supplied name used for display purposes only
    * If this field is empty, the {@link name} field should be used
    */
-  private String display_name;
+  private String display_name = "";
   
   /** A short description of what this object represents */
-  private String description;
+  private String description = "";
   
   /** Optional, detailed notes about what the object represents */
-  private String notes;
+  private String notes = "";
   
   /** A timestamp of when this UID was first recorded by OpenTSDB in seconds */
-  private long created;
+  private long created = 0;
   
   /** Optional user supplied key/values */
-  private HashMap<String, String> custom;
+  private HashMap<String, String> custom = null;
   
   /** @return the uid */
   public final String getUID() {

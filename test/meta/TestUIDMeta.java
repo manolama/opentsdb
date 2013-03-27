@@ -18,6 +18,8 @@ import static org.junit.Assert.assertNull;
 
 import java.util.HashMap;
 
+import net.opentsdb.utils.JSON;
+
 import org.junit.Test;
 
 public final class TestUIDMeta {
@@ -82,5 +84,21 @@ public final class TestUIDMeta {
     meta.setCustom(custom_tags);
     assertNotNull(meta.getCustom());
     assertEquals(meta.getCustom().get("key"), "MyVal");
+  }
+  
+  @Test
+  public void serialize() throws Exception {
+    assertNotNull(JSON.serializeToString(meta));
+    System.out.println(JSON.serializeToString(meta));
+  }
+  
+  @Test
+  public void deserialize() throws Exception {
+    String json = "{\"uid\":\"ABCD\",\"type\":2,\"name\":\"MyName\"," +
+    "\"description\":\"Description\",\"notes\":\"MyNotes\",\"created\":" + 
+    "1328140801,\"custom\":null,\"displayName\":\"Empty\"}";
+    UIDMeta uidmeta = JSON.parseToObject(json, UIDMeta.class);
+    assertNotNull(uidmeta);
+    assertEquals(uidmeta.getUID(), "ABCD");
   }
 }
