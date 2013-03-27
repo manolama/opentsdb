@@ -51,6 +51,7 @@ tsdb_SRC := \
 	src/graph/Plot.java	\
 	src/meta/Annotation.java	\
 	src/meta/TSMeta.java	\
+	src/meta/UIDMeta.java	\
 	src/stats/Histogram.java	\
 	src/stats/StatsCollector.java	\
 	src/tools/ArgP.java	\
@@ -105,6 +106,7 @@ test_SRC := \
 	test/core/TestTags.java	\
 	test/meta/TestAnnotation.java	\
 	test/meta/TestTSMeta.java	\
+	test/meta/TestUIDMeta.java	\
 	test/stats/TestHistogram.java	\
 	test/tsd/TestGraphHandler.java	\
 	test/uid/TestNoSuchUniqueId.java	\
