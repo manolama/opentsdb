@@ -77,7 +77,6 @@ public final class TestAnnotation {
   @Test
   public void serialize() throws Exception {
     assertNotNull(JSON.serializeToString(note));
-    System.out.println(JSON.serializeToString(note));
   }
   
   @Test
