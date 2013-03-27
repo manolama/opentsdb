@@ -25,7 +25,7 @@ import java.util.HashMap;
  * in the data storage system.
  * @since 2.0
  */
-public class TSMeta {
+public final class TSMeta {
 
   /** Hexadecimal representation of the TSUID this metadata is associated with */
   private String tsuid;
