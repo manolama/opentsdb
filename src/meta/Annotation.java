@@ -79,7 +79,7 @@ public final class Annotation {
     return notes;
   }
 
-  /** @return the custom keyvalue map */
+  /** @return the custom key/value map, may be null */
   public final HashMap<String, String> getCustom() {
     return custom;
   }
