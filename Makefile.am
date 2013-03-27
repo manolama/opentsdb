@@ -49,6 +49,7 @@ tsdb_SRC := \
 	src/core/TsdbQuery.java	\
 	src/core/WritableDataPoints.java	\
 	src/graph/Plot.java	\
+	src/meta/Annotation.java	\
 	src/stats/Histogram.java	\
 	src/stats/StatsCollector.java	\
 	src/tools/ArgP.java	\
@@ -101,6 +102,7 @@ test_SRC := \
 	test/core/TestAggregators.java \
 	test/core/TestCompactionQueue.java	\
 	test/core/TestTags.java	\
+	test/meta/TestAnnotation.java	\
 	test/stats/TestHistogram.java	\
 	test/tsd/TestGraphHandler.java	\
 	test/uid/TestNoSuchUniqueId.java	\
