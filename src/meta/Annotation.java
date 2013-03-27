@@ -14,6 +14,10 @@ package net.opentsdb.meta;
 
 import java.util.HashMap;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
+
 /**
  * Annotations are used to record time-based notes about timeseries events.
  * Every note must have an associated start_time as that determines
@@ -35,24 +39,26 @@ import java.util.HashMap;
  * with the name of the person who recorded the note.
  * @since 2.0
  */
+@JsonAutoDetect(fieldVisibility = Visibility.PUBLIC_ONLY)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public final class Annotation {
   /** If the note is associated with a timeseries, represents the ID */
-  private String tsuid;
+  private String tsuid = "";
   
   /** The start timestamp associated wit this note in seconds or ms */
-  private long start_time;
+  private long start_time = 0;
   
   /** Optional end time if the note represents an event that was resolved */
-  private long end_time;
+  private long end_time = 0;
   
   /** A short description of the event, displayed in GUIs */
-  private String description;  
+  private String description = "";  
   
   /** A detailed accounting of the event or note */
-  private String notes;
+  private String notes = "";
   
   /** Optional user supplied key/values */
-  private HashMap<String, String> custom;
+  private HashMap<String, String> custom = null;
   
   /** @return the tsuid, may be empty if this is a global annotation */
   public final String getTSUID() {

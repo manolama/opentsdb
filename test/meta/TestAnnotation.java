@@ -18,6 +18,8 @@ import static org.junit.Assert.assertNull;
 
 import java.util.HashMap;
 
+import net.opentsdb.utils.JSON;
+
 import org.junit.Test;
 
 public final class TestAnnotation {
@@ -60,7 +62,7 @@ public final class TestAnnotation {
   
   @Test
   public void customNull() {
-    assertNull(note.getNotes());
+    assertNull(note.getCustom());
   }
   
   @Test
@@ -70,5 +72,21 @@ public final class TestAnnotation {
     note.setCustom(custom_tags);
     assertNotNull(note.getCustom());
     assertEquals(note.getCustom().get("key"), "MyVal");
+  }
+
+  @Test
+  public void serialize() throws Exception {
+    assertNotNull(JSON.serializeToString(note));
+    System.out.println(JSON.serializeToString(note));
+  }
+  
+  @Test
+  public void deserialize() throws Exception {
+    String json = "{\"tsuid\":\"ABCD\",\"description\":\"Description\"," + 
+    "\"notes\":\"Notes\",\"custom\":null,\"endTime\":1328140801,\"startTime" + 
+    "\":1328140800}";
+    Annotation note = JSON.parseToObject(json, Annotation.class);
+    assertNotNull(note);
+    assertEquals(note.getTSUID(), "ABCD");
   }
 }
