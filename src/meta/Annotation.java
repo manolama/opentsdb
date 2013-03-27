@@ -14,33 +14,28 @@ package net.opentsdb.meta;
 
 import java.util.HashMap;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
  * Annotations are used to record time-based notes about timeseries events.
- * Every note must have an associated {@link start_time} as that determines
+ * Every note must have an associated start_time as that determines
  * where the note is stored.
- * 
+ * <p>
  * Annotations may be associated with a specific timeseries, in which case
- * the {@link tsuid} must be configured with a valid TSUID. If no TSUID
+ * the tsuid must be configured with a valid TSUID. If no TSUID
  * is provided, the annotation is considered a "global" note that applies
  * to everything stored in OpenTSDB.
- * 
- * The {@link description} field should store a very brief line of information
+ * <p>
+ * The description field should store a very brief line of information
  * about the event. GUIs can display the description in their "main" view
  * where multiple annotations may appear. Users of the GUI could then click
  * or hover over the description for more detail including the {@link notes}
  * field.
- * 
- * Custom data can be stored in the {@link #custom} hash map for user
+ * <p>
+ * Custom data can be stored in the custom hash map for user
  * specific information. For example, you could add a "reporter" key
  * with the name of the person who recorded the note.
  * @since 2.0
  */
-public class Annotation {
-  private static final Logger LOG = LoggerFactory.getLogger(Annotation.class);
-  
+public final class Annotation {
   /** If the note is associated with a timeseries, represents the ID */
   private String tsuid;
   
@@ -58,4 +53,64 @@ public class Annotation {
   
   /** Optional user supplied key/values */
   private HashMap<String, String> custom;
+  
+  /** @return the tsuid, may be empty if this is a global annotation */
+  public final String getTSUID() {
+    return tsuid;
+  }
+
+  /** @return the start_time */
+  public final long getStartTime() {
+    return start_time;
+  }
+
+  /**  @return the end_time, may be 0 */
+  public final long getEndTime() {
+    return end_time;
+  }
+
+  /** @return the description */
+  public final String getDescription() {
+    return description;
+  }
+
+  /** @return the notes, may be empty */
+  public final String getNotes() {
+    return notes;
+  }
+
+  /** @return the custom keyvalue map */
+  public final HashMap<String, String> getCustom() {
+    return custom;
+  }
+
+  /** @param tsuid the tsuid to store*/
+  public void setTSUID(final String tsuid) {
+    this.tsuid = tsuid;
+  }
+
+  /** @param start_time the start_time, required for every annotation */
+  public void setStartTime(final long start_time) {
+    this.start_time = start_time;
+  }
+
+  /** @param end_time the end_time, optional*/
+  public void setEndTime(final long end_time) {
+    this.end_time = end_time;
+  }
+
+  /** @param description the description, required for every annotation */
+  public void setDescription(final String description) {
+    this.description = description;
+  }
+
+  /** @param notes the notes to set */
+  public void setNotes(final String notes) {
+    this.notes = notes;
+  }
+
+  /** @param custom the custom key/value map */
+  public void setCustom(final HashMap<String, String> custom) {
+    this.custom = custom;
+  }
 }
