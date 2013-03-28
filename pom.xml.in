@@ -248,7 +248,7 @@
       <version>@GUAVA_VERSION@</version>
     </dependency>
     
-        <dependency>
+    <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-annotations</artifactId>
       <version>@JACKSON_VERSION@</version>
