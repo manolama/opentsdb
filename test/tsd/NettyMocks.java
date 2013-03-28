@@ -19,12 +19,14 @@ import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.DefaultChannelPipeline;
 import org.jboss.netty.handler.codec.http.HttpRequestDecoder;
 import org.jboss.netty.handler.codec.http.HttpResponseEncoder;
+import org.junit.Ignore;
 
 /**
  * Helper class that provides mockups for testing any OpenTSDB processes that
  * deal with Netty.
  */
-public class NettyMocks {
+@Ignore
+public final class NettyMocks {
 
   /**
    * Returns a mocked Channel object that simply sets the name to

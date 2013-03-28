@@ -214,7 +214,7 @@ final class HttpQuery {
   /**
    * Returns the path component of the URI as an array of strings, split on the
    * forward slash
-   * Similar to the {@link getQueryPath()} call, this returns only the path 
+   * Similar to the {@link getQueryPath} call, this returns only the path 
    * without the protocol, host, port or query string params. E.g. 
    * "/path/starts/here" will return an array of {"path", "starts", "here"}
    * @return An array with 0 or more components
@@ -228,9 +228,10 @@ final class HttpQuery {
     // probably don't need any premature optimization
     String[] exploded_path = path.startsWith("/") ? 
         path.substring(1).split("/") : path.split("/");
-    if (exploded_path.length == 1 && exploded_path[0].isEmpty())
+    if (exploded_path.length == 1 && exploded_path[0].isEmpty()) {
       // split will return an empty string if the path is /, so clean it up
       return new String[0];
+    }
     return exploded_path;
   }
   
@@ -241,11 +242,11 @@ final class HttpQuery {
    * @throws UnsupportedCharsetException if the parsed character set is invalid
    * @since 2.0
    */
-  public Charset getCharset(){
+  public Charset getCharset() {
     // RFC2616 3.7
-    for (String type : this.request.getHeaders("Content-Type")){
+    for (String type : this.request.getHeaders("Content-Type")) {
       int idx = type.toUpperCase().indexOf("CHARSET=");
-      if (idx > 1){
+      if (idx > 1) {
         String charset = type.substring(idx+8);
         return Charset.forName(charset);
       }
@@ -260,7 +261,7 @@ final class HttpQuery {
    * @throws UnsupportedCharsetException if the parsed character set is invalid
    * @since 2.0
    */
-  public String getContent(){
+  public String getContent() {
     return this.request.getContent().toString(this.getCharset());
   }
   

@@ -391,8 +391,9 @@ final class GraphHandler implements HttpRpc {
       if (query.hasQueryStringParam("json")) {
         HashMap<String, Object> map = loadCachedJson(query, end_time, 
             max_age, basepath);
-        if (map == null)
+        if (map == null) {
           map = new HashMap<String, Object>();
+        }
         map.put("timing", query.processingTimeMillis());
         map.put("cachehit", "disk");
         query.sendReply(JSON.serializeToBytes(map));
@@ -556,9 +557,7 @@ final class GraphHandler implements HttpRpc {
    * cache the result in case of a cache hit.
    * @param basepath The base path used for the Gnuplot files.
    * @return {@code null} in case no file was found, or the contents of the
-   * file if it was found.  In case some contents was found, it is truncated
-   * after the position of the last `:' in order to allow the caller to add
-   * the time taken to serve by the request and other JSON elements if wanted.
+   * file if it was found.
    * @throws IOException If the file cannot be loaded
    * @throws JsonMappingException If the JSON cannot be parsed to a HashMap
    * @throws JsonParseException If the JSON is improperly formatted

@@ -39,8 +39,9 @@ final class LogsRpc implements HttpRpc {
     LogIterator logmsgs = new LogIterator();
     if (query.hasQueryStringParam("json")) {
       ArrayList<String> logs = new ArrayList<String>();
-      for (String log : logmsgs)
+      for (String log : logmsgs) {
         logs.add(log);
+      }
       query.sendReply(JSON.serializeToBytes(logs));
     } else if (query.hasQueryStringParam("level")) {
       final Level level = Level.toLevel(query.getQueryStringParam("level"),
