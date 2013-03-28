@@ -306,6 +306,12 @@ final class GraphHandler implements HttpRpc {
         final HashMap<String, Object> results = new HashMap<String, Object>();
         results.put("plotted", nplotted);
         results.put("points", npoints);
+        // 1.0 returned an empty inner array if the 1st hashset was null, to do
+        // the same we need to fudge it with an empty set
+        if (aggregated_tags != null && aggregated_tags.length > 0 &&
+            aggregated_tags[0] == null) {
+          aggregated_tags[0] = new HashSet<String>();
+        }
         results.put("etags", aggregated_tags);
         results.put("timing", query.processingTimeMillis());
         query.sendReply(JSON.serializeToBytes(results));
