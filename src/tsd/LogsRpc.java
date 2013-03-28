@@ -38,9 +38,6 @@ final class LogsRpc implements HttpRpc {
     throws JsonGenerationException, IOException {
     LogIterator logmsgs = new LogIterator();
     if (query.hasQueryStringParam("json")) {
-      // todo This should be streamed out, need to use Jackson for streaming,
-      // add a streaming method to HttpQuery, and add a ChunkedWriter to the
-      // pipeline
       ArrayList<String> logs = new ArrayList<String>();
       for (String log : logmsgs)
         logs.add(log);
