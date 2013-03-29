@@ -286,23 +286,23 @@ final class HttpQuery {
       return "";
     }
     if (!split[0].toLowerCase().equals("api")) {
-      return split[0];
+      return split[0].toLowerCase();
     }
     if (split.length < 2) {
       return "api";
     }
-    if (split[1].startsWith("v") && split[1].length() > 1 && 
+    if (split[1].toLowerCase().startsWith("v") && split[1].length() > 1 && 
         Character.isDigit(split[1].charAt(1))) {
       final int version = Integer.parseInt(split[1].substring(1));
       this.api_version = version > MAX_API_VERSION ? MAX_API_VERSION : version;
     } else {
       this.api_version = MAX_API_VERSION;
-      return "api/" + split[1];
+      return "api/" + split[1].toLowerCase();
     }
     if (split.length < 3){
       return "api";
     }
-    return "api/" + split[2];
+    return "api/" + split[2].toLowerCase();
   }
   
   /**

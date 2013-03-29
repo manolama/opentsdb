@@ -209,6 +209,13 @@ public class TestHttpQuery {
   }
   
   @Test
+  public void getQueryBaseRouteAPICap() {
+    final HttpQuery query = getQuery("/API/V3/PUT");
+    assertEquals(query.getQueryBaseRoute(), "api/put");
+    assertEquals(query.api_version(), 1);
+  }
+  
+  @Test
   public void getQueryBaseRouteAPIDefaultV() {
     final HttpQuery query = getQuery("/api/put");
     assertEquals(query.getQueryBaseRoute(), "api/put");
@@ -241,6 +248,20 @@ public class TestHttpQuery {
     final HttpQuery query = getQuery("/favicon.ico");
     assertEquals(query.getQueryBaseRoute(), "favicon.ico");
     assertEquals(query.api_version(), 0);
+  }
+  
+  @Test
+  public void getQueryBaseRouteVersion() {
+    final HttpQuery query = getQuery("/api/version/query");
+    assertEquals(query.getQueryBaseRoute(), "api/version");
+    assertEquals(query.api_version(), 1);
+  }
+  
+  @Test
+  public void getQueryBaseRouteVBad() {
+    final HttpQuery query = getQuery("/api/v/query");
+    assertEquals(query.getQueryBaseRoute(), "api/v");
+    assertEquals(query.api_version(), 1);
   }
   
   @Test (expected = NullPointerException.class)
