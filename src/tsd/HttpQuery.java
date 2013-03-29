@@ -16,15 +16,20 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.stumbleupon.async.Deferred;
-
 import ch.qos.logback.classic.spi.ThrowableProxy;
 import ch.qos.logback.classic.spi.ThrowableProxyUtil;
+
+import com.stumbleupon.async.Deferred;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +42,7 @@ import org.jboss.netty.channel.ChannelFutureListener;
 import org.jboss.netty.channel.DefaultFileRegion;
 import org.jboss.netty.handler.codec.http.DefaultHttpResponse;
 import org.jboss.netty.handler.codec.http.HttpHeaders;
+import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.jboss.netty.handler.codec.http.HttpVersion;
@@ -48,6 +54,8 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.graph.Plot;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.tsd.HttpFormatter;
+import net.opentsdb.utils.PluginLoader;
 
 /**
  * Binds together an HTTP request and the channel on which it was received.
@@ -70,6 +78,17 @@ final class HttpQuery {
   private static final Histogram httplatency =
     new Histogram(16000, (short) 2, 100);
 
+  /** Maps Content-Type to a formatter @since 2.0 */
+  private static HashMap<String, Constructor<? extends HttpFormatter>> 
+    formatter_map_content_type = null;
+  
+  /** Maps query string names to a formatter @since 2.0 */
+  private static HashMap<String, Constructor<? extends HttpFormatter>> 
+    formatter_map_query_string = null;
+  
+  /** Caches formatter implementation information for user access @since 2.0 */
+  private static ArrayList<HashMap<String, Object>> formatter_status = null;
+  
   /** When the query was started (useful for timing). */
   private final long start_time = System.nanoTime();
 
@@ -79,17 +98,30 @@ final class HttpQuery {
   /** The channel on which the request was received. */
   private final Channel chan;
 
+  /** Shortcut to the request method */
+  private final HttpMethod method; 
+  
   /** Parsed query string (lazily built on first access). */
   private Map<String, List<String>> querystring;
 
   /** API version parsed from the incoming request */
   private int api_version = 0;
   
+  /** The formatter to use for parsing input and responding */
+  private HttpFormatter formatter = null;
+  
   /** Deferred result of this query, to allow asynchronous processing.  */
   private final Deferred<Object> deferred = new Deferred<Object>();
 
+  /** The response object we'll fill with data @since 2.0 */
+  private final DefaultHttpResponse response =
+    new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.ACCEPTED);
+  
   /** The {@code TSDB} instance we belong to */
   private final TSDB tsdb; 
+  
+  /** Whether or not to show stack traces in the output @since 2.0 */
+  private final boolean show_stack_trace;
   
   /**
    * Constructor.
@@ -100,6 +132,9 @@ final class HttpQuery {
     this.tsdb = tsdb;
     this.request = request;
     this.chan = chan;
+    this.show_stack_trace = 
+      tsdb.getConfig().getBoolean("tsd.http.show_stack_trace");
+    this.method = request.getMethod();
   }
 
   /**
@@ -117,6 +152,16 @@ final class HttpQuery {
     return request;
   }
 
+  /** Returns the HTTP method/verb for the request */
+  public HttpMethod method() {
+    return this.method;
+  }
+  
+  /** Returns the response object, allowing formatters to set headers @since 2.0 */
+  public DefaultHttpResponse response() {
+    return this.response;
+  }
+  
   /**
    * Returns the underlying Netty {@link Channel} of this query.
    */
@@ -131,8 +176,13 @@ final class HttpQuery {
    * not supply a version, the MAX_API_VERSION value will be used.
    * @since 2.0
    */
-  public int api_version() {
+  public int apiVersion() {
     return this.api_version;
+  }
+  
+  /** @return Whether or not to show stack traces in errors @since 2.0 */
+  public boolean showStackTrace() {
+    return this.show_stack_trace;
   }
   
   /**
@@ -147,6 +197,12 @@ final class HttpQuery {
     return (int) ((System.nanoTime() - start_time) / 1000000);
   }
 
+  /** @return The selected formatter. Will return null if {@link setFormatter}
+   * hasn't been called yet @since 2.0  */
+  public HttpFormatter formatter() {
+    return this.formatter;
+  }
+  
   /**
    * Returns the query string parameters passed in the URI.
    */
@@ -324,6 +380,12 @@ final class HttpQuery {
     return Charset.forName("UTF-8");
   }
   
+  /** @return True if the request has content, false if not @since 2.0 */
+  public boolean hasContent() {
+    return this.request.getContent() != null && 
+      this.request.getContent().readable();
+  }
+  
   /**
    * Decodes the request content to a string using the appropriate character set
    * @return Decoded content or an empty string if the request did not include
@@ -336,10 +398,82 @@ final class HttpQuery {
   }
   
   /**
+   * Sets the local formatter based on a query string parameter or content type.
+   * <p>
+   * If the caller supplies a "formatter=" parameter, the proper formatter is
+   * loaded if found. If the formatter doesn't exist, an exception will be 
+   * thrown, the JsonFormatter selected, and the user gets the error
+   * <p>
+   * If no query string parameter is supplied, the Content-Type header for the
+   * request is parsed and if a matching formatter is found, it's used. 
+   * Otherwise we default to the JsonFormatter.
+   * @throws InvocationTargetException if the formatter cannot be instantiated
+   * @throws IllegalArgumentException if the formatter cannot be instantiated
+   * @throws InstantiationException if the formatter cannot be instantiated
+   * @throws IllegalAccessException if a security manager is blocking access
+   * @throws BadRequestException if a formatter requsted via query string does 
+   * not exist
+   */
+  public void setFormatter() throws InvocationTargetException, 
+    IllegalArgumentException, InstantiationException, IllegalAccessException {
+    if (this.hasQueryStringParam("formatter")) {
+      final String qs = this.getQueryStringParam("formatter");
+      Constructor<? extends HttpFormatter> ctor = 
+        formatter_map_query_string.get(qs);
+      if (ctor == null) {
+        this.formatter = new JsonFormatter(this);
+        throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
+            "Requested formatter was not found", 
+            "Could not find a formatter with the name: " + qs);
+      }
+      
+      this.formatter = ctor.newInstance(this);
+      return;
+    }
+    
+    // attempt to parse the Content-Type string. We only want the first part,
+    // not the character set. And if the CT is missing, we'll use the default
+    // formatter
+    String content_type = this.request.getHeader("Content-Type");
+    if (content_type == null || content_type.isEmpty()) {
+      this.formatter = new JsonFormatter(this);
+      return;
+    }
+    if (content_type.indexOf(";") > -1) {
+      content_type = content_type.substring(0, content_type.indexOf(";"));
+    }
+    Constructor<? extends HttpFormatter> ctor = 
+      formatter_map_content_type.get(content_type);
+    if (ctor == null) {
+      this.formatter = new JsonFormatter(this);
+      return;
+    }
+    
+    this.formatter = ctor.newInstance(this);
+  }
+  
+  /**
    * Sends a 500 error page to the client.
+   * Handles responses from deprecated API calls as well as newer, versioned
+   * API calls
    * @param cause The unexpected exception that caused this error.
    */
   public void internalError(final Exception cause) {
+    logError("Internal Server Error on " + request.getUri(), cause);
+    
+    if (this.api_version > 0) {
+      if (this.formatter == null) { 
+        this.formatter = new JsonFormatter(this);
+      }
+      switch (this.api_version) {
+        case 1:
+        default:
+          sendReply(HttpResponseStatus.INTERNAL_SERVER_ERROR, 
+              formatter.formatErrorV1(cause));
+      }
+      return;
+    }
+    
     ThrowableProxy tp = new ThrowableProxy(cause);
     tp.calculatePackagingData();
     final String pretty_exc = ThrowableProxyUtil.asString(tp);
@@ -364,22 +498,33 @@ final class HttpQuery {
                          + pretty_exc
                          + "</pre></blockquote>"));
     }
-    logError("Internal Server Error on " + request.getUri(), cause);
   }
 
   /**
    * Sends a 400 error page to the client.
+   * Handles responses from deprecated API calls as well as newer, versioned
+   * API calls
    * @param explain The string describing why the request is bad.
    */
-  public void badRequest(final String explain) {
+  public void badRequest(final BadRequestException exception) {
+    logWarn("Bad Request on " + request.getUri() + ": " + exception.getMessage());
+    if (this.api_version > 0) {
+      switch (this.api_version) {
+        case 1:
+        default:
+          sendReply(exception.getStatus(), formatter.formatErrorV1(exception));
+      }
+      return;
+    }
     if (hasQueryStringParam("json")) {
-      final StringBuilder buf = new StringBuilder(10 + explain.length());
+      final StringBuilder buf = new StringBuilder(10 + 
+          exception.getDetails().length());
       buf.append("{\"err\":\"");
-      HttpQuery.escapeJson(explain, buf);
+      HttpQuery.escapeJson(exception.getMessage(), buf);
       buf.append("\"}");
       sendReply(HttpResponseStatus.BAD_REQUEST, buf);
     } else if (hasQueryStringParam("png")) {
-      sendAsPNG(HttpResponseStatus.BAD_REQUEST, explain, 3600);
+      sendAsPNG(HttpResponseStatus.BAD_REQUEST, exception.getMessage(), 3600);
     } else {
       sendReply(HttpResponseStatus.BAD_REQUEST,
                 makePage("Bad Request", "Looks like it's your fault this time",
@@ -388,15 +533,22 @@ final class HttpQuery {
                          + "Sorry but your request was rejected as being"
                          + " invalid.<br/><br/>"
                          + "The reason provided was:<blockquote>"
-                         + explain
+                         + exception.getMessage()
                          + "</blockquote></blockquote>"));
     }
-    logWarn("Bad Request on " + request.getUri() + ": " + explain);
   }
 
   /** Sends a 404 error page to the client. */
   public void notFound() {
     logWarn("Not Found: " + request.getUri());
+    if (this.api_version > 0) { 
+      switch (this.api_version) {
+        case 1:
+        default:
+          sendReply(HttpResponseStatus.NOT_FOUND, formatter.formatNotFoundV1());
+      }
+      return;
+    }
     if (hasQueryStringParam("json")) {
       sendReply(HttpResponseStatus.NOT_FOUND,
                 new StringBuilder("{\"err\":\"Page Not Found\"}"));
@@ -409,12 +561,14 @@ final class HttpQuery {
 
   /** Redirects the client's browser to the given location.  */
   public void redirect(final String location) {
-    // TODO(tsuna): We currently redirect with some HTML because `sendReply'
-    // doesn't easily allow us to pass a `Location' header, which is lame.
+    // set the header AND a meta refresh just in case
+    response.setHeader("Location", location);
     sendReply(HttpResponseStatus.OK,
-              makePage("<meta http-equiv=\"refresh\" content=\"0; url="
-                       + location + "\">",
-                       "Redirecting...", "Redirecting...", "Loading..."));
+      new StringBuilder(
+          "<html></head><meta http-equiv=\"refresh\" content=\"0; url="
+           + location + "\"></head></html>")
+         .toString().getBytes(this.getCharset())
+    );
   }
 
   /**
@@ -476,6 +630,16 @@ final class HttpQuery {
    */
   public void sendReply(final byte[] data) {
     sendBuffer(HttpResponseStatus.OK, ChannelBuffers.wrappedBuffer(data));
+  }
+  
+  /**
+   * Sends data to the client with the given HTTP status code.
+   * @param status HTTP status code to return
+   * @param data Raw byte array to send as-is after the HTTP headers.
+   * @since 2.0
+   */
+  public void sendReply(final HttpResponseStatus status, final byte[] data) {
+    sendBuffer(status, ChannelBuffers.wrappedBuffer(data));
   }
 
   /**
@@ -552,8 +716,10 @@ final class HttpQuery {
       sendFile(status, basepath + ".png", max_age);
     } catch (Exception e) {
       getQueryString().remove("png");  // Avoid recursion.
-      internalError(new RuntimeException("Failed to generate a PNG with the"
-                                         + " following message: " + msg, e));
+      this.sendReply(HttpResponseStatus.INTERNAL_SERVER_ERROR, 
+          formatter.formatErrorV1(new RuntimeException(
+              "Failed to generate a PNG with the"
+              + " following message: " + msg, e)));
     }
   }
 
@@ -602,13 +768,14 @@ final class HttpQuery {
       if (querystring != null) {
         querystring.remove("png");  // Avoid potential recursion.
       }
-      notFound();
+      if (this.formatter == null) { 
+        this.formatter = new JsonFormatter(this);
+      }
+      this.sendReply(HttpResponseStatus.NOT_FOUND, formatter.formatNotFoundV1());
       return;
     }
     final long length = file.length();
     {
-      final DefaultHttpResponse response =
-        new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
       final String mimetype = guessMimeTypeFromUri(path);
       response.setHeader(HttpHeaders.Names.CONTENT_TYPE,
                          mimetype == null ? "text/plain" : mimetype);
@@ -659,10 +826,15 @@ final class HttpQuery {
       done();
       return;
     }
-    final DefaultHttpResponse response =
-      new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
-    response.setHeader(HttpHeaders.Names.CONTENT_TYPE, guessMimeType(buf));
+    response.setHeader(HttpHeaders.Names.CONTENT_TYPE, 
+        (formatter == null || api_version < 1 ? guessMimeType(buf) : 
+          formatter.responseContentType()));
+    
     // TODO(tsuna): Server, X-Backend, etc. headers.
+    // only reset if we have the default status, otherwise the user set it
+    if (response.getStatus() == HttpResponseStatus.ACCEPTED) {
+      response.setStatus(status);
+    }
     response.setContent(buf);
     final boolean keepalive = HttpHeaders.isKeepAlive(request);
     if (keepalive) {
@@ -743,6 +915,138 @@ final class HttpQuery {
   }
 
   /**
+   * Loads the formatter maps with present, implemented formatters. If no
+   * plugins are loaded, only the default implementations will be available.
+   * This method also builds the status map that users can access via the API
+   * to see what has been implemented.
+   * <p>
+   * <b>WARNING:</b> The TSDB should have called on of the JAR load or search
+   * methods from PluginLoader before calling this method. This will only scan
+   * the class path for plugins that implement the HttpFormatter class
+   * @param tsdb The TSDB to pass on to plugins
+   * @throws NoSuchMethodException if a class could not be instantiated
+   * @throws SecurityException if a security manager is present and causes
+   * trouble
+   * @throws ClassNotFoundException if the base class couldn't be found, for
+   * some really odd reason
+   * @throws IllegalArgumentException if a mapping collision occurs
+   * @since 2.0
+   */
+  public static void InitializeFormatterMaps(final TSDB tsdb) 
+    throws SecurityException, NoSuchMethodException, ClassNotFoundException {
+    List<HttpFormatter> formatters = 
+      PluginLoader.loadPlugins(HttpFormatter.class);
+     
+    // add the default formatters compiled with OpenTSDB
+    if (formatters == null) { 
+      formatters = new ArrayList<HttpFormatter>();
+    }
+    HttpFormatter default_formatter = new JsonFormatter();
+    formatters.add(default_formatter);
+     
+    formatter_map_content_type = 
+      new HashMap<String, Constructor<? extends HttpFormatter>>();
+    formatter_map_query_string = 
+      new HashMap<String, Constructor<? extends HttpFormatter>>();
+    formatter_status = new ArrayList<HashMap<String, Object>>();
+     
+    for (HttpFormatter formatter : formatters) {
+      Constructor<? extends HttpFormatter> ctor = 
+        formatter.getClass().getDeclaredConstructor(HttpQuery.class);
+      ctor.setAccessible(true);
+       
+      // check for collisions before adding formatters to the maps
+      Constructor<? extends HttpFormatter> map_ctor = 
+        formatter_map_content_type.get(formatter.requestContentType());
+      if (map_ctor != null) {
+        final String err = "Formatter content type collision between \"" + 
+        formatter.getClass().getCanonicalName() + "\" and \"" + 
+        map_ctor.getClass().getCanonicalName() + "\"";
+        LOG.error(err);
+        throw new IllegalArgumentException(err);
+      } else { 
+        formatter_map_content_type.put(formatter.requestContentType(), 
+            ctor);
+      }
+      
+      map_ctor = formatter_map_query_string.get(formatter.shortName());
+      if (map_ctor != null) {
+        final String err = "Formatter name collision between \"" + 
+        formatter.getClass().getCanonicalName() + "\" and \"" + 
+        map_ctor.getClass().getCanonicalName() + "\"";
+        LOG.error(err);
+        throw new IllegalArgumentException(err);
+      } else { 
+        formatter_map_query_string.put(formatter.shortName(), ctor);
+      }
+      
+      // initialize the plugins
+      formatter.initialize(tsdb);
+      
+      // write the status for any formatters OTHER than the default
+      if (formatter.shortName().equals("json")) {
+        continue;
+      }
+      HashMap<String, Object> status = new HashMap<String, Object>();
+      status.put("version", formatter.version());
+      status.put("class", formatter.getClass().getCanonicalName());
+      status.put("formatter", formatter.shortName());
+      status.put("request_content_type", formatter.requestContentType());
+      status.put("response_content_type", formatter.responseContentType());
+      
+      ArrayList<String> parsers = new ArrayList<String>();
+      ArrayList<String> formats = new ArrayList<String>();
+      Method[] methods = formatter.getClass().getDeclaredMethods();
+      for (Method m : methods) {
+        if (Modifier.isPublic(m.getModifiers())) {
+          if (m.getName().startsWith("parse")) {
+            parsers.add(m.getName().substring(5));
+          }
+          if (m.getName().startsWith("format")) {
+            formats.add(m.getName().substring(6));
+          }
+        }
+      }
+      status.put("parsers", parsers);
+      status.put("formatters", formats);
+      formatter_status.add(status);
+    }
+    
+    // add the base class to the status map so users can see everything that
+    // is implemented
+    HashMap<String, Object> status = new HashMap<String, Object>();
+    // todo - set the OpenTSDB version
+    //status.put("version", BuildData.version);
+    Class<?> base_formatter = Class.forName("net.opentsdb.tsd.HttpFormatter");
+    status.put("class", default_formatter.getClass().getCanonicalName());
+    status.put("formatter", default_formatter.shortName());
+    status.put("request_content_type", default_formatter.requestContentType());
+    status.put("response_content_type", default_formatter.responseContentType());
+    
+    ArrayList<String> parsers = new ArrayList<String>();
+    ArrayList<String> formats = new ArrayList<String>();
+    Method[] methods = base_formatter.getDeclaredMethods();
+    for (Method m : methods) {
+      if (Modifier.isPublic(m.getModifiers())) {
+        if (m.getName().startsWith("parse")) {
+          parsers.add(m.getName().substring(5));
+        }
+        if (m.getName().startsWith("format")) {
+          formats.add(m.getName().substring(6));
+        }
+      }
+    }
+    status.put("parsers", parsers);
+    status.put("formatters", formats);
+    formatter_status.add(status);
+  }
+  
+  /** @return the formatter status list and maps @since 2.0 */
+  public static ArrayList<HashMap<String, Object>> getFormatterStatus() {
+    return formatter_status;
+  }
+
+  /**
    * Easy way to generate a small, simple HTML page.
    * <p>
    * Equivalent to {@code makePage(null, title, subtitle, body)}.
@@ -766,10 +1070,10 @@ final class HttpQuery {
    * @param body The body of the page (excluding the {@code body} tag).
    * @return A full HTML page.
    */
-   public static StringBuilder makePage(final String htmlheader,
-                                        final String title,
-                                        final String subtitle,
-                                        final String body) {
+  public static StringBuilder makePage(final String htmlheader,
+                                       final String title,
+                                       final String subtitle,
+                                       final String body) {
     final StringBuilder buf = new StringBuilder(
       BOILERPLATE_LENGTH + (htmlheader == null ? 0 : htmlheader.length())
       + title.length() + subtitle.length() + body.length());
@@ -786,7 +1090,8 @@ final class HttpQuery {
       .append(PAGE_FOOTER);
     return buf;
   }
-
+  
+  /** @return Information aboutt the query */
   public String toString() {
     return "HttpQuery"
       + "(start_time=" + start_time
@@ -795,7 +1100,7 @@ final class HttpQuery {
       + ", querystring=" + querystring
       + ')';
   }
-
+   
   // ---------------- //
   // Logging helpers. //
   // ---------------- //
@@ -811,7 +1116,7 @@ final class HttpQuery {
   private void logError(final String msg, final Exception e) {
     LOG.error(chan.toString() + ' ' + msg, e);
   }
-
+   
   // -------------------------------------------- //
   // Boilerplate (shamelessly stolen from Google) //
   // -------------------------------------------- //
@@ -866,5 +1171,4 @@ final class HttpQuery {
              + "<h1>Page Not Found</h1>"
              + "The requested URL was not found on this server."
              + "</blockquote>");
-
 }

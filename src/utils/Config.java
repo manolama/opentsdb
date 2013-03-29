@@ -60,7 +60,7 @@ public class Config {
 
   /** tsd.storage.enable_compaction */
   private boolean enable_compactions = true;
-  
+
   /**
    * The list of properties configured to their defaults or modified by users
    */
@@ -278,6 +278,7 @@ public class Config {
     default_map.put("tsd.storage.hbase.zk_quorum", "localhost");
     default_map.put("tsd.storage.hbase.zk_basedir", "/hbase");
     default_map.put("tsd.storage.enable_compaction", "true");
+    default_map.put("tsd.http.show_stack_trace", "false");
 
     for (Map.Entry<String, String> entry : default_map.entrySet()) {
       if (!properties.containsKey(entry.getKey()))

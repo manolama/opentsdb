@@ -67,14 +67,17 @@ tsdb_SRC := \
 	src/tsd/ConnectionManager.java	\
 	src/tsd/GnuplotException.java	\
 	src/tsd/GraphHandler.java	\
+	src/tsd/HttpFormatter.java	\
 	src/tsd/HttpQuery.java	\
 	src/tsd/HttpRpc.java	\
-	src/tsd/LineBasedFrameDecoder.java	\
-	src/tsd/LogsRpc.java	\
-	src/tsd/PipelineFactory.java	\
-	src/tsd/PutDataPointRpc.java	\
+	src/tsd/JsonFormatter.java	\
+	src/tsd/LineBasedFrameDecoder.java \
+	src/tsd/LogsRpc.java \
+	src/tsd/PipelineFactory.java \
+	src/tsd/PutDataPointRpc.java \
 	src/tsd/RpcHandler.java	\
-	src/tsd/StaticFileRpc.java	\
+	src/tsd/StaticFileRpc.java \
+	src/tsd/SuggestRpc.java \
 	src/tsd/TelnetRpc.java	\
 	src/tsd/WordSplitter.java	\
 	src/uid/NoSuchUniqueId.java	\
@@ -124,11 +127,13 @@ test_SRC := \
 	
 test_plugin_SRC := \
   test/plugin/DummyPluginA.java \
-  test/plugin/DummyPluginB.java
+  test/plugin/DummyPluginB.java \
+  test/tsd/DummyHttpFormatter.java
 
 # Do NOT include the test dir path, just the META portion
 test_plugin_SVCS := \
-  META-INF/services/net.opentsdb.plugin.DummyPlugin
+  META-INF/services/net.opentsdb.plugin.DummyPlugin \
+  META-INF/services/net.opentsdb.tsd.HttpFormatter
   
 test_plugin_MF := \
   test/META-INF/MANIFEST.MF
@@ -173,7 +178,8 @@ GWTC_ARGS = -ea  # Additional arguments like -style PRETTY or -logLevel DEBUG
 
 package_dir := $(subst .,/,$(package))
 UNITTESTS := $(test_SRC:test/%.java=$(package_dir)/%.class)
-PLUGINTESTS := $(test_plugin_SRC:test/plugin/DummyPlugin%.java=$(package_dir)/plugin/DummyPlugin%.class)
+PLUGINTESTS := $(test_plugin_SRC:test/%.java=$(package_dir)/%.class)
+PLUGINSVCS := $(test_plugin_SVCS:%=-C $(srcdir)/test %)
 AM_JAVACFLAGS = -Xlint -source 6
 JVM_ARGS =
 classes := $(tsdb_SRC:src/%.java=$(package_dir)/%.class) \
@@ -377,7 +383,7 @@ $(jar): manifest .javac-stamp $(classes)
 # I've seen cases where `jar' exits with an error but leaves a partially built .jar file!
 
 $(plugin_test_jar): .javac-unittests-plugin-stamp
-	$(JAR) cvfm $(plugin_test_jar) $(srcdir)/$(test_plugin_MF) $(test_plugin_classes) -C $(srcdir)/test $(test_plugin_SVCS)
+	$(JAR) cvfm $(plugin_test_jar) $(srcdir)/$(test_plugin_MF) $(test_plugin_classes) $(PLUGINSVCS)
 
 # Generate the file for those who get a tarball without it.  This happens if
 # you download a tarball off GitHub for instance.
