@@ -220,6 +220,10 @@ final class HttpQuery {
    * Returns only the path component of the URI as a string
    * This call strips the protocol, host, port and query string parameters 
    * leaving only the path e.g. "/path/starts/here"
+   * <p>
+   * Note that for slightly quicker performance you can call request().getUri()
+   * to get the full path as a string but you'll have to strip query string
+   * parameters manually.
    * @return The path component of the URI
    * @throws NullPointerException if the URI is null
    * @since 2.0
@@ -234,6 +238,8 @@ final class HttpQuery {
    * Similar to the {@link getQueryPath} call, this returns only the path 
    * without the protocol, host, port or query string params. E.g. 
    * "/path/starts/here" will return an array of {"path", "starts", "here"}
+   * <p>
+   * Note that for maximum speed you may want to parse the query path manually.
    * @return An array with 1 or more components, note the first item may be
    * an empty string.
    * @throws BadRequestException if the URI is empty or does not start with a

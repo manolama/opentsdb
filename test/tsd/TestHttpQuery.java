@@ -236,6 +236,13 @@ public class TestHttpQuery {
     assertEquals(query.api_version(), 0);
   }
   
+  @Test
+  public void getQueryBaseRouteFavicon() {
+    final HttpQuery query = getQuery("/favicon.ico");
+    assertEquals(query.getQueryBaseRoute(), "favicon.ico");
+    assertEquals(query.api_version(), 0);
+  }
+  
   @Test (expected = NullPointerException.class)
   public void getQueryBaseRouteNull() {
     getQuery(null).getQueryBaseRoute();
