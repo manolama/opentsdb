@@ -13,6 +13,7 @@
 package net.opentsdb.tsd;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -21,6 +22,7 @@ import org.slf4j.LoggerFactory;
 
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.core.IncomingDataPoint;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.utils.JSON;
 
@@ -140,6 +142,12 @@ public abstract class HttpFormatter {
   /** @return the outoing content type */
   public String responseContentType() {
     return this.response_content_type;
+  }
+  
+  public ArrayList<IncomingDataPoint> parsePutV1() throws IOException {
+    if (!query.hasContent())
+      throw new BadRequestException("Missing request content");
+    
   }
   
   /**
