@@ -70,10 +70,7 @@ final class Fsck {
     Config config = CliOptions.getConfig(argp);
     
     final TSDB tsdb = new TSDB(config);
-    tsdb.getClient().ensureTableExists(
-        config.getString("tsd.storage.hbase.data_table")).joinUninterruptibly();
-    tsdb.getClient().ensureTableExists(
-        config.getString("tsd.storage.hbase.uid_table")).joinUninterruptibly();
+    tsdb.checkNecessaryTablesExist().joinUninterruptibly();
     final byte[] table = config.getString("tsd.storage.hbase.data_table").getBytes(); 
     final boolean fix = argp.has("--fix");
     argp = null;

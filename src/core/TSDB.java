@@ -35,6 +35,7 @@ import org.hbase.async.PutRequest;
 
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.utils.Config;
+import net.opentsdb.utils.DateTime;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
 
@@ -101,19 +102,43 @@ public final class TSDB {
     tag_values = new UniqueId(client, uidtable, TAG_VALUE_QUAL, TAG_VALUE_WIDTH);
     compactionq = new CompactionQueue(this);
 
+    if (config.hasProperty("tsd.core.timezone"))
+      DateTime.setDefaultTimezone(config.getString("tsd.core.timezone"));
+    
     LOG.debug(config.dumpConfiguration());
   }
   
-  /** Returns the configured HBase client */
-  public final HBaseClient getClient(){
+  /** 
+   * Returns the configured HBase client 
+   * @return The HBase client
+   * @since 2.0 
+   */
+  public final HBaseClient getClient() {
     return this.client;
   }
   
-  /** Getter that returns the configuration object */
+  /** 
+   * Getter that returns the configuration object
+   * @return The configuration object
+   * @since 2.0 
+   */
   public final Config getConfig() {
     return this.config;
   }
 
+  /**
+   * Verifies that the data and UID tables exist in HBase
+   * @return An ArrayList of objects to wait for
+   * @throws TableNotFoundException
+   * @since 2.0
+   */
+  public Deferred<ArrayList<Object>> checkNecessaryTablesExist() {
+    return Deferred.group(client.ensureTableExists(
+        config.getString("tsd.storage.hbase.data_table")),
+        client.ensureTableExists(
+            config.getString("tsd.storage.hbase.uid_table")));
+  }
+  
   /** Number of cache hits during lookups involving UIDs. */
   public int uidCacheHits() {
     return (metrics.cacheHits() + tag_names.cacheHits()
@@ -374,7 +399,7 @@ public final class TSDB {
       }
     }
     // First flush the compaction queue, then shutdown the HBase client.
-    return Config.ENABLE_COMPACTIONS
+    return config.enable_compactions()
       ? compactionq.flush().addCallbacks(new HClientShutdown(),
                                          new ShutdownErrback())
       : client.shutdown();
@@ -431,7 +456,7 @@ public final class TSDB {
    * @param base_time The 32-bit unsigned UNIX timestamp.
    */
   final void scheduleForCompaction(final byte[] row, final int base_time) {
-    if (Config.ENABLE_COMPACTIONS) {
+    if (config.enable_compactions()) {
       compactionq.add(row);
     }
   }

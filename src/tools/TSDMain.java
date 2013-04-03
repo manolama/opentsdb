@@ -89,33 +89,33 @@ final class TSDMain {
     Config config = CliOptions.getConfig(argp);
     
     // check for the required parameters
-    try{
+    try {
       if (config.getString("tsd.http.staticroot").isEmpty())
         usage(argp, "Missing static root directory", 1);
-    }catch(NullPointerException npe){
+    } catch(NullPointerException npe) {
       usage(argp, "Missing static root directory", 1);
     }
-    try{
+    try {
       if (config.getString("tsd.http.cachedir").isEmpty())
         usage(argp, "Missing cache directory", 1);
-    }catch(NullPointerException npe){
+    } catch(NullPointerException npe) {
       usage(argp, "Missing cache directory", 1);
     }
-    try{
+    try {
       if (!config.hasProperty("tsd.network.port"))
         usage(argp, "Missing network port", 1);
       config.getInt("tsd.network.port");
-    }catch (NumberFormatException nfe){
+    } catch (NumberFormatException nfe) {
       usage(argp, "Invalid network port setting", 1);
     }
 
     // validate the cache and staticroot directories
-    try{
+    try {
       checkDirectory(config.getString("tsd.http.staticroot"), DONT_CREATE,
           !MUST_BE_WRITEABLE);
       checkDirectory(config.getString("tsd.http.cachedir"),
           CREATE_IF_NEEDED, MUST_BE_WRITEABLE);
-    }catch (IllegalArgumentException e){
+    } catch (IllegalArgumentException e) {
       usage(argp, e.getMessage(), 3);
     }
 
@@ -123,9 +123,9 @@ final class TSDMain {
     if (config.getBoolean("tsd.network.async_io")) {
       int workers = Runtime.getRuntime().availableProcessors() * 2;
       if (config.hasProperty("tsd.network.worker_threads")) {
-        try{
+        try {
         workers = config.getInt("tsd.network.worker_threads");
-        }catch (NumberFormatException nfe){
+        } catch (NumberFormatException nfe) {
           usage(argp, "Invalid worker thread count", 1);
         }
       }
@@ -141,11 +141,8 @@ final class TSDMain {
     try {
       tsdb = new TSDB(config);
       
-      // Make sure we don't even start if we can't find out tables.
-      tsdb.getClient().ensureTableExists(
-          config.getString("tsd.storage.hbase.data_table")).joinUninterruptibly();
-      tsdb.getClient().ensureTableExists(
-          config.getString("tsd.storage.hbase.uid_table")).joinUninterruptibly();
+      // Make sure we don't even start if we can't find our tables.
+      tsdb.checkNecessaryTablesExist().joinUninterruptibly();
 
       registerShutdownHook(tsdb);
       final ServerBootstrap server = new ServerBootstrap(factory);

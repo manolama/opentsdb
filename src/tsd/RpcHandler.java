@@ -12,12 +12,14 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.fasterxml.jackson.core.JsonGenerationException;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
@@ -34,6 +36,7 @@ import net.opentsdb.BuildData;
 import net.opentsdb.core.Aggregators;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.utils.JSON;
 
 /**
  * Stateless handler for RPCs (telnet-style or HTTP).
@@ -318,8 +321,9 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
 
   /** The "/aggregators" endpoint. */
   private static final class ListAggregators implements HttpRpc {
-    public void execute(final TSDB tsdb, final HttpQuery query) {
-      query.sendJsonArray(Aggregators.set());
+    public void execute(final TSDB tsdb, final HttpQuery query) 
+      throws JsonGenerationException, IOException {
+      query.sendReply(JSON.serializeToBytes(Aggregators.set()));
     }
   }
 
@@ -339,7 +343,8 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       return Deferred.fromResult(null);
     }
 
-    public void execute(final TSDB tsdb, final HttpQuery query) {
+    public void execute(final TSDB tsdb, final HttpQuery query) 
+      throws JsonGenerationException, IOException {
       final boolean json = query.hasQueryStringParam("json");
       final StringBuilder buf = json ? null : new StringBuilder(2048);
       final ArrayList<String> stats = json ? new ArrayList<String>(64) : null;
@@ -355,7 +360,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       };
       doCollectStats(tsdb, collector);
       if (json) {
-        query.sendJsonArray(stats);
+        query.sendReply(JSON.serializeToBytes(stats));
       } else {
         query.sendReply(buf);
       }
@@ -372,7 +377,8 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
 
   /** The "/suggest" endpoint. */
   private static final class Suggest implements HttpRpc {
-    public void execute(final TSDB tsdb, final HttpQuery query) {
+    public void execute(final TSDB tsdb, final HttpQuery query) 
+      throws JsonGenerationException, IOException {
       final String type = query.getRequiredQueryStringParam("type");
       final String q = query.getQueryStringParam("q");
       if (q == null) {
@@ -388,7 +394,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       } else {
         throw new BadRequestException("Invalid 'type' parameter:" + type);
       }
-      query.sendJsonArray(suggestions);
+      query.sendReply(JSON.serializeToBytes(suggestions));
     }
   }
 
@@ -413,29 +419,30 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       return Deferred.fromResult(null);
     }
 
-    public void execute(final TSDB tsdb, final HttpQuery query) {
+    public void execute(final TSDB tsdb, final HttpQuery query) throws 
+      IOException {
       final boolean json = query.request().getUri().endsWith("json");
-      StringBuilder buf;
+      
       if (json) {
-        buf = new StringBuilder(157 + BuildData.repo_status.toString().length()
-                                + BuildData.user.length() + BuildData.host.length()
-                                + BuildData.repo.length());
-        buf.append("{\"short_revision\":\"").append(BuildData.short_revision)
-          .append("\",\"full_revision\":\"").append(BuildData.full_revision)
-          .append("\",\"timestamp\":").append(BuildData.timestamp)
-          .append(",\"repo_status\":\"").append(BuildData.repo_status)
-          .append("\",\"user\":\"").append(BuildData.user)
-          .append("\",\"host\":\"").append(BuildData.host)
-          .append("\",\"repo\":\"").append(BuildData.repo)
-          .append("\"}");
+        HashMap<String, String> version = new HashMap<String, String>();
+        version.put("version", BuildData.version);
+        version.put("short_revision", BuildData.short_revision);
+        version.put("full_revision", BuildData.full_revision);
+        version.put("timestamp", Long.toString(BuildData.timestamp));
+        version.put("repo_status", BuildData.repo_status.toString());
+        version.put("user", BuildData.user);
+        version.put("host", BuildData.host);
+        version.put("repo", BuildData.repo);
+        query.sendReply(JSON.serializeToBytes(version));
       } else {
         final String revision = BuildData.revisionString();
         final String build = BuildData.buildString();
+        StringBuilder buf;
         buf = new StringBuilder(2 // For the \n's
                                 + revision.length() + build.length());
         buf.append(revision).append('\n').append(build).append('\n');
+        query.sendReply(buf);
       }
-      query.sendReply(buf);
     }
   }
 

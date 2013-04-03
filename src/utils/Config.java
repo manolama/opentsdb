@@ -1,3 +1,15 @@
+// This file is part of OpenTSDB.
+// Copyright (C) 2010-2012  The OpenTSDB Authors.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 2.1 of the License, or (at your
+// option) any later version.  This program is distributed in the hope that it
+// will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser
+// General Public License for more details.  You should have received a copy
+// of the GNU Lesser General Public License along with this program.  If not,
+// see <http://www.gnu.org/licenses/>.
 package net.opentsdb.utils;
 
 import java.io.FileInputStream;
@@ -33,25 +45,32 @@ import org.slf4j.LoggerFactory;
  * properties, rather a plugin should use the Config(final Config parent)
  * constructor to get a copy of the parent's properties and then work with the
  * values locally.
+ * @since 2.0
  */
 public class Config {
   private static final Logger LOG = LoggerFactory.getLogger(Config.class);
 
-  // STATICS - these are accessed often so need a static address for quick
-  // access. Their value will be changed when the config is loaded
-  // NOTE: edit the setDefaults() method if you add a static
+  // These are accessed often so need a set address for fast access (faster
+  // than accessing the map. Their value will be changed when the config is 
+  // loaded
+  // NOTE: edit the setDefaults() method if you add a public field
 
   /** tsd.core.auto_create_metrics */
-  public static boolean AUTO_METRIC = false;
+  private boolean auto_metric = false;
 
   /** tsd.storage.enable_compaction */
-  public static boolean ENABLE_COMPACTIONS = true;
-
+  private boolean enable_compactions = true;
+  
   /**
    * The list of properties configured to their defaults or modified by users
    */
-  protected final Properties properties = new Properties();
+  protected final HashMap<String, String> properties = 
+    new HashMap<String, String>();
 
+  /** Holds default values for the config */
+  protected static final HashMap<String, String> default_map = 
+    new HashMap<String, String>();
+  
   /** Tracks the location of the file that was actually loaded */
   private String config_location;
 
@@ -73,10 +92,9 @@ public class Config {
    * Constructor that initializes default values and attempts to load the given
    * properties file
    * @param file Path to the file to load
-   * @throws FileNotFoundException Thrown if the file wasn't found
    * @throws IOException Thrown if unable to read or parse the file
    */
-  public Config(final String file) throws FileNotFoundException, IOException {
+  public Config(final String file) throws IOException {
     this.loadConfig(file);
     this.setDefaults();
   }
@@ -96,6 +114,16 @@ public class Config {
     this.setDefaults();
   }
 
+  /** @return the auto_metric value */
+  public boolean auto_metric() {
+    return this.auto_metric;
+  }
+  
+  /** @return the enable_compaction value */
+  public boolean enable_compactions() {
+    return this.enable_compactions;
+  }
+  
   /**
    * Allows for modifying properties after loading
    * 
@@ -116,7 +144,7 @@ public class Config {
    * @throws NullPointerException if the property did not exist
    */
   public final String getString(final String property) {
-    return this.properties.getProperty(property);
+    return this.properties.get(property);
   }
 
   /**
@@ -127,7 +155,7 @@ public class Config {
    * @throws NullPointerException if the property did not exist
    */
   public final int getInt(final String property) {
-    return Integer.parseInt(this.properties.getProperty(property));
+    return Integer.parseInt(this.properties.get(property));
   }
 
   /**
@@ -138,7 +166,7 @@ public class Config {
    * @throws NullPointerException if the property did not exist
    */
   public final short getShort(final String property) {
-    return Short.parseShort(this.properties.getProperty(property));
+    return Short.parseShort(this.properties.get(property));
   }
 
   /**
@@ -149,7 +177,7 @@ public class Config {
    * @throws NullPointerException if the property did not exist
    */
   public final long getLong(final String property) {
-    return Long.parseLong(this.properties.getProperty(property));
+    return Long.parseLong(this.properties.get(property));
   }
 
   /**
@@ -160,7 +188,7 @@ public class Config {
    * @throws NullPointerException if the property did not exist
    */
   public final float getFloat(final String property) {
-    return Float.parseFloat(this.properties.getProperty(property));
+    return Float.parseFloat(this.properties.get(property));
   }
 
   /**
@@ -171,7 +199,7 @@ public class Config {
    * @throws NullPointerException if the property did not exist
    */
   public final double getDouble(final String property) {
-    return Double.parseDouble(this.properties.getProperty(property));
+    return Double.parseDouble(this.properties.get(property));
   }
 
   /**
@@ -187,10 +215,7 @@ public class Config {
    * @throws NullPointerException if the property was not found
    */
   public final boolean getBoolean(final String property) {
-    final String val = this.properties.getProperty(property).toUpperCase();
-    if (val == null)
-      throw new NullPointerException();
-
+    final String val = this.properties.get(property).toUpperCase();
     if (val.equals("1"))
       return true;
     if (val.equals("TRUE"))
@@ -206,7 +231,7 @@ public class Config {
    * @return True if the property exists and has a value, not an empty string
    */
   public final boolean hasProperty(final String property) {
-    final String val = this.properties.getProperty(property).toUpperCase();
+    final String val = this.properties.get(property);
     if (val == null)
       return false;
     if (val.isEmpty())
@@ -222,16 +247,13 @@ public class Config {
     if (this.properties.isEmpty())
       return "No configuration settings stored";
 
-    @SuppressWarnings("rawtypes")
-    Enumeration e = this.properties.propertyNames();
-    String response = "TSD Configuration:\n";
-    response += "File [" + this.config_location + "]\n";
-    while (e.hasMoreElements()) {
-      String key = (String) e.nextElement();
-      response += "Key [" + key + "]  Value ["
-          + this.properties.getProperty(key) + "]\n";
+    StringBuilder response = new StringBuilder("TSD Configuration:\n");
+    response.append("File [" + this.config_location + "]\n");
+    for (Map.Entry<String, String> entry : this.properties.entrySet()) {
+      response.append("Key [" + entry.getKey() + "]  Value [").
+          append(entry.getValue() + "]\n");
     }
-    return response;
+    return response.toString();
   }
 
   /**
@@ -240,32 +262,31 @@ public class Config {
    * This should be called in the constructor
    */
   protected void setDefaults() {
-    HashMap<String, String> map = new HashMap<String, String>();
     // map.put("tsd.network.port", ""); // does not have a default, required
     // map.put("tsd.http.cachedir", ""); // does not have a default, required
     // map.put("tsd.http.staticroot", ""); // does not have a default, required
-    map.put("tsd.network.bind", "0.0.0.0");
-    map.put("tsd.network.worker_threads", "");
-    map.put("tsd.network.async_io", "true");
-    map.put("tsd.network.tcp_no_delay", "true");
-    map.put("tsd.network.keep_alive", "true");
-    map.put("tsd.network.reuse_address", "true");
-    map.put("tsd.core.auto_create_metrics", "false");
-    map.put("tsd.storage.flush_interval", "1000");
-    map.put("tsd.storage.hbase.data_table", "tsdb");
-    map.put("tsd.storage.hbase.uid_table", "tsdb-uid");
-    map.put("tsd.storage.hbase.zk_quorum", "localhost");
-    map.put("tsd.storage.hbase.zk_basedir", "/hbase");
-    map.put("tsd.storage.enable_compaction", "true");
+    default_map.put("tsd.network.bind", "0.0.0.0");
+    default_map.put("tsd.network.worker_threads", "");
+    default_map.put("tsd.network.async_io", "true");
+    default_map.put("tsd.network.tcp_no_delay", "true");
+    default_map.put("tsd.network.keep_alive", "true");
+    default_map.put("tsd.network.reuse_address", "true");
+    default_map.put("tsd.core.auto_create_metrics", "false");
+    default_map.put("tsd.storage.flush_interval", "1000");
+    default_map.put("tsd.storage.hbase.data_table", "tsdb");
+    default_map.put("tsd.storage.hbase.uid_table", "tsdb-uid");
+    default_map.put("tsd.storage.hbase.zk_quorum", "localhost");
+    default_map.put("tsd.storage.hbase.zk_basedir", "/hbase");
+    default_map.put("tsd.storage.enable_compaction", "true");
 
-    for (Map.Entry<String, String> entry : map.entrySet()) {
+    for (Map.Entry<String, String> entry : default_map.entrySet()) {
       if (!properties.containsKey(entry.getKey()))
         properties.put(entry.getKey(), entry.getValue());
     }
 
     // set statics
-    AUTO_METRIC = this.getBoolean("tsd.core.auto_create_metrics");
-    ENABLE_COMPACTIONS = this.getBoolean("tsd.storage.enable_compaction");
+    auto_metric = this.getBoolean("tsd.core.auto_create_metrics");
+    enable_compactions = this.getBoolean("tsd.storage.enable_compaction");
   }
 
   /**
@@ -304,11 +325,14 @@ public class Config {
     for (String file : file_locations) {
       try {
         FileInputStream file_stream = new FileInputStream(file);
-        this.properties.clear();
-        this.properties.load(file_stream);
+        Properties props = new Properties();
+        props.load(file_stream);
+        
+        // load the hash map
+        this.loadHashMap(props);        
       } catch (Exception e) {
         // don't do anything, the file may be missing and that's fine
-        LOG.debug("Unable to find or load " + file);
+        LOG.debug("Unable to find or load " + file, e);
         continue;
       }
 
@@ -331,12 +355,32 @@ public class Config {
       IOException {
     FileInputStream file_stream;
     file_stream = new FileInputStream(file);
-    this.properties.clear();
-    this.properties.load(file_stream);
+    Properties props = new Properties();
+    props.load(file_stream);
+    
+    // load the hash map
+    this.loadHashMap(props);
 
     // no exceptions thrown, so save the valid path and exit
     LOG.info("Successfully loaded configuration file: " + file);
     this.config_location = file;
   }
 
+  /**
+   * Calld from {@link #loadConfig} to copy the properties into the hash map
+   * Tsuna points out that the Properties class is much slower than a hash
+   * map so if we'll be looking up config values more than once, a hash map
+   * is the way to go 
+   * @param props The loaded Properties object to copy
+   */
+  private void loadHashMap(final Properties props) {
+    this.properties.clear();
+    
+    @SuppressWarnings("rawtypes")
+    Enumeration e = props.propertyNames();
+    while (e.hasMoreElements()) {
+      String key = (String) e.nextElement();
+      this.properties.put(key, props.getProperty(key));
+    }
+  }
 }
