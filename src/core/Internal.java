@@ -84,7 +84,7 @@ public final class Internal {
 
   /** Extracts the timestamp from a row key.  */
   public static long baseTime(final TSDB tsdb, final byte[] row) {
-    return Bytes.getUnsignedInt(row, tsdb.metrics.width());
+    return Bytes.getUnsignedInt(row, TSDB.METRICS_WIDTH);
   }
 
   /** @see Tags#getTags */
@@ -107,7 +107,7 @@ public final class Internal {
   }
 
   public static short metricWidth(final TSDB tsdb) {
-    return tsdb.metrics.width();
+    return TSDB.METRICS_WIDTH;
   }
 
   /** @see CompactionQueue#complexCompact  */

@@ -1,6 +1,18 @@
+// This file is part of OpenTSDB.
+// Copyright (C) 2010-2012  The OpenTSDB Authors.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 2.1 of the License, or (at your
+// option) any later version.  This program is distributed in the hope that it
+// will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser
+// General Public License for more details.  You should have received a copy
+// of the GNU Lesser General Public License along with this program.  If not,
+// see <http://www.gnu.org/licenses/>.
 package net.opentsdb.storage;
 
-import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -14,12 +26,8 @@ import net.opentsdb.meta.Tree;
 import net.opentsdb.meta.TreeBranch;
 import net.opentsdb.meta.UIDMeta;
 import net.opentsdb.stats.StatsCollector;
-import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UIDType;
 import net.opentsdb.utils.Config;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.stumbleupon.async.Deferred;
 
@@ -35,65 +43,41 @@ import com.stumbleupon.async.Deferred;
  * - Implement UIDs of some sort for metrics, tag names and values
  */
 public abstract class DataStore extends Thread {
-  private static final Logger LOG = LoggerFactory.getLogger(DataStore.class);
 
-  /** Unique ID cache for the metric names. */
-  protected final UniqueId metrics;
-  
-  /** Unique ID cache for the tag names. */
-  protected final UniqueId tag_names;
-  
-  /** Unique ID cache for the tag values. */
-  protected final UniqueId tag_values;
-  
-  protected final boolean enable_ms_timestamps;
-  
   /**
-   * Constructor
-   * @param config A configuration to use for this data store
+   * Empty default constructor necessary for plugins
    * 
-   * @note Implementations will likely want to create their own config 
-   * implementation based on this parent
+   * The {@link initialize} method will be called to pass a config class and 
+   * that should be used to initialize the storage layer.
    */
-  public DataStore(final Config config){
-    metrics = null;
-    tag_names = null;
-    tag_values = null;
-    this.enable_ms_timestamps = 
-      config.getBoolean("tsd.core.enable_ms_timestamps");
+  public DataStore(){
+  
   }
   
   /**
    * Runs storage management tasks
    * @throws StorageException if the management thread could not be started
    */
-  public abstract void start();
+  public abstract void initialize(final Config config);
 
   /**
    * Used to flush queues and gracefully close clients on TSD shutdown
    * @return A deferred object to wait on before closing the thread
    * @throws StorageException
    */
-  public abstract Deferred<Object> shutdown();
+  public abstract Deferred<ArrayList<Object>> shutdown();
 
   /**
    * For storage systems that batch data, forces a batch send
    * @return A deferred object to wait on if necessary
    * @throws StorageException
    */
-  public abstract Deferred<Object> flushData();
+  public abstract Deferred<ArrayList<Object>> flushData();
   
   /**
    * Flushes the UID maps and can be overridden to flush other caches
    */
-  public void flushCaches(){
-    if (this.metrics != null)
-      this.metrics.dropCaches();
-    if (this.tag_names != null)
-      this.tag_names.dropCaches();
-    if (this.tag_values != null)
-      this.tag_values.dropCaches();
-  }
+  public abstract Deferred<ArrayList<Object>> flushCaches();
 
   /**
    * Retrieves statistics about the underlying storage system and UID maps
@@ -149,6 +133,18 @@ public abstract class DataStore extends Thread {
    */
   public abstract Deferred<Object> renameUID(final UIDType type, 
       final String current_name, final String new_name);
+  
+  /**
+   * Performs a simple match on the string for the given UID type and returns
+   * a list of matches
+   * @param search The string to match on, if empty, returns the first 
+   * {@code count} names in the cache or group
+   * @param count The number of results to return
+   * @return An array of names, may be empty if no matches were found
+   * @throws StorageException
+   */
+  public abstract Deferred<ArrayList<String>> suggestUIDs(final UIDType type, 
+      final String search, final int count);
   
   /**
    * Scans the UID table for errors such as orphaned UID names or incorrect

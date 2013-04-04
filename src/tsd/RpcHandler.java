@@ -36,6 +36,7 @@ import net.opentsdb.BuildData;
 import net.opentsdb.core.Aggregators;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.uid.UniqueId.UIDType;
 import net.opentsdb.utils.JSON;
 
 /**
@@ -386,11 +387,11 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       }
       List<String> suggestions;
       if ("metrics".equals(type)) {
-        suggestions = tsdb.suggestMetrics(q);
+        suggestions = tsdb.suggestUIDs(UIDType.METRIC, q, 25);
       } else if ("tagk".equals(type)) {
-        suggestions = tsdb.suggestTagNames(q);
+        suggestions = tsdb.suggestUIDs(UIDType.TAGK, q, 25);
       } else if ("tagv".equals(type)) {
-        suggestions = tsdb.suggestTagValues(q);
+        suggestions = tsdb.suggestUIDs(UIDType.TAGV, q, 25);
       } else {
         throw new BadRequestException("Invalid 'type' parameter:" + type);
       }

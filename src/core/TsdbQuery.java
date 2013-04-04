@@ -33,6 +33,7 @@ import static org.hbase.async.Bytes.ByteMap;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
+import net.opentsdb.uid.UniqueId.UIDType;
 
 /**
  * Non-synchronized implementation of {@link Query}.
@@ -157,7 +158,14 @@ final public class TsdbQuery implements Query {
                             final Aggregator function,
                             final boolean rate) throws NoSuchUniqueName {
     findGroupBys(tags);
-    this.metric = tsdb.metrics.getId(metric);
+    try {
+      this.metric = tsdb.storage.getUID(UIDType.METRIC, metric)
+        .joinUninterruptibly();
+    } catch (RuntimeException re) {
+      throw re;
+    }catch (Exception e) {
+      throw new RuntimeException(e.getMessage(), e);
+    }
     this.tags = Tags.resolveAll(tsdb, tags);
     aggregator = function;
     this.rate = rate;
@@ -199,7 +207,14 @@ final public class TsdbQuery implements Query {
         if (group_bys == null) {
           group_bys = new ArrayList<byte[]>();
         }
-        group_bys.add(tsdb.tag_names.getId(tag.getKey()));
+        try {
+          group_bys.add(tsdb.storage.getUID(UIDType.TAGK, tag.getKey())
+                .joinUninterruptibly());
+        } catch (RuntimeException re) {
+          throw re;
+        } catch (Exception e) {
+          throw new RuntimeException(e.getMessage(), e);
+        }
         i.remove();
         if (tagvalue.charAt(0) == '*') {
           continue;  // For a 'GROUP BY' with any value, we're done.
@@ -210,13 +225,27 @@ final public class TsdbQuery implements Query {
         if (group_by_values == null) {
           group_by_values = new ByteMap<byte[][]>();
         }
-        final short value_width = tsdb.tag_values.width();
+        final short value_width = TSDB.TAG_VALUE_WIDTH;
         final byte[][] value_ids = new byte[values.length][value_width];
-        group_by_values.put(tsdb.tag_names.getId(tag.getKey()),
-                            value_ids);
+        try {
+          group_by_values.put(tsdb.storage.getUID(UIDType.TAGK, tag.getKey())
+              .joinUninterruptibly(), value_ids);
+        } catch (RuntimeException re) {
+          throw re;
+        } catch (Exception e) {
+          throw new RuntimeException(e.getMessage(), e);
+        }
         for (int j = 0; j < values.length; j++) {
-          final byte[] value_id = tsdb.tag_values.getId(values[j]);
-          System.arraycopy(value_id, 0, value_ids[j], 0, value_width);
+          byte[] value_id;
+          try {
+            value_id = tsdb.storage.getUID(UIDType.TAGV, values[j])
+              .joinUninterruptibly();
+            System.arraycopy(value_id, 0, value_ids[j], 0, value_width);
+          } catch (RuntimeException re) {
+            throw re;
+          } catch (Exception e) {
+            throw new RuntimeException(e.getMessage(), e);
+          }
         }
       }
     }
@@ -238,7 +267,7 @@ final public class TsdbQuery implements Query {
    * @throws IllegalArgumentException if bad data was retreived from HBase.
    */
   private TreeMap<byte[], Span> findSpans() throws HBaseException {
-    final short metric_width = tsdb.metrics.width();
+    final short metric_width = TSDB.METRICS_WIDTH;
     final TreeMap<byte[], Span> spans =  // The key is a row key from HBase.
       new TreeMap<byte[], Span>(new SpanCmp(metric_width));
     int nrows = 0;
@@ -320,7 +349,7 @@ final public class TsdbQuery implements Query {
     //   - one for the LOL-OMG combination: [0, 0, 1, 0, 0, 4] and,
     //   - one for the LOL-WTF combination: [0, 0, 1, 0, 0, 3].
     final ByteMap<SpanGroup> groups = new ByteMap<SpanGroup>();
-    final short value_width = tsdb.tag_values.width();
+    final short value_width = TSDB.TAG_VALUE_WIDTH;
     final byte[] group = new byte[group_bys.size() * value_width];
     for (final Map.Entry<byte[], Span> entry : spans.entrySet()) {
       final byte[] row = entry.getKey();
@@ -366,7 +395,7 @@ final public class TsdbQuery implements Query {
    * Creates the {@link Scanner} to use for this query.
    */
   Scanner getScanner() throws HBaseException {
-    final short metric_width = tsdb.metrics.width();
+    final short metric_width = TSDB.METRICS_WIDTH;
     final byte[] start_row = new byte[metric_width + Const.TIMESTAMP_BYTES];
     final byte[] end_row = new byte[metric_width + Const.TIMESTAMP_BYTES];
     // We search at least one row before and one row after the start & end
@@ -434,8 +463,8 @@ final public class TsdbQuery implements Query {
     if (group_bys != null) {
       Collections.sort(group_bys, Bytes.MEMCMP);
     }
-    final short name_width = tsdb.tag_names.width();
-    final short value_width = tsdb.tag_values.width();
+    final short name_width = TSDB.TAG_NAME_WIDTH;
+    final short value_width = TSDB.TAG_VALUE_WIDTH;
     final short tagsize = (short) (name_width + value_width);
     // Generate a regexp for our tags.  Say we have 2 tags: { 0 0 1 0 0 2 }
     // and { 4 5 6 9 8 7 }, the regexp will be:
@@ -450,7 +479,7 @@ final public class TsdbQuery implements Query {
     buf.append("(?s)"  // Ensure we use the DOTALL flag.
                + "^.{")
        // ... start by skipping the metric ID and timestamp.
-       .append(tsdb.metrics.width() + Const.TIMESTAMP_BYTES)
+       .append(TSDB.METRICS_WIDTH + Const.TIMESTAMP_BYTES)
        .append("}");
     final Iterator<byte[]> tags = this.tags.iterator();
     final Iterator<byte[]> group_bys = (this.group_bys == null
@@ -542,9 +571,12 @@ final public class TsdbQuery implements Query {
        .append(getEndTime())
        .append(", metric=").append(Arrays.toString(metric));
     try {
-      buf.append(" (").append(tsdb.metrics.getName(metric));
+      buf.append(" (").append(tsdb.storage.getName(UIDType.METRIC, metric)
+           .joinUninterruptibly());
     } catch (NoSuchUniqueId e) {
       buf.append(" (<").append(e.getMessage()).append('>');
+    } catch (Exception ex) {
+      throw new RuntimeException(ex.getMessage(), ex);
     }
     try {
       buf.append("), tags=").append(Tags.resolveIds(tsdb, tags));
@@ -557,9 +589,12 @@ final public class TsdbQuery implements Query {
     if (group_bys != null) {
       for (final byte[] tag_id : group_bys) {
         try {
-          buf.append(tsdb.tag_names.getName(tag_id));
+          buf.append(tsdb.storage.getName(UIDType.TAGK, tag_id)
+              .joinUninterruptibly());
         } catch (NoSuchUniqueId e) {
           buf.append('<').append(e.getMessage()).append('>');
+        } catch (Exception ex) {
+          throw new RuntimeException(ex.getMessage(), ex);
         }
         buf.append(' ')
            .append(Arrays.toString(tag_id));
@@ -571,9 +606,12 @@ final public class TsdbQuery implements Query {
           buf.append("={");
           for (final byte[] value_id : value_ids) {
             try {
-              buf.append(tsdb.tag_values.getName(value_id));
+              buf.append(tsdb.storage.getName(UIDType.TAGV, value_id)
+                    .joinUninterruptibly());
             } catch (NoSuchUniqueId e) {
               buf.append('<').append(e.getMessage()).append('>');
+            } catch (Exception ex) {
+              throw new RuntimeException(ex.getMessage(), ex);
             }
             buf.append(' ')
                .append(Arrays.toString(value_id))

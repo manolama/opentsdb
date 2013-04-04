@@ -90,7 +90,7 @@ public final class Span implements DataPoints {
       // Verify that we have the same metric id and tags.
       final byte[] key = row.key();
       final RowSeq last = rows.get(rows.size() - 1);
-      final short metric_width = tsdb.metrics.width();
+      final short metric_width = TSDB.METRICS_WIDTH;
       final short tags_offset = (short) (metric_width + Const.TIMESTAMP_BYTES);
       final short tags_bytes = (short) (key.length - tags_offset);
       String error = null;

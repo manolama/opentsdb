@@ -61,6 +61,9 @@ public class Config {
   /** tsd.storage.enable_compaction */
   private boolean enable_compactions = true;
   
+  /** tsd.core.enable_milliseconds */
+  private boolean enable_ms_timestamps = false;
+  
   /**
    * The list of properties configured to their defaults or modified by users
    */
@@ -278,6 +281,7 @@ public class Config {
     default_map.put("tsd.storage.hbase.zk_quorum", "localhost");
     default_map.put("tsd.storage.hbase.zk_basedir", "/hbase");
     default_map.put("tsd.storage.enable_compaction", "true");
+    default_map.put("tsd.core.enable_milliseconds", "false");
 
     for (Map.Entry<String, String> entry : default_map.entrySet()) {
       if (!properties.containsKey(entry.getKey()))
@@ -287,6 +291,7 @@ public class Config {
     // set statics
     auto_metric = this.getBoolean("tsd.core.auto_create_metrics");
     enable_compactions = this.getBoolean("tsd.storage.enable_compaction");
+    enable_ms_timestamps = this.getBoolean("tsd.core.enable_milliseconds");
   }
 
   /**

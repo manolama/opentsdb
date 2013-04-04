@@ -79,7 +79,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
   public CompactionQueue(final TSDB tsdb) {
     super(new Cmp(tsdb));
     this.tsdb = tsdb;
-    metric_width = tsdb.metrics.width();
+    metric_width = TSDB.METRICS_WIDTH;
     if (tsdb.config.enable_compactions()) {
       startCompactionThread();
     }
@@ -940,7 +940,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     private final short metric_width;
 
     public Cmp(final TSDB tsdb) {
-      metric_width = tsdb.metrics.width();
+      metric_width = TSDB.METRICS_WIDTH;
     }
 
     public int compare(final byte[] a, final byte[] b) {

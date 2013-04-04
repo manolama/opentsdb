@@ -24,6 +24,7 @@ import org.hbase.async.Bytes;
 import org.hbase.async.PutRequest;
 
 import net.opentsdb.stats.Histogram;
+import net.opentsdb.uid.UniqueId.UIDType;
 import net.opentsdb.utils.Config;
 
 /**
@@ -106,9 +107,9 @@ final class IncomingDataPoints implements WritableDataPoints {
   static byte[] rowKeyTemplate(final TSDB tsdb,
                                final String metric,
                                final Map<String, String> tags) {
-    final short metric_width = tsdb.metrics.width();
-    final short tag_name_width = tsdb.tag_names.width();
-    final short tag_value_width = tsdb.tag_values.width();
+    final short metric_width = TSDB.METRICS_WIDTH;
+    final short tag_name_width = TSDB.TAG_NAME_WIDTH;
+    final short tag_value_width = TSDB.TAG_VALUE_WIDTH;
     final short num_tags = (short) tags.size();
 
     int row_size = (metric_width + Const.TIMESTAMP_BYTES
@@ -118,9 +119,15 @@ final class IncomingDataPoints implements WritableDataPoints {
 
     short pos = 0;
 
-    copyInRowKey(row, pos, (tsdb.config.auto_metric() ? 
-        tsdb.metrics.getOrCreateId(metric)
-        : tsdb.metrics.getId(metric)));
+    try {
+      copyInRowKey(row, pos, (tsdb.config.auto_metric() ? 
+          tsdb.storage.getOrAssignUID(UIDType.METRIC, metric).joinUninterruptibly()
+          : tsdb.storage.getUID(UIDType.METRIC, metric).joinUninterruptibly()));
+    } catch (RuntimeException re) {
+      throw re;
+    }catch (Exception e) {
+      throw new RuntimeException(e.getMessage(), e);
+    }
     pos += metric_width;
 
     pos += Const.TIMESTAMP_BYTES;
@@ -163,7 +170,7 @@ final class IncomingDataPoints implements WritableDataPoints {
     // because the HBase client may still hold a reference to it in its
     // internal datastructures.
     row = Arrays.copyOf(row, row.length);
-    Bytes.setInt(row, (int) base_time, tsdb.metrics.width());
+    Bytes.setInt(row, (int) base_time, TSDB.METRICS_WIDTH);
     tsdb.scheduleForCompaction(row, (int) base_time);
     return base_time;
   }
@@ -209,7 +216,7 @@ final class IncomingDataPoints implements WritableDataPoints {
     } else {
       // This is the first data point, let's record the starting timestamp.
       base_time = updateBaseTime(timestamp);
-      Bytes.setInt(row, (int) base_time, tsdb.metrics.width());
+      Bytes.setInt(row, (int) base_time, TSDB.METRICS_WIDTH);
     }
 
     if (values.length == size) {
@@ -264,7 +271,7 @@ final class IncomingDataPoints implements WritableDataPoints {
 
   /** Extracts the base timestamp from the row key. */
   private long baseTime() {
-    return Bytes.getUnsignedInt(row, tsdb.metrics.width());
+    return Bytes.getUnsignedInt(row, TSDB.METRICS_WIDTH);
   }
 
   public Deferred<Object> addPoint(final long timestamp, final long value) {
@@ -315,8 +322,14 @@ final class IncomingDataPoints implements WritableDataPoints {
     if (row == null) {
       throw new IllegalStateException("setSeries never called before!");
     }
-    final byte[] id = Arrays.copyOfRange(row, 0, tsdb.metrics.width());
-    return tsdb.metrics.getName(id);
+    final byte[] id = Arrays.copyOfRange(row, 0, TSDB.METRICS_WIDTH);
+    try {
+      return tsdb.storage.getName(UIDType.METRIC, id).joinUninterruptibly();
+    } catch (RuntimeException re) {
+      throw re;
+    }catch (Exception e) {
+      throw new RuntimeException(e.getMessage(), e);
+    }
   }
 
   public Map<String, String> getTags() {

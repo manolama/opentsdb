@@ -14,6 +14,8 @@ package net.opentsdb.core;
 
 import java.util.Arrays;
 
+import net.opentsdb.uid.UniqueId.UIDType;
+
 /** Helper functions to deal with the row key. */
 final class RowKey {
 
@@ -28,8 +30,14 @@ final class RowKey {
    * @return The name of the metric.
    */
   static String metricName(final TSDB tsdb, final byte[] row) {
-    final byte[] id = Arrays.copyOfRange(row, 0, tsdb.metrics.width());
-    return tsdb.metrics.getName(id);
+    final byte[] id = Arrays.copyOfRange(row, 0, TSDB.METRICS_WIDTH);
+    try {
+      return tsdb.storage.getName(UIDType.METRIC, id).joinUninterruptibly();
+    } catch (RuntimeException re) {
+      throw re;
+    }catch (Exception e) {
+      throw new RuntimeException(e.getMessage(), e);
+    }
   }
 
 }

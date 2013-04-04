@@ -95,7 +95,7 @@ final class RowSeq implements DataPoints {
     }
 
     final byte[] key = row.key();
-    final long base_time = Bytes.getUnsignedInt(key, tsdb.metrics.width());
+    final long base_time = Bytes.getUnsignedInt(key, TSDB.METRICS_WIDTH);
     final int time_adj = (int) (base_time - baseTime());
     if (time_adj <= 0) {
       // Corner case: if the time difference is 0 and the key is the same, it
@@ -260,7 +260,7 @@ final class RowSeq implements DataPoints {
 
   /** Extracts the base timestamp from the row key. */
   long baseTime() {
-    return Bytes.getUnsignedInt(key, tsdb.metrics.width());
+    return Bytes.getUnsignedInt(key, TSDB.METRICS_WIDTH);
   }
 
   /** @throws IndexOutOfBoundsException if {@code i} is out of bounds. */

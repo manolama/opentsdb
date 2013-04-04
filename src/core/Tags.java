@@ -25,6 +25,7 @@ import org.hbase.async.Bytes;
 
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
+import net.opentsdb.uid.UniqueId.UIDType;
 
 /** Helper functions to deal with tags. */
 public final class Tags {
@@ -188,17 +189,26 @@ public final class Tags {
   static String getValue(final TSDB tsdb, final byte[] row,
                          final String name) throws NoSuchUniqueName {
     validateString("tag name", name);
-    final byte[] id = tsdb.tag_names.getId(name);
+    byte[] id;
+    try {
+      id = tsdb.storage.getUID(UIDType.TAGK, name)
+        .joinUninterruptibly();
+    } catch (RuntimeException re) {
+      throw re;
+    }catch (Exception e1) {
+      throw new RuntimeException(e1.getMessage(), e1);
+    }
     final byte[] value_id = getValueId(tsdb, row, id);
     if (value_id == null) {
       return null;
     }
     // This shouldn't throw a NoSuchUniqueId.
     try {
-      return tsdb.tag_values.getName(value_id);
+      return tsdb.storage.getName(UIDType.TAGV, value_id).joinUninterruptibly();
     } catch (NoSuchUniqueId e) {
-      LOG.error("Internal error, NoSuchUniqueId unexpected here!", e);
       throw e;
+    } catch (Exception e1) {
+      throw new RuntimeException(e1.getMessage(), e1);
     }
   }
 
@@ -212,10 +222,10 @@ public final class Tags {
    */
   static byte[] getValueId(final TSDB tsdb, final byte[] row,
                            final byte[] tag_id) {
-    final short name_width = tsdb.tag_names.width();
-    final short value_width = tsdb.tag_values.width();
+    final short name_width = TSDB.TAG_NAME_WIDTH;
+    final short value_width = TSDB.TAG_VALUE_WIDTH;
     // TODO(tsuna): Can do a binary search.
-    for (short pos = (short) (tsdb.metrics.width() + Const.TIMESTAMP_BYTES);
+    for (short pos = (short) (TSDB.METRICS_WIDTH + Const.TIMESTAMP_BYTES);
          pos < row.length;
          pos += name_width + value_width) {
       if (rowContains(row, pos, tag_id)) {
@@ -254,21 +264,30 @@ public final class Tags {
    */
   static Map<String, String> getTags(final TSDB tsdb,
                                      final byte[] row) throws NoSuchUniqueId {
-    final short name_width = tsdb.tag_names.width();
-    final short value_width = tsdb.tag_values.width();
+    final short name_width = TSDB.TAG_NAME_WIDTH;
+    final short value_width = TSDB.TAG_VALUE_WIDTH;
     final short tag_bytes = (short) (name_width + value_width);
     final byte[] tmp_name = new byte[name_width];
     final byte[] tmp_value = new byte[value_width];
-    final short metric_ts_bytes = (short) (tsdb.metrics.width()
+    final short metric_ts_bytes = (short) (TSDB.METRICS_WIDTH
                                            + Const.TIMESTAMP_BYTES);
     final HashMap<String, String> result
       = new HashMap<String, String>((row.length - metric_ts_bytes) / tag_bytes);
     for (short pos = metric_ts_bytes; pos < row.length; pos += tag_bytes) {
       System.arraycopy(row, pos, tmp_name, 0, name_width);
-      final String name = tsdb.tag_names.getName(tmp_name);
-      System.arraycopy(row, pos + name_width, tmp_value, 0, value_width);
-      final String value = tsdb.tag_values.getName(tmp_value);
-      result.put(name, value);
+      String name;
+      try {
+        name = tsdb.storage.getName(UIDType.TAGK, tmp_name)
+          .joinUninterruptibly();
+        System.arraycopy(row, pos + name_width, tmp_value, 0, value_width);
+        final String value = tsdb.storage.getName(UIDType.TAGV, tmp_value)
+          .joinUninterruptibly();
+        result.put(name, value);
+      } catch (RuntimeException re) {
+        throw re;
+      }catch (Exception e) {
+        throw new RuntimeException(e.getMessage(), e);
+      }
     }
     return result;
   }
@@ -331,16 +350,26 @@ public final class Tags {
     throws NoSuchUniqueName {
     final ArrayList<byte[]> tag_ids = new ArrayList<byte[]>(tags.size());
     for (final Map.Entry<String, String> entry : tags.entrySet()) {
+      try{
       final byte[] tag_id = (create
-                             ? tsdb.tag_names.getOrCreateId(entry.getKey())
-                             : tsdb.tag_names.getId(entry.getKey()));
+       ? tsdb.storage.getOrAssignUID(UIDType.TAGK, entry.getKey())
+           .joinUninterruptibly()
+       : tsdb.storage.getUID(UIDType.TAGK, entry.getKey())
+           .joinUninterruptibly());
       final byte[] value_id = (create
-                               ? tsdb.tag_values.getOrCreateId(entry.getValue())
-                               : tsdb.tag_values.getId(entry.getValue()));
-      final byte[] thistag = new byte[tag_id.length + value_id.length];
-      System.arraycopy(tag_id, 0, thistag, 0, tag_id.length);
-      System.arraycopy(value_id, 0, thistag, tag_id.length, value_id.length);
-      tag_ids.add(thistag);
+       ? tsdb.storage.getOrAssignUID(UIDType.TAGV, entry.getKey())
+           .joinUninterruptibly()
+       : tsdb.storage.getUID(UIDType.TAGV, entry.getKey())
+         .joinUninterruptibly());
+        final byte[] thistag = new byte[tag_id.length + value_id.length];
+        System.arraycopy(tag_id, 0, thistag, 0, tag_id.length);
+        System.arraycopy(value_id, 0, thistag, tag_id.length, value_id.length);
+        tag_ids.add(thistag);
+      } catch (RuntimeException re) {
+        throw re;
+      } catch (Exception e) {
+        throw new RuntimeException(e.getMessage(), e);
+      }
     }
     // Now sort the tags.
     Collections.sort(tag_ids, Bytes.MEMCMP);
@@ -361,8 +390,8 @@ public final class Tags {
   static HashMap<String, String> resolveIds(final TSDB tsdb,
                                             final ArrayList<byte[]> tags)
     throws NoSuchUniqueId {
-    final short name_width = tsdb.tag_names.width();
-    final short value_width = tsdb.tag_values.width();
+    final short name_width = TSDB.TAG_NAME_WIDTH;
+    final short value_width = TSDB.TAG_VALUE_WIDTH;
     final short tag_bytes = (short) (name_width + value_width);
     final byte[] tmp_name = new byte[name_width];
     final byte[] tmp_value = new byte[value_width];
@@ -374,10 +403,19 @@ public final class Tags {
             + " (expected " + tag_bytes + "): " + Arrays.toString(tag));
       }
       System.arraycopy(tag, 0, tmp_name, 0, name_width);
-      final String name = tsdb.tag_names.getName(tmp_name);
-      System.arraycopy(tag, name_width, tmp_value, 0, value_width);
-      final String value = tsdb.tag_values.getName(tmp_value);
-      result.put(name, value);
+      String name;
+      try {
+        name = tsdb.storage.getName(UIDType.TAGK, tmp_name)
+          .joinUninterruptibly();
+        System.arraycopy(tag, name_width, tmp_value, 0, value_width);
+        final String value = tsdb.storage.getName(UIDType.TAGV, tmp_value)
+          .joinUninterruptibly();
+        result.put(name, value);
+      } catch (RuntimeException re) {
+        throw re;
+      } catch (Exception e) {
+        throw new RuntimeException(e.getMessage(), e);
+      }
     }
     return result;
   }

@@ -33,11 +33,13 @@ import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
 
-import net.opentsdb.uid.UniqueId;
+import net.opentsdb.uid.UniqueId.UIDType;
 import net.opentsdb.utils.Config;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.storage.DataStore;
+import net.opentsdb.storage.hbase.HBaseStorage;
 
 /**
  * Thread-safe implementation of the TSDB client.
@@ -50,25 +52,28 @@ public final class TSDB {
   
   static final byte[] FAMILY = { 't' };
 
-  private static final String METRICS_QUAL = "metrics";
-  private static final short METRICS_WIDTH = 3;
-  private static final String TAG_NAME_QUAL = "tagk";
-  private static final short TAG_NAME_WIDTH = 3;
-  private static final String TAG_VALUE_QUAL = "tagv";
-  private static final short TAG_VALUE_WIDTH = 3;
+  // TEMP publics till we can move these into storage
+//  private static final String METRICS_QUAL = "metrics";
+  public static final short METRICS_WIDTH = 3;
+//  private static final String TAG_NAME_QUAL = "tagk";
+  public static final short TAG_NAME_WIDTH = 3;
+//  private static final String TAG_VALUE_QUAL = "tagv";
+  public static final short TAG_VALUE_WIDTH = 3;
 
   /** Client for the HBase cluster to use.  */
   final HBaseClient client;
+  
+  final DataStore storage;
 
   /** Name of the table in which timeseries are stored.  */
   final byte[] table;
 
-  /** Unique IDs for the metric names. */
-  final UniqueId metrics;
-  /** Unique IDs for the tag names. */
-  final UniqueId tag_names;
-  /** Unique IDs for the tag values. */
-  final UniqueId tag_values;
+//  /** Unique IDs for the metric names. */
+//  final UniqueId metrics;
+//  /** Unique IDs for the tag names. */
+//  final UniqueId tag_names;
+//  /** Unique IDs for the tag values. */
+//  final UniqueId tag_values;
 
   /** Configuration object for all TSDB components */
   final Config config;
@@ -93,13 +98,13 @@ public final class TSDB {
         config.getString("tsd.storage.hbase.zk_basedir"));
     this.client.setFlushInterval(config.getShort("tsd.storage.flush_interval"));
     table = config.getString("tsd.storage.hbase.data_table").getBytes();
-    
-    final byte[] uidtable = config.getString("tsd.storage.hbase.uid_table")
-        .getBytes();
 
-    metrics = new UniqueId(client, uidtable, METRICS_QUAL, METRICS_WIDTH);
-    tag_names = new UniqueId(client, uidtable, TAG_NAME_QUAL, TAG_NAME_WIDTH);
-    tag_values = new UniqueId(client, uidtable, TAG_VALUE_QUAL, TAG_VALUE_WIDTH);
+    this.storage = new HBaseStorage();
+    this.storage.initialize(config);
+    
+//    metrics = new UniqueId(client, uidtable, METRICS_QUAL, METRICS_WIDTH);
+//    tag_names = new UniqueId(client, uidtable, TAG_NAME_QUAL, TAG_NAME_WIDTH);
+//    tag_values = new UniqueId(client, uidtable, TAG_VALUE_QUAL, TAG_VALUE_WIDTH);
     compactionq = new CompactionQueue(this);
 
     if (config.hasProperty("tsd.core.timezone"))
@@ -138,33 +143,35 @@ public final class TSDB {
         client.ensureTableExists(
             config.getString("tsd.storage.hbase.uid_table")));
   }
-  
-  /** Number of cache hits during lookups involving UIDs. */
-  public int uidCacheHits() {
-    return (metrics.cacheHits() + tag_names.cacheHits()
-            + tag_values.cacheHits());
-  }
 
-  /** Number of cache misses during lookups involving UIDs. */
-  public int uidCacheMisses() {
-    return (metrics.cacheMisses() + tag_names.cacheMisses()
-            + tag_values.cacheMisses());
-  }
-
-  /** Number of cache entries currently in RAM for lookups involving UIDs. */
-  public int uidCacheSize() {
-    return (metrics.cacheSize() + tag_names.cacheSize()
-            + tag_values.cacheSize());
-  }
+// todo - restore
+//  /** Number of cache hits during lookups involving UIDs. */
+//  public int uidCacheHits() {
+//    return (metrics.cacheHits() + tag_names.cacheHits()
+//            + tag_values.cacheHits());
+//  }
+//
+//  /** Number of cache misses during lookups involving UIDs. */
+//  public int uidCacheMisses() {
+//    return (metrics.cacheMisses() + tag_names.cacheMisses()
+//            + tag_values.cacheMisses());
+//  }
+//
+//  /** Number of cache entries currently in RAM for lookups involving UIDs. */
+//  public int uidCacheSize() {
+//    return (metrics.cacheSize() + tag_names.cacheSize()
+//            + tag_values.cacheSize());
+//  }
 
   /**
    * Collects the stats and metrics tracked by this instance.
    * @param collector The collector to use.
    */
   public void collectStats(final StatsCollector collector) {
-    collectUidStats(metrics, collector);
-    collectUidStats(tag_names, collector);
-    collectUidStats(tag_values, collector);
+    // todo UID stats
+//    collectUidStats(metrics, collector);
+//    collectUidStats(tag_names, collector);
+//    collectUidStats(tag_values, collector);
 
     {
       final Runtime runtime = Runtime.getRuntime();
@@ -219,17 +226,17 @@ public final class TSDB {
     return TsdbQuery.scanlatency;
   }
 
-  /**
-   * Collects the stats for a {@link UniqueId}.
-   * @param uid The instance from which to collect stats.
-   * @param collector The collector to use.
-   */
-  private static void collectUidStats(final UniqueId uid,
-                                      final StatsCollector collector) {
-    collector.record("uid.cache-hit", uid.cacheHits(), "kind=" + uid.kind());
-    collector.record("uid.cache-miss", uid.cacheMisses(), "kind=" + uid.kind());
-    collector.record("uid.cache-size", uid.cacheSize(), "kind=" + uid.kind());
-  }
+//  /**
+//   * Collects the stats for a {@link UniqueId}.
+//   * @param uid The instance from which to collect stats.
+//   * @param collector The collector to use.
+//   */
+//  private static void collectUidStats(final UniqueId uid,
+//                                      final StatsCollector collector) {
+//    collector.record("uid.cache-hit", uid.cacheHits(), "kind=" + uid.kind());
+//    collector.record("uid.cache-miss", uid.cacheMisses(), "kind=" + uid.kind());
+//    collector.record("uid.cache-size", uid.cacheSize(), "kind=" + uid.kind());
+//  }
 
   /**
    * Returns a new {@link Query} instance suitable for this TSDB.
@@ -329,7 +336,7 @@ public final class TSDB {
     IncomingDataPoints.checkMetricAndTags(metric, tags);
     final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);
     final long base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
-    Bytes.setInt(row, (int) base_time, metrics.width());
+    Bytes.setInt(row, (int) base_time, METRICS_WIDTH);
     scheduleForCompaction(row, (int) base_time);
     final short qualifier = (short) ((timestamp - base_time) << Const.FLAG_BITS
                                      | flags);
@@ -409,24 +416,15 @@ public final class TSDB {
    * Given a prefix search, returns a few matching metric names.
    * @param search A prefix to search.
    */
-  public List<String> suggestMetrics(final String search) {
-    return metrics.suggest(search);
-  }
-
-  /**
-   * Given a prefix search, returns a few matching tag names.
-   * @param search A prefix to search.
-   */
-  public List<String> suggestTagNames(final String search) {
-    return tag_names.suggest(search);
-  }
-
-  /**
-   * Given a prefix search, returns a few matching tag values.
-   * @param search A prefix to search.
-   */
-  public List<String> suggestTagValues(final String search) {
-    return tag_values.suggest(search);
+  public List<String> suggestUIDs(final UIDType type, final String search, 
+      final int count) {
+    try {
+      return storage.suggestUIDs(type, search, count).joinUninterruptibly();
+    } catch (RuntimeException re) {
+      throw re;
+    } catch (Exception e) {
+      throw new RuntimeException(e.getMessage(), e);
+    }
   }
 
   /**
@@ -434,9 +432,7 @@ public final class TSDB {
    * @since 1.1
    */
   public void dropCaches() {
-    metrics.dropCaches();
-    tag_names.dropCaches();
-    tag_values.dropCaches();
+    storage.flushCaches();
   }
 
   // ------------------ //
