@@ -47,16 +47,15 @@ final class SuggestRpc implements HttpRpc {
           "] is not permitted for this endpoint");
     }
     
-    HashMap<String, String> map = null;
+    final String type;
+    final String q;
     if (query.apiVersion() > 0 && query.method() == HttpMethod.POST) {
-      map = query.formatter().parseSuggestV1();
-    }
-    final String type = map != null && map.containsKey("type") ? map.get("type")
-        : query.getRequiredQueryStringParam("type");
-    final String q = map != null && map.containsKey("q") ? map.get("q") 
-        : query.getQueryStringParam("q");
-    if (q == null) {
-      throw BadRequestException.missingParameter("q");
+      final HashMap<String, String> map = query.serializer().parseSuggestV1();
+      type = map.get("type");
+      q = map.get("q");
+    } else {
+      type = query.getRequiredQueryStringParam("type");
+      q = query.getRequiredQueryStringParam("q");
     }
     
     List<String> suggestions;
@@ -71,7 +70,7 @@ final class SuggestRpc implements HttpRpc {
     }
     
     if (query.apiVersion() > 0) {
-      query.sendReply(query.formatter().formatSuggestV1(suggestions));
+      query.sendReply(query.serializer().formatSuggestV1(suggestions));
     } else {
       query.sendReply(JSON.serializeToBytes(suggestions));
     }

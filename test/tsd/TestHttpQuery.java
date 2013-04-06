@@ -17,13 +17,10 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.powermock.api.mockito.PowerMockito.mock;
-import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Method;
 import java.nio.charset.Charset;
 import java.nio.charset.UnsupportedCharsetException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -44,20 +41,15 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
-import org.powermock.reflect.Whitebox;
 
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({TSDB.class, Config.class, HttpQuery.class})
-public class TestHttpQuery {
-  private TSDB tsdb = mock(TSDB.class);
-  private Config config = mock(Config.class);
+public final class TestHttpQuery {
+  private TSDB tsdb = null;
 
   @Before
   public void before() throws Exception {
-    HashMap<String, String> properties = new HashMap<String, String>();
-    properties.put("tsd.http.show_stack_trace", "true");
-    Whitebox.setInternalState(config, "properties", properties);
-    when(tsdb.getConfig()).thenReturn(config);
+    tsdb = NettyMocks.getMockedHTTPTSDB();
   }
   
   @Test
@@ -220,8 +212,8 @@ public class TestHttpQuery {
     assertEquals(query.apiVersion(), 0);
   }
   
-  @Test
-  public void getQueryBaseRouteAPIVMax() {
+  @Test (expected = BadRequestException.class)
+  public void getQueryBaseRouteAPIVNotImplemented() {
     final HttpQuery query = getQuery("/api/v3/put");
     assertEquals(query.getQueryBaseRoute(), "api/put");
     assertEquals(query.apiVersion(), 1);
@@ -229,7 +221,7 @@ public class TestHttpQuery {
   
   @Test
   public void getQueryBaseRouteAPICap() {
-    final HttpQuery query = getQuery("/API/V3/PUT");
+    final HttpQuery query = getQuery("/API/V1/PUT");
     assertEquals(query.getQueryBaseRoute(), "api/put");
     assertEquals(query.apiVersion(), 1);
   }
@@ -243,7 +235,7 @@ public class TestHttpQuery {
   
   @Test
   public void getQueryBaseRouteAPIQS() {
-    final HttpQuery query = getQuery("/api/v2/put?metric=mine");
+    final HttpQuery query = getQuery("/api/v1/put?metric=mine");
     assertEquals(query.getQueryBaseRoute(), "api/put");
     assertEquals(query.apiVersion(), 1);
   }
@@ -252,14 +244,14 @@ public class TestHttpQuery {
   public void getQueryBaseRouteAPINoEP() {
     final HttpQuery query = getQuery("/api");
     assertEquals(query.getQueryBaseRoute(), "api");
-    assertEquals(query.apiVersion(), 0);
+    assertEquals(query.apiVersion(), 1);
   }
   
   @Test
   public void getQueryBaseRouteAPINoEPSlash() {
     final HttpQuery query = getQuery("/api/");
     assertEquals(query.getQueryBaseRoute(), "api");
-    assertEquals(query.apiVersion(), 0);
+    assertEquals(query.apiVersion(), 1);
   }
   
   @Test
@@ -377,58 +369,58 @@ public class TestHttpQuery {
   
   @Test
   public void guessMimeTypeFromUriPNG() throws Exception {
-    assertEquals(ReflectguessMimeTypeFromUri().invoke(null, "abcd.png"), 
+    assertEquals(reflectguessMimeTypeFromUri().invoke(null, "abcd.png"), 
         "image/png");
   }
   
   @Test
   public void guessMimeTypeFromUriHTML() throws Exception {
-    assertEquals(ReflectguessMimeTypeFromUri().invoke(null, "abcd.html"), 
+    assertEquals(reflectguessMimeTypeFromUri().invoke(null, "abcd.html"), 
         "text/html; charset=UTF-8");
   }
   
   @Test
   public void guessMimeTypeFromUriCSS() throws Exception {
-    assertEquals(ReflectguessMimeTypeFromUri().invoke(null, "abcd.css"), 
+    assertEquals(reflectguessMimeTypeFromUri().invoke(null, "abcd.css"), 
         "text/css");
   }
   
   @Test
   public void guessMimeTypeFromUriJS() throws Exception {
-    assertEquals(ReflectguessMimeTypeFromUri().invoke(null, "abcd.js"), 
+    assertEquals(reflectguessMimeTypeFromUri().invoke(null, "abcd.js"), 
         "text/javascript");
   }
   
   @Test
   public void guessMimeTypeFromUriGIF() throws Exception {
-    assertEquals(ReflectguessMimeTypeFromUri().invoke(null, "abcd.gif"), 
+    assertEquals(reflectguessMimeTypeFromUri().invoke(null, "abcd.gif"), 
         "image/gif");
   }
   
   @Test
   public void guessMimeTypeFromUriICO() throws Exception {
-    assertEquals(ReflectguessMimeTypeFromUri().invoke(null, "abcd.ico"), 
+    assertEquals(reflectguessMimeTypeFromUri().invoke(null, "abcd.ico"), 
         "image/x-icon");
   }
   
   @Test
   public void guessMimeTypeFromUriOther() throws Exception {
-    assertNull(ReflectguessMimeTypeFromUri().invoke(null, "abcd.jpg"));
+    assertNull(reflectguessMimeTypeFromUri().invoke(null, "abcd.jpg"));
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void guessMimeTypeFromUriNull() throws Exception {
-    ReflectguessMimeTypeFromUri().invoke(null, (Object[])null);
+    reflectguessMimeTypeFromUri().invoke(null, (Object[])null);
   }
   
   @Test 
   public void guessMimeTypeFromUriEmpty() throws Exception {
-    assertNull(ReflectguessMimeTypeFromUri().invoke(null, ""));
+    assertNull(reflectguessMimeTypeFromUri().invoke(null, ""));
   }
 
   @Test
   public void guessMimeTypeFromContentsHTML() throws Exception {
-    assertEquals(ReflectguessMimeTypeFromContents().invoke(
+    assertEquals(reflectguessMimeTypeFromContents().invoke(
         getQuery(""),
         ChannelBuffers.copiedBuffer(
             "<HTML>...", Charset.forName("UTF-8"))), 
@@ -437,7 +429,7 @@ public class TestHttpQuery {
   
   @Test
   public void guessMimeTypeFromContentsJSONObj() throws Exception {
-    assertEquals(ReflectguessMimeTypeFromContents().invoke(
+    assertEquals(reflectguessMimeTypeFromContents().invoke(
         getQuery(""),
         ChannelBuffers.copiedBuffer(
             "{\"hello\":\"world\"}", Charset.forName("UTF-8"))), 
@@ -446,7 +438,7 @@ public class TestHttpQuery {
   
   @Test
   public void guessMimeTypeFromContentsJSONArray() throws Exception {
-    assertEquals(ReflectguessMimeTypeFromContents().invoke(
+    assertEquals(reflectguessMimeTypeFromContents().invoke(
         getQuery(""),
         ChannelBuffers.copiedBuffer(
             "[\"hello\",\"world\"]", Charset.forName("UTF-8"))), 
@@ -455,7 +447,7 @@ public class TestHttpQuery {
   
   @Test
   public void guessMimeTypeFromContentsPNG() throws Exception {
-    assertEquals(ReflectguessMimeTypeFromContents().invoke(
+    assertEquals(reflectguessMimeTypeFromContents().invoke(
         getQuery(""),
         ChannelBuffers.copiedBuffer(
             new byte[] {(byte) 0x89, 0x00})), 
@@ -464,7 +456,7 @@ public class TestHttpQuery {
   
   @Test
   public void guessMimeTypeFromContentsText() throws Exception {
-    assertEquals(ReflectguessMimeTypeFromContents().invoke(
+    assertEquals(reflectguessMimeTypeFromContents().invoke(
         getQuery(""),
         ChannelBuffers.copiedBuffer(
             "Just plain text", Charset.forName("UTF-8"))), 
@@ -473,7 +465,7 @@ public class TestHttpQuery {
   
   @Test 
   public void guessMimeTypeFromContentsEmpty() throws Exception {
-    assertEquals(ReflectguessMimeTypeFromContents().invoke(
+    assertEquals(reflectguessMimeTypeFromContents().invoke(
         getQuery(""),
         ChannelBuffers.copiedBuffer(
             "", Charset.forName("UTF-8"))), 
@@ -483,88 +475,88 @@ public class TestHttpQuery {
   @Test (expected = NullPointerException.class)
   public void guessMimeTypeFromContentsNull() throws Exception {
     ChannelBuffer buf = null;
-    ReflectguessMimeTypeFromContents().invoke(
+    reflectguessMimeTypeFromContents().invoke(
         getQuery(""), buf);
   }
   
   @Test
-  public void InitializeFormatterMaps() throws Exception {
-    HttpQuery.InitializeFormatterMaps(null);
+  public void initializeSerializerMaps() throws Exception {
+    HttpQuery.initializeSerializerMaps(null);
   }
   
   @Test
-  public void setFormatter() throws Exception {
-    HttpQuery.InitializeFormatterMaps(null);
+  public void setSerializer() throws Exception {
+    HttpQuery.initializeSerializerMaps(null);
     HttpQuery query = getQuery("/aggregators");
-    query.setFormatter();
-    assertEquals(query.formatter().getClass().getCanonicalName(), 
-        JsonFormatter.class.getCanonicalName());
+    query.setSerializer();
+    assertEquals(query.serializer().getClass().getCanonicalName(), 
+        HttpJsonSerializer.class.getCanonicalName());
   }
   
   @Test
   public void setFormatterQS() throws Exception {
-    HttpQuery.InitializeFormatterMaps(null);
+    HttpQuery.initializeSerializerMaps(null);
     HttpQuery query = getQuery("/aggregators?formatter=json");
-    query.setFormatter();
-    assertEquals(query.formatter().getClass().getCanonicalName(), 
-        JsonFormatter.class.getCanonicalName());
+    query.setSerializer();
+    assertEquals(query.serializer().getClass().getCanonicalName(), 
+        HttpJsonSerializer.class.getCanonicalName());
   }
   
   @Test
-  public void setFormatterDummyQS() throws Exception {
+  public void setSerializerDummyQS() throws Exception {
     PluginLoader.loadJAR("plugin_test.jar");
-    HttpQuery.InitializeFormatterMaps(null);
-    HttpQuery query = getQuery("/aggregators?formatter=dummy");
-    query.setFormatter();
-    assertEquals(query.formatter().getClass().getCanonicalName(), 
-        "net.opentsdb.tsd.DummyHttpFormatter");
+    HttpQuery.initializeSerializerMaps(null);
+    HttpQuery query = getQuery("/aggregators?serializer=dummy");
+    query.setSerializer();
+    assertEquals(query.serializer().getClass().getCanonicalName(), 
+        "net.opentsdb.tsd.DummyHttpSerializer");
   }
   
   @Test
-  public void SetFormatterCT() throws Exception {
-    HttpQuery.InitializeFormatterMaps(null);
+  public void setSerializerCT() throws Exception {
+    HttpQuery.initializeSerializerMaps(null);
     final Channel channelMock = NettyMocks.fakeChannel();
     final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
         HttpMethod.GET, "/");
     req.addHeader("Content-Type", "application/json");
     final HttpQuery query = new HttpQuery(tsdb, req, channelMock);
-    query.setFormatter();
-    assertEquals(query.formatter().getClass().getCanonicalName(), 
-        JsonFormatter.class.getCanonicalName());
+    query.setSerializer();
+    assertEquals(query.serializer().getClass().getCanonicalName(), 
+        HttpJsonSerializer.class.getCanonicalName());
   }
   
   @Test
-  public void SetFormatterDummyCT() throws Exception {
+  public void setSerializerDummyCT() throws Exception {
     PluginLoader.loadJAR("plugin_test.jar");
-    HttpQuery.InitializeFormatterMaps(null);
+    HttpQuery.initializeSerializerMaps(null);
     final Channel channelMock = NettyMocks.fakeChannel();
     final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
         HttpMethod.GET, "/");
     req.addHeader("Content-Type", "application/tsdbdummy");
     final HttpQuery query = new HttpQuery(tsdb, req, channelMock);
-    query.setFormatter();
-    assertEquals(query.formatter().getClass().getCanonicalName(), 
-        "net.opentsdb.tsd.DummyHttpFormatter");
+    query.setSerializer();
+    assertEquals(query.serializer().getClass().getCanonicalName(), 
+        "net.opentsdb.tsd.DummyHttpSerializer");
   }
   
   @Test
-  public void SetFormatterDefaultCT() throws Exception {
-    HttpQuery.InitializeFormatterMaps(null);
+  public void setSerializerDefaultCT() throws Exception {
+    HttpQuery.initializeSerializerMaps(null);
     final Channel channelMock = NettyMocks.fakeChannel();
     final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
         HttpMethod.GET, "/");
     req.addHeader("Content-Type", "invalid/notfoundtype");
     final HttpQuery query = new HttpQuery(tsdb, req, channelMock);
-    query.setFormatter();
-    assertEquals(query.formatter().getClass().getCanonicalName(), 
-        JsonFormatter.class.getCanonicalName());
+    query.setSerializer();
+    assertEquals(query.serializer().getClass().getCanonicalName(), 
+        HttpJsonSerializer.class.getCanonicalName());
   }
   
   @Test (expected = BadRequestException.class)
-  public void setFormatterNotFound() throws Exception {
-    HttpQuery.InitializeFormatterMaps(null);
-    HttpQuery query = getQuery("/aggregators?formatter=notfound");
-    query.setFormatter();
+  public void setSerializerNotFound() throws Exception {
+    HttpQuery.initializeSerializerMaps(null);
+    HttpQuery query = getQuery("/api/suggest?serializer=notfound");
+    query.setSerializer();
   }
   
   /**
@@ -586,7 +578,7 @@ public class TestHttpQuery {
    * @return The method if it was detected
    * @throws Exception If the method was not found
    */
-  private Method ReflectguessMimeTypeFromUri() throws Exception {
+  private Method reflectguessMimeTypeFromUri() throws Exception {
     Method guessMimeTypeFromUri = HttpQuery.class.getDeclaredMethod(
         "guessMimeTypeFromUri", String.class);
     guessMimeTypeFromUri.setAccessible(true);
@@ -599,7 +591,7 @@ public class TestHttpQuery {
    * @return The method if it was detected
    * @throws Exception if the method was not found
    */
-  private Method ReflectguessMimeTypeFromContents() throws Exception {
+  private Method reflectguessMimeTypeFromContents() throws Exception {
     Method guessMimeTypeFromContents = HttpQuery.class.getDeclaredMethod(
         "guessMimeTypeFromContents", ChannelBuffer.class);
     guessMimeTypeFromContents.setAccessible(true);

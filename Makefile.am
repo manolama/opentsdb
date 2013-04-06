@@ -67,17 +67,17 @@ tsdb_SRC := \
 	src/tsd/ConnectionManager.java	\
 	src/tsd/GnuplotException.java	\
 	src/tsd/GraphHandler.java	\
-	src/tsd/HttpFormatter.java	\
+	src/tsd/HttpJsonSerializer.java	\
+	src/tsd/HttpSerializer.java	\
 	src/tsd/HttpQuery.java	\
 	src/tsd/HttpRpc.java	\
-	src/tsd/JsonFormatter.java	\
-	src/tsd/LineBasedFrameDecoder.java \
-	src/tsd/LogsRpc.java \
-	src/tsd/PipelineFactory.java \
-	src/tsd/PutDataPointRpc.java \
+	src/tsd/LineBasedFrameDecoder.java	\
+	src/tsd/LogsRpc.java	\
+	src/tsd/PipelineFactory.java	\
+	src/tsd/PutDataPointRpc.java	\
 	src/tsd/RpcHandler.java	\
-	src/tsd/StaticFileRpc.java \
-	src/tsd/SuggestRpc.java \
+	src/tsd/StaticFileRpc.java	\
+	src/tsd/SuggestRpc.java	\
 	src/tsd/TelnetRpc.java	\
 	src/tsd/WordSplitter.java	\
 	src/uid/NoSuchUniqueId.java	\
@@ -128,12 +128,12 @@ test_SRC := \
 test_plugin_SRC := \
   test/plugin/DummyPluginA.java \
   test/plugin/DummyPluginB.java \
-  test/tsd/DummyHttpFormatter.java
+  test/tsd/DummyHttpSerializer.java
 
 # Do NOT include the test dir path, just the META portion
 test_plugin_SVCS := \
   META-INF/services/net.opentsdb.plugin.DummyPlugin \
-  META-INF/services/net.opentsdb.tsd.HttpFormatter
+  META-INF/services/net.opentsdb.tsd.HttpSerializer
   
 test_plugin_MF := \
   test/META-INF/MANIFEST.MF

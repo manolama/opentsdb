@@ -121,7 +121,7 @@ final class GraphHandler implements HttpRpc {
     } catch (IOException e) {
       query.internalError(e);
     } catch (IllegalArgumentException e) {
-      query.badRequest(new BadRequestException(e.getMessage()));
+      query.badRequest(e.getMessage());
     }
   }
 
@@ -290,10 +290,9 @@ final class GraphHandler implements HttpRpc {
       try {
         execute();
       } catch (BadRequestException e) {
-        query.badRequest(new BadRequestException(e.getMessage()));
+        query.badRequest(e.getMessage());
       } catch (GnuplotException e) {
-        query.badRequest(new BadRequestException(
-            "<pre>" + e.getMessage() + "</pre>"));
+        query.badRequest("<pre>" + e.getMessage() + "</pre>");
       } catch (RuntimeException e) {
         query.internalError(e);
       } catch (IOException e) {

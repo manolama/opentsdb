@@ -103,9 +103,10 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     http_commands.put("aggregators", new ListAggregators());
     http_commands.put("logs", new LogsRpc());
     http_commands.put("q", new GraphHandler());
-    http_commands.put("suggest", new SuggestRpc());
-    http_commands.put("api/suggest", new SuggestRpc());
-    http_commands.put("api/formatters", new Formatters());
+    SuggestRpc suggest_rpc = new SuggestRpc();
+    http_commands.put("suggest", suggest_rpc);
+    http_commands.put("api/suggest", suggest_rpc);
+    http_commands.put("api/serializers", new Serializers());
   }
 
   @Override
@@ -158,14 +159,13 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     if (req.isChunked()) {
       logError(query, "Received an unsupported chunked request: "
                + query.request());
-      query.badRequest(
-              new BadRequestException("Chunked request not supported"));
+      query.badRequest("Chunked request not supported");
       return;
     }
     try {
-      try{
-        query.setFormatter();
+      try {        
         final String route = query.getQueryBaseRoute();
+        query.setSerializer();
         
         final HttpRpc rpc = http_commands.get(route);
         if (rpc != null) {
@@ -175,7 +175,6 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
         }
       } catch (BadRequestException ex) {
         query.badRequest(ex);
-        //query.sendReply(ex.getStatus(), query.formatter().formatError(ex));
       }
     } catch (Exception ex) {
       query.internalError(ex);
@@ -436,7 +435,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
 
   /** The /api/formatters endpoint 
    * @since 2.0 */
-  private static final class Formatters implements HttpRpc {
+  private static final class Serializers implements HttpRpc {
     public void execute(final TSDB tsdb, final HttpQuery query) 
       throws IOException {
       // only accept GET/POST
@@ -449,8 +448,12 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       switch (query.apiVersion()) {
         case 0:
         case 1:
+          query.sendReply(query.serializer().formatSerializersV1());
+          break;
         default: 
-          query.sendReply(query.formatter().formatFormattersV1());
+          throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+              "Requested API version not implemented", "Version " + 
+              query.apiVersion() + " is not implemented");
       }
     }
   }

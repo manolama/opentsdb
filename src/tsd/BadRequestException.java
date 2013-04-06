@@ -38,9 +38,7 @@ final class BadRequestException extends RuntimeException {
    * @param A brief, descriptive error message
    */
   public BadRequestException(final String message) {
-    super(message);
-    this.status = HttpResponseStatus.BAD_REQUEST;
-    this.details = "";
+    this(HttpResponseStatus.BAD_REQUEST, message, "");
   }
   
   /**
@@ -51,9 +49,7 @@ final class BadRequestException extends RuntimeException {
    */
   public BadRequestException(final HttpResponseStatus status, 
       final String message) {
-    super(message);
-    this.status = status;
-    this.details = "";
+    this(status, message, "");
   }
   
   /**
@@ -93,5 +89,5 @@ final class BadRequestException extends RuntimeException {
     return this.details;
   }
   
-  static final long serialVersionUID = 1276251669;
+  static final long serialVersionUID = 1365109233;
 }
