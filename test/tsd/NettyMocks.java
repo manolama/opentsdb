@@ -49,7 +49,6 @@ public final class NettyMocks {
     final Config config = mock(Config.class);
     HashMap<String, String> properties = new HashMap<String, String>();
     properties.put("tsd.http.show_stack_trace", "true");
-    when(config.getBoolean("tsd.http.show_stack_trace")).thenReturn(true);
     Whitebox.setInternalState(config, "properties", properties);
     when(tsdb.getConfig()).thenReturn(config);
     return tsdb;

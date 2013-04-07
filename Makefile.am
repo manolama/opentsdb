@@ -411,7 +411,7 @@ mostlyclean-local:
 	@rm -f .javac-stamp .javac-unittests-stamp .javac-unittests-plugin-stamp .gwtc-stamp* .staticroot-stamp
 	rm -rf gwt gwt-unitCache staticroot
 	rm -f manifest $(BUILT_SOURCES)
-	rm -f $(classes_with_nested_classes) $(test_classes_with_nested_classes)
+	rm -f $(classes_with_nested_classes) $(test_classes_with_nested_classes) $(test_plugin_classes)
 	test -d $(package_dir) || exit 0 \
 	  && find $(package_dir) -depth -type d -exec rmdir {} ';' \
 	  && dir=$(package_dir) && dir=$${dir%/*} \
