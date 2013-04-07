@@ -109,7 +109,7 @@ final class HttpQuery {
   private int api_version = 0;
   
   /** The serializer to use for parsing input and responding */
-  private HttpSerializer serializer = new HttpJsonSerializer();
+  private HttpSerializer serializer = null;
   
   /** Deferred result of this query, to allow asynchronous processing.  */
   private final Deferred<Object> deferred = new Deferred<Object>();
@@ -136,6 +136,7 @@ final class HttpQuery {
     this.show_stack_trace = 
       tsdb.getConfig().getBoolean("tsd.http.show_stack_trace");
     this.method = request.getMethod();
+    this.serializer = new HttpJsonSerializer(this);
   }
 
   /**
@@ -334,9 +335,8 @@ final class HttpQuery {
    * <li>"/api/query" - "api/query" - a default versioned API call</li>
    * </ul>
    * @return the base route
-   * @throws NumberFormatException if the version cannot be parsed
    * @throws BadRequestException if the version requested is greater than the
-   * max
+   * max or the version # can't be parsed
    * @since 2.0
    */
   public String getQueryBaseRoute() {
@@ -355,14 +355,21 @@ final class HttpQuery {
     }
     if (split[1].toLowerCase().startsWith("v") && split[1].length() > 1 && 
         Character.isDigit(split[1].charAt(1))) {
-      final int version = Integer.parseInt(split[1].substring(1));
-      if (version > MAX_API_VERSION) {
-        throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
-            "Requested API version is greater than the max implemented", 
-            "API version [" + version + "] is greater than the max [" + 
-            MAX_API_VERSION + "]");
+      try {
+        final int version = Integer.parseInt(split[1].substring(1));
+        if (version > MAX_API_VERSION) {
+          throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+              "Requested API version is greater than the max implemented", 
+              "API version [" + version + "] is greater than the max [" + 
+              MAX_API_VERSION + "]");
+        }
+        this.api_version = version;
+      } catch (NumberFormatException nfe) {
+        throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
+            "Invalid API version format supplied", 
+            "API version [" + split[1].substring(1) + 
+            "] cannot be parsed to an integer");
       }
-      this.api_version = version;
     } else {
       return "api/" + split[1].toLowerCase();
     }
@@ -471,6 +478,8 @@ final class HttpQuery {
     logError("Internal Server Error on " + request.getUri(), cause);
     
     if (this.api_version > 0) {
+      // always default to the latest version of the error formatter since we
+      // need to return something
       switch (this.api_version) {
         case 1:
         default:
@@ -558,6 +567,8 @@ final class HttpQuery {
   public void notFound() {
     logWarn("Not Found: " + request.getUri());
     if (this.api_version > 0) { 
+      // always default to the latest version of the error formatter since we
+      // need to return something
       switch (this.api_version) {
         case 1:
         default:
@@ -864,7 +875,7 @@ final class HttpQuery {
           serializer.responseContentType()));
     
     // TODO(tsuna): Server, X-Backend, etc. headers.
-    // only reset the statis if we have the default status, otherwise the user 
+    // only reset the status if we have the default status, otherwise the user 
     // already set it
     if (response.getStatus() == HttpResponseStatus.ACCEPTED) {
       response.setStatus(status);

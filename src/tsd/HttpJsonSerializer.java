@@ -18,6 +18,7 @@ import java.util.List;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.stumbleupon.async.Deferred;
@@ -80,8 +81,12 @@ class HttpJsonSerializer extends HttpSerializer {
    */
   @Override
   public HashMap<String, String> parseSuggestV1() throws IOException {
-    if (!query.hasContent())
-      return null;
+    final String json = query.getContent();
+    if (json == null || json.isEmpty()) {
+      throw new BadRequestException(HttpResponseStatus.BAD_REQUEST,
+          "Missing message content",
+          "Supply valid JSON formatted data in the body of your request");
+    }
     return JSON.parseToObject(query.getContent(), 
         new TypeReference<HashMap<String, String>>(){});
   }
@@ -116,11 +121,11 @@ class HttpJsonSerializer extends HttpSerializer {
    */
   private ChannelBuffer serializeJSON(final Object obj) throws IOException {
     if (query.hasQueryStringParam("jsonp")) {
-      return ChannelBuffers.copiedBuffer(
+      return ChannelBuffers.wrappedBuffer(
           JSON.serializeToJSONPBytes(query.getQueryStringParam("jsonp"), 
           obj));
     }
-    return ChannelBuffers.copiedBuffer(
+    return ChannelBuffers.wrappedBuffer(
         JSON.serializeToBytes(obj));
   }
 }

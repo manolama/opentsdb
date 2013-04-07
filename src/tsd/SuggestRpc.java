@@ -52,8 +52,14 @@ final class SuggestRpc implements HttpRpc {
     if (query.apiVersion() > 0 && query.method() == HttpMethod.POST) {
       final HashMap<String, String> map = query.serializer().parseSuggestV1();
       type = map.get("type");
+      if (type == null || type.isEmpty()) {
+        throw new BadRequestException("Missing 'type' parameter");
+      }
       q = map.get("q");
-    } else {
+      if (q == null) {
+        throw new BadRequestException("Missing 'q' parameter");
+      }
+    } else { 
       type = query.getRequiredQueryStringParam("type");
       q = query.getRequiredQueryStringParam("q");
     }
@@ -71,7 +77,7 @@ final class SuggestRpc implements HttpRpc {
     
     if (query.apiVersion() > 0) {
       query.sendReply(query.serializer().formatSuggestV1(suggestions));
-    } else {
+    } else { // deprecated API
       query.sendReply(JSON.serializeToBytes(suggestions));
     }
   }  

@@ -117,7 +117,9 @@ test_SRC := \
 	test/stats/TestHistogram.java	\
 	test/tsd/NettyMocks.java	\
 	test/tsd/TestGraphHandler.java	\
+	test/tsd/TestHttpJsonSerializer.java	\
 	test/tsd/TestHttpQuery.java	\
+	test/tsd/TestSuggestRpc.java	\
 	test/uid/TestNoSuchUniqueId.java	\
 	test/uid/TestUniqueId.java \
 	test/utils/TestConfig.java \ 

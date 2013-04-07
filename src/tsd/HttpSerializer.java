@@ -201,7 +201,6 @@ public abstract class HttpSerializer {
     } else {
       output.append("Page not found");
     }
-    output.append("\",\"details\":\"").append("");
     output.append("\"}}");
     if (query.hasQueryStringParam("jsonp")) {
       output.append(")");
