@@ -20,6 +20,9 @@ import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 
+import ch.qos.logback.classic.spi.ThrowableProxy;
+import ch.qos.logback.classic.spi.ThrowableProxyUtil;
+
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
@@ -235,6 +238,14 @@ public abstract class HttpSerializer {
       HttpQuery.escapeJson(exception.getDetails(), details);
       output.append(",\"details\":\"").append(details.toString()).append("\"");
     }
+    if (query.showStackTrace()) {
+      ThrowableProxy tp = new ThrowableProxy(exception);
+      tp.calculatePackagingData();
+      final String pretty_exc = ThrowableProxyUtil.asString(tp);
+      final StringBuilder trace = new StringBuilder(pretty_exc.length());
+      HttpQuery.escapeJson(pretty_exc, trace);
+      output.append(",\"trace\":\"").append(trace.toString()).append("\"");
+    }
     output.append("}}");
     if (query.hasQueryStringParam("jsonp")) {
       output.append(")");
@@ -262,8 +273,16 @@ public abstract class HttpSerializer {
     output.append(500);
     final StringBuilder msg = new StringBuilder(exception.getMessage().length());
     HttpQuery.escapeJson(exception.getMessage(), msg);
-    output.append(",\"message\":\"").append(msg.toString());
-    output.append("\"}}");
+    output.append(",\"message\":\"").append(msg.toString()).append("\"");
+    if (query.showStackTrace()) {
+      ThrowableProxy tp = new ThrowableProxy(exception);
+      tp.calculatePackagingData();
+      final String pretty_exc = ThrowableProxyUtil.asString(tp);
+      final StringBuilder trace = new StringBuilder(pretty_exc.length());
+      HttpQuery.escapeJson(pretty_exc, trace);
+      output.append(",\"trace\":\"").append(trace.toString()).append("\"");
+    }
+    output.append("}}");
     if (query.hasQueryStringParam("jsonp")) {
       output.append(")");
     }

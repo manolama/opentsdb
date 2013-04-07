@@ -641,8 +641,9 @@ public final class TestHttpQuery {
     assertEquals(HttpResponseStatus.INTERNAL_SERVER_ERROR, 
         query.response().getStatus());    
     assertEquals(
-        "{\"error\":{\"code\":500,\"message\":\"Internal Error\"}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+        "{\"error\":{\"code\":500,\"message\":\"Internal Error\"", 
+        query.response().getContent().toString(Charset.forName("UTF-8"))
+        .substring(0, 47));
   }
   
   @Test (expected = NullPointerException.class)
@@ -691,8 +692,9 @@ public final class TestHttpQuery {
     }
     assertEquals(HttpResponseStatus.BAD_REQUEST, query.response().getStatus()); 
     assertEquals(
-        "{\"error\":{\"code\":400,\"message\":\"Bad user error\"}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+        "{\"error\":{\"code\":400,\"message\":\"Bad user error\"", 
+        query.response().getContent().toString(Charset.forName("UTF-8"))
+        .substring(0, 47));
   }
   
   @Test
@@ -707,8 +709,9 @@ public final class TestHttpQuery {
     }
     assertEquals(HttpResponseStatus.FORBIDDEN, query.response().getStatus()); 
     assertEquals(
-        "{\"error\":{\"code\":403,\"message\":\"Bad user error\"}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+        "{\"error\":{\"code\":403,\"message\":\"Bad user error\"", 
+        query.response().getContent().toString(Charset.forName("UTF-8"))
+        .substring(0, 47));
   }
   
   @Test
@@ -723,8 +726,9 @@ public final class TestHttpQuery {
     }
     assertEquals(HttpResponseStatus.FORBIDDEN, query.response().getStatus()); 
     assertEquals(
-        "{\"error\":{\"code\":403,\"message\":\"Bad user error\",\"details\":\"Got Details\"}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+        "{\"error\":{\"code\":403,\"message\":\"Bad user error\",\"details\":\"Got Details\"", 
+        query.response().getContent().toString(Charset.forName("UTF-8"))
+        .substring(0, 71));
   }
   
   @Test (expected = NullPointerException.class)
@@ -761,8 +765,9 @@ public final class TestHttpQuery {
     query.badRequest("Bad user error");
     assertEquals(HttpResponseStatus.BAD_REQUEST, query.response().getStatus()); 
     assertEquals(
-        "{\"error\":{\"code\":400,\"message\":\"Bad user error\"}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+        "{\"error\":{\"code\":400,\"message\":\"Bad user error\"", 
+        query.response().getContent().toString(Charset.forName("UTF-8"))
+        .substring(0, 47));
   }
   
   @Test

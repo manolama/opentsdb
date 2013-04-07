@@ -166,7 +166,7 @@ dist_pkgdata_DATA = src/logback.xml
 dist_static_DATA = src/tsd/static/favicon.ico
 
 EXTRA_DIST = tsdb.in $(tsdb_SRC) $(test_SRC) \
-        $(test_plugin_SRC) $(test_plugin_MF) $(srcdir)/test/$(test_plugin_SVCS)\
+        $(test_plugin_SRC) $(test_plugin_MF) $(test_plugin_SVCS:%=$(srcdir)/test/%) \
         $(THIRD_PARTY) $(THIRD_PARTY:=.md5) \
         $(httpui_SRC) $(httpui_DEPS) \
 	tools/check_tsd	\
