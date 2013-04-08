@@ -272,7 +272,8 @@ public abstract class HttpSerializer {
   public ChannelBuffer formatErrorV1(final BadRequestException exception) {
     StringBuilder output = 
       new StringBuilder(exception.getMessage().length() * 2);
-    if (query.hasQueryStringParam("jsonp")) {
+    final String jsonp = query.getQueryStringParam("jsonp");
+    if (jsonp != null && !jsonp.isEmpty()) {
       output.append(query.getQueryStringParam("jsonp") + "(");
     }
     output.append("{\"error\":{\"code\":");
@@ -295,7 +296,7 @@ public abstract class HttpSerializer {
       output.append(",\"trace\":\"").append(trace.toString()).append("\"");
     }
     output.append("}}");
-    if (query.hasQueryStringParam("jsonp")) {
+    if (jsonp != null && !jsonp.isEmpty()) {
       output.append(")");
     }
     return ChannelBuffers.copiedBuffer(
@@ -314,7 +315,8 @@ public abstract class HttpSerializer {
   public ChannelBuffer formatErrorV1(final Exception exception) {
     StringBuilder output = 
       new StringBuilder(exception.getMessage().length() * 2);
-    if (query.hasQueryStringParam("jsonp")) {
+    final String jsonp = query.getQueryStringParam("jsonp");
+    if (jsonp != null && !jsonp.isEmpty()) {
       output.append(query.getQueryStringParam("jsonp") + "(");
     }
     output.append("{\"error\":{\"code\":");
@@ -331,7 +333,7 @@ public abstract class HttpSerializer {
       output.append(",\"trace\":\"").append(trace.toString()).append("\"");
     }
     output.append("}}");
-    if (query.hasQueryStringParam("jsonp")) {
+    if (jsonp != null && !jsonp.isEmpty()) {
       output.append(")");
     }
     return ChannelBuffers.copiedBuffer(
