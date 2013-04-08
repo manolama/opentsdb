@@ -15,6 +15,7 @@ package net.opentsdb.tsd;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.jboss.netty.buffer.ChannelBuffer;
@@ -124,6 +125,16 @@ class HttpJsonSerializer extends HttpSerializer {
     return this.serializeJSON(aggregators);
   }
   
+  /**
+   * Format a hash map of information about the OpenTSDB version
+   * @param version A hash map with version information
+   * @return A JSON structure
+   * @throws IOException if the serialization failed
+   */
+  public ChannelBuffer formatVersionV1(final Map<String, String> version) 
+    throws IOException {
+    return this.serializeJSON(version);
+  }
   /**
    * Helper object for the format calls to wrap the JSON response in a JSONP
    * function if requested. Used for code dedupe.

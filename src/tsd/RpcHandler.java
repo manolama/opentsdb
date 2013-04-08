@@ -88,6 +88,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       final Version version = new Version();
       telnet_commands.put("version", version);
       http_commands.put("version", version);
+      http_commands.put("api/version", version);
     }
     {
       final DropCaches dropcaches = new DropCaches();
@@ -384,27 +385,39 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
 
     public void execute(final TSDB tsdb, final HttpQuery query) throws 
       IOException {
-      final boolean json = query.request().getUri().endsWith("json");
       
-      if (json) {
-        HashMap<String, String> version = new HashMap<String, String>();
-        version.put("version", BuildData.version);
-        version.put("short_revision", BuildData.short_revision);
-        version.put("full_revision", BuildData.full_revision);
-        version.put("timestamp", Long.toString(BuildData.timestamp));
-        version.put("repo_status", BuildData.repo_status.toString());
-        version.put("user", BuildData.user);
-        version.put("host", BuildData.host);
-        version.put("repo", BuildData.repo);
-        query.sendReply(JSON.serializeToBytes(version));
+      // only accept GET/POST
+      if (query.method() != HttpMethod.GET && query.method() != HttpMethod.POST) {
+        throw new BadRequestException(HttpResponseStatus.METHOD_NOT_ALLOWED, 
+            "Method not allowed", "The HTTP method [" + query.method().getName() +
+            "] is not permitted for this endpoint");
+      }
+      
+      final HashMap<String, String> version = new HashMap<String, String>();
+      version.put("version", BuildData.version);
+      version.put("short_revision", BuildData.short_revision);
+      version.put("full_revision", BuildData.full_revision);
+      version.put("timestamp", Long.toString(BuildData.timestamp));
+      version.put("repo_status", BuildData.repo_status.toString());
+      version.put("user", BuildData.user);
+      version.put("host", BuildData.host);
+      version.put("repo", BuildData.repo);
+      
+      if (query.apiVersion() > 0) {
+        query.sendReply(query.serializer().formatVersionV1(version));
       } else {
-        final String revision = BuildData.revisionString();
-        final String build = BuildData.buildString();
-        StringBuilder buf;
-        buf = new StringBuilder(2 // For the \n's
-                                + revision.length() + build.length());
-        buf.append(revision).append('\n').append(build).append('\n');
-        query.sendReply(buf);
+        final boolean json = query.request().getUri().endsWith("json");      
+        if (json) {
+          query.sendReply(JSON.serializeToBytes(version));
+        } else {
+          final String revision = BuildData.revisionString();
+          final String build = BuildData.buildString();
+          StringBuilder buf;
+          buf = new StringBuilder(2 // For the \n's
+                                  + revision.length() + build.length());
+          buf.append(revision).append('\n').append(build).append('\n');
+          query.sendReply(buf);
+        }
       }
     }
   }

@@ -15,6 +15,7 @@ package net.opentsdb.tsd;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.jboss.netty.buffer.ChannelBuffer;
@@ -160,7 +161,7 @@ public abstract class HttpSerializer {
   /**
    * Formats a suggestion response
    * @param suggestions List of suggestions for the given type
-   * @return A JSON formatted byte array
+   * @return A ChannelBuffer object to pass on to the caller
    * @throws IOException if the serialization failed
    * @throws BadRequestException if the plugin has not implemented this method
    */
@@ -174,7 +175,7 @@ public abstract class HttpSerializer {
 
   /**
    * Format the serializers status map
-   * @return A JSON structure
+   * @return A ChannelBuffer object to pass on to the caller
    * @throws IOException if the serialization failed
    * @throws BadRequestException if the plugin has not implemented this method
    */
@@ -188,7 +189,7 @@ public abstract class HttpSerializer {
   /**
    * Format the list of implemented aggregators
    * @param aggregators The list of aggregation functions
-   * @return A JSON structure
+   * @return A ChannelBuffer object to pass on to the caller
    * @throws IOException if the serialization failed
    * @throws BadRequestException if the plugin has not implemented this method
    */
@@ -198,6 +199,21 @@ public abstract class HttpSerializer {
         "The requested API endpoint has not been implemented", 
         this.getClass().getCanonicalName() + 
         " has not implemented formatAggregatorsV1");
+  }
+  
+  /**
+   * Format a hash map of information about the OpenTSDB version
+   * @param version A hash map with version information
+   * @return A ChannelBuffer object to pass on to the caller
+   * @throws IOException if the serialization failed
+   * @throws BadRequestException if the plugin has not implemented this method
+   */
+  public ChannelBuffer formatVersionV1(final Map<String, String> version) 
+    throws IOException {
+    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+        "The requested API endpoint has not been implemented", 
+        this.getClass().getCanonicalName() + 
+        " has not implemented formatVersionV1");
   }
   
   /**
