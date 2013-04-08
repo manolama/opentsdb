@@ -217,6 +217,21 @@ public abstract class HttpSerializer {
   }
   
   /**
+   * Format a response from the DropCaches call
+   * @param response A hash map with a response
+   * @return A ChannelBuffer object to pass on to the caller
+   * @throws IOException if the serialization failed
+   * @throws BadRequestException if the plugin has not implemented this method
+   */
+  public ChannelBuffer formatDropCachesV1(final Map<String, String> response) 
+    throws IOException {
+    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+        "The requested API endpoint has not been implemented", 
+        this.getClass().getCanonicalName() + 
+        " has not implemented formatDropCachesV1");
+  }
+  
+  /**
    * Formats a 404 error when an endpoint or file wasn't found
    * <p>
    * <b>WARNING:</b> If overriding, make sure this method catches all errors and

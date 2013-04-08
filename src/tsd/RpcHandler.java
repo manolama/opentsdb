@@ -94,6 +94,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       final DropCaches dropcaches = new DropCaches();
       telnet_commands.put("dropcaches", dropcaches);
       http_commands.put("dropcaches", dropcaches);
+      http_commands.put("api/dropcaches", dropcaches);
     }
 
     telnet_commands.put("exit", new Exit());
@@ -454,9 +455,25 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       return Deferred.fromResult(null);
     }
 
-    public void execute(final TSDB tsdb, final HttpQuery query) {
+    public void execute(final TSDB tsdb, final HttpQuery query) 
+      throws IOException {
       dropCaches(tsdb, query.channel());
-      query.sendReply("Caches dropped.\n");
+      
+      // only accept GET/POST
+      if (query.method() != HttpMethod.GET && query.method() != HttpMethod.POST) {
+        throw new BadRequestException(HttpResponseStatus.METHOD_NOT_ALLOWED, 
+            "Method not allowed", "The HTTP method [" + query.method().getName() +
+            "] is not permitted for this endpoint");
+      }
+      
+      if (query.apiVersion() > 0) {
+        final HashMap<String, String> response = new HashMap<String, String>();
+        response.put("status", "200");
+        response.put("message", "Caches dropped");
+        query.sendReply(query.serializer().formatDropCachesV1(response));
+      } else { // deprecated API
+        query.sendReply("Caches dropped.\n");
+      }
     }
 
     /** Drops in memory caches.  */

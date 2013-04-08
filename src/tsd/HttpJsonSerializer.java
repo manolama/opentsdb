@@ -135,6 +135,18 @@ class HttpJsonSerializer extends HttpSerializer {
     throws IOException {
     return this.serializeJSON(version);
   }
+  
+  /**
+   * Format a response from the DropCaches call
+   * @param response A hash map with a response
+   * @return A JSON structure
+   * @throws IOException if the serialization failed
+   */
+  public ChannelBuffer formatDropCachesV1(final Map<String, String> response) 
+    throws IOException {
+    return this.serializeJSON(response);
+  }
+  
   /**
    * Helper object for the format calls to wrap the JSON response in a JSONP
    * function if requested. Used for code dedupe.
