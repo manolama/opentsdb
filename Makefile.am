@@ -67,17 +67,17 @@ tsdb_SRC := \
 	src/tsd/ConnectionManager.java	\
 	src/tsd/GnuplotException.java	\
 	src/tsd/GraphHandler.java	\
-	src/tsd/HttpFormatter.java	\
+	src/tsd/HttpJsonSerializer.java	\
+	src/tsd/HttpSerializer.java	\
 	src/tsd/HttpQuery.java	\
 	src/tsd/HttpRpc.java	\
-	src/tsd/JsonFormatter.java	\
-	src/tsd/LineBasedFrameDecoder.java \
-	src/tsd/LogsRpc.java \
-	src/tsd/PipelineFactory.java \
-	src/tsd/PutDataPointRpc.java \
+	src/tsd/LineBasedFrameDecoder.java	\
+	src/tsd/LogsRpc.java	\
+	src/tsd/PipelineFactory.java	\
+	src/tsd/PutDataPointRpc.java	\
 	src/tsd/RpcHandler.java	\
-	src/tsd/StaticFileRpc.java \
-	src/tsd/SuggestRpc.java \
+	src/tsd/StaticFileRpc.java	\
+	src/tsd/SuggestRpc.java	\
 	src/tsd/TelnetRpc.java	\
 	src/tsd/WordSplitter.java	\
 	src/uid/NoSuchUniqueId.java	\
@@ -117,7 +117,9 @@ test_SRC := \
 	test/stats/TestHistogram.java	\
 	test/tsd/NettyMocks.java	\
 	test/tsd/TestGraphHandler.java	\
+	test/tsd/TestHttpJsonSerializer.java	\
 	test/tsd/TestHttpQuery.java	\
+	test/tsd/TestSuggestRpc.java	\
 	test/uid/TestNoSuchUniqueId.java	\
 	test/uid/TestUniqueId.java \
 	test/utils/TestConfig.java \ 
@@ -128,12 +130,12 @@ test_SRC := \
 test_plugin_SRC := \
   test/plugin/DummyPluginA.java \
   test/plugin/DummyPluginB.java \
-  test/tsd/DummyHttpFormatter.java
+  test/tsd/DummyHttpSerializer.java
 
 # Do NOT include the test dir path, just the META portion
 test_plugin_SVCS := \
   META-INF/services/net.opentsdb.plugin.DummyPlugin \
-  META-INF/services/net.opentsdb.tsd.HttpFormatter
+  META-INF/services/net.opentsdb.tsd.HttpSerializer
   
 test_plugin_MF := \
   test/META-INF/MANIFEST.MF
@@ -164,7 +166,7 @@ dist_pkgdata_DATA = src/logback.xml
 dist_static_DATA = src/tsd/static/favicon.ico
 
 EXTRA_DIST = tsdb.in $(tsdb_SRC) $(test_SRC) \
-        $(test_plugin_SRC) $(test_plugin_MF) $(srcdir)/test/$(test_plugin_SVCS)\
+        $(test_plugin_SRC) $(test_plugin_MF) $(test_plugin_SVCS:%=$(srcdir)/test/%) \
         $(THIRD_PARTY) $(THIRD_PARTY:=.md5) \
         $(httpui_SRC) $(httpui_DEPS) \
 	tools/check_tsd	\
@@ -214,7 +216,7 @@ install-exec-hook:
 	rm -f tsdb.tmp
 
 $(builddata_SRC): .git/HEAD $(tsdb_SRC) $(top_srcdir)/build-aux/gen_build_data.sh
-	$(srcdir)/build-aux/gen_build_data.sh $(builddata_SRC) $(package)
+	$(srcdir)/build-aux/gen_build_data.sh $(builddata_SRC) $(package) $(PACKAGE_VERSION)
 
 jar: $(jar) .javac-unittests-stamp .gwtc-stamp
 
@@ -409,7 +411,7 @@ mostlyclean-local:
 	@rm -f .javac-stamp .javac-unittests-stamp .javac-unittests-plugin-stamp .gwtc-stamp* .staticroot-stamp
 	rm -rf gwt gwt-unitCache staticroot
 	rm -f manifest $(BUILT_SOURCES)
-	rm -f $(classes_with_nested_classes) $(test_classes_with_nested_classes)
+	rm -f $(classes_with_nested_classes) $(test_classes_with_nested_classes) $(test_plugin_classes)
 	test -d $(package_dir) || exit 0 \
 	  && find $(package_dir) -depth -type d -exec rmdir {} ';' \
 	  && dir=$(package_dir) && dir=$${dir%/*} \

@@ -88,11 +88,13 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       final Version version = new Version();
       telnet_commands.put("version", version);
       http_commands.put("version", version);
+      http_commands.put("api/version", version);
     }
     {
       final DropCaches dropcaches = new DropCaches();
       telnet_commands.put("dropcaches", dropcaches);
       http_commands.put("dropcaches", dropcaches);
+      http_commands.put("api/dropcaches", dropcaches);
     }
 
     telnet_commands.put("exit", new Exit());
@@ -100,12 +102,19 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     telnet_commands.put("put", new PutDataPointRpc());
 
     http_commands.put("", new HomePage());
-    http_commands.put("aggregators", new ListAggregators());
+    {
+      final ListAggregators aggregators = new ListAggregators();
+      http_commands.put("aggregators", aggregators);
+      http_commands.put("api/aggregators", aggregators);
+    }
     http_commands.put("logs", new LogsRpc());
     http_commands.put("q", new GraphHandler());
-    http_commands.put("suggest", new SuggestRpc());
-    http_commands.put("api/suggest", new SuggestRpc());
-    http_commands.put("api/formatters", new Formatters());
+    {
+      final SuggestRpc suggest_rpc = new SuggestRpc();
+      http_commands.put("suggest", suggest_rpc);
+      http_commands.put("api/suggest", suggest_rpc);
+    }
+    http_commands.put("api/serializers", new Serializers());
   }
 
   @Override
@@ -158,14 +167,13 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     if (req.isChunked()) {
       logError(query, "Received an unsupported chunked request: "
                + query.request());
-      query.badRequest(
-              new BadRequestException("Chunked request not supported"));
+      query.badRequest("Chunked request not supported.");
       return;
     }
     try {
-      try{
-        query.setFormatter();
+      try {        
         final String route = query.getQueryBaseRoute();
+        query.setSerializer();
         
         final HttpRpc rpc = http_commands.get(route);
         if (rpc != null) {
@@ -175,7 +183,6 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
         }
       } catch (BadRequestException ex) {
         query.badRequest(ex);
-        //query.sendReply(ex.getStatus(), query.formatter().formatError(ex));
       }
     } catch (Exception ex) {
       query.internalError(ex);
@@ -273,7 +280,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   /** The home page ("GET /"). */
   private static final class HomePage implements HttpRpc {
     public void execute(final TSDB tsdb, final HttpQuery query) 
-    throws IOException {
+      throws IOException {
       final StringBuilder buf = new StringBuilder(2048);
       buf.append("<div id=queryuimain></div>"
                  + "<noscript>You must have JavaScript enabled.</noscript>"
@@ -290,8 +297,21 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   /** The "/aggregators" endpoint. */
   private static final class ListAggregators implements HttpRpc {
     public void execute(final TSDB tsdb, final HttpQuery query) 
-      throws JsonGenerationException, IOException {
-      query.sendReply(JSON.serializeToBytes(Aggregators.set()));
+      throws IOException {
+      
+      // only accept GET/POST
+      if (query.method() != HttpMethod.GET && query.method() != HttpMethod.POST) {
+        throw new BadRequestException(HttpResponseStatus.METHOD_NOT_ALLOWED, 
+            "Method not allowed", "The HTTP method [" + query.method().getName() +
+            "] is not permitted for this endpoint");
+      }
+      
+      if (query.apiVersion() > 0) {
+        query.sendReply(
+            query.serializer().formatAggregatorsV1(Aggregators.set()));
+      } else {
+        query.sendReply(JSON.serializeToBytes(Aggregators.set()));
+      }
     }
   }
 
@@ -364,29 +384,42 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       return Deferred.fromResult(null);
     }
 
-    public void execute(final TSDB tsdb, final HttpQuery query) {
-      final boolean json = query.request().getUri().endsWith("json");
-      StringBuilder buf;
-      if (json) {
-        buf = new StringBuilder(157 + BuildData.repo_status.toString().length()
-                                + BuildData.user.length() + BuildData.host.length()
-                                + BuildData.repo.length());
-        buf.append("{\"short_revision\":\"").append(BuildData.short_revision)
-          .append("\",\"full_revision\":\"").append(BuildData.full_revision)
-          .append("\",\"timestamp\":").append(BuildData.timestamp)
-          .append(",\"repo_status\":\"").append(BuildData.repo_status)
-          .append("\",\"user\":\"").append(BuildData.user)
-          .append("\",\"host\":\"").append(BuildData.host)
-          .append("\",\"repo\":\"").append(BuildData.repo)
-          .append("\"}");
-      } else {
-        final String revision = BuildData.revisionString();
-        final String build = BuildData.buildString();
-        buf = new StringBuilder(2 // For the \n's
-                                + revision.length() + build.length());
-        buf.append(revision).append('\n').append(build).append('\n');
+    public void execute(final TSDB tsdb, final HttpQuery query) throws 
+      IOException {
+      
+      // only accept GET/POST
+      if (query.method() != HttpMethod.GET && query.method() != HttpMethod.POST) {
+        throw new BadRequestException(HttpResponseStatus.METHOD_NOT_ALLOWED, 
+            "Method not allowed", "The HTTP method [" + query.method().getName() +
+            "] is not permitted for this endpoint");
       }
-      query.sendReply(buf);
+      
+      final HashMap<String, String> version = new HashMap<String, String>();
+      version.put("version", BuildData.version);
+      version.put("short_revision", BuildData.short_revision);
+      version.put("full_revision", BuildData.full_revision);
+      version.put("timestamp", Long.toString(BuildData.timestamp));
+      version.put("repo_status", BuildData.repo_status.toString());
+      version.put("user", BuildData.user);
+      version.put("host", BuildData.host);
+      version.put("repo", BuildData.repo);
+      
+      if (query.apiVersion() > 0) {
+        query.sendReply(query.serializer().formatVersionV1(version));
+      } else {
+        final boolean json = query.request().getUri().endsWith("json");      
+        if (json) {
+          query.sendReply(JSON.serializeToBytes(version));
+        } else {
+          final String revision = BuildData.revisionString();
+          final String build = BuildData.buildString();
+          StringBuilder buf;
+          buf = new StringBuilder(2 // For the \n's
+                                  + revision.length() + build.length());
+          buf.append(revision).append('\n').append(build).append('\n');
+          query.sendReply(buf);
+        }
+      }
     }
   }
 
@@ -422,9 +455,25 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       return Deferred.fromResult(null);
     }
 
-    public void execute(final TSDB tsdb, final HttpQuery query) {
+    public void execute(final TSDB tsdb, final HttpQuery query) 
+      throws IOException {
       dropCaches(tsdb, query.channel());
-      query.sendReply("Caches dropped.\n");
+      
+      // only accept GET/POST
+      if (query.method() != HttpMethod.GET && query.method() != HttpMethod.POST) {
+        throw new BadRequestException(HttpResponseStatus.METHOD_NOT_ALLOWED, 
+            "Method not allowed", "The HTTP method [" + query.method().getName() +
+            "] is not permitted for this endpoint");
+      }
+      
+      if (query.apiVersion() > 0) {
+        final HashMap<String, String> response = new HashMap<String, String>();
+        response.put("status", "200");
+        response.put("message", "Caches dropped");
+        query.sendReply(query.serializer().formatDropCachesV1(response));
+      } else { // deprecated API
+        query.sendReply("Caches dropped.\n");
+      }
     }
 
     /** Drops in memory caches.  */
@@ -436,7 +485,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
 
   /** The /api/formatters endpoint 
    * @since 2.0 */
-  private static final class Formatters implements HttpRpc {
+  private static final class Serializers implements HttpRpc {
     public void execute(final TSDB tsdb, final HttpQuery query) 
       throws IOException {
       // only accept GET/POST
@@ -449,8 +498,12 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       switch (query.apiVersion()) {
         case 0:
         case 1:
+          query.sendReply(query.serializer().formatSerializersV1());
+          break;
         default: 
-          query.sendReply(query.formatter().formatFormattersV1());
+          throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+              "Requested API version not implemented", "Version " + 
+              query.apiVersion() + " is not implemented");
       }
     }
   }

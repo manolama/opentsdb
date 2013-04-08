@@ -47,16 +47,19 @@ public final class PipelineFactory implements ChannelPipelineFactory {
    * Constructor that initializes the RPC router and loads HTTP formatter 
    * plugins
    * @param tsdb The TSDB to use.
-   * @throws NoSuchMethodException if there is an issue loading formatter 
-   * plugins
-   * @throws SecurityException if a security manager exists and gets in the way
-   * @throws ClassNotFoundException if the base HttpFormatte class could not be
-   * found
+   * @throws RuntimeException if there is an issue loading plugins
+   * @throws Exception if the HttpQuery handler is unable to load 
+   * serializers
    */
-  public PipelineFactory(final TSDB tsdb) throws SecurityException, 
-    NoSuchMethodException, ClassNotFoundException {
+  public PipelineFactory(final TSDB tsdb) {
     this.rpchandler = new RpcHandler(tsdb);
-    HttpQuery.InitializeFormatterMaps(tsdb);
+    try {
+      HttpQuery.initializeSerializerMaps(tsdb);
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to initialize formatter plugins", e);
+    }
   }
 
   @Override

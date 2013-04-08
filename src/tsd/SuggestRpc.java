@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2010-2012  The OpenTSDB Authors.
+// Copyright (C) 2013  The OpenTSDB Authors.
 //
 // This program is free software: you can redistribute it and/or modify it
 // under the terms of the GNU Lesser General Public License as published by
@@ -47,32 +47,54 @@ final class SuggestRpc implements HttpRpc {
           "] is not permitted for this endpoint");
     }
     
-    HashMap<String, String> map = null;
+    final String type;
+    final String q;
+    final String max;
     if (query.apiVersion() > 0 && query.method() == HttpMethod.POST) {
-      map = query.formatter().parseSuggestV1();
+      final HashMap<String, String> map = query.serializer().parseSuggestV1();
+      type = map.get("type");
+      if (type == null || type.isEmpty()) {
+        throw new BadRequestException("Missing 'type' parameter");
+      }
+      q = map.get("q");
+      if (q == null) {
+        throw new BadRequestException("Missing 'q' parameter");
+      }
+      max = map.get("max");
+    } else { 
+      type = query.getRequiredQueryStringParam("type");
+      q = query.getRequiredQueryStringParam("q");
+      max = query.getQueryStringParam("max");
     }
-    final String type = map != null && map.containsKey("type") ? map.get("type")
-        : query.getRequiredQueryStringParam("type");
-    final String q = map != null && map.containsKey("q") ? map.get("q") 
-        : query.getQueryStringParam("q");
-    if (q == null) {
-      throw BadRequestException.missingParameter("q");
+    
+    final int max_results;
+    if (max != null && !max.isEmpty()) {
+      try {
+        max_results = Integer.parseInt(max);
+      } catch (NumberFormatException nfe) {
+        throw new BadRequestException("Unable to parse 'max' as a number");
+      }
+    } else {
+      max_results = 0;
     }
     
     List<String> suggestions;
     if ("metrics".equals(type)) {
-      suggestions = tsdb.suggestMetrics(q);
+      suggestions = max_results > 0 ? tsdb.suggestMetrics(q, max_results) :
+         tsdb.suggestMetrics(q);
     } else if ("tagk".equals(type)) {
-      suggestions = tsdb.suggestTagNames(q);
+      suggestions = max_results > 0 ? tsdb.suggestTagNames(q, max_results) :
+         tsdb.suggestTagNames(q);
     } else if ("tagv".equals(type)) {
-      suggestions = tsdb.suggestTagValues(q);
+      suggestions = max_results > 0 ? tsdb.suggestTagValues(q, max_results) :
+        tsdb.suggestTagValues(q);
     } else {
       throw new BadRequestException("Invalid 'type' parameter:" + type);
     }
     
     if (query.apiVersion() > 0) {
-      query.sendReply(query.formatter().formatSuggestV1(suggestions));
-    } else {
+      query.sendReply(query.serializer().formatSuggestV1(suggestions));
+    } else { // deprecated API
       query.sendReply(JSON.serializeToBytes(suggestions));
     }
   }  
