@@ -35,7 +35,7 @@ final class BadRequestException extends RuntimeException {
   /** 
    * Backwards compatible constructor, sets the status code to 400, leaves 
    * the details field empty
-   * @param A brief, descriptive error message
+   * @param message A brief, descriptive error message
    */
   public BadRequestException(final String message) {
     this(HttpResponseStatus.BAD_REQUEST, message, "");

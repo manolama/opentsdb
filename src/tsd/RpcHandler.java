@@ -103,9 +103,11 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     http_commands.put("aggregators", new ListAggregators());
     http_commands.put("logs", new LogsRpc());
     http_commands.put("q", new GraphHandler());
-    SuggestRpc suggest_rpc = new SuggestRpc();
-    http_commands.put("suggest", suggest_rpc);
-    http_commands.put("api/suggest", suggest_rpc);
+    {
+      final SuggestRpc suggest_rpc = new SuggestRpc();
+      http_commands.put("suggest", suggest_rpc);
+      http_commands.put("api/suggest", suggest_rpc);
+    }
     http_commands.put("api/serializers", new Serializers());
   }
 
@@ -159,7 +161,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     if (req.isChunked()) {
       logError(query, "Received an unsupported chunked request: "
                + query.request());
-      query.badRequest("Chunked request not supported");
+      query.badRequest("Chunked request not supported.");
       return;
     }
     try {
@@ -272,7 +274,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   /** The home page ("GET /"). */
   private static final class HomePage implements HttpRpc {
     public void execute(final TSDB tsdb, final HttpQuery query) 
-    throws IOException {
+      throws IOException {
       final StringBuilder buf = new StringBuilder(2048);
       buf.append("<div id=queryuimain></div>"
                  + "<noscript>You must have JavaScript enabled.</noscript>"
@@ -363,29 +365,30 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       return Deferred.fromResult(null);
     }
 
-    public void execute(final TSDB tsdb, final HttpQuery query) {
+    public void execute(final TSDB tsdb, final HttpQuery query) throws 
+      IOException {
       final boolean json = query.request().getUri().endsWith("json");
-      StringBuilder buf;
+      
       if (json) {
-        buf = new StringBuilder(157 + BuildData.repo_status.toString().length()
-                                + BuildData.user.length() + BuildData.host.length()
-                                + BuildData.repo.length());
-        buf.append("{\"short_revision\":\"").append(BuildData.short_revision)
-          .append("\",\"full_revision\":\"").append(BuildData.full_revision)
-          .append("\",\"timestamp\":").append(BuildData.timestamp)
-          .append(",\"repo_status\":\"").append(BuildData.repo_status)
-          .append("\",\"user\":\"").append(BuildData.user)
-          .append("\",\"host\":\"").append(BuildData.host)
-          .append("\",\"repo\":\"").append(BuildData.repo)
-          .append("\"}");
+        HashMap<String, String> version = new HashMap<String, String>();
+        version.put("version", BuildData.version);
+        version.put("short_revision", BuildData.short_revision);
+        version.put("full_revision", BuildData.full_revision);
+        version.put("timestamp", Long.toString(BuildData.timestamp));
+        version.put("repo_status", BuildData.repo_status.toString());
+        version.put("user", BuildData.user);
+        version.put("host", BuildData.host);
+        version.put("repo", BuildData.repo);
+        query.sendReply(JSON.serializeToBytes(version));
       } else {
         final String revision = BuildData.revisionString();
         final String build = BuildData.buildString();
+        StringBuilder buf;
         buf = new StringBuilder(2 // For the \n's
                                 + revision.length() + build.length());
         buf.append(revision).append('\n').append(build).append('\n');
+        query.sendReply(buf);
       }
-      query.sendReply(buf);
     }
   }
 

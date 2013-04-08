@@ -50,7 +50,7 @@ import net.opentsdb.core.TSDB;
  * <b>Warning:</b> Every HTTP request will instantiate a new serializer object
  * (except for a few that don't require it) so please avoid creating heavy
  * objects in the constructor, parse or format methods. Instead, use the 
- * {@link initialize} method to instantiate thread-safe, static objects that
+ * {@link #initialize} method to instantiate thread-safe, static objects that
  * you need for de/serializtion. It will be called once on TSD startup.
  * <p>
  * <b>Note:</b> If a method needs to throw an exception due to user error, such
@@ -92,8 +92,9 @@ public abstract class HttpSerializer {
    * status code in the response.
    * <p>
    * <b>Note:</b> A new serializer is instantiated for every HTTP connection, so
-   * don't do any heavy object creation here. Instead, use the {@link initialize} 
-   * method to setup static, thread-safe objects if you need stuff like that 
+   * don't do any heavy object creation here. Instead, use the 
+   * {@link #initialize} method to setup static, thread-safe objects if you 
+   * need stuff like that 
    * @param query
    */
   public HttpSerializer(final HttpQuery query) {

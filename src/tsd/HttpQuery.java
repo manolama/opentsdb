@@ -199,7 +199,7 @@ final class HttpQuery {
     return (int) ((System.nanoTime() - start_time) / 1000000);
   }
 
-  /** @return The selected seralizer. Will return null if {@link setSerializer}
+  /** @return The selected seralizer. Will return null if {@link #setSerializer}
    * hasn't been called yet @since 2.0  */
   public HttpSerializer serializer() {
     return this.serializer;
@@ -293,7 +293,7 @@ final class HttpQuery {
   /**
    * Returns the path component of the URI as an array of strings, split on the
    * forward slash
-   * Similar to the {@link getQueryPath} call, this returns only the path 
+   * Similar to the {@link #getQueryPath} call, this returns only the path 
    * without the protocol, host, port or query string params. E.g. 
    * "/path/starts/here" will return an array of {"path", "starts", "here"}
    * <p>
@@ -323,9 +323,9 @@ final class HttpQuery {
    * Parses the query string to determine the base route for handing a query 
    * off to an RPC handler.
    * This method splits the query path component and returns a string suitable
-   * for routing by {@see RpcHandler}. The resulting route is always lower case
+   * for routing by {@link RpcHandler}. The resulting route is always lower case
    * and will consist of either an empty string, a deprecated API call or an
-   * API route. API routes will set the {@link api_version} to either a user 
+   * API route. API routes will set the {@link #apiVersion} to either a user 
    * provided value or the MAX_API_VERSION.
    * <p>
    * Some URIs and their routes include:<ul>
@@ -673,7 +673,7 @@ final class HttpQuery {
    * Sends an HTTP reply to the client.
    * <p>
    * This is equivalent of
-   * <code>{@link sendReply(HttpResponseStatus, StringBuilder)
+   * <code>{@link #sendReply(HttpResponseStatus, StringBuilder)
    * sendReply}({@link HttpResponseStatus#OK
    * HttpResponseStatus.OK}, buf)</code>
    * @param buf The content of the reply to send.
@@ -686,7 +686,7 @@ final class HttpQuery {
    * Sends an HTTP reply to the client.
    * <p>
    * This is equivalent of
-   * <code>{@link sendReply(HttpResponseStatus, StringBuilder)
+   * <code>{@link #sendReply(HttpResponseStatus, StringBuilder)
    * sendReply}({@link HttpResponseStatus#OK
    * HttpResponseStatus.OK}, buf)</code>
    * @param buf The content of the reply to send.
@@ -1136,7 +1136,7 @@ final class HttpQuery {
       .append(PAGE_FOOTER);
     return buf;
   }
-  
+
   /** @return Information about the query */
   public String toString() {
     return "HttpQuery"
@@ -1217,4 +1217,5 @@ final class HttpQuery {
              + "<h1>Page Not Found</h1>"
              + "The requested URL was not found on this server."
              + "</blockquote>");
+
 }

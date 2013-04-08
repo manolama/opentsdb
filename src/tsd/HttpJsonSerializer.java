@@ -125,7 +125,6 @@ class HttpJsonSerializer extends HttpSerializer {
           JSON.serializeToJSONPBytes(query.getQueryStringParam("jsonp"), 
           obj));
     }
-    return ChannelBuffers.wrappedBuffer(
-        JSON.serializeToBytes(obj));
+    return ChannelBuffers.wrappedBuffer(JSON.serializeToBytes(obj));
   }
 }
