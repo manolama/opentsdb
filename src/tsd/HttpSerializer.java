@@ -15,6 +15,7 @@ package net.opentsdb.tsd;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
@@ -182,6 +183,21 @@ public abstract class HttpSerializer {
         "The requested API endpoint has not been implemented", 
         this.getClass().getCanonicalName() + 
         " has not implemented formatSerializersV1");
+  }
+  
+  /**
+   * Format the list of implemented aggregators
+   * @param aggregators The list of aggregation functions
+   * @return A JSON structure
+   * @throws IOException if the serialization failed
+   * @throws BadRequestException if the plugin has not implemented this method
+   */
+  public ChannelBuffer formatAggregatorsV1(final Set<String> aggregators) 
+    throws IOException {
+    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+        "The requested API endpoint has not been implemented", 
+        this.getClass().getCanonicalName() + 
+        " has not implemented formatAggregatorsV1");
   }
   
   /**

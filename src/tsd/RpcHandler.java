@@ -100,7 +100,11 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     telnet_commands.put("put", new PutDataPointRpc());
 
     http_commands.put("", new HomePage());
-    http_commands.put("aggregators", new ListAggregators());
+    {
+      final ListAggregators aggregators = new ListAggregators();
+      http_commands.put("aggregators", aggregators);
+      http_commands.put("api/aggregators", aggregators);
+    }
     http_commands.put("logs", new LogsRpc());
     http_commands.put("q", new GraphHandler());
     {
@@ -291,8 +295,21 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   /** The "/aggregators" endpoint. */
   private static final class ListAggregators implements HttpRpc {
     public void execute(final TSDB tsdb, final HttpQuery query) 
-      throws JsonGenerationException, IOException {
-      query.sendReply(JSON.serializeToBytes(Aggregators.set()));
+      throws IOException {
+      
+      // only accept GET/POST
+      if (query.method() != HttpMethod.GET && query.method() != HttpMethod.POST) {
+        throw new BadRequestException(HttpResponseStatus.METHOD_NOT_ALLOWED, 
+            "Method not allowed", "The HTTP method [" + query.method().getName() +
+            "] is not permitted for this endpoint");
+      }
+      
+      if (query.apiVersion() > 0) {
+        query.sendReply(
+            query.serializer().formatAggregatorsV1(Aggregators.set()));
+      } else {
+        query.sendReply(JSON.serializeToBytes(Aggregators.set()));
+      }
     }
   }
 
