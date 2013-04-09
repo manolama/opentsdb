@@ -24,7 +24,7 @@ public final class JSONException extends RuntimeException {
    * @param msg The message of the exception, potentially including a stack
    * trace.
    */
-  JSONException(final String msg) {
+  public JSONException(final String msg) {
     super(msg);
   }
   
@@ -32,7 +32,7 @@ public final class JSONException extends RuntimeException {
    * Constructor.
    * @param cause The exception that caused this one to be thrown.
    */
-  JSONException(final Throwable cause) {
+  public JSONException(final Throwable cause) {
     super(cause);
   }
   
@@ -42,7 +42,7 @@ public final class JSONException extends RuntimeException {
    * trace.
    * @param cause The exception that caused this one to be thrown.
    */
-  JSONException(final String msg, final Throwable cause) {
+  public JSONException(final String msg, final Throwable cause) {
     super(msg, cause);
   }
   

@@ -16,7 +16,6 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -85,7 +84,8 @@ public final class JSON {
    * @param json The string to deserialize
    * @param pojo The class type of the object used for deserialization
    * @return An object of the {@link pojo} type
-   * @throws IllegalArgumentException if the data or class was null
+   * @throws IllegalArgumentException if the data or class was null or parsing 
+   * failed
    * @throws JSONException if the data could not be parsed
    */
   public static final <T> T parseToObject(final String json,
@@ -98,9 +98,9 @@ public final class JSON {
     try {
       return jsonMapper.readValue(json, pojo);
     } catch (JsonParseException e) {
-      throw new JSONException(e);
+      throw new IllegalArgumentException(e);
     } catch (JsonMappingException e) {
-      throw new JSONException(e);
+      throw new IllegalArgumentException(e);
     } catch (IOException e) {
       throw new JSONException(e);
     }
@@ -113,7 +113,8 @@ public final class JSON {
    * @param json The byte array to deserialize
    * @param pojo The class type of the object used for deserialization
    * @return An object of the {@link pojo} type
-   * @throws IllegalArgumentException if the data or class was null
+   * @throws IllegalArgumentException if the data or class was null or parsing 
+   * failed
    * @throws JSONException if the data could not be parsed
    */
   public static final <T> T parseToObject(final byte[] json,
@@ -125,9 +126,9 @@ public final class JSON {
     try {
       return jsonMapper.readValue(json, pojo);
     } catch (JsonParseException e) {
-      throw new JSONException(e);
+      throw new IllegalArgumentException(e);
     } catch (JsonMappingException e) {
-      throw new JSONException(e);
+      throw new IllegalArgumentException(e);
     } catch (IOException e) {
       throw new JSONException(e);
     }
@@ -138,7 +139,8 @@ public final class JSON {
    * @param json The string to deserialize
    * @param type A type definition for a complex object
    * @return An object of the {@link pojo} type
-   * @throws IllegalArgumentException if the data or type was null
+   * @throws IllegalArgumentException if the data or type was null or parsing
+   * failed
    * @throws JSONException if the data could not be parsed
    */
   @SuppressWarnings("unchecked")
@@ -151,9 +153,9 @@ public final class JSON {
     try {
       return (T)jsonMapper.readValue(json, type);
     } catch (JsonParseException e) {
-      throw new JSONException(e);
+      throw new IllegalArgumentException(e);
     } catch (JsonMappingException e) {
-      throw new JSONException(e);
+      throw new IllegalArgumentException(e);
     } catch (IOException e) {
       throw new JSONException(e);
     }
@@ -164,7 +166,8 @@ public final class JSON {
    * @param json The byte array to deserialize
    * @param type A type definition for a complex object
    * @return An object of the {@link pojo} type
-   * @throws IllegalArgumentException if the data or type was null
+   * @throws IllegalArgumentException if the data or type was null or parsing
+   * failed
    * @throws JSONException if the data could not be parsed
    */
   @SuppressWarnings("unchecked")
@@ -177,9 +180,9 @@ public final class JSON {
     try {
       return (T)jsonMapper.readValue(json, type);
     } catch (JsonParseException e) {
-      throw new JSONException(e);
+      throw new IllegalArgumentException(e);
     } catch (JsonMappingException e) {
-      throw new JSONException(e);
+      throw new IllegalArgumentException(e);
     } catch (IOException e) {
       throw new JSONException(e);
     }
@@ -192,7 +195,7 @@ public final class JSON {
    * throwing an error until you start processing the data
    * @param json The string to parse
    * @return A JsonParser object to be used for iteration
-   * @throws IllegalArgumentException if the data was null
+   * @throws IllegalArgumentException if the data was null or parsing failed
    * @throws JSONException if the data could not be parsed
    */
   public static final JsonParser parseToStream(final String json) {
@@ -201,7 +204,7 @@ public final class JSON {
     try {
       return jsonMapper.getFactory().createJsonParser(json);
     } catch (JsonParseException e) {
-      throw new JSONException(e);
+      throw new IllegalArgumentException(e);
     } catch (IOException e) {
       throw new JSONException(e);
     }
@@ -214,7 +217,7 @@ public final class JSON {
    * throwing an error until you start processing the data
    * @param json The byte array to parse
    * @return A JsonParser object to be used for iteration
-   * @throws IllegalArgumentException if the data was null
+   * @throws IllegalArgumentException if the data was null or parsing failed
    * @throws JSONException if the data could not be parsed
    */
   public static final JsonParser parseToStream(final byte[] json) {
@@ -223,7 +226,7 @@ public final class JSON {
     try {
       return jsonMapper.getFactory().createJsonParser(json);
     } catch (JsonParseException e) {
-      throw new JSONException(e);
+      throw new IllegalArgumentException(e);
     } catch (IOException e) {
       throw new JSONException(e);
     }
@@ -236,7 +239,7 @@ public final class JSON {
    * throwing an error until you start processing the data
    * @param json The input stream to parse
    * @return A JsonParser object to be used for iteration
-   * @throws IllegalArgumentException if the data was null
+   * @throws IllegalArgumentException if the data was null or parsing failed
    * @throws JSONException if the data could not be parsed
    */
   public static final JsonParser parseToStream(final InputStream json) {
@@ -245,7 +248,7 @@ public final class JSON {
     try {
       return jsonMapper.getFactory().createJsonParser(json);
     } catch (JsonParseException e) {
-      throw new JSONException(e);
+      throw new IllegalArgumentException(e);
     } catch (IOException e) {
       throw new JSONException(e);
     }

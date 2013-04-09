@@ -74,13 +74,13 @@ public final class TestJSON {
     JSON.parseToObject("", HashMap.class);
   }
   
-  @Test (expected = JSONException.class)
+  @Test (expected = IllegalArgumentException.class)
   public void parseToObjectStringBad() throws Exception {
     String json = "{\"notgonnafinish";
     JSON.parseToObject(json, HashMap.class);
   }
  
-  @Test (expected = JSONException.class)
+  @Test (expected = IllegalArgumentException.class)
   public void parseToObjectStringBadMap() throws Exception {
     JSON.parseToObject(
         "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}", HashSet.class);
@@ -112,13 +112,13 @@ public final class TestJSON {
     JSON.parseToObject(json, HashMap.class);
   }
 
-  @Test (expected = JSONException.class)
+  @Test (expected = IllegalArgumentException.class)
   public void parseToObjectByteBad() throws Exception {
     byte[] json = "{\"notgonnafinish".getBytes();
     JSON.parseToObject(json, HashMap.class);
   }
 
-  @Test (expected = JSONException.class)
+  @Test (expected = IllegalArgumentException.class)
   public void parseToObjectByteBadMap() throws Exception {
     JSON.parseToObject(
         "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes(), 
@@ -152,12 +152,12 @@ public final class TestJSON {
     JSON.parseToObject("", getTRMap());
   }
   
-  @Test (expected = JSONException.class)
+  @Test (expected = IllegalArgumentException.class)
   public void parseToObjectStringTypeBad() throws Exception {
     JSON.parseToObject("{\"notgonnafinish", getTRMap());
   }
 
-  @Test (expected = JSONException.class)
+  @Test (expected = IllegalArgumentException.class)
   public void parseToObjectStringTypeBadMap() throws Exception {
     JSON.parseToObject(
         "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}", getTRSet());
@@ -188,13 +188,13 @@ public final class TestJSON {
     JSON.parseToObject((byte[])null, getTRMap());
   }
 
-  @Test (expected = JSONException.class)
+  @Test (expected = IllegalArgumentException.class)
   public void parseToObjectByteTypeBad() throws Exception {
     byte[] json = "{\"notgonnafinish".getBytes();
     JSON.parseToObject(json, getTRMap());
   }
 
-  @Test (expected = JSONException.class)
+  @Test (expected = IllegalArgumentException.class)
   public void parseToObjectByteTypeBadMap() throws Exception {
     JSON.parseToObject(
         "{\"utf\":\"aériennes\",\"ascii\":\"aariennes\"}".getBytes(), 

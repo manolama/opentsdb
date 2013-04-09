@@ -22,7 +22,6 @@ import java.util.List;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.utils.Config;
-import net.opentsdb.utils.JSONException;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.junit.Before;
@@ -110,7 +109,7 @@ public final class TestHttpJsonSerializer {
     serdes.parseSuggestV1();
   }
   
-  @Test (expected = JSONException.class)
+  @Test (expected = BadRequestException.class)
   public void parseSuggestV1NotJSON() throws Exception {
     HttpQuery query = NettyMocks.postQuery(tsdb, "", 
         "This is unparsable", "");
