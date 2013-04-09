@@ -99,7 +99,11 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
 
     telnet_commands.put("exit", new Exit());
     telnet_commands.put("help", new Help());
-    telnet_commands.put("put", new PutDataPointRpc());
+    {
+      final PutDataPointRpc put = new PutDataPointRpc();
+      telnet_commands.put("put", put);
+      http_commands.put("api/put", put);
+    }
 
     http_commands.put("", new HomePage());
     {
@@ -164,7 +168,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   private void handleHttpQuery(final TSDB tsdb, final Channel chan, final HttpRequest req) {
     http_rpcs_received.incrementAndGet();
     final HttpQuery query = new HttpQuery(tsdb, req, chan);
-    if (req.isChunked()) {
+    if (!tsdb.getConfig().enable_chunked_requests() && req.isChunked()) {
       logError(query, "Received an unsupported chunked request: "
                + query.request());
       query.badRequest("Chunked request not supported.");
