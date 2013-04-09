@@ -13,6 +13,7 @@
 package net.opentsdb.core;
 
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Bridging class that stores a normalized data point parsed from the "put" 
@@ -62,6 +63,23 @@ public class IncomingDataPoint {
     this.timestamp = timestamp;
     this.value = value;
     this.tags = tags;
+  }
+  
+  /**
+   * @return information about this object
+   */
+  @Override
+  public String toString() {
+    final StringBuilder buf = new StringBuilder();
+    buf.append("metric=").append(this.metric);
+    buf.append(" ts=").append(this.timestamp);
+    buf.append(" value=").append(this.value).append(" ");
+    if (this.tags != null) {
+      for (Map.Entry<String, String> entry : this.tags.entrySet()) {
+        buf.append(entry.getKey()).append("=").append(entry.getValue());
+      }
+    }
+    return buf.toString();
   }
   
   /** @return the metric */

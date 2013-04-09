@@ -24,6 +24,8 @@ import com.stumbleupon.async.Deferred;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.IncomingDataPoint;
 import net.opentsdb.core.TSDB;
@@ -33,7 +35,7 @@ import net.opentsdb.uid.NoSuchUniqueName;
 
 /** Implements the "put" telnet-style command. */
 final class PutDataPointRpc implements TelnetRpc, HttpRpc {
-
+  private static final Logger LOG = LoggerFactory.getLogger(PutDataPointRpc.class);
   private static final AtomicLong requests = new AtomicLong();
   private static final AtomicLong hbase_errors = new AtomicLong();
   private static final AtomicLong invalid_values = new AtomicLong();
@@ -113,24 +115,28 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
           if (show_details) {
             details.add(this.getHttpDetails("Metric name was empty", dp));
           }
+          LOG.warn("Metric name was empty: " + dp);
           continue;
         }
         if (dp.getTimestamp() <= 0) {
           if (show_details) {
             details.add(this.getHttpDetails("Invalid timestamp", dp));
           }
+          LOG.warn("Invalid timestamp: " + dp);
           continue;
         }
         if (dp.getValue() == null || dp.getValue().isEmpty()) {
           if (show_details) {
             details.add(this.getHttpDetails("Empty value", dp));
           }
+          LOG.warn("Empty value: " + dp);
           continue;
         }
         if (dp.getTags() == null || dp.getTags().size() < 1) {
           if (show_details) {
             details.add(this.getHttpDetails("Missing tags", dp));
           }
+          LOG.warn("Missing tags: " + dp);
           continue;
         }
         if (Tags.looksLikeInteger(dp.getValue())) {
@@ -141,21 +147,24 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
               Float.parseFloat(dp.getValue()), dp.getTags());
         }
         success++;
-      }catch (NumberFormatException x) {
+      } catch (NumberFormatException x) {
         if (show_details) {
           details.add(this.getHttpDetails("Unable to parse value to a number", 
               dp));
         }
+        LOG.warn("Unable to parse value to a number: " + dp);
         invalid_values.incrementAndGet();
       } catch (IllegalArgumentException iae) {
         if (show_details) {
           details.add(this.getHttpDetails(iae.getMessage(), dp));
         }
+        LOG.warn(iae.getMessage() + ": " + dp);
         illegal_arguments.incrementAndGet();
       } catch (NoSuchUniqueName nsu) {
         if (show_details) {
           details.add(this.getHttpDetails("Unknown metric", dp));
         }
+        LOG.warn("Unknown metric: " + dp);
         unknown_metrics.incrementAndGet();
       }
     }
@@ -243,6 +252,7 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
    * @param message The message to return to the user
    * @param dp The datapoint that caused the error
    * @return A hashmap with information
+   * @since 2.0
    */
   final private HashMap<String, Object> getHttpDetails(final String message, 
       final IncomingDataPoint dp) {

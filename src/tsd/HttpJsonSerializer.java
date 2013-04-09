@@ -100,7 +100,7 @@ class HttpJsonSerializer extends HttpSerializer {
       final IncomingDataPoint dp = 
         JSON.parseToObject(content, IncomingDataPoint.class);
       final ArrayList<IncomingDataPoint> dps = 
-        new ArrayList<IncomingDataPoint>();
+        new ArrayList<IncomingDataPoint>(1);
       dps.add(dp);
       return dps;
     } else {
