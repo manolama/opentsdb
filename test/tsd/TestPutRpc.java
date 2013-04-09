@@ -214,7 +214,6 @@ public final class TestPutRpc {
     assertEquals(HttpResponseStatus.NO_CONTENT, query.response().getStatus());
   }
   
-  
   @Test
   public void putSETiny() throws Exception {
     HttpQuery query = NettyMocks.postQuery(tsdb, "/api/put", 

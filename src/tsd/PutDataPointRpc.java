@@ -172,7 +172,9 @@ final class PutDataPointRpc implements TelnetRpc, HttpRpc {
     final long failures = total - success;
     if (!show_summary && !show_details) {
       if (failures > 0) {
-        query.sendReply(HttpResponseStatus.BAD_REQUEST, "".getBytes());
+        throw new BadRequestException(HttpResponseStatus.BAD_REQUEST,
+            "One or more data points had errors", 
+            "Please see the TSD logs or append \"details\" to the put request");
       } else {
         query.sendReply(HttpResponseStatus.NO_CONTENT, "".getBytes());
       }
