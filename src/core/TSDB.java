@@ -490,22 +490,25 @@ public final class TSDB {
     Tags.validateString(type, name);
     if (type.toLowerCase().equals("metric")) {
       try {
-        this.metrics.getId(name);
-        throw new IllegalArgumentException("Name already exists");
+        final byte[] uid = this.metrics.getId(name);
+        throw new IllegalArgumentException("Name already exists with UID: " +
+            UniqueId.uidToString(uid));
       } catch (NoSuchUniqueName nsue) {
         return this.metrics.getOrCreateId(name);
       }
     } else if (type.toLowerCase().equals("tagk")) {
       try {
-        this.tag_names.getId(name); 
-        throw new IllegalArgumentException("Name already exists");
+        final byte[] uid = this.tag_names.getId(name);
+        throw new IllegalArgumentException("Name already exists with UID: " +
+            UniqueId.uidToString(uid));
       } catch (NoSuchUniqueName nsue) {
         return this.tag_names.getOrCreateId(name);
       }
     } else if (type.toLowerCase().equals("tagv")) {
       try {
-        this.tag_values.getId(name); 
-        throw new IllegalArgumentException("Name already exists");
+        final byte[] uid = this.tag_values.getId(name);
+        throw new IllegalArgumentException("Name already exists with UID: " +
+            UniqueId.uidToString(uid));
       } catch (NoSuchUniqueName nsue) {
         return this.tag_values.getOrCreateId(name);
       }
