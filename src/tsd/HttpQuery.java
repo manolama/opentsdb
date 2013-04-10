@@ -330,6 +330,7 @@ final class HttpQuery {
    * slash
    * @throws NullPointerException if the URI is null
    * @throws IllegalArgumentException if the uri does not start with "/api"
+   * @since 2.0
    */
   public String[] explodeAPIPath() {
     final String[] split = this.explodePath();
