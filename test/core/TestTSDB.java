@@ -135,6 +135,12 @@ public final class TestTSDB {
     tsdb.assignUid("metric", null);
   }
   
+  @Test (expected = IllegalArgumentException.class)
+  public void assignUidInvalidCharacter() {
+    setupAssignUid();
+    tsdb.assignUid("metric", "Not!A:Valid@Name");
+  }
+  
   private void setupAssignUid() {
     when(metrics.getId("sys.cpu.0")).thenReturn(new byte[] { 0, 0, 1 });
     when(metrics.getId("sys.cpu.1")).thenThrow(
