@@ -63,6 +63,8 @@ public final class TSDB {
 
   /** Name of the table in which timeseries are stored.  */
   final byte[] table;
+  /** Name of the table in which UID information is stored. */
+  final byte[] uid_table;
 
   /** Unique IDs for the metric names. */
   final UniqueId metrics;
@@ -94,13 +96,11 @@ public final class TSDB {
         config.getString("tsd.storage.hbase.zk_basedir"));
     this.client.setFlushInterval(config.getShort("tsd.storage.flush_interval"));
     table = config.getString("tsd.storage.hbase.data_table").getBytes();
-    
-    final byte[] uidtable = config.getString("tsd.storage.hbase.uid_table")
-        .getBytes();
+    uid_table = config.getString("tsd.storage.hbase.uid_table").getBytes();
 
-    metrics = new UniqueId(client, uidtable, METRICS_QUAL, METRICS_WIDTH);
-    tag_names = new UniqueId(client, uidtable, TAG_NAME_QUAL, TAG_NAME_WIDTH);
-    tag_values = new UniqueId(client, uidtable, TAG_VALUE_QUAL, TAG_VALUE_WIDTH);
+    metrics = new UniqueId(client, uid_table, METRICS_QUAL, METRICS_WIDTH);
+    tag_names = new UniqueId(client, uid_table, TAG_NAME_QUAL, TAG_NAME_WIDTH);
+    tag_values = new UniqueId(client, uid_table, TAG_VALUE_QUAL, TAG_VALUE_WIDTH);
     compactionq = new CompactionQueue(this);
 
     if (config.hasProperty("tsd.core.timezone"))
@@ -516,6 +516,16 @@ public final class TSDB {
       LOG.warn("Unknown type name: " + type);
       throw new IllegalArgumentException("Unknown type name");
     }
+  }
+  
+  /** @return the name of the UID table as a byte array for client requests */
+  public byte[] uidTable() {
+    return this.uid_table;
+  }
+  
+  /** @return the name of the data table as a byte array for client requests */
+  public byte[] dataTable() {
+    return this.table;
   }
   
   // ------------------ //
