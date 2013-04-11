@@ -15,35 +15,74 @@ package net.opentsdb.core;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 import net.opentsdb.utils.DateTime;
 
-public class TSSubQuery {
+/**
+ * Represents the parameters for an individual sub query on a metric or specific
+ * timeseries. When setting up a query, use the setter methods to store user 
+ * information such as the start time and list of queries. After setting the 
+ * proper values, add the sub query to a {@link TSQuery}. 
+ * <p>
+ * When the query is processed by the TSD, if the {@code tsuids} list has one
+ * or more timeseries, the {@code metric} and {@code tags} fields will be 
+ * ignored and only the tsuids processed.
+ * <p>
+ * <b>Note:</b> You do not need to call {@link #validateAndSetQuery} directly as
+ * the {@link TSQuery} object will call this for you when the entire set of 
+ * queries has been compiled.
+ * <b>Note:</b> If using POJO deserialization, make sure to avoid setting the 
+ * {@code agg}, {@code downsampler} and {@code downsample_interval} fields.
+ * @since 2.0
+ */
+public final class TSSubQuery {
+  /** User given name of an aggregation function to use */
   private String aggregator;
   
+  /** User given name for a metric, e.g. "sys.cpu.0" */
   private String metric;
   
+  /** User provided list of timeseries UIDs */
   private ArrayList<String> tsuids;
   
+  /** User supplied list of tags for specificity or grouping. May be null or 
+   * empty */
   private HashMap<String, String> tags;
   
+  /** User given downsampler */
   private String downsample;
   
+  /** Whether or not the user wants to perform a rate conversion */
   private boolean rate;
   
-  // local vars set after parsing
+  /** Parsed aggregation function */
   private Aggregator agg;
+  
+  /** Parsed downsampler function */
   private Aggregator downsampler;
+  
+  /** Parsed downsample interval */
   private long downsample_interval;
   
   /**
+   * Default constructor necessary for POJO de/serialization
+   */
+  public TSSubQuery() {
+    
+  }
+  
+  /**
    * Runs through query parameters to make sure it's a valid request.
-   * This includes parsing the aggreagor, downsampling info, metrics, tags or
-   * timeseries. 
+   * This includes parsing the aggregator, downsampling info, metrics, tags or
+   * timeseries and setting the local parsed fields needed by the TSD for proper
+   * execution. If no exceptions are thrown, the query is considered valid.
+   * <b>Note:</b> You do not need to call this directly as it will be executed
+   * by the {@link TSQuery} object the sub query is assigned to.
    * @throws IllegalArgumentException if something is wrong with the query
    */
-  public final void validateAndSetQuery() {
+  public void validateAndSetQuery() {
     if (this.aggregator == null || this.aggregator.isEmpty()) {
       throw new IllegalArgumentException("Missing the aggregation function");
     }
@@ -79,12 +118,80 @@ public class TSSubQuery {
           this.downsample.substring(0, dash));
     }
   }
+
+  /** @return the parsed aggregation function */
+  public Aggregator aggregator() {
+    return this.agg;
+  }
   
-  /**
-   * Returns a list of queries to execute
-   * @return
-   */
-  public final List<Query> queries() {
-    return null;
+  /** @return the parsed downsampler aggregation function */
+  public Aggregator downsampler() {
+    return this.downsampler;
+  }
+  
+  /** @return the parsed downsample interval in seconds */
+  public long downsampleInterval() {
+    return this.downsample_interval;
+  }
+  
+  /** @return the user supplied aggregator */
+  public String getAggregator() {
+    return aggregator;
+  }
+
+  /** @return the user supplied metric */
+  public String getMetric() {
+    return metric;
+  }
+
+  /** @return the user supplied list of TSUIDs */
+  public List<String> getTsuids() {
+    return tsuids;
+  }
+
+  /** @return the user supplied list of query tags, may be null or empty */
+  public Map<String, String> getTags() {
+    return tags;
+  }
+
+  /** @return the raw downsampling function request from the user, 
+   * e.g. "1h-avg" */
+  public String getDownsample() {
+    return downsample;
+  }
+
+  /** @return whether or not the user requested a rate conversion */
+  public boolean getRate() {
+    return rate;
+  }
+
+  /** @param aggregator the name of an aggregation function */
+  public void setAggregator(String aggregator) {
+    this.aggregator = aggregator;
+  }
+
+  /** @param metric the name of a metric to fetch */
+  public void setMetric(String metric) {
+    this.metric = metric;
+  }
+
+  /** @param tsuids a list of timeseries UIDs as hex encoded strings to fetch */
+  public void setTsuids(ArrayList<String> tsuids) {
+    this.tsuids = tsuids;
+  }
+
+  /** @param tags an optional list of tags for specificity or grouping */
+  public void setTags(HashMap<String, String> tags) {
+    this.tags = tags;
+  }
+
+  /** @param downsample the downsampling function to use, e.g. "2h-avg" */
+  public void setDownsample(String downsample) {
+    this.downsample = downsample;
+  }
+
+  /** @param rate whether or not the result should be rate converted */
+  public void setRate(boolean rate) {
+    this.rate = rate;
   }
 }
