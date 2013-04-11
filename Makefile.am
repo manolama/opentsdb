@@ -116,6 +116,8 @@ test_SRC := \
 	test/core/TestCompactionQueue.java	\
 	test/core/TestTags.java	\
 	test/core/TestTSDB.java	\
+	test/core/TestTSQuery.java	\
+	test/core/TestTSSubQuery.java	\
 	test/plugin/DummyPlugin.java \
 	test/meta/TestAnnotation.java	\
 	test/meta/TestTSMeta.java	\
