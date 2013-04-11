@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
@@ -173,6 +174,18 @@ public abstract class HttpSerializer {
   }
   
   /**
+   * Parses a list of metrics, tagk and/or tagvs to assign UIDs to
+   * @return as hash map of lists for the different types
+   * @throws BadRequestException if the plugin has not implemented this method
+   */
+  public HashMap<String, List<String>> parseUidAssignV1() {
+    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+        "The requested API endpoint has not been implemented", 
+        this.getClass().getCanonicalName() + 
+        " has not implemented parseUidAssignV1");
+  }
+  
+  /**
    * Formats the results of an HTTP data point storage request
    * @param results A map of results. The map will consist of:
    * <ul><li>success - (long) the number of successfully parsed datapoints</li>
@@ -257,6 +270,21 @@ public abstract class HttpSerializer {
   }
   
   /**
+   * Format a response from the Uid Assignment RPC
+   * @param response A map of lists of pairs representing the results of the
+   * assignment
+   * @return A ChannelBuffer object to pass on to the caller
+   * @throws BadRequestException if the plugin has not implemented this method
+   */
+  public ChannelBuffer formatUidAssignV1(final 
+      Map<String, TreeMap<String, String>> response) {
+    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+        "The requested API endpoint has not been implemented", 
+        this.getClass().getCanonicalName() + 
+        " has not implemented formatUidAssignV1");
+  }
+  
+  /**
    * Formats a 404 error when an endpoint or file wasn't found
    * <p>
    * <b>WARNING:</b> If overriding, make sure this method catches all errors and
@@ -338,16 +366,23 @@ public abstract class HttpSerializer {
    * @return A standard JSON error
    */
   public ChannelBuffer formatErrorV1(final Exception exception) {
+    String message = exception.getMessage();
+    // NPEs have a null for the message string (why?!?!?!)
+    if (exception.getClass() == NullPointerException.class) {
+      message = "An internal null pointer exception was thrown";
+    } else if (message == null) {
+      message = "An unknown exception occurred";
+    }
     StringBuilder output = 
-      new StringBuilder(exception.getMessage().length() * 2);
+      new StringBuilder(message.length() * 2);
     final String jsonp = query.getQueryStringParam("jsonp");
     if (jsonp != null && !jsonp.isEmpty()) {
       output.append(query.getQueryStringParam("jsonp") + "(");
     }
     output.append("{\"error\":{\"code\":");
     output.append(500);
-    final StringBuilder msg = new StringBuilder(exception.getMessage().length());
-    HttpQuery.escapeJson(exception.getMessage(), msg);
+    final StringBuilder msg = new StringBuilder(message.length());
+    HttpQuery.escapeJson(message, msg);
     output.append(",\"message\":\"").append(msg.toString()).append("\"");
     if (query.showStackTrace()) {
       ThrowableProxy tp = new ThrowableProxy(exception);
