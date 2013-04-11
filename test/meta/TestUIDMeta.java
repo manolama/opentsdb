@@ -89,7 +89,6 @@ public final class TestUIDMeta {
   @Test
   public void serialize() throws Exception {
     assertNotNull(JSON.serializeToString(meta));
-    System.out.println(JSON.serializeToString(meta));
   }
   
   @Test

@@ -12,12 +12,13 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.fasterxml.jackson.core.JsonGenerationException;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
@@ -28,12 +29,15 @@ import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
+import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpRequest;
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 
 import net.opentsdb.BuildData;
 import net.opentsdb.core.Aggregators;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.utils.JSON;
 
 /**
  * Stateless handler for RPCs (telnet-style or HTTP).
@@ -84,22 +88,38 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       final Version version = new Version();
       telnet_commands.put("version", version);
       http_commands.put("version", version);
+      http_commands.put("api/version", version);
     }
     {
       final DropCaches dropcaches = new DropCaches();
       telnet_commands.put("dropcaches", dropcaches);
       http_commands.put("dropcaches", dropcaches);
+      http_commands.put("api/dropcaches", dropcaches);
     }
 
     telnet_commands.put("exit", new Exit());
     telnet_commands.put("help", new Help());
-    telnet_commands.put("put", new PutDataPointRpc());
+    {
+      final PutDataPointRpc put = new PutDataPointRpc();
+      telnet_commands.put("put", put);
+      http_commands.put("api/put", put);
+    }
 
     http_commands.put("", new HomePage());
-    http_commands.put("aggregators", new ListAggregators());
+    {
+      final ListAggregators aggregators = new ListAggregators();
+      http_commands.put("aggregators", aggregators);
+      http_commands.put("api/aggregators", aggregators);
+    }
     http_commands.put("logs", new LogsRpc());
     http_commands.put("q", new GraphHandler());
-    http_commands.put("suggest", new Suggest());
+    {
+      final SuggestRpc suggest_rpc = new SuggestRpc();
+      http_commands.put("suggest", suggest_rpc);
+      http_commands.put("api/suggest", suggest_rpc);
+    }
+    http_commands.put("api/serializers", new Serializers());
+    http_commands.put("api/uid", new UniqueIdRpc());
   }
 
   @Override
@@ -149,68 +169,30 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
   private void handleHttpQuery(final TSDB tsdb, final Channel chan, final HttpRequest req) {
     http_rpcs_received.incrementAndGet();
     final HttpQuery query = new HttpQuery(tsdb, req, chan);
-    if (req.isChunked()) {
+    if (!tsdb.getConfig().enable_chunked_requests() && req.isChunked()) {
       logError(query, "Received an unsupported chunked request: "
                + query.request());
       query.badRequest("Chunked request not supported.");
       return;
     }
     try {
-      final HttpRpc rpc = http_commands.get(getEndPoint(query));
-      if (rpc != null) {
-        rpc.execute(tsdb, query);
-      } else {
-        query.notFound();
+      try {        
+        final String route = query.getQueryBaseRoute();
+        query.setSerializer();
+        
+        final HttpRpc rpc = http_commands.get(route);
+        if (rpc != null) {
+          rpc.execute(tsdb, query);
+        } else {
+          query.notFound();
+        }
+      } catch (BadRequestException ex) {
+        query.badRequest(ex);
       }
-    } catch (BadRequestException ex) {
-      query.badRequest(ex.getMessage());
     } catch (Exception ex) {
       query.internalError(ex);
       exceptions_caught.incrementAndGet();
     }
-  }
-
-  /**
-   * Returns the "first path segment" in the URI.
-   *
-   * Examples:
-   * <pre>
-   *   URI request | Value returned
-   *   ------------+---------------
-   *   /           | ""
-   *   /foo        | "foo"
-   *   /foo/bar    | "foo"
-   *   /foo?quux   | "foo"
-   * </pre>
-   * @param query The HTTP query.
-   */
-  private String getEndPoint(final HttpQuery query) {
-    final String uri = query.request().getUri();
-    if (uri.length() < 1) {
-      throw new BadRequestException("Empty query");
-    }
-    if (uri.charAt(0) != '/') {
-      throw new BadRequestException("Query doesn't start with a slash: <code>"
-                                    // TODO(tsuna): HTML escape to avoid XSS.
-                                    + uri + "</code>");
-    }
-    final int questionmark = uri.indexOf('?', 1);
-    final int slash = uri.indexOf('/', 1);
-    int pos;  // Will be set to where the first path segment ends.
-    if (questionmark > 0) {
-      if (slash > 0) {
-        pos = (questionmark < slash
-               ? questionmark       // Request: /foo?bar/quux
-               : slash);            // Request: /foo/bar?quux
-      } else {
-        pos = questionmark;         // Request: /foo?bar
-      }
-    } else {
-      pos = (slash > 0
-             ? slash                // Request: /foo/bar
-             : uri.length());       // Request: /foo
-    }
-    return uri.substring(1, pos);
   }
 
   /**
@@ -302,7 +284,8 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
 
   /** The home page ("GET /"). */
   private static final class HomePage implements HttpRpc {
-    public void execute(final TSDB tsdb, final HttpQuery query) {
+    public void execute(final TSDB tsdb, final HttpQuery query) 
+      throws IOException {
       final StringBuilder buf = new StringBuilder(2048);
       buf.append("<div id=queryuimain></div>"
                  + "<noscript>You must have JavaScript enabled.</noscript>"
@@ -318,8 +301,22 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
 
   /** The "/aggregators" endpoint. */
   private static final class ListAggregators implements HttpRpc {
-    public void execute(final TSDB tsdb, final HttpQuery query) {
-      query.sendJsonArray(Aggregators.set());
+    public void execute(final TSDB tsdb, final HttpQuery query) 
+      throws IOException {
+      
+      // only accept GET/POST
+      if (query.method() != HttpMethod.GET && query.method() != HttpMethod.POST) {
+        throw new BadRequestException(HttpResponseStatus.METHOD_NOT_ALLOWED, 
+            "Method not allowed", "The HTTP method [" + query.method().getName() +
+            "] is not permitted for this endpoint");
+      }
+      
+      if (query.apiVersion() > 0) {
+        query.sendReply(
+            query.serializer().formatAggregatorsV1(Aggregators.set()));
+      } else {
+        query.sendReply(JSON.serializeToBytes(Aggregators.set()));
+      }
     }
   }
 
@@ -339,7 +336,8 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       return Deferred.fromResult(null);
     }
 
-    public void execute(final TSDB tsdb, final HttpQuery query) {
+    public void execute(final TSDB tsdb, final HttpQuery query) 
+      throws JsonGenerationException, IOException {
       final boolean json = query.hasQueryStringParam("json");
       final StringBuilder buf = json ? null : new StringBuilder(2048);
       final ArrayList<String> stats = json ? new ArrayList<String>(64) : null;
@@ -355,7 +353,7 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       };
       doCollectStats(tsdb, collector);
       if (json) {
-        query.sendJsonArray(stats);
+        query.sendReply(JSON.serializeToBytes(stats));
       } else {
         query.sendReply(buf);
       }
@@ -367,28 +365,6 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       ConnectionManager.collectStats(collector);
       RpcHandler.collectStats(collector);
       tsdb.collectStats(collector);
-    }
-  }
-
-  /** The "/suggest" endpoint. */
-  private static final class Suggest implements HttpRpc {
-    public void execute(final TSDB tsdb, final HttpQuery query) {
-      final String type = query.getRequiredQueryStringParam("type");
-      final String q = query.getQueryStringParam("q");
-      if (q == null) {
-        throw BadRequestException.missingParameter("q");
-      }
-      List<String> suggestions;
-      if ("metrics".equals(type)) {
-        suggestions = tsdb.suggestMetrics(q);
-      } else if ("tagk".equals(type)) {
-        suggestions = tsdb.suggestTagNames(q);
-      } else if ("tagv".equals(type)) {
-        suggestions = tsdb.suggestTagValues(q);
-      } else {
-        throw new BadRequestException("Invalid 'type' parameter:" + type);
-      }
-      query.sendJsonArray(suggestions);
     }
   }
 
@@ -413,29 +389,42 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       return Deferred.fromResult(null);
     }
 
-    public void execute(final TSDB tsdb, final HttpQuery query) {
-      final boolean json = query.request().getUri().endsWith("json");
-      StringBuilder buf;
-      if (json) {
-        buf = new StringBuilder(157 + BuildData.repo_status.toString().length()
-                                + BuildData.user.length() + BuildData.host.length()
-                                + BuildData.repo.length());
-        buf.append("{\"short_revision\":\"").append(BuildData.short_revision)
-          .append("\",\"full_revision\":\"").append(BuildData.full_revision)
-          .append("\",\"timestamp\":").append(BuildData.timestamp)
-          .append(",\"repo_status\":\"").append(BuildData.repo_status)
-          .append("\",\"user\":\"").append(BuildData.user)
-          .append("\",\"host\":\"").append(BuildData.host)
-          .append("\",\"repo\":\"").append(BuildData.repo)
-          .append("\"}");
-      } else {
-        final String revision = BuildData.revisionString();
-        final String build = BuildData.buildString();
-        buf = new StringBuilder(2 // For the \n's
-                                + revision.length() + build.length());
-        buf.append(revision).append('\n').append(build).append('\n');
+    public void execute(final TSDB tsdb, final HttpQuery query) throws 
+      IOException {
+      
+      // only accept GET/POST
+      if (query.method() != HttpMethod.GET && query.method() != HttpMethod.POST) {
+        throw new BadRequestException(HttpResponseStatus.METHOD_NOT_ALLOWED, 
+            "Method not allowed", "The HTTP method [" + query.method().getName() +
+            "] is not permitted for this endpoint");
       }
-      query.sendReply(buf);
+      
+      final HashMap<String, String> version = new HashMap<String, String>();
+      version.put("version", BuildData.version);
+      version.put("short_revision", BuildData.short_revision);
+      version.put("full_revision", BuildData.full_revision);
+      version.put("timestamp", Long.toString(BuildData.timestamp));
+      version.put("repo_status", BuildData.repo_status.toString());
+      version.put("user", BuildData.user);
+      version.put("host", BuildData.host);
+      version.put("repo", BuildData.repo);
+      
+      if (query.apiVersion() > 0) {
+        query.sendReply(query.serializer().formatVersionV1(version));
+      } else {
+        final boolean json = query.request().getUri().endsWith("json");      
+        if (json) {
+          query.sendReply(JSON.serializeToBytes(version));
+        } else {
+          final String revision = BuildData.revisionString();
+          final String build = BuildData.buildString();
+          StringBuilder buf;
+          buf = new StringBuilder(2 // For the \n's
+                                  + revision.length() + build.length());
+          buf.append(revision).append('\n').append(build).append('\n');
+          query.sendReply(buf);
+        }
+      }
     }
   }
 
@@ -471,9 +460,25 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
       return Deferred.fromResult(null);
     }
 
-    public void execute(final TSDB tsdb, final HttpQuery query) {
+    public void execute(final TSDB tsdb, final HttpQuery query) 
+      throws IOException {
       dropCaches(tsdb, query.channel());
-      query.sendReply("Caches dropped.\n");
+      
+      // only accept GET/POST
+      if (query.method() != HttpMethod.GET && query.method() != HttpMethod.POST) {
+        throw new BadRequestException(HttpResponseStatus.METHOD_NOT_ALLOWED, 
+            "Method not allowed", "The HTTP method [" + query.method().getName() +
+            "] is not permitted for this endpoint");
+      }
+      
+      if (query.apiVersion() > 0) {
+        final HashMap<String, String> response = new HashMap<String, String>();
+        response.put("status", "200");
+        response.put("message", "Caches dropped");
+        query.sendReply(query.serializer().formatDropCachesV1(response));
+      } else { // deprecated API
+        query.sendReply("Caches dropped.\n");
+      }
     }
 
     /** Drops in memory caches.  */
@@ -483,7 +488,31 @@ final class RpcHandler extends SimpleChannelUpstreamHandler {
     }
   }
 
-
+  /** The /api/formatters endpoint 
+   * @since 2.0 */
+  private static final class Serializers implements HttpRpc {
+    public void execute(final TSDB tsdb, final HttpQuery query) 
+      throws IOException {
+      // only accept GET/POST
+      if (query.method() != HttpMethod.GET && query.method() != HttpMethod.POST) {
+        throw new BadRequestException(HttpResponseStatus.METHOD_NOT_ALLOWED, 
+            "Method not allowed", "The HTTP method [" + query.method().getName() +
+            "] is not permitted for this endpoint");
+      }
+      
+      switch (query.apiVersion()) {
+        case 0:
+        case 1:
+          query.sendReply(query.serializer().formatSerializersV1());
+          break;
+        default: 
+          throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+              "Requested API version not implemented", "Version " + 
+              query.apiVersion() + " is not implemented");
+      }
+    }
+  }
+  
   // ---------------- //
   // Logging helpers. //
   // ---------------- //

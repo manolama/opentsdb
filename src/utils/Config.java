@@ -61,6 +61,12 @@ public class Config {
   /** tsd.storage.enable_compaction */
   private boolean enable_compactions = true;
   
+  /** tsd.http.request.enable_chunked */
+  private boolean enable_chunked_requests = false;
+  
+  /** tsd.http.request.max_chunk */
+  private int max_chunked_requests = 4096; 
+  
   /**
    * The list of properties configured to their defaults or modified by users
    */
@@ -122,6 +128,16 @@ public class Config {
   /** @return the enable_compaction value */
   public boolean enable_compactions() {
     return this.enable_compactions;
+  }
+  
+  /** @return whether or not chunked requests are supported */
+  public boolean enable_chunked_requests() {
+    return this.enable_chunked_requests;
+  }
+  
+  /** @return max incoming chunk size in bytes */
+  public int max_chunked_requests() {
+    return this.max_chunked_requests;
   }
   
   /**
@@ -231,7 +247,7 @@ public class Config {
    * @return True if the property exists and has a value, not an empty string
    */
   public final boolean hasProperty(final String property) {
-    final String val = this.properties.get(property).toUpperCase();
+    final String val = this.properties.get(property);
     if (val == null)
       return false;
     if (val.isEmpty())
@@ -278,6 +294,9 @@ public class Config {
     default_map.put("tsd.storage.hbase.zk_quorum", "localhost");
     default_map.put("tsd.storage.hbase.zk_basedir", "/hbase");
     default_map.put("tsd.storage.enable_compaction", "true");
+    default_map.put("tsd.http.show_stack_trace", "true");
+    default_map.put("tsd.http.request.enable_chunked", "false");
+    default_map.put("tsd.http.request.max_chunk", "4096");
 
     for (Map.Entry<String, String> entry : default_map.entrySet()) {
       if (!properties.containsKey(entry.getKey()))
@@ -287,6 +306,10 @@ public class Config {
     // set statics
     auto_metric = this.getBoolean("tsd.core.auto_create_metrics");
     enable_compactions = this.getBoolean("tsd.storage.enable_compaction");
+    enable_chunked_requests = this.getBoolean("tsd.http.request.enable_chunked");
+    if (this.hasProperty("tsd.http.request.max_chunk")) {
+      max_chunked_requests = this.getInt("tsd.http.request.max_chunk");
+    }
   }
 
   /**

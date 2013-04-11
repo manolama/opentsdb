@@ -19,6 +19,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
+import javax.xml.bind.DatatypeConverter;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -378,6 +380,7 @@ public final class UniqueId implements UniqueIdInterface {
   /**
    * Attempts to find suggestions of names given a search term.
    * @param search The search term (possibly empty).
+   * @param max_results The number of results to return. Must be 1 or greater
    * @return A list of known valid names that have UIDs that sort of match
    * the search term.  If the search term is empty, returns the first few
    * terms.
@@ -385,12 +388,32 @@ public final class UniqueId implements UniqueIdInterface {
    * HBase.
    */
   public List<String> suggest(final String search) throws HBaseException {
+    return suggest(search, MAX_SUGGESTIONS);
+  }
+      
+  /**
+   * Attempts to find suggestions of names given a search term.
+   * @param search The search term (possibly empty).
+   * @param max_results The number of results to return. Must be 1 or greater
+   * @return A list of known valid names that have UIDs that sort of match
+   * the search term.  If the search term is empty, returns the first few
+   * terms.
+   * @throws HBaseException if there was a problem getting suggestions from
+   * HBase.
+   * @throws IllegalArgumentException if the count was less than 1
+   * @since 2.0
+   */
+  public List<String> suggest(final String search, final int max_results) 
+    throws HBaseException {
+    if (max_results < 1) {
+      throw new IllegalArgumentException("Count must be greater than 0");
+    }
     // TODO(tsuna): Add caching to try to avoid re-scanning the same thing.
-    final Scanner scanner = getSuggestScanner(search);
+    final Scanner scanner = getSuggestScanner(search, max_results);
     final LinkedList<String> suggestions = new LinkedList<String>();
     try {
       ArrayList<ArrayList<KeyValue>> rows;
-      while ((short) suggestions.size() < MAX_SUGGESTIONS
+      while ((short) suggestions.size() < max_results
              && (rows = scanner.nextRows().joinUninterruptibly()) != null) {
         for (final ArrayList<KeyValue> row : rows) {
           if (row.size() != 1) {
@@ -522,8 +545,11 @@ public final class UniqueId implements UniqueIdInterface {
 
   /**
    * Creates a scanner that scans the right range of rows for suggestions.
+   * @param search The string to start searching at
+   * @param max_results The max number of results to return
    */
-  private Scanner getSuggestScanner(final String search) {
+  private Scanner getSuggestScanner(final String search, 
+      final int max_results) {
     final byte[] start_row;
     final byte[] end_row;
     if (search.isEmpty()) {
@@ -539,7 +565,7 @@ public final class UniqueId implements UniqueIdInterface {
     scanner.setStopKey(end_row);
     scanner.setFamily(ID_FAMILY);
     scanner.setQualifier(kind);
-    scanner.setMaxNumRows(MAX_SUGGESTIONS);
+    scanner.setMaxNumRows(max_results <= 4096 ? max_results : 4096);
     return scanner;
   }
 
@@ -646,4 +672,67 @@ public final class UniqueId implements UniqueIdInterface {
     return "UniqueId(" + fromBytes(table) + ", " + kind() + ", " + idWidth + ")";
   }
 
+  /**
+   * Converts a byte array to a hex encoded, upper case string with padding
+   * @param uid The ID to convert
+   * @return the UID as a hex string
+   * @throws NullPointerException if the ID was null
+   * @since 2.0
+   */
+  public static String uidToString(final byte[] uid) {
+    return DatatypeConverter.printHexBinary(uid);
+  }
+  
+  /**
+   * Converts a hex string to a byte array
+   * If the {@code uid} is less than {@code uid_length * 2} characters wide, it
+   * will be padded with 0s to conform to the spec. E.g. if the tagk width is 3
+   * and the given {@code uid} string is "1", the string will be padded to 
+   * "000001" and then converted to a byte array to reach 3 bytes. 
+   * All {@code uid}s are padded to 1 byte. If given "1", and {@code uid_length}
+   * is 0, the uid will be padded to "01" then converted.
+   * @param uid The UID to convert
+   * @param uid_length An optional length, in bytes, that the UID must conform
+   * to. Set to 0 if not used.
+   * @return The UID as a byte array
+   * @throws NullPointerException if the ID was null
+   * @throws IllegalArgumentException if the string is not valid hex
+   * @since 2.0
+   */
+  public static byte[] stringToUid(final String uid) {
+    return stringToUid(uid, (short)0);
+  }
+  
+  /**
+   * Converts a hex string to a byte array
+   * If the {@code uid} is less than {@code uid_length * 2} characters wide, it
+   * will be padded with 0s to conform to the spec. E.g. if the tagk width is 3
+   * and the given {@code uid} string is "1", the string will be padded to 
+   * "000001" and then converted to a byte array to reach 3 bytes. 
+   * All {@code uid}s are padded to 1 byte. If given "1", and {@code uid_length}
+   * is 0, the uid will be padded to "01" then converted.
+   * @param uid The UID to convert
+   * @param uid_length An optional length, in bytes, that the UID must conform
+   * to. Set to 0 if not used.
+   * @return The UID as a byte array
+   * @throws NullPointerException if the ID was null
+   * @throws IllegalArgumentException if the string is not valid hex
+   * @since 2.0
+   */
+  public static byte[] stringToUid(final String uid, final short uid_length) {
+    if (uid.isEmpty()) {
+      throw new IllegalArgumentException("UID was empty");
+    }
+    String id = uid;
+    if (uid_length > 0) {
+      while (id.length() < uid_length * 2) {
+        id = "0" + id;
+      }
+    } else {
+      if (id.length() % 2 > 0) {
+        id = "0" + id;
+      }
+    }
+    return DatatypeConverter.parseHexBinary(id);
+  }
 }

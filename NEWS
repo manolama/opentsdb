@@ -6,6 +6,14 @@ Noteworthy changes:
   - Configuration can be provided in a properties file
   - New Jackson JSON helper class
   - GnuPlot batch file for Windows compatability
+  - Add relative time option "n" for 30 days
+  - Relative, unix epoch style timestamps work in CliQuery
+  - New "max" parameter for /suggest that can fetch more than the default 25 
+    results. If not supplied, default is used
+  - New formalized HTTP API, deprecates many of the old HTTP API calls but it
+    is still backwards compatible
+  - New store data points over HTTP via JSON
+  - New optional chunked encoding support for HTTP requests, configurable
 
 * Version 1.1.0 (2013-03-08) [12879d7]
 
