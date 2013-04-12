@@ -37,6 +37,7 @@ import org.hbase.async.RowLockRequest;
 
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.uid.UniqueId.UniqueIdType;
 import net.opentsdb.utils.Config;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.stats.Histogram;
@@ -131,40 +132,44 @@ public final class TSDB {
 
   /**
    * Attempts to find the name for a unique identifier given a type
-   * @param type Either "metric", "tagk" or "tagv"
+   * @param type The type of UID
    * @param uid The UID to search for
    * @return The name of the UID object if found
    * @throws IllegalArgumentException if the type is not valid
    * @throws NoSuchUniqueId if the UID was not found
+   * @since 2.0
    */
-  public String getUidName(final String type, final byte[] uid) {
-    if (type.toLowerCase().equals("metric")) {
-      return this.metrics.getName(uid);
-    } else if (type.toLowerCase().equals("tagk")) {
-      return this.tag_names.getName(uid);
-    } else if (type.toLowerCase().equals("tagv")) {
-      return this.tag_values.getName(uid);
-    } else {
-      throw new IllegalArgumentException("Unrecognized Unique ID name");
+  public String getUidName(final UniqueIdType type, final byte[] uid) {
+    switch (type) {
+      case METRIC:
+        return this.metrics.getName(uid);
+      case TAGV:
+        return this.tag_names.getName(uid);
+      case TAGK:
+        return this.tag_values.getName(uid);
+      default:
+        throw new IllegalArgumentException("Unrecognized UID type");
     }
   }
   
   /**
    * Attempts to find the UID matching a given name
-   * @param type Either "metric", "tagk" or "tagv"
+   * @param type The type of UID
    * @param name The name to search for
    * @throws IllegalArgumentException if the type is not valid
    * @throws NoSuchUniqueName if the name was not found
+   * @since 2.0
    */
-  public byte[] getUID(final String type, final String name) {
-    if (type.toLowerCase().equals("metric")) {
-      return this.metrics.getId(name);
-    } else if (type.toLowerCase().equals("tagk")) {
-      return this.tag_names.getId(name);
-    } else if (type.toLowerCase().equals("tagv")) {
-      return this.tag_values.getId(name);
-    } else {
-      throw new IllegalArgumentException("Unrecognized Unique ID name");
+  public byte[] getUID(final UniqueIdType type, final String name) {
+    switch (type) {
+      case METRIC:
+        return this.metrics.getId(name);
+      case TAGV:
+        return this.tag_names.getId(name);
+      case TAGK:
+        return this.tag_values.getId(name);
+      default:
+        throw new IllegalArgumentException("Unrecognized UID type");
     }
   }
   
