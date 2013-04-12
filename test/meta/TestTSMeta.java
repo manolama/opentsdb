@@ -45,7 +45,6 @@ public final class TestTSMeta {
   @Test
   public void metric() {
     UIDMeta metric = new UIDMeta();
-    metric.setUID("AB");
     meta.setMetric(metric);
     assertNotNull(meta.getMetric());
   }
