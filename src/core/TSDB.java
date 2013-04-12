@@ -130,6 +130,45 @@ public final class TSDB {
   }
 
   /**
+   * Attempts to find the name for a unique identifier given a type
+   * @param type Either "metric", "tagk" or "tagv"
+   * @param uid The UID to search for
+   * @return The name of the UID object if found
+   * @throws IllegalArgumentException if the type is not valid
+   * @throws NoSuchUniqueId if the UID was not found
+   */
+  public String getUidName(final String type, final byte[] uid) {
+    if (type.toLowerCase().equals("metric")) {
+      return this.metrics.getName(uid);
+    } else if (type.toLowerCase().equals("tagk")) {
+      return this.tag_names.getName(uid);
+    } else if (type.toLowerCase().equals("tagv")) {
+      return this.tag_values.getName(uid);
+    } else {
+      throw new IllegalArgumentException("Unrecognized Unique ID name");
+    }
+  }
+  
+  /**
+   * Attempts to find the UID matching a given name
+   * @param type Either "metric", "tagk" or "tagv"
+   * @param name The name to search for
+   * @throws IllegalArgumentException if the type is not valid
+   * @throws NoSuchUniqueName if the name was not found
+   */
+  public byte[] getUID(final String type, final String name) {
+    if (type.toLowerCase().equals("metric")) {
+      return this.metrics.getId(name);
+    } else if (type.toLowerCase().equals("tagk")) {
+      return this.tag_names.getId(name);
+    } else if (type.toLowerCase().equals("tagv")) {
+      return this.tag_values.getId(name);
+    } else {
+      throw new IllegalArgumentException("Unrecognized Unique ID name");
+    }
+  }
+  
+  /**
    * Verifies that the data and UID tables exist in HBase
    * @return An ArrayList of objects to wait for
    * @throws TableNotFoundException
