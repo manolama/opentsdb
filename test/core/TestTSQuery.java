@@ -14,54 +14,23 @@ package net.opentsdb.core;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
 
+@RunWith(PowerMockRunner.class)
+@PrepareForTest({ TSQuery.class })
 public final class TestTSQuery {
 
   @Test
   public void constructor() {
     assertNotNull(new TSQuery());
-  }
-  
-  // Getters and Setters ----------------
-  @Test
-  public void gsStart() {
-    TSQuery ts = new TSQuery();
-    ts.setStart("1d-ago");
-    assertEquals("1d-ago", ts.getStart());
-  }
-  
-  @Test
-  public void gsEnd() {
-    TSQuery ts = new TSQuery();
-    ts.setEnd("1d-ago");
-    assertEquals("1d-ago", ts.getEnd());
-  }
-  
-  @Test
-  public void gsTimezone() {
-    TSQuery ts = new TSQuery();
-    ts.setTimezone("UTC");
-    assertEquals("UTC", ts.getTimezone());
-  }
-  
-  @Test
-  public void gsOptions() {
-    TSQuery ts = new TSQuery();
-    ts.setOptions(new HashMap<String, ArrayList<String>>());
-    assertNotNull(ts.getOptions());
-  }
-  
-  @Test
-  public void gsPadding() {
-    TSQuery ts = new TSQuery();
-    ts.setPadding(true);
-    assertTrue(ts.getPadding());
   }
 
   @Test
@@ -108,11 +77,13 @@ public final class TestTSQuery {
   }
   
   @Test
-  public void validateEmptyEnd() {
+  public void validateEmptyEnd() {    
+    PowerMockito.mockStatic(System.class);
+    when(System.currentTimeMillis()).thenReturn(1357300800000L);
     TSQuery q = this.getMetricForValidate();
     q.setEnd("");
     q.validateAndSetQuery();
-    assertEquals(System.currentTimeMillis(), q.endTime());
+    assertEquals(1357300800000L, q.endTime());
   }
   
   @Test (expected = IllegalArgumentException.class)

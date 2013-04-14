@@ -83,39 +83,39 @@ public final class TSSubQuery {
    * @throws IllegalArgumentException if something is wrong with the query
    */
   public void validateAndSetQuery() {
-    if (this.aggregator == null || this.aggregator.isEmpty()) {
+    if (aggregator == null || aggregator.isEmpty()) {
       throw new IllegalArgumentException("Missing the aggregation function");
     }
     try {
-      this.agg = Aggregators.get(this.aggregator);
+      agg = Aggregators.get(aggregator);
     } catch (NoSuchElementException nse) {
       throw new IllegalArgumentException(
-          "No such aggregation function: " + this.aggregator);
+          "No such aggregation function: " + aggregator);
     }
     
     // we must have at least one TSUID OR a metric
-    if ((this.tsuids == null || this.tsuids.size() < 1) && 
-        (this.metric == null || this.metric.isEmpty())) {
+    if ((tsuids == null || tsuids.isEmpty()) && 
+        (metric == null || metric.isEmpty())) {
       throw new IllegalArgumentException(
           "Missing the metric or tsuids, provide at least one");
     }
     
     // parse the downsampler if we have one
-    if (this.downsample != null && !this.downsample.isEmpty()) {
-      final int dash = this.downsample.indexOf('-', 1); // 1st char can't be
+    if (downsample != null && !downsample.isEmpty()) {
+      final int dash = downsample.indexOf('-', 1); // 1st char can't be
                                                         // `-'.
       if (dash < 0) {
         throw new IllegalArgumentException("Invalid downsampling specifier '" 
-            + this.downsample + "' in [" + this.downsample + "]");
+            + downsample + "' in [" + downsample + "]");
       }
       try {
-        downsampler = Aggregators.get(this.downsample.substring(dash + 1));
+        downsampler = Aggregators.get(downsample.substring(dash + 1));
       } catch (NoSuchElementException e) {
         throw new IllegalArgumentException("No such downsampling function: "
-            + this.downsample.substring(dash + 1));
+            + downsample.substring(dash + 1));
       }
       downsample_interval = DateTime.parseDuration(
-          this.downsample.substring(0, dash));
+          downsample.substring(0, dash));
     }
   }
 

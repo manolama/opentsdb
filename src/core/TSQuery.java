@@ -81,27 +81,27 @@ public final class TSQuery {
    * @throws IllegalArgumentException if something is wrong with the query
    */
   public void validateAndSetQuery() {
-    if (this.start == null || this.start.isEmpty()) {
+    if (start == null || start.isEmpty()) {
       throw new IllegalArgumentException("Missing start time");
     }
-    this.start_time = DateTime.parseDateTimeString(this.start, this.timezone);
+    start_time = DateTime.parseDateTimeString(start, timezone);
     
-    if (this.end != null && !this.end.isEmpty()) {
-      this.end_time = DateTime.parseDateTimeString(this.end, this.timezone);
+    if (end != null && !end.isEmpty()) {
+      end_time = DateTime.parseDateTimeString(end, timezone);
     } else {
-      this.end_time = System.currentTimeMillis();
+      end_time = System.currentTimeMillis();
     }
-    if (this.end_time <= this.start_time) {
+    if (end_time <= start_time) {
       throw new IllegalArgumentException(
           "End time must be greater than the start time");
     }
     
-    if (this.queries == null || this.queries.size() < 1) {
+    if (queries == null || queries.isEmpty()) {
       throw new IllegalArgumentException("Missing queries");
     }
     
     // validate queries
-    for (TSSubQuery sub : this.queries) {
+    for (TSSubQuery sub : queries) {
       sub.validateAndSetQuery();
     }
   }
@@ -117,8 +117,8 @@ public final class TSQuery {
     for (TSSubQuery sub : this.queries) {
       final Query query = tsdb.newQuery();
       // TODO - fix this when we support ms timestamps
-      query.setStartTime(this.start_time / 1000);
-      query.setEndTime(this.end_time / 1000);
+      query.setStartTime(start_time / 1000);
+      query.setEndTime(end_time / 1000);
       if (sub.downsampler() != null) {
         query.downsample((int)sub.downsampleInterval(), sub.downsampler());
       }

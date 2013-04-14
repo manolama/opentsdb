@@ -15,7 +15,6 @@ package net.opentsdb.core;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -28,50 +27,7 @@ public final class TestTSSubQuery {
   public void constructor() {
     assertNotNull(new TSSubQuery());
   }
-  
-  // Getters and Setters ----------------
-  @Test
-  public void gsAggregator() {
-    TSSubQuery sub = new TSSubQuery();
-    sub.setAggregator("avg");
-    assertEquals("avg", sub.getAggregator());
-  }
-  
-  @Test
-  public void gsMetric() {
-    TSSubQuery sub = new TSSubQuery();
-    sub.setMetric("sys.cpu.0");
-    assertEquals("sys.cpu.0", sub.getMetric());
-  }
-  
-  @Test
-  public void gsgetTsuids() {
-    TSSubQuery sub = new TSSubQuery();
-    sub.setTsuids(new ArrayList<String>());
-    assertNotNull(sub.getTsuids());
-  }
-  
-  @Test
-  public void gsgetTags() {
-    TSSubQuery sub = new TSSubQuery();
-    sub.setTags(new HashMap<String, String>());
-    assertNotNull(sub.getTags());
-  }
-  
-  @Test
-  public void gsDownsample() {
-    TSSubQuery sub = new TSSubQuery();
-    sub.setDownsample("1h-avg");
-    assertEquals("1h-avg", sub.getDownsample());
-  }
-  
-  @Test
-  public void gsRate() {
-    TSSubQuery sub = new TSSubQuery();
-    sub.setRate(true);
-    assertTrue(sub.getRate());
-  }
-  
+
   @Test
   public void validate() {
     TSSubQuery sub = getMetricForValidate();
@@ -88,7 +44,7 @@ public final class TestTSSubQuery {
   public void validateTS() {
     TSSubQuery sub = getMetricForValidate();
     sub.setMetric(null);
-    ArrayList<String> tsuids = new ArrayList<String> (1);
+    ArrayList<String> tsuids = new ArrayList<String>(1);
     tsuids.add("ABCD");
     sub.setTsuids(tsuids);
     sub.validateAndSetQuery();
