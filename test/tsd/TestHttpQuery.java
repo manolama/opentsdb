@@ -86,6 +86,17 @@ public final class TestHttpQuery {
     assertEquals(3, params.get("param").size());
   }
   
+  @Test
+  public void getQueryStringMultiNoParam() {
+    Map<String, List<String>> params = 
+      NettyMocks.getQuery(tsdb, 
+          "/api/v1/put?param").getQueryString();
+    assertNotNull(params);
+    assertEquals(1, params.size());
+    assertEquals(1, params.get("param").size());
+    assertTrue(params.get("param").get(0).isEmpty());
+  }
+  
   @Test (expected = NullPointerException.class)
   public void getQueryStringNULL() {
     NettyMocks.getQuery(tsdb, null).getQueryString();
