@@ -130,24 +130,14 @@ final class QueryRpc implements HttpRpc {
     
     // handle tsuid queries first
     if (query.hasQueryStringParam("tsuid")) {
-      final List<String> tsuids = query.getQueryStringParams("tsuid");
-      if (tsuids == null || tsuids.size() < 1) {
-        throw new BadRequestException(
-            "One or more TSUID sub queries did not have data");
-      }
-      
+      final List<String> tsuids = query.getQueryStringParams("tsuid");     
       for (String q : tsuids) {
         this.parseTsuidTypeSubQuery(q, data_query);
       }
     }
     
     if (query.hasQueryStringParam("m")) {
-      final List<String> legacy_queries = query.getQueryStringParams("m");
-      if (legacy_queries == null || legacy_queries.size() < 1) {
-        throw new BadRequestException(
-        "One or more M type sub queries did not have data");
-      }
-      
+      final List<String> legacy_queries = query.getQueryStringParams("m");      
       for (String q : legacy_queries) {
         this.parseMTypeSubQuery(q, data_query);
       }

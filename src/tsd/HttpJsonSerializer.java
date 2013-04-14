@@ -12,8 +12,8 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.TreeMap;
 
 import org.jboss.netty.buffer.ChannelBuffer;
+import org.jboss.netty.buffer.ChannelBufferOutputStream;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
@@ -280,9 +281,8 @@ class HttpJsonSerializer extends HttpSerializer {
     final boolean as_arrays = this.query.hasQueryStringParam("arrays");
     
     // todo - this should be streamed at some point since it could be HUGE
-    // todo - until streamed, calculate a size in the query execution code for
-    // efficient allocation
-    final ByteArrayOutputStream output = new ByteArrayOutputStream();
+    final ChannelBuffer response = ChannelBuffers.dynamicBuffer();
+    final OutputStream output = new ChannelBufferOutputStream(response);
     try {
       JsonGenerator json = JSON.getFactory().createGenerator(output);
       json.writeStartArray();
@@ -343,8 +343,7 @@ class HttpJsonSerializer extends HttpSerializer {
       json.writeEndArray();
       json.close();
       
-      // todo - again, STREAM IT!
-      return ChannelBuffers.wrappedBuffer(output.toByteArray());
+      return response;
     } catch (IOException e) {
       LOG.error("Unexpected exception", e);
       throw new RuntimeException(e);
