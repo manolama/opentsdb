@@ -119,7 +119,6 @@ public final class TestUIDMeta {
   public void serialize() throws Exception {
     final String json = JSON.serializeToString(meta);
     assertNotNull(json);
-    System.out.println(json);
     assertEquals("{\"uid\":\"\",\"type\":null,\"name\":\"\",\"description\":"
         + "\"\",\"notes\":\"\",\"created\":0,\"custom\":null,\"displayName\":"
          + "\"\"}", 
