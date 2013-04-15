@@ -38,6 +38,7 @@ import org.hbase.async.RowLock;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
@@ -46,7 +47,7 @@ import com.stumbleupon.async.Deferred;
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({TSDB.class, Config.class, UniqueId.class, HBaseClient.class, 
   GetRequest.class, PutRequest.class, DeleteRequest.class, KeyValue.class, 
-  RowLock.class})
+  RowLock.class, UIDMeta.class})
 public final class TestUIDMeta {
   private TSDB tsdb = mock(TSDB.class);
   private HBaseClient client = mock(HBaseClient.class);
@@ -106,8 +107,10 @@ public final class TestUIDMeta {
 
   @Test
   public void createConstructor() {
+    PowerMockito.mockStatic(System.class);
+    when(System.currentTimeMillis()).thenReturn(1357300800000L); 
     meta = new UIDMeta(UniqueIdType.TAGK, new byte[] { 1, 0, 0 }, "host");
-    assertEquals(System.currentTimeMillis() / 1000, meta.getCreated());
+    assertEquals(1357300800000L / 1000, meta.getCreated());
     assertEquals(UniqueId.uidToString(new byte[] { 1, 0, 0 }), meta.getUID());
     assertEquals("host", meta.getName());
   }
