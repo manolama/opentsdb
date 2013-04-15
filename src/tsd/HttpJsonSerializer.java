@@ -28,6 +28,7 @@ import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.IncomingDataPoint;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.meta.TSMeta;
 import net.opentsdb.meta.UIDMeta;
 import net.opentsdb.utils.JSON;
 
@@ -180,6 +181,25 @@ class HttpJsonSerializer extends HttpSerializer {
   }
   
   /**
+   * Parses a single TSMeta object
+   * @throws JSONException if parsing failed
+   * @throws BadRequestException if the content was missing or parsing failed
+   */
+  public TSMeta parseTSMetaV1() {
+    final String json = query.getContent();
+    if (json == null || json.isEmpty()) {
+      throw new BadRequestException(HttpResponseStatus.BAD_REQUEST,
+          "Missing message content",
+          "Supply valid JSON formatted data in the body of your request");
+    }
+    try {
+      return JSON.parseToObject(json, TSMeta.class);
+    } catch (IllegalArgumentException iae) {
+      throw new BadRequestException("Unable to parse the given JSON", iae);
+    }
+  }
+  
+  /**
    * Formats the results of an HTTP data point storage request
    * @param results A map of results. The map will consist of:
    * <ul><li>success - (long) the number of successfully parsed datapoints</li>
@@ -265,6 +285,16 @@ class HttpJsonSerializer extends HttpSerializer {
    * @throws JSONException if serialization failed
    */
   public ChannelBuffer formatUidMetaV1(final UIDMeta meta) {
+    return this.serializeJSON(meta);
+  }
+  
+  /**
+   * Format a single TSMeta object
+   * @param meta The TSMeta object to serialize
+   * @return A JSON structure
+   * @throws JSONException if serialization failed
+   */
+  public ChannelBuffer formatTSMetaV1(final TSMeta meta) {
     return this.serializeJSON(meta);
   }
   
