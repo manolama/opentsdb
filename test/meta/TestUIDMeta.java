@@ -14,7 +14,6 @@ package net.opentsdb.meta;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.anyShort;
 import static org.mockito.Matchers.any;
@@ -22,7 +21,6 @@ import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.uid.NoSuchUniqueId;
@@ -52,7 +50,7 @@ import com.stumbleupon.async.Deferred;
 public final class TestUIDMeta {
   private TSDB tsdb = mock(TSDB.class);
   private HBaseClient client = mock(HBaseClient.class);
-  UIDMeta meta = new UIDMeta();
+  private UIDMeta meta = new UIDMeta();
   
   @Before
   public void before() throws Exception {   
@@ -113,49 +111,12 @@ public final class TestUIDMeta {
     assertEquals(UniqueId.uidToString(new byte[] { 1, 0, 0 }), meta.getUID());
     assertEquals("host", meta.getName());
   }
-  
-  @Test
-  public void displayName() {
-    meta.setDisplayName("Display");
-    assertEquals(meta.getDisplayName(), "Display");
-  }
-  
-  @Test
-  public void description() {
-    meta.setDescription("Description");
-    assertEquals(meta.getDescription(), "Description");
-  }
-  
-  @Test
-  public void notes() {
-    meta.setNotes("Notes");
-    assertEquals(meta.getNotes(), "Notes");
-  }
-  
-  @Test
-  public void created() {
-    meta.setCreated(1328140800L);
-    assertEquals(meta.getCreated(), 1328140800L);
-  }
-  
-  @Test
-  public void customNull() {
-    assertNull(meta.getCustom());
-  }
-  
-  @Test
-  public void custom() {
-    HashMap<String, String> custom_tags = new HashMap<String, String>();
-    custom_tags.put("key", "MyVal");
-    meta.setCustom(custom_tags);
-    assertNotNull(meta.getCustom());
-    assertEquals(meta.getCustom().get("key"), "MyVal");
-  }
-  
+ 
   @Test
   public void serialize() throws Exception {
     final String json = JSON.serializeToString(meta);
     assertNotNull(json);
+    System.out.println(json);
     assertEquals("{\"uid\":\"\",\"type\":null,\"name\":\"\",\"description\":"
         + "\"\",\"notes\":\"\",\"created\":0,\"custom\":null,\"displayName\":"
          + "\"\"}", 
@@ -171,6 +132,7 @@ public final class TestUIDMeta {
     assertNotNull(meta);
     assertEquals(meta.getUID(), "ABCD");
     assertEquals(UniqueIdType.METRIC, meta.getType());
+    assertEquals("MyNotes", meta.getNotes());
     assertEquals("Empty", meta.getDisplayName());
   }
 

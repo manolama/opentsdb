@@ -26,6 +26,8 @@ import org.hbase.async.RowLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
@@ -60,6 +62,7 @@ import net.opentsdb.utils.JSONException;
  * @since 2.0
  */
 @JsonIgnoreProperties(ignoreUnknown = true) 
+@JsonAutoDetect(fieldVisibility = Visibility.PUBLIC_ONLY)
 public final class UIDMeta {
   private static final Logger LOG = LoggerFactory.getLogger(UIDMeta.class);
   
@@ -432,7 +435,7 @@ public final class UIDMeta {
 
   /** @param display_name an optional descriptive name for the UID */
   public void setDisplayName(final String display_name) {
-    if (!display_name.equals(display_name)) {
+    if (!this.display_name.equals(display_name)) {
       changed.put("display_name", true);
       this.display_name = display_name;
     }
@@ -440,7 +443,7 @@ public final class UIDMeta {
 
   /** @param description an optional description of the UID */
   public void setDescription(final String description) {
-    if (!description.equals(description)) {
+    if (!this.description.equals(description)) {
       changed.put("description", true);
       this.description = description;
     }
@@ -448,20 +451,9 @@ public final class UIDMeta {
 
   /** @param notes optional notes */
   public void setNotes(final String notes) {
-    if (!notes.equals(notes)) {
+    if (!this.notes.equals(notes)) {
       changed.put("notes", true);
       this.notes = notes;
-    }
-  }
-
-  /** @param created when the UID was assigned, Unix epoch time. This can
-   * only be set once */
-  public void setCreated(final long created) {
-    if (created < 1) {
-      this.created = created;
-    } else {
-      LOG.warn("Attempt to assign a new created timestamp rejected for UID: '" + 
-          uid + "' of type: '" + type + "'");
     }
   }
 
@@ -470,7 +462,7 @@ public final class UIDMeta {
     // equivalency of maps is a pain, users have to submit the whole map
     // anyway so we'll just mark it as changed every time we have a non-null
     // value
-    if (custom != null || custom != null) {
+    if (this.custom != null || custom != null) {
       changed.put("custom", true);
       this.custom = custom;
     }
