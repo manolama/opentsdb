@@ -23,7 +23,6 @@ import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
 import org.hbase.async.RowLock;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -110,7 +109,7 @@ public final class UIDMeta {
    * Initializes the the changed map
    */
   public UIDMeta() {
-    this.initializeChangedMap();
+    initializeChangedMap();
   }
  
   /**
@@ -122,7 +121,7 @@ public final class UIDMeta {
   public UIDMeta(final UniqueIdType type, final String uid) {
     this.type = type;
     this.uid = uid;
-    this.initializeChangedMap();
+    initializeChangedMap();
   }
   
   /**
@@ -136,14 +135,14 @@ public final class UIDMeta {
     this.type = type;
     this.uid = UniqueId.uidToString(uid);
     this.name = name;
-    this.created = System.currentTimeMillis() / 1000;
-    this.initializeChangedMap();
+    created = System.currentTimeMillis() / 1000;
+    initializeChangedMap();
   }
   
   /** @return a string with details about this object */
   @Override
   public String toString() {
-    return "'" + this.type.toString() + ":" + this.uid + "'";
+    return "'" + type.toString() + ":" + uid + "'";
   }
   
   /**
@@ -161,10 +160,10 @@ public final class UIDMeta {
    * @throws JSONException if the object could not be serialized
    */
   public void syncToStorage(final TSDB tsdb, final boolean overwrite) {
-    if (this.uid == null || this.uid.isEmpty()) {
+    if (uid == null || uid.isEmpty()) {
       throw new IllegalArgumentException("Missing UID");
     }
-    if (this.type == null) {
+    if (type == null) {
       throw new IllegalArgumentException("Missing type");
     }
 
@@ -172,7 +171,7 @@ public final class UIDMeta {
     final String name = tsdb.getUidName(type, UniqueId.stringToUid(uid));
     
     boolean has_changes = false;
-    for (Map.Entry<String, Boolean> entry : this.changed.entrySet()) {
+    for (Map.Entry<String, Boolean> entry : changed.entrySet()) {
       if (entry.getValue()) {
         has_changes = true;
         break;
@@ -184,21 +183,21 @@ public final class UIDMeta {
     }
     
     final RowLock lock = tsdb.hbaseAcquireLock(tsdb.uidTable(), 
-        UniqueId.stringToUid(this.uid), (short)3);
+        UniqueId.stringToUid(uid), (short)3);
     try {
       final UIDMeta stored_meta = 
-        getFromStorage(tsdb, this.type, UniqueId.stringToUid(this.uid), lock);
+        getFromStorage(tsdb, type, UniqueId.stringToUid(uid), lock);
       if (stored_meta != null) {
-        this.syncMeta(stored_meta, overwrite);
+        syncMeta(stored_meta, overwrite);
       }
       
       // verify the name is set locally just to be safe
-      if (this.name == null || this.name.isEmpty()) {
+      if (name == null || name.isEmpty()) {
         this.name = name;
       }
       final PutRequest put = new PutRequest(tsdb.uidTable(), 
-          UniqueId.stringToUid(this.uid), FAMILY, 
-          (this.type.toString().toLowerCase() + "_meta").getBytes(CHARSET), 
+          UniqueId.stringToUid(uid), FAMILY, 
+          (type.toString().toLowerCase() + "_meta").getBytes(CHARSET), 
           JSON.serializeToBytes(this), lock);
       tsdb.hbasePutWithRetry(put, (short)3, (short)800);
       
@@ -207,7 +206,7 @@ public final class UIDMeta {
       try {
         tsdb.getClient().unlockRow(lock);
       } catch (HBaseException e) {
-        LOG.error("Error while releasing the lock on row: " + this.uid, e);
+        LOG.error("Error while releasing the lock on row: " + uid, e);
       }
     }
   }
@@ -219,16 +218,16 @@ public final class UIDMeta {
    * @throws IllegalArgumentException if data was missing (uid and type)
    */
   public void delete(final TSDB tsdb) {
-    if (this.uid == null || this.uid.isEmpty()) {
+    if (uid == null || uid.isEmpty()) {
       throw new IllegalArgumentException("Missing UID");
     }
-    if (this.type == null) {
+    if (type == null) {
       throw new IllegalArgumentException("Missing type");
     }
 
     final DeleteRequest delete = new DeleteRequest(tsdb.uidTable(), 
-        UniqueId.stringToUid(this.uid), FAMILY, 
-        (this.type.toString().toLowerCase() + "_meta").getBytes(CHARSET));
+        UniqueId.stringToUid(uid), FAMILY, 
+        (type.toString().toLowerCase() + "_meta").getBytes(CHARSET));
     try {
       tsdb.getClient().delete(delete);
     } catch (Exception e) {
@@ -328,31 +327,31 @@ public final class UIDMeta {
    */
   private void syncMeta(final UIDMeta meta, final boolean overwrite) {
     // copy non-user-accessible data first
-    this.uid = meta.uid;
+    uid = meta.uid;
     if (meta.name != null && !meta.name.isEmpty()) {
-      this.name = meta.name;
+      name = meta.name;
     }
     if (meta.type != null) {
-      this.type = meta.type;
+      type = meta.type;
     }
-    this.created = meta.created;
+    created = meta.created;
     
     // handle user-accessible stuff
-    if (!overwrite && !this.changed.get("display_name")) {
-      this.display_name = meta.display_name;
+    if (!overwrite && !changed.get("display_name")) {
+      display_name = meta.display_name;
     }
-    if (!overwrite && !this.changed.get("description")) {
-      this.description = meta.description;
+    if (!overwrite && !changed.get("description")) {
+      description = meta.description;
     }
-    if (!overwrite && !this.changed.get("notes")) {
-      this.notes = meta.notes;
+    if (!overwrite && !changed.get("notes")) {
+      notes = meta.notes;
     }
-    if (!overwrite && !this.changed.get("custom")) {
-      this.custom = meta.custom;
+    if (!overwrite && !changed.get("custom")) {
+      custom = meta.custom;
     }
 
     // reset changed flags
-    this.initializeChangedMap();
+    initializeChangedMap();
   }
   
   /**
@@ -410,24 +409,24 @@ public final class UIDMeta {
 
   /** @param display_name an optional descriptive name for the UID */
   public void setDisplayName(final String display_name) {
-    if (!this.display_name.equals(display_name)) {
-      this.changed.put("display_name", true);
+    if (!display_name.equals(display_name)) {
+      changed.put("display_name", true);
       this.display_name = display_name;
     }
   }
 
   /** @param description an optional description of the UID */
   public void setDescription(final String description) {
-    if (!this.description.equals(description)) {
-      this.changed.put("description", true);
+    if (!description.equals(description)) {
+      changed.put("description", true);
       this.description = description;
     }
   }
 
   /** @param notes optional notes */
   public void setNotes(final String notes) {
-    if (!this.notes.equals(notes)) {
-      this.changed.put("notes", true);
+    if (!notes.equals(notes)) {
+      changed.put("notes", true);
       this.notes = notes;
     }
   }
@@ -435,11 +434,11 @@ public final class UIDMeta {
   /** @param created when the UID was assigned, Unix epoch time. This can
    * only be set once */
   public void setCreated(final long created) {
-    if (this.created < 1) {
+    if (created < 1) {
       this.created = created;
     } else {
       LOG.warn("Attempt to assign a new created timestamp rejected for UID: '" + 
-          this.uid + "' of type: '" + this.type + "'");
+          uid + "' of type: '" + type + "'");
     }
   }
 
@@ -448,8 +447,8 @@ public final class UIDMeta {
     // equivalency of maps is a pain, users have to submit the whole map
     // anyway so we'll just mark it as changed every time we have a non-null
     // value
-    if (this.custom != null || custom != null) {
-      this.changed.put("custom", true);
+    if (custom != null || custom != null) {
+      changed.put("custom", true);
       this.custom = custom;
     }
   }
