@@ -324,6 +324,8 @@ public final class UIDMeta {
    * <b>Note:</b> This method also resets the {@code changed} map to false
    * for every field
    * @param meta The stored object to sync from
+   * @param overwrite Whether or not all user mutable data in storage should be
+   * replaced by the local object
    */
   private void syncMeta(final UIDMeta meta, final boolean overwrite) {
     // copy non-user-accessible data first
