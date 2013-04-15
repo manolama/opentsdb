@@ -253,12 +253,33 @@ public final class UIDMeta {
    */
   public static UIDMeta getUIDMeta(final TSDB tsdb, final UniqueIdType type, 
       final String uid) {
+    return getUIDMeta(tsdb, type, UniqueId.stringToUid(uid));
+  }
+  
+  /**
+   * Verifies the UID object exists, then attempts to return the meta from 
+   * storage and if not found, returns a default object.
+   * <p>
+   * The reason for returning a default object (with the type, uid and name set)
+   * is due to users who may have just enabled meta data or have upgraded we 
+   * want to return valid data. If they modify the entry, it will write to 
+   * storage. You can tell it's a default if the {@code created} value is 0. If
+   * the meta was generated at UID assignment or updated by the meta sync CLI
+   * command, it will have a valid timestamp.
+   * @param tsdb The TSDB to use for storage access
+   * @param type The type of UID to fetch
+   * @param uid The ID of the meta to fetch
+   * @return A UIDMeta from storage or a default
+   * @throws HBaseException if there was an issue fetching
+   */
+  public static UIDMeta getUIDMeta(final TSDB tsdb, final UniqueIdType type, 
+      final byte[] uid) {
     // verify that the UID is still in the map before bothering with meta
-    final String name = tsdb.getUidName(type, UniqueId.stringToUid(uid));
+    final String name = tsdb.getUidName(type, uid);
     
     UIDMeta meta;
     try {
-      meta = getFromStorage(tsdb, type, UniqueId.stringToUid(uid), null);
+      meta = getFromStorage(tsdb, type, uid, null);
       if (meta != null) {
         meta.initializeChangedMap();
         return meta;
@@ -272,7 +293,7 @@ public final class UIDMeta {
     }
     
     meta = new UIDMeta();
-    meta.uid = uid;
+    meta.uid = UniqueId.uidToString(uid);
     meta.type = type;
     meta.name = name;
     return meta;
