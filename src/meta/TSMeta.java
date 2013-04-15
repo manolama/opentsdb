@@ -121,6 +121,15 @@ public final class TSMeta {
   }
   
   /**
+   * Constructor for RPC timeseries parsing that will not set the timestamps
+   * @param tsuid The UID of the timeseries
+   */
+  public TSMeta(final String tsuid) {
+    this.tsuid = tsuid;
+    initializeChangedMap();
+  }
+  
+  /**
    * Constructor for new timeseries that initializes the created and 
    * last_received times
    * @param tsuid The UID of the timeseries
@@ -193,6 +202,22 @@ public final class TSMeta {
     if (!has_changes) {
       LOG.debug(this + " does not have changes, skipping sync to storage");
       throw new IllegalStateException("No changes detected in TSUID meta data");
+    }
+    
+    // before proceeding, make sure each UID object exists by loading the info
+    metric = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
+        tsuid.substring(0, TSDB.metrics_width() * 2));
+    final List<byte[]> parsed_tags = UniqueId.getTagPairsFromTSUID(tsuid, 
+        TSDB.metrics_width(), TSDB.tagk_width(), TSDB.tagv_width());
+    tags = new ArrayList<UIDMeta>(parsed_tags.size());
+    int idx = 0;
+    for (byte[] tag : parsed_tags) {
+      if (idx % 2 == 0) {
+        tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGK, tag));
+      } else {
+        tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGV, tag));
+      }
+      idx++;
     }
     
     final RowLock lock = tsdb.hbaseAcquireLock(tsdb.uidTable(), 
