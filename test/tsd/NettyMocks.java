@@ -121,6 +121,43 @@ public final class NettyMocks {
   }
   
   /**
+   * Returns an HttpQuery object with the given uri, content and type
+   * Method = PUT
+   * @param tsdb The TSDB to associate with, needs to be mocked with the Config
+   * object set
+   * @param uri A URI to use
+   * @param content Content to POST (UTF-8 encoding)
+   * @return an HttpQuery object
+   */
+  public static HttpQuery putQuery(final TSDB tsdb, final String uri, 
+      final String content) {
+    return putQuery(tsdb, uri, content, "application/json; charset=UTF-8");
+  }
+  
+  /**
+   * Returns an HttpQuery object with the given uri, content and type
+   * Method = PUT
+   * @param tsdb The TSDB to associate with, needs to be mocked with the Config
+   * object set
+   * @param uri A URI to use
+   * @param content Content to POST (UTF-8 encoding)
+   * @param type Content-Type value
+   * @return an HttpQuery object
+   */
+  public static HttpQuery putQuery(final TSDB tsdb, final String uri, 
+      final String content, final String type) {
+    final Channel channelMock = NettyMocks.fakeChannel();
+    final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
+        HttpMethod.PUT, uri);
+    if (content != null) {
+      req.setContent(ChannelBuffers.copiedBuffer(content, 
+          Charset.forName("UTF-8")));
+    }
+    req.setHeader("Content-Type", type);
+    return new HttpQuery(tsdb, req, channelMock);
+  }
+  
+  /**
    * Returns a simple pipeline with an HttpRequestDecoder and an 
    * HttpResponseEncoder. No mocking, returns an actual pipeline
    * @return The pipeline
