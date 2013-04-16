@@ -134,9 +134,10 @@ public final class TSMeta {
    * last_received times
    * @param tsuid The UID of the timeseries
    */
-  public TSMeta(final byte[] tsuid) {
+  public TSMeta(final byte[] tsuid, final long created) {
     this.tsuid = UniqueId.uidToString(tsuid);
-    created = System.currentTimeMillis() / 1000;
+    // downgrade to seconds
+    this.created = created > 9999999999L ? created / 1000 : created;
     last_received = created;
     initializeChangedMap();
   }
@@ -292,6 +293,36 @@ public final class TSMeta {
   }
   
   /**
+   * Determines if an entry exists in storage or not. This is used by the 
+   * MetaManager thread to determine if we need to write a new TSUID entry or
+   * not. It will not attempt to verify if the stored data is valid, just 
+   * checks to see if something is stored there.
+   * @param tsdb  The TSDB to use for storage access
+   * @param tsuid The UID of the meta to verify
+   * @return True if data was found, false if not
+   * @throws HBaseException if there was an issue fetching
+   */
+  public static boolean metaExistsInStorage(final TSDB tsdb, final String tsuid) {
+    final GetRequest get = new GetRequest(tsdb.uidTable(), 
+        UniqueId.stringToUid(tsuid));
+    get.family(FAMILY);
+    get.qualifier(QUALIFIER);
+    
+    try {
+      final ArrayList<KeyValue> row = 
+        tsdb.getClient().get(get).joinUninterruptibly();
+      if (row == null || row.isEmpty()) {
+        return false;
+      }
+      return true;
+    } catch (HBaseException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException("Should never be here", e);
+    }
+  }
+  
+  /**
    * Attempts to fetch the timeseries meta data from storage
    * @param tsdb The TSDB to use for storage access
    * @param tsuid The UID of the meta to fetch
@@ -341,8 +372,15 @@ public final class TSMeta {
   private void syncMeta(final TSMeta meta, final boolean overwrite) {
     // copy non-user-accessible data first
     tsuid = meta.tsuid;
-    created = meta.created;
-    last_received = meta.last_received;
+    
+    // use the earliest created value
+    if (meta.created > 0 && meta.created < created) {
+      created = meta.created;
+    }   
+    // use the latest last_received value
+    if (meta.last_received > 0 && meta.last_received > last_received) {
+      last_received = meta.last_received;
+    }
     
     // handle user-accessible stuff
     if (!overwrite && !changed.get("display_name")) {

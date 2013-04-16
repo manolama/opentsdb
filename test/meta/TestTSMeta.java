@@ -13,8 +13,10 @@
 package net.opentsdb.meta;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyShort;
 import static org.mockito.Mockito.when;
@@ -112,9 +114,7 @@ public final class TestTSMeta {
  
   @Test
   public void createConstructor() {
-    PowerMockito.mockStatic(System.class);
-    when(System.currentTimeMillis()).thenReturn(1357300800000L); 
-    meta = new TSMeta(new byte[] { 0, 0, 1, 0, 0, 2, 0, 0, 3 });
+    meta = new TSMeta(new byte[] { 0, 0, 1, 0, 0, 2, 0, 0, 3 }, 1357300800000L);
     assertEquals(1357300800000L / 1000, meta.getCreated());
   }
   
@@ -191,7 +191,7 @@ public final class TestTSMeta {
   
   @Test
   public void syncToStorage() throws Exception {
-    meta = new TSMeta(new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 1 });
+    meta = new TSMeta(new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 1 }, 1357300800000L);
     meta.setDisplayName("New DN");
     meta.syncToStorage(tsdb, false);
     assertEquals("New DN", meta.getDisplayName());
@@ -200,7 +200,7 @@ public final class TestTSMeta {
   
   @Test
   public void syncToStorageOverwrite() throws Exception {
-    meta = new TSMeta(new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 1 });
+    meta = new TSMeta(new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 1 }, 1357300800000L);
     meta.setDisplayName("New DN");
     meta.syncToStorage(tsdb, true);
     assertEquals("New DN", meta.getDisplayName());
@@ -209,7 +209,7 @@ public final class TestTSMeta {
   
   @Test (expected = IllegalStateException.class)
   public void syncToStorageNoChanges() throws Exception {
-    meta = new TSMeta(new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 1 });
+    meta = new TSMeta(new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 1 }, 1357300800000L);
     meta.syncToStorage(tsdb, true);
   }
   
@@ -217,5 +217,17 @@ public final class TestTSMeta {
   public void syncToStorageNullTSUID() throws Exception {
     meta = new TSMeta();
     meta.syncToStorage(tsdb, true);
+  }
+
+  @Test
+  public void metaExistsInStorage() throws Exception {
+    assertTrue(TSMeta.metaExistsInStorage(tsdb, "000001000001000001"));
+  }
+  
+  @Test
+  public void metaExistsInStorageNot() throws Exception {
+    when(client.get((GetRequest) any())).thenReturn(
+        Deferred.fromResult((ArrayList<KeyValue>)null));
+    assertFalse(TSMeta.metaExistsInStorage(tsdb, "000001000001000001"));
   }
 }
