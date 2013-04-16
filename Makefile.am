@@ -49,6 +49,8 @@ tsdb_SRC := \
 	src/core/TSDB.java	\
 	src/core/Tags.java	\
 	src/core/TsdbQuery.java	\
+	src/core/TSQuery.java	\
+	src/core/TSSubQuery.java	\
 	src/core/WritableDataPoints.java	\
 	src/graph/Plot.java	\
 	src/meta/Annotation.java	\
@@ -76,6 +78,7 @@ tsdb_SRC := \
 	src/tsd/LogsRpc.java	\
 	src/tsd/PipelineFactory.java	\
 	src/tsd/PutDataPointRpc.java	\
+	src/tsd/QueryRpc.java	\
 	src/tsd/RpcHandler.java	\
 	src/tsd/StaticFileRpc.java	\
 	src/tsd/SuggestRpc.java	\
@@ -114,6 +117,8 @@ test_SRC := \
 	test/core/TestCompactionQueue.java	\
 	test/core/TestTags.java	\
 	test/core/TestTSDB.java	\
+	test/core/TestTSQuery.java	\
+	test/core/TestTSSubQuery.java	\
 	test/plugin/DummyPlugin.java \
 	test/meta/TestAnnotation.java	\
 	test/meta/TestTSMeta.java	\
@@ -124,6 +129,7 @@ test_SRC := \
 	test/tsd/TestHttpJsonSerializer.java	\
 	test/tsd/TestHttpQuery.java	\
 	test/tsd/TestPutRpc.java	\
+	test/tsd/TestQueryRpc.java	\
 	test/tsd/TestSuggestRpc.java	\
 	test/tsd/TestUniqueIdRpc.java	\
 	test/uid/TestNoSuchUniqueId.java	\

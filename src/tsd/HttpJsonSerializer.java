@@ -12,6 +12,8 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tsd;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -20,16 +22,21 @@ import java.util.Set;
 import java.util.TreeMap;
 
 import org.jboss.netty.buffer.ChannelBuffer;
+import org.jboss.netty.buffer.ChannelBufferOutputStream;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.core.DataPoint;
+import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.IncomingDataPoint;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.meta.TSMeta;
-import net.opentsdb.meta.UIDMeta;
+import net.opentsdb.core.TSQuery;
 import net.opentsdb.utils.JSON;
 
 /**
@@ -41,7 +48,9 @@ import net.opentsdb.utils.JSON;
  * @since 2.0
  */
 class HttpJsonSerializer extends HttpSerializer {
-
+  private static final Logger LOG = 
+    LoggerFactory.getLogger(HttpJsonSerializer.class);
+  
   /** Type reference for incoming data points */
   private static TypeReference<ArrayList<IncomingDataPoint>> TR_INCOMING =
     new TypeReference<ArrayList<IncomingDataPoint>>() {};
@@ -162,11 +171,12 @@ class HttpJsonSerializer extends HttpSerializer {
   }
   
   /**
-   * Parses a single UIDMeta object
+   * Parses a timeseries data query
+   * @return A TSQuery with data ready to validate
    * @throws JSONException if parsing failed
    * @throws BadRequestException if the content was missing or parsing failed
    */
-  public UIDMeta parseUidMetaV1() {
+  public TSQuery parseQueryV1() {
     final String json = query.getContent();
     if (json == null || json.isEmpty()) {
       throw new BadRequestException(HttpResponseStatus.BAD_REQUEST,
@@ -174,26 +184,7 @@ class HttpJsonSerializer extends HttpSerializer {
           "Supply valid JSON formatted data in the body of your request");
     }
     try {
-      return JSON.parseToObject(json, UIDMeta.class);
-    } catch (IllegalArgumentException iae) {
-      throw new BadRequestException("Unable to parse the given JSON", iae);
-    }
-  }
-  
-  /**
-   * Parses a single TSMeta object
-   * @throws JSONException if parsing failed
-   * @throws BadRequestException if the content was missing or parsing failed
-   */
-  public TSMeta parseTSMetaV1() {
-    final String json = query.getContent();
-    if (json == null || json.isEmpty()) {
-      throw new BadRequestException(HttpResponseStatus.BAD_REQUEST,
-          "Missing message content",
-          "Supply valid JSON formatted data in the body of your request");
-    }
-    try {
-      return JSON.parseToObject(json, TSMeta.class);
+      return JSON.parseToObject(json, TSQuery.class);
     } catch (IllegalArgumentException iae) {
       throw new BadRequestException("Unable to parse the given JSON", iae);
     }
@@ -279,23 +270,92 @@ class HttpJsonSerializer extends HttpSerializer {
   }
   
   /**
-   * Format a single UIDMeta object
-   * @param meta The UIDMeta object to serialize
-   * @return A JSON structure
-   * @throws JSONException if serialization failed
+   * Format the results from a timeseries data query
+   * @param data_query The TSQuery object used to fetch the results
+   * @param results The data fetched from storage
+   * @return A ChannelBuffer object to pass on to the caller
    */
-  public ChannelBuffer formatUidMetaV1(final UIDMeta meta) {
-    return this.serializeJSON(meta);
-  }
-  
-  /**
-   * Format a single TSMeta object
-   * @param meta The TSMeta object to serialize
-   * @return A JSON structure
-   * @throws JSONException if serialization failed
-   */
-  public ChannelBuffer formatTSMetaV1(final TSMeta meta) {
-    return this.serializeJSON(meta);
+  public ChannelBuffer formatQueryV1(final TSQuery data_query, 
+      final List<DataPoints[]> results) {
+    
+    final boolean as_arrays = this.query.hasQueryStringParam("arrays");
+    final String jsonp = this.query.getQueryStringParam("jsonp");
+    
+    // todo - this should be streamed at some point since it could be HUGE
+    final ChannelBuffer response = ChannelBuffers.dynamicBuffer();
+    final OutputStream output = new ChannelBufferOutputStream(response);
+    try {
+      // don't forget jsonp
+      if (jsonp != null && !jsonp.isEmpty()) {
+        output.write((jsonp + "(").getBytes(query.getCharset()));
+      }
+      JsonGenerator json = JSON.getFactory().createGenerator(output);
+      json.writeStartArray();
+      
+      for (DataPoints[] separate_dps : results) {
+        for (DataPoints dps : separate_dps) {
+          json.writeStartObject();
+          
+          json.writeStringField("metric", dps.metricName());
+          
+          json.writeFieldName("tags");
+          json.writeStartObject();
+          if (dps.getTags() != null) {
+            for (Map.Entry<String, String> tag : dps.getTags().entrySet()) {
+              json.writeStringField(tag.getKey(), tag.getValue());
+            }
+          }
+          json.writeEndObject();
+          
+          json.writeFieldName("aggregated_tags");
+          json.writeStartArray();
+          if (dps.getAggregatedTags() != null) {
+            for (String atag : dps.getAggregatedTags()) {
+              json.writeString(atag);
+            }
+          }
+          json.writeEndArray();
+          
+          // now the fun stuff, dump the data
+          json.writeFieldName("dps");
+          
+          // default is to write a map, otherwise write arrays
+          if (as_arrays) {
+            json.writeStartArray();
+            for (final DataPoint dp : dps) {
+              json.writeStartArray();
+              json.writeNumber(dp.timestamp());
+              json.writeNumber(
+                  dp.isInteger() ? dp.longValue() : dp.doubleValue());
+              json.writeEndArray();
+            }
+            json.writeEndArray();
+          } else {
+            json.writeStartObject();
+            for (final DataPoint dp : dps) {
+              json.writeNumberField(Long.toString(dp.timestamp()), 
+                  dp.isInteger() ? dp.longValue() : dp.doubleValue());
+            }
+            json.writeEndObject();
+          }
+
+          // close the results for this particular query
+          json.writeEndObject();
+        }
+      }
+    
+      // close
+      json.writeEndArray();
+      json.close();
+      
+      if (jsonp != null && !jsonp.isEmpty()) {
+        output.write(")".getBytes());
+      }
+      return response;
+    } catch (IOException e) {
+      LOG.error("Unexpected exception", e);
+      throw new RuntimeException(e);
+    }
   }
   
   /**

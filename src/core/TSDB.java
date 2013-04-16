@@ -32,8 +32,6 @@ import org.hbase.async.HBaseClient;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
-import org.hbase.async.RowLock;
-import org.hbase.async.RowLockRequest;
 
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueId;
@@ -67,7 +65,7 @@ public final class TSDB {
   /** Name of the table in which timeseries are stored.  */
   final byte[] table;
   /** Name of the table in which UID information is stored. */
-  final byte[] uid_table;
+  final byte[] uidtable;
 
   /** Unique IDs for the metric names. */
   final UniqueId metrics;
@@ -99,11 +97,11 @@ public final class TSDB {
         config.getString("tsd.storage.hbase.zk_basedir"));
     this.client.setFlushInterval(config.getShort("tsd.storage.flush_interval"));
     table = config.getString("tsd.storage.hbase.data_table").getBytes();
-    uid_table = config.getString("tsd.storage.hbase.uid_table").getBytes();
+    uidtable = config.getString("tsd.storage.hbase.uid_table").getBytes();
 
-    metrics = new UniqueId(client, uid_table, METRICS_QUAL, METRICS_WIDTH);
-    tag_names = new UniqueId(client, uid_table, TAG_NAME_QUAL, TAG_NAME_WIDTH);
-    tag_values = new UniqueId(client, uid_table, TAG_VALUE_QUAL, TAG_VALUE_WIDTH);
+    metrics = new UniqueId(client, uidtable, METRICS_QUAL, METRICS_WIDTH);
+    tag_names = new UniqueId(client, uidtable, TAG_NAME_QUAL, TAG_NAME_WIDTH);
+    tag_values = new UniqueId(client, uidtable, TAG_VALUE_QUAL, TAG_VALUE_WIDTH);
     compactionq = new CompactionQueue(this);
 
     if (config.hasProperty("tsd.core.timezone"))
@@ -140,12 +138,15 @@ public final class TSDB {
    * @since 2.0
    */
   public String getUidName(final UniqueIdType type, final byte[] uid) {
+    if (uid == null) {
+      throw new IllegalArgumentException("Missing UID");
+    }
     switch (type) {
       case METRIC:
         return this.metrics.getName(uid);
-      case TAGV:
-        return this.tag_names.getName(uid);
       case TAGK:
+        return this.tag_names.getName(uid);
+      case TAGV:
         return this.tag_values.getName(uid);
       default:
         throw new IllegalArgumentException("Unrecognized UID type");
@@ -161,12 +162,15 @@ public final class TSDB {
    * @since 2.0
    */
   public byte[] getUID(final UniqueIdType type, final String name) {
+    if (name == null || name.isEmpty()) {
+      throw new IllegalArgumentException("Missing UID name");
+    }
     switch (type) {
       case METRIC:
         return this.metrics.getId(name);
-      case TAGV:
-        return this.tag_names.getId(name);
       case TAGK:
+        return this.tag_names.getId(name);
+      case TAGV:
         return this.tag_values.getId(name);
       default:
         throw new IllegalArgumentException("Unrecognized UID type");
@@ -581,7 +585,7 @@ public final class TSDB {
   
   /** @return the name of the UID table as a byte array for client requests */
   public byte[] uidTable() {
-    return this.uid_table;
+    return this.uidtable;
   }
   
   /** @return the name of the data table as a byte array for client requests */
@@ -589,88 +593,6 @@ public final class TSDB {
     return this.table;
   }
   
-  /**
-   * Attempts to run the PutRequest given in argument, retrying if needed.
-   * <p>
-   * <b>Note:</b> Puts are synchronized.
-   * <p>
-   * @param put The PutRequest to execute.
-   * @param attempts The maximum number of attempts.
-   * @param wait The initial amount of time in ms to sleep for after a
-   * failure.  This amount is doubled after each failed attempt.
-   * @throws HBaseException if all the attempts have failed.  This exception
-   * will be the exception of the last attempt.
-   * @since 2.0
-   */
-  public void hbasePutWithRetry(final PutRequest put, short attempts, short wait)
-    throws HBaseException {
-    put.setBufferable(false);  // TODO(tsuna): Remove once this code is async.
-    while (attempts-- > 0) {
-      try {
-        client.put(put).joinUninterruptibly();
-        return;
-      } catch (HBaseException e) {
-        if (attempts > 0) {
-          LOG.error("Put failed, attempts left=" + attempts
-                    + " (retrying in " + wait + " ms), put=" + put, e);
-          try {
-            Thread.sleep(wait);
-          } catch (InterruptedException ie) {
-            throw new RuntimeException("interrupted", ie);
-          }
-          wait *= 2;
-        } else {
-          throw e;
-        }
-      } catch (Exception e) {
-        LOG.error("WTF?  Unexpected exception type, put=" + put, e);
-      }
-    }
-    throw new IllegalStateException("This code should never be reached!");
-  }
-  
-  /**
-   * Attempt to acquire a lock on the given row
-   * <b>Warning:</b> Caller MUST release this lock or it will sit there for
-   * minutes (by default)
-   * @param table The table to acquire a lock on
-   * @param row The row to acquire a lock on
-   * @param attempts The maximum number of attempts to try, must be 1 or greater
-   * @return A row lock if successful
-   * @throws HBaseException if the lock could not be acquired
-   */
-  public RowLock hbaseAcquireLock(final byte[] table, final byte[] row, 
-      short attempts) {
-    final short max_attempts = attempts;
-    HBaseException hbe = null;
-    while (attempts-- > 0) {
-      RowLock lock;
-      try {
-        lock = client.lockRow(
-            new RowLockRequest(table, row)).joinUninterruptibly();
-      } catch (HBaseException e) {
-        try {
-          Thread.sleep(61000 / max_attempts);
-        } catch (InterruptedException ie) {
-          break;  // We've been asked to stop here, let's bail out.
-        }
-        hbe = e;
-        continue;
-      } catch (Exception e) {
-        throw new RuntimeException("Should never be here", e);
-      }
-      if (lock == null) {  // Should not happen.
-        LOG.error("WTF, got a null pointer as a RowLock!");
-        continue;
-      }
-      return lock;
-    }
-    if (hbe == null) {
-      throw new IllegalStateException("Should never happen!");
-    }
-    throw hbe;
-  }
- 
   // ------------------ //
   // Compaction helpers //
   // ------------------ //

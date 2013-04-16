@@ -469,6 +469,7 @@ final class HttpQuery {
    * @return An HttpMethod
    * @throws BadRequestException if the user provided a {@code method} qs
    * without a value or the override contained an invalid value
+   * @since 2.0
    */
   public HttpMethod getAPIMethod() {
     if (this.method() != HttpMethod.GET) {

@@ -27,10 +27,10 @@ import ch.qos.logback.classic.spi.ThrowableProxyUtil;
 
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.IncomingDataPoint;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.meta.TSMeta;
-import net.opentsdb.meta.UIDMeta;
+import net.opentsdb.core.TSQuery;
 
 /**
  * Abstract base class for Serializers; plugins that handle converting requests
@@ -188,27 +188,15 @@ public abstract class HttpSerializer {
   }
   
   /**
-   * Parses a single UIDMeta object
-   * @return the parsed meta data object
+   * Parses a timeseries data query
+   * @return A TSQuery with data ready to validate
    * @throws BadRequestException if the plugin has not implemented this method
    */
-  public UIDMeta parseUidMetaV1() {
+  public TSQuery parseQueryV1() {
     throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
         "The requested API endpoint has not been implemented", 
         this.getClass().getCanonicalName() + 
-        " has not implemented parseUidMetaV1");
-  }
-  
-  /**
-   * Parses a single TSMeta object
-   * @return the parsed meta data object
-   * @throws BadRequestException if the plugin has not implemented this method
-   */
-  public TSMeta parseTSMetaV1() {
-    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
-        "The requested API endpoint has not been implemented", 
-        this.getClass().getCanonicalName() + 
-        " has not implemented parseTSMetaV1");
+        " has not implemented parseQueryV1");
   }
   
   /**
@@ -311,29 +299,18 @@ public abstract class HttpSerializer {
   }
   
   /**
-   * Format a single UIDMeta object
-   * @param meta The UIDMeta object to serialize
+   * Format the results from a timeseries data query
+   * @param query The TSQuery object used to fetch the results
+   * @param results The data fetched from storage
    * @return A ChannelBuffer object to pass on to the caller
    * @throws BadRequestException if the plugin has not implemented this method
    */
-  public ChannelBuffer formatUidMetaV1(final UIDMeta meta) {
+  public ChannelBuffer formatQueryV1(final TSQuery query, 
+      final List<DataPoints[]> results) {
     throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
         "The requested API endpoint has not been implemented", 
         this.getClass().getCanonicalName() + 
-        " has not implemented formatUidMetaV1");
-  }
-  
-  /**
-   * Format a single TSMeta object
-   * @param meta The TSMeta object to serialize
-   * @return A ChannelBuffer object to pass on to the caller
-   * @throws BadRequestException if the plugin has not implemented this method
-   */
-  public ChannelBuffer formatTSMetaV1(final TSMeta meta) {
-    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
-        "The requested API endpoint has not been implemented", 
-        this.getClass().getCanonicalName() + 
-        " has not implemented formatTSMetaV1");
+        " has not implemented formatQueryV1");
   }
   
   /**
