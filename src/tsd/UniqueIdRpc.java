@@ -44,13 +44,13 @@ final class UniqueIdRpc implements HttpRpc {
     final String endpoint = uri.length > 1 ? uri[1] : ""; 
 
     if (endpoint.toLowerCase().equals("assign")) {
-      handleAssign(tsdb, query);
+      this.handleAssign(tsdb, query);
       return;
     } else if (endpoint.toLowerCase().equals("uidmeta")) {
-      handleUIDMeta(tsdb, query);
+      this.handleUIDMeta(tsdb, query);
       return;
     } else if (endpoint.toLowerCase().equals("tsmeta")) {
-      handleTSMeta(tsdb, query);
+      this.handleTSMeta(tsdb, query);
       return;
     } else {
       throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
@@ -164,7 +164,7 @@ final class UniqueIdRpc implements HttpRpc {
       if (query.hasContent()) {
         meta = query.serializer().parseUidMetaV1();
       } else {
-        meta = parseUIDMetaQS(query);
+        meta = this.parseUIDMetaQS(query);
       }
       try {
         meta.syncToStorage(tsdb, false);
@@ -183,7 +183,7 @@ final class UniqueIdRpc implements HttpRpc {
       if (query.hasContent()) {
         meta = query.serializer().parseUidMetaV1();
       } else {
-        meta = parseUIDMetaQS(query);
+        meta = this.parseUIDMetaQS(query);
       }
       try {
         meta.syncToStorage(tsdb, true);
@@ -202,7 +202,7 @@ final class UniqueIdRpc implements HttpRpc {
       if (query.hasContent()) {
         meta = query.serializer().parseUidMetaV1();
       } else {
-        meta = parseUIDMetaQS(query);
+        meta = this.parseUIDMetaQS(query);
       }
       try {
         meta.delete(tsdb);
@@ -251,7 +251,7 @@ final class UniqueIdRpc implements HttpRpc {
       if (query.hasContent()) {
         meta = query.serializer().parseTSMetaV1();
       } else {
-        meta = parseTSMetaQS(query);
+        meta = this.parseTSMetaQS(query);
       }
       try {
         meta.syncToStorage(tsdb, false);
@@ -272,7 +272,7 @@ final class UniqueIdRpc implements HttpRpc {
       if (query.hasContent()) {
         meta = query.serializer().parseTSMetaV1();
       } else {
-        meta = parseTSMetaQS(query);
+        meta = this.parseTSMetaQS(query);
       }
       try {
         meta.syncToStorage(tsdb, true);
@@ -293,7 +293,7 @@ final class UniqueIdRpc implements HttpRpc {
       if (query.hasContent()) {
         meta = query.serializer().parseTSMetaV1();
       } else {
-        meta = parseTSMetaQS(query);
+        meta = this.parseTSMetaQS(query);
       }
       try{
         meta.delete(tsdb);
@@ -315,7 +315,7 @@ final class UniqueIdRpc implements HttpRpc {
    * @throws BadRequestException if a required value was missing or could not
    * be parsed
    */
-  private static UIDMeta parseUIDMetaQS(final HttpQuery query) {
+  private UIDMeta parseUIDMetaQS(final HttpQuery query) {
     final String uid = query.getRequiredQueryStringParam("uid");
     final String type = query.getRequiredQueryStringParam("type");
     final UIDMeta meta = new UIDMeta(UniqueId.stringToUniqueIdType(type), uid);
@@ -344,7 +344,7 @@ final class UniqueIdRpc implements HttpRpc {
    * @throws BadRequestException if a required value was missing or could not
    * be parsed
    */
-  private static TSMeta parseTSMetaQS(final HttpQuery query) {
+  private TSMeta parseTSMetaQS(final HttpQuery query) {
     final String tsuid = query.getRequiredQueryStringParam("tsuid");
     final TSMeta meta = new TSMeta(tsuid);
     
