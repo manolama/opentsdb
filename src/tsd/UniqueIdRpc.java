@@ -208,7 +208,7 @@ final class UniqueIdRpc implements HttpRpc {
       }
       try {        
         meta.delete(tsdb);
-        tsdb.deleteUIDMeta(meta.getUID());
+        tsdb.deleteUIDMeta(meta);
       } catch (IllegalArgumentException e) {
         throw new BadRequestException("Unable to delete UIDMeta information", e);
       } catch (NoSuchUniqueName e) {

@@ -86,7 +86,7 @@ public abstract class SearchPlugin {
   
   /**
    * Indexes a UID metadata object for a metric, tagk or tagv
-   * <b>Note:</b> Unique Document ID = UID and the Type
+   * <b>Note:</b> Unique Document ID = UID and the Type "TYPEUID"
    * @param meta The UIDMeta to index
    * @return A deferred object that indicates the completion of the request.
    * The {@link Object} has not special meaning and can be {@code null}
@@ -96,11 +96,11 @@ public abstract class SearchPlugin {
 
   /**
    * Called when we need to remove a UID meta object from the engine
-   * <b>Note:</b> Unique Document ID = UID 
-   * @param uid The hex encoded UID to remove
+   * <b>Note:</b> Unique Document ID = UID and the Type "TYPEUID"
+   * @param meta The UIDMeta to remove
    * @return A deferred object that indicates the completion of the request.
    * The {@link Object} has not special meaning and can be {@code null}
    * (think of it as {@code Deferred<Void>}).
    */
-  public abstract Deferred<Object> deleteUIDMeta(final String uid);
+  public abstract Deferred<Object> deleteUIDMeta(final UIDMeta meta);
 }
