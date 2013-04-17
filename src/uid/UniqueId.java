@@ -21,6 +21,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.xml.bind.DatatypeConverter;
 
+import net.opentsdb.meta.MetaManager;
+import net.opentsdb.meta.UIDMeta;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,6 +95,9 @@ public final class UniqueId implements UniqueIdInterface {
   /** Number of times we had to read from HBase and populate the cache. */
   private volatile int cacheMisses;
 
+  /** Optional meta manager used to track new UIDs */
+  private MetaManager meta_manager = null;
+  
   /**
    * Constructor.
    * @param client The HBase client to use.
@@ -138,6 +144,16 @@ public final class UniqueId implements UniqueIdInterface {
     return idWidth;
   }
 
+  /** 
+   * Lets the TSD set a meta manager for this object so that new UIDs can be
+   * pushed into the UID meta data creation queue. If this is never called and
+   * the manager is null, new UIDs will not create meta data entries. 
+   * @param meta_manager The meta_manager to set.
+   */
+  public void setMetaManager(final MetaManager meta_manager) {
+    this.meta_manager = meta_manager;
+  }
+  
   /**
    * Causes this instance to discard all its in-memory caches.
    * @since 1.1
@@ -371,6 +387,14 @@ public final class UniqueId implements UniqueIdInterface {
 
         addIdToCache(name, row);
         addNameToCache(row, name);
+        
+        if (meta_manager != null) {
+          final UniqueIdType type = 
+            stringToUniqueIdType(new String(kind, CHARSET));
+          final UIDMeta meta = new UIDMeta(type, row, name);
+          meta_manager.queueUIDMeta(meta);
+        }
+        
         return row;
       } finally {
         unlock(lock);
@@ -762,6 +786,27 @@ public final class UniqueId implements UniqueIdInterface {
     return DatatypeConverter.parseHexBinary(id);
   }
 
+  /**
+   * Extracts the TSUID from a storage row key that includes the timestamp.
+   * @param row_key The row key to process
+   * @param metric_width The width of the metric
+   * @param timestamp_width The width of the timestamp
+   * @return The TSUID
+   * @throws ArrayIndexOutOfBoundsException if the row_key is invalid
+   */
+  public static byte[] getTSUIDFromKey(final byte[] row_key, 
+      final short metric_width, final short timestamp_width) {
+    int idx = 0;
+    final byte[] tsuid = new byte[row_key.length - timestamp_width];
+    for (int i = 0; i < row_key.length; i++) {
+      if (i < metric_width || i >= (metric_width + timestamp_width)) {
+        tsuid[idx] = row_key[i];
+        idx++;
+      }
+    }
+    return tsuid;
+  }
+  
   /**
    * Extracts a list of tagk/tagv pairs from a tsuid
    * @param tsuid The tsuid to parse
