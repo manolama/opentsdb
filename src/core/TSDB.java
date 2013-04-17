@@ -714,12 +714,32 @@ public final class TSDB {
   }
   
   /**
+   * Delete the timeseries meta object from the search index
+   * @param tsuid The TSUID to delete
+   */
+  public void deleteTSMeta(final String tsuid) {
+    if (search != null) {
+      search.deleteTSMeta(tsuid);
+    }
+  }
+  
+  /**
    * Index the given UID meta object via the configured search plugin
    * @param meta The meta data object to index
    */
   public void indexUIDMeta(final UIDMeta meta) {
     if (search != null) {
       search.indexUIDMeta(meta);
+    }
+  }
+  
+  /**
+   * Delete the UID meta object from the search index
+   * @param uid The UID to delete
+   */
+  public void deleteUIDMeta(final String uid) {
+    if (search != null) {
+      search.deleteUIDMeta(uid);
     }
   }
   
