@@ -40,6 +40,7 @@ import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
 import net.opentsdb.utils.Config;
 import net.opentsdb.utils.DateTime;
+import net.opentsdb.meta.MetaManager;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
 
@@ -87,6 +88,9 @@ public final class TSDB {
    */
   private final CompactionQueue compactionq;
 
+  /** Handles processing of new TSUIDs and UIDs */
+  private final MetaManager meta_manager;
+  
   /**
    * Constructor
    * @param config An initialized configuration object
@@ -108,6 +112,16 @@ public final class TSDB {
 
     if (config.hasProperty("tsd.core.timezone"))
       DateTime.setDefaultTimezone(config.getString("tsd.core.timezone"));
+    if (config.enable_meta_tracking()) {
+      meta_manager = new MetaManager(this);
+      // this is cleaner than another constructor and defaults to null. UIDs 
+      // will be refactored with DAL code anyways
+      metrics.setMetaManager(meta_manager);
+      tag_names.setMetaManager(meta_manager);
+      tag_values.setMetaManager(meta_manager);
+    } else {
+      meta_manager = null;
+    }
     
     LOG.debug(config.dumpConfiguration());
   }
@@ -396,6 +410,10 @@ public final class TSDB {
 
     IncomingDataPoints.checkMetricAndTags(metric, tags);
     final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);
+    if (config.enable_meta_tracking()) {
+      meta_manager.queueTSUID(UniqueId.uidToString(
+          UniqueId.getTSUIDFromKey(row, METRICS_WIDTH, (short)4)), timestamp);
+    }
     final long base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
     Bytes.setInt(row, (int) base_time, metrics.width());
     scheduleForCompaction(row, (int) base_time);
@@ -677,7 +695,7 @@ public final class TSDB {
     }
     throw hbe;
   }
- 
+
   // ------------------ //
   // Compaction helpers //
   // ------------------ //
