@@ -12,6 +12,8 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -40,6 +42,8 @@ import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
 import net.opentsdb.utils.Config;
 import net.opentsdb.utils.DateTime;
+import net.opentsdb.utils.PluginLoader;
+import net.opentsdb.search.SearchPlugin;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
 
@@ -94,6 +98,16 @@ public final class TSDB {
    */
   public TSDB(final Config config) {
     this.config = config;
+    final String plugin_path = config.getString("tsd.core.plugin_path");
+    if (!plugin_path.isEmpty()) {
+      try {
+        PluginLoader.loadJARs(plugin_path);
+      } catch (Exception e) {
+        LOG.error("Error loading plugins from plugin path: " + plugin_path, e);
+        throw new RuntimeException("Error loading plugins from plugin path: " + 
+            plugin_path, e);
+      }
+    }
     this.client = new HBaseClient(
         config.getString("tsd.storage.hbase.zk_quorum"),
         config.getString("tsd.storage.hbase.zk_basedir"));
