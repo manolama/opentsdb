@@ -140,6 +140,7 @@ public final class UIDMeta {
     this.name = name;
     created = System.currentTimeMillis() / 1000;
     initializeChangedMap();
+    changed.put("created", true);
   }
   
   /** @return a string with details about this object */
@@ -389,6 +390,7 @@ public final class UIDMeta {
     changed.put("description", false);
     changed.put("notes", false);
     changed.put("custom", false);
+    changed.put("created", false);
   }
   
   // Getters and Setters --------------

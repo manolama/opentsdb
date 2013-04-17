@@ -140,6 +140,7 @@ public final class TSMeta {
     this.created = created > 9999999999L ? created / 1000 : created;
     last_received = created;
     initializeChangedMap();
+    changed.put("created", true);
   }
 
   /** @return a string with details about this object */
@@ -430,6 +431,7 @@ public final class TSMeta {
     changed.put("max", false);
     changed.put("min", false);
     changed.put("last_received", false);
+    changed.put("created", false);
   }
   
   /**
