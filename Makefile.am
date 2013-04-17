@@ -56,6 +56,7 @@ tsdb_SRC := \
 	src/meta/Annotation.java	\
 	src/meta/TSMeta.java	\
 	src/meta/UIDMeta.java	\
+	src/search/SearchPlugin.java	\
 	src/stats/Histogram.java	\
 	src/stats/StatsCollector.java	\
 	src/tools/ArgP.java	\
