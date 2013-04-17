@@ -82,10 +82,10 @@ public final class MetaManager {
     new_tsuid_processors = new NewTSUIDProcessor[thread_count];
     for (int i = 0; i < thread_count; i++) {
       new_tsuid_processors[i] = new NewTSUIDProcessor();
-      new_tsuid_processors[i].run();
+      new_tsuid_processors[i].start();
     }
     new_uid_processor = new NewUIDProcessor();
-    new_uid_processor.run();
+    new_uid_processor.start();
   }
   
   /**
@@ -140,6 +140,7 @@ public final class MetaManager {
             LOG.error("New TSUID thread interrupted. Quiting");
             return;
           }
+          continue;
         }
         
         try {
@@ -179,12 +180,14 @@ public final class MetaManager {
             LOG.error("New UID thread interrupted. Quiting");
             return;
           }
+          continue;
         }
         
         try {
           // if the meta already exists in storage, it won't hurt to update it
           meta.syncToStorage(tsdb, false);
           // todo (cl) - push to search plugin
+          LOG.trace("Stored new UID: " + meta.toString());
         } catch (Exception e) {
           LOG.error("Failed to sync new UIDMeta: " + meta, e);
         }
