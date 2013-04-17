@@ -92,7 +92,7 @@ public final class TSDB {
   private final CompactionQueue compactionq;
 
   /** Search indexer to use if configure */
-  private final SearchPlugin search;
+  private SearchPlugin search = null;
   
   /**
    * Constructor
@@ -101,16 +101,6 @@ public final class TSDB {
    */
   public TSDB(final Config config) {
     this.config = config;
-    final String plugin_path = config.getString("tsd.core.plugin_path");
-    if (!plugin_path.isEmpty()) {
-      try {
-        PluginLoader.loadJARs(plugin_path);
-      } catch (Exception e) {
-        LOG.error("Error loading plugins from plugin path: " + plugin_path, e);
-        throw new RuntimeException("Error loading plugins from plugin path: " + 
-            plugin_path, e);
-      }
-    }
     this.client = new HBaseClient(
         config.getString("tsd.storage.hbase.zk_quorum"),
         config.getString("tsd.storage.hbase.zk_basedir"));
@@ -123,18 +113,44 @@ public final class TSDB {
     tag_values = new UniqueId(client, uidtable, TAG_VALUE_QUAL, TAG_VALUE_WIDTH);
     compactionq = new CompactionQueue(this);
 
-    if (config.hasProperty("tsd.core.timezone"))
+    if (config.hasProperty("tsd.core.timezone")) {
       DateTime.setDefaultTimezone(config.getString("tsd.core.timezone"));
-    
+    }
+    LOG.debug(config.dumpConfiguration());
+  }
+  
+  /**
+   * Should be called immediately after construction to initialize plugins and
+   * objects that rely on such. It also moves most of the potential exception
+   * throwing code out of the constructor so TSDMain can shutdown clients and
+   * such properly.
+   * @throws RuntimeException if the plugin path could not be processed
+   * @throws IllegalArgumentException if a plugin could not be initialized
+   * @since 2.0
+   */
+  public void initializePlugins() {
+    final String plugin_path = config.getString("tsd.core.plugin_path");
+    if (!plugin_path.isEmpty()) {
+      try {
+        PluginLoader.loadJARs(plugin_path);
+      } catch (Exception e) {
+        LOG.error("Error loading plugins from plugin path: " + plugin_path, e);
+        throw new RuntimeException("Error loading plugins from plugin path: " + 
+            plugin_path, e);
+      }
+    }
+
     if (config.getBoolean("tsd.search.enable")) {
       search = PluginLoader.loadSpecificPlugin(
           config.getString("tsd.search.plugin"), SearchPlugin.class);
+      if (search == null) {
+        throw new IllegalArgumentException("Unable to locate search plugin: " + 
+            config.getString("tsd.search.plugin"));
+      }
       search.initialize(this);
     } else {
       search = null;
     }
-    
-    LOG.debug(config.dumpConfiguration());
   }
   
   /** 
