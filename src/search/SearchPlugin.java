@@ -75,6 +75,16 @@ public abstract class SearchPlugin {
   public abstract Deferred<Object> indexTSMeta(final TSMeta meta);
   
   /**
+   * Called when we need to remove a timeseries meta object from the engine
+   * <b>Note:</b> Unique Document ID = TSUID 
+   * @param tsuid The hex encoded TSUID to remove
+   * @return A deferred object that indicates the completion of the request.
+   * The {@link Object} has not special meaning and can be {@code null}
+   * (think of it as {@code Deferred<Void>}).
+   */
+  public abstract Deferred<Object> deleteTSMeta(final String tsuid);
+  
+  /**
    * Indexes a UID metadata object for a metric, tagk or tagv
    * <b>Note:</b> Unique Document ID = UID and the Type
    * @param meta The UIDMeta to index
@@ -83,4 +93,14 @@ public abstract class SearchPlugin {
    * (think of it as {@code Deferred<Void>}).
    */
   public abstract Deferred<Object> indexUIDMeta(final UIDMeta meta);
+
+  /**
+   * Called when we need to remove a UID meta object from the engine
+   * <b>Note:</b> Unique Document ID = UID 
+   * @param uid The hex encoded UID to remove
+   * @return A deferred object that indicates the completion of the request.
+   * The {@link Object} has not special meaning and can be {@code null}
+   * (think of it as {@code Deferred<Void>}).
+   */
+  public abstract Deferred<Object> deleteUIDMeta(final String uid);
 }
