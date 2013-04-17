@@ -288,6 +288,7 @@ public class Config {
     default_map.put("tsd.network.keep_alive", "true");
     default_map.put("tsd.network.reuse_address", "true");
     default_map.put("tsd.core.auto_create_metrics", "false");
+    default_map.put("tsd.core.plugin_path", "");
     default_map.put("tsd.search.enable", "false");
     default_map.put("tsd.search.plugin", "");
     default_map.put("tsd.storage.flush_interval", "1000");
