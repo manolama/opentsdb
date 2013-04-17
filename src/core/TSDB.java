@@ -735,11 +735,11 @@ public final class TSDB {
   
   /**
    * Delete the UID meta object from the search index
-   * @param uid The UID to delete
+   * @param meta The UID meta object to delete
    */
-  public void deleteUIDMeta(final String uid) {
+  public void deleteUIDMeta(final UIDMeta meta) {
     if (search != null) {
-      search.deleteUIDMeta(uid);
+      search.deleteUIDMeta(meta);
     }
   }
   
