@@ -43,6 +43,8 @@ import net.opentsdb.uid.UniqueId.UniqueIdType;
 import net.opentsdb.utils.Config;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.PluginLoader;
+import net.opentsdb.meta.TSMeta;
+import net.opentsdb.meta.UIDMeta;
 import net.opentsdb.search.SearchPlugin;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
@@ -91,6 +93,9 @@ public final class TSDB {
    */
   private final CompactionQueue compactionq;
 
+  /** Search indexer to use if configure */
+  private final SearchPlugin search;
+  
   /**
    * Constructor
    * @param config An initialized configuration object
@@ -122,6 +127,14 @@ public final class TSDB {
 
     if (config.hasProperty("tsd.core.timezone"))
       DateTime.setDefaultTimezone(config.getString("tsd.core.timezone"));
+    
+    if (config.getBoolean("tsd.search.enable")) {
+      search = PluginLoader.loadSpecificPlugin(
+          config.getString("tsd.search.plugin"), SearchPlugin.class);
+      search.initialize(this);
+    } else {
+      search = null;
+    }
     
     LOG.debug(config.dumpConfiguration());
   }
@@ -692,6 +705,26 @@ public final class TSDB {
     throw hbe;
   }
  
+  /**
+   * Index the given timeseries meta object via the configured search plugin
+   * @param meta The meta data object to index
+   */
+  public void indexTSMeta(final TSMeta meta) {
+    if (search != null) {
+      search.indexTSMeta(meta);
+    }
+  }
+  
+  /**
+   * Index the given UID meta object via the configured search plugin
+   * @param meta The meta data object to index
+   */
+  public void indexUIDMeta(final UIDMeta meta) {
+    if (search != null) {
+      search.indexUIDMeta(meta);
+    }
+  }
+  
   // ------------------ //
   // Compaction helpers //
   // ------------------ //
