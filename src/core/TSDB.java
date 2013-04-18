@@ -130,8 +130,9 @@ public final class TSDB {
    */
   public void initializePlugins() {
     final String plugin_path = config.getString("tsd.core.plugin_path");
-    if (!plugin_path.isEmpty()) {
+    if (plugin_path != null && !plugin_path.isEmpty()) {
       try {
+        System.out.println("Attempting to load plugins");
         PluginLoader.loadJARs(plugin_path);
       } catch (Exception e) {
         LOG.error("Error loading plugins from plugin path: " + plugin_path, e);
@@ -140,6 +141,7 @@ public final class TSDB {
       }
     }
 
+    // load the search plugin if enabled
     if (config.getBoolean("tsd.search.enable")) {
       search = PluginLoader.loadSpecificPlugin(
           config.getString("tsd.search.plugin"), SearchPlugin.class);
@@ -147,7 +149,14 @@ public final class TSDB {
         throw new IllegalArgumentException("Unable to locate search plugin: " + 
             config.getString("tsd.search.plugin"));
       }
-      search.initialize(this);
+      try {
+        search.initialize(this);
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to initialize search plugin", e);
+      }
+      LOG.info("Successfully initialized search plugin [" + 
+          search.getClass().getCanonicalName() + "] version: " 
+          + search.version());
     } else {
       search = null;
     }
