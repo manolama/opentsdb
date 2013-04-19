@@ -17,8 +17,11 @@ import java.lang.reflect.Method;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,7 +105,9 @@ final class UidManager {
         + "  rename <kind> <name> <newname>: Renames this UID.\n"
         + "  fsck: Checks the consistency of UIDs.\n"
         + "  [kind] <name>: Lookup the ID of this name.\n"
-        + "  [kind] <ID>: Lookup the name of this ID.\n\n"
+        + "  [kind] <ID>: Lookup the name of this ID.\n"
+        + "  metasync: Generates missing TSUID and UID meta entries, updates\n"
+        + "            created timestamps\n\n"
         + "Example values for [kind]:"
         + " metric, tagk (tag name), tagv (tag value).");
     if (argp != null) {
@@ -145,7 +150,7 @@ final class UidManager {
     argp = null;
     int rc;
     try {
-      rc = runCommand(tsdb.getClient(), table, idwidth, ignorecase, args);
+      rc = runCommand(tsdb, table, idwidth, ignorecase, args);
     } finally {
       try {
         tsdb.getClient().shutdown().joinUninterruptibly();
@@ -157,7 +162,7 @@ final class UidManager {
     System.exit(rc);
   }
 
-  private static int runCommand(final HBaseClient client,
+  private static int runCommand(final TSDB tsdb,
                                 final byte[] table,
                                 final short idwidth,
                                 final boolean ignorecase,
@@ -166,7 +171,7 @@ final class UidManager {
     if (args[0].equals("grep")) {
       if (2 <= nargs && nargs <= 3) {
         try {
-          return grep(client, table, ignorecase, args);
+          return grep(tsdb.getClient(), table, ignorecase, args);
         } catch (HBaseException e) {
           return 3;
         }
@@ -179,23 +184,37 @@ final class UidManager {
         usage("Wrong number of arguments");
         return 2;
       }
-      return assign(client, table, idwidth, args);
+      return assign(tsdb.getClient(), table, idwidth, args);
     } else if (args[0].equals("rename")) {
       if (nargs != 4) {
         usage("Wrong number of arguments");
         return 2;
       }
-      return rename(client, table, idwidth, args);
+      return rename(tsdb.getClient(), table, idwidth, args);
     } else if (args[0].equals("fsck")) {
-      return fsck(client, table);
+      return fsck(tsdb.getClient(), table);
+    } else if (args[0].equals("metasync")) {
+      // check for the data table existance and initialize our plugins 
+      // so that update meta data can be pushed to search engines
+      try {
+        tsdb.getClient().ensureTableExists(
+            tsdb.getConfig().getString(
+                "tsd.storage.hbase.data_table")).joinUninterruptibly();
+        tsdb.initializePlugins();
+        return metaSync(tsdb);
+      } catch (Exception e) {
+        LOG.error("Unexpected exception", e);
+        return 3;
+      }      
     } else {
       if (1 <= nargs && nargs <= 2) {
         final String kind = nargs == 2 ? args[0] : null;
         try {
           final long id = Long.parseLong(args[nargs - 1]);
-          return lookupId(client, table, idwidth, id, kind);
+          return lookupId(tsdb.getClient(), table, idwidth, id, kind);
         } catch (NumberFormatException e) {
-          return lookupName(client, table, idwidth, args[nargs - 1], kind);
+          return lookupName(tsdb.getClient(), table, idwidth, 
+              args[nargs - 1], kind);
         }
       } else {
         usage("Wrong number of arguments");
@@ -655,6 +674,61 @@ final class UidManager {
     }
   }
 
+  /**
+   * Runs through the entire data table and creates TSMeta objects for unique
+   * timeseries and/or updates {@code created} timestamps
+   * @param tsdb The tsdb to use for processing, including a search plugin
+   * @return 0 if completed successfully, something else if it dies
+   */
+  private static int metaSync(final TSDB tsdb) throws Exception {
+    final long start_time = System.currentTimeMillis() / 1000;
+    
+    // first up, we need the max metric ID so we can split up the data table
+    // amongst threads.
+    final GetRequest get = new GetRequest(tsdb.uidTable(), new byte[] { 0 });
+    get.family("id".getBytes(CHARSET));
+    get.qualifier("metrics".getBytes(CHARSET));
+    final ArrayList<KeyValue> row = 
+      tsdb.getClient().get(get).joinUninterruptibly();
+    if (row == null || row.isEmpty()) {
+      throw new IllegalStateException("No data in the metric max UID cell");
+    }
+    final byte[] id_bytes = row.get(0).value();
+    if (id_bytes.length != 8) {
+      throw new IllegalStateException("Invalid metric max UID, wrong # of bytes");
+    }
+    final long max_id = Bytes.getLong(id_bytes);
+    
+    // now figure out how many IDs to divy up between the workers
+    final int workers = Runtime.getRuntime().availableProcessors() * 2;
+    final double quotient = (double)max_id / (double)workers;
+    final Set<Integer> processed_tsuids = 
+      Collections.synchronizedSet(new HashSet<Integer>());
+    
+    long index = 1;
+    
+    System.out.println("Max metric ID is [" + max_id + "]");
+    System.out.println("Spooling up [" + workers + "] worker threads");
+    final Thread[] threads = new Thread[workers];
+    for (int i = 0; i < workers; i++) {
+      threads[i] = new MetaSync(tsdb, index, quotient, processed_tsuids, i);
+      threads[i].start();
+      index += quotient;
+      if (index < max_id) {
+        index++;
+      }
+    }
+    
+    // wait till we're all done
+    for (int i = 0; i < workers; i++) {
+      threads[i].join();
+    }
+    
+    final long duration = (System.currentTimeMillis() / 1000) - start_time;
+    System.out.println("Completed meta data synchronization in [" + duration + "] seconds");
+    return 0;
+  }
+  
   private static byte[] toBytes(final String s) {
     try {
       return (byte[]) toBytes.invoke(null, s);
@@ -671,4 +745,76 @@ final class UidManager {
     }
   }
 
+  private static class MetaSync extends Thread {
+    final TSDB tsdb;
+    
+    /** The ID to start the sync with for this thread */
+    final long start_id;
+    
+    /** The end of the ID block to work on */
+    final long end_id;
+    
+    /** A shared list of TSUIDs that have been processed by this or other threads */
+    final Set<Integer> processed_tsuids;
+    
+    /** Diagnostic ID for this thread */
+    final int thread_id;
+    
+    /**
+     * Constructor that sets local variables
+     * @param tsdb The TSDB to process with
+     * @param start_id The starting ID of the block we'll work on
+     * @param quotient The total number of IDs in our block
+     * @param thread_id The ID of this thread (starts at 0)
+     */
+    public MetaSync(final TSDB tsdb, final long start_id, final double quotient, 
+        final Set<Integer> processed_tsuids, final int thread_id) {
+      this.tsdb = tsdb;
+      this.start_id = start_id;
+      this.end_id = start_id + (long) quotient + 1; // teensy bit of overlap
+      this.processed_tsuids = processed_tsuids;
+      this.thread_id = thread_id;
+    }
+    
+    /**
+     * Do the fun happy stuff
+     */
+    public void run() {
+      LOG.info("Hello from thread [" + thread_id + "]");
+      System.out.println("Hello from thread [" + thread_id + "] fetching from [" + start_id + "] to [" + end_id + "]");
+      
+      final Scanner scanner = getScanner();
+      try {
+        ArrayList<ArrayList<KeyValue>> rows;
+        while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
+          for (final ArrayList<KeyValue> row : rows) {
+            final byte[] key = row.get(0).key();
+          }          
+        }
+      } catch (RuntimeException e) {
+        throw e;
+      } catch (Exception e) {
+        throw new RuntimeException("Should never be here", e);
+      }
+    }
+    
+    /**
+     * Returns a scanner set to scan the range configured for this thread
+     * @return A scanner
+     * @throws HBaseException if something goes boom
+     */
+    private Scanner getScanner() throws HBaseException {
+      final short metric_width = tsdb.metrics_width();
+      final byte[] start_row = 
+        Arrays.copyOfRange(Bytes.fromLong(start_id), 8 - metric_width, 8);
+      final byte[] end_row = 
+        Arrays.copyOfRange(Bytes.fromLong(end_id), 8 - metric_width, 8);
+
+      final Scanner scanner = tsdb.getClient().newScanner(tsdb.uidTable());
+      scanner.setStartKey(start_row);
+      scanner.setStopKey(end_row);
+      scanner.setFamily("t".getBytes(CHARSET));
+      return scanner;
+    }
+  }
 }
