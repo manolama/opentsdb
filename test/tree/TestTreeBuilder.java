@@ -12,8 +12,23 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tree;
 
+import java.lang.reflect.Method;
+
+import org.junit.Test;
+
 public final class TestTreeBuilder {
 
+  private static Method setCurrentName;
+  static {
+    try {
+      setCurrentName = TreeBuilder.class.getDeclaredMethod("setCurrentName", 
+          Branch.class, String.class, String.class);
+      setCurrentName.setAccessible(true);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to locate 'setCurrentName' method");
+    }
+  }
+  
   // TODO - fetchBranch()
   
   // TODO - storeBranch()
@@ -25,4 +40,9 @@ public final class TestTreeBuilder {
   // TODO - processDisplayFormater()
   
   // TODO - setBranchName()
+  
+  @Test
+  public void setCurrentName() throws Exception {
+    
+  }
 }
