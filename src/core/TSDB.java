@@ -460,8 +460,9 @@ public final class TSDB {
     IncomingDataPoints.checkMetricAndTags(metric, tags);
     final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);
     if (config.enable_meta_tracking()) {
-      meta_manager.queueTSUID(UniqueId.uidToString(
-          UniqueId.getTSUIDFromKey(row, METRICS_WIDTH, (short)4)), timestamp);
+      final byte[] tsuid = UniqueId.getTSUIDFromKey(row, METRICS_WIDTH, 
+          Const.TIMESTAMP_BYTES);
+      TSMeta.incrementOrSetTSUID(this, tsuid);
     }
     final long base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
     Bytes.setInt(row, (int) base_time, metrics.width());
