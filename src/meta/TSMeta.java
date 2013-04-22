@@ -33,8 +33,10 @@ import org.hbase.async.RowLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 
 /**
@@ -49,6 +51,7 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_NULL)
+@JsonAutoDetect(fieldVisibility = Visibility.PUBLIC_ONLY)
 public final class TSMeta {
   private static final Logger LOG = LoggerFactory.getLogger(TSMeta.class);
 
@@ -131,7 +134,7 @@ public final class TSMeta {
   
   /**
    * Constructor for new timeseries that initializes the created and 
-   * last_received times
+   * last_received times to the current system time
    * @param tsuid The UID of the timeseries
    */
   public TSMeta(final byte[] tsuid) {
@@ -139,8 +142,22 @@ public final class TSMeta {
     created = System.currentTimeMillis() / 1000;
     last_received = created;
     initializeChangedMap();
+    changed.put("created", true);
   }
 
+  /**
+   * Constructor for new timeseries that stores the given created time
+   * @param tsuid The UID of the timeseries
+   * @param created When the timeseries was first encountered, Unix epoch in 
+   * seconds
+   */
+  public TSMeta(final byte[] tsuid, final long created) {
+    this.tsuid = UniqueId.uidToString(tsuid);
+    this.created = created;
+    initializeChangedMap();
+    changed.put("created", true);
+  }
+  
   /** @return a string with details about this object */
   @Override
   public String toString() {
@@ -239,7 +256,7 @@ public final class TSMeta {
       // copy all fields BUT the UIDMetas and serialize those
       stored_meta = copyToStorageObject();
       final PutRequest put = new PutRequest(tsdb.uidTable(), 
-          UniqueId.stringToUid(tsuid), FAMILY, QUALIFIER, 
+          UniqueId.stringToUid(stored_meta.tsuid), FAMILY, QUALIFIER, 
           JSON.serializeToBytes(stored_meta), lock);
       tsdb.hbasePutWithRetry(put, (short)3, (short)800);
       
@@ -251,6 +268,53 @@ public final class TSMeta {
         LOG.error("Error while releasing the lock on row: " + tsuid, e);
       }
     }
+  }
+  
+  /**
+   * Attempts to store a new, blank timeseries meta object.
+   * <b>Note:</b> This should not be called by user accessible methods as it will 
+   * overwrite any data already in the column.
+   * <p>
+   * <b>Note:</b> We do not store the UIDMeta information with TSMeta's since
+   * users may change a single UIDMeta object and we don't want to update every
+   * TSUID that includes that object with the new data. Instead, UIDMetas are
+   * merged into the TSMeta on retrieval so we always have canonical data. This
+   * also saves space in storage. 
+   * @param tsdb The TSDB to use for storage access
+   * @throws HBaseException if there was an issue fetching
+   * @throws IllegalArgumentException if parsing failed
+   * @throws JSONException if the object could not be serialized
+   */
+  public void storeNew(final TSDB tsdb) {
+    if (tsuid == null || tsuid.isEmpty()) {
+      throw new IllegalArgumentException("Missing TSUID");
+    }
+    
+    // before proceeding, make sure each UID object exists by loading the info
+    metric = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
+        tsuid.substring(0, TSDB.metrics_width() * 2));
+    final List<byte[]> parsed_tags = UniqueId.getTagPairsFromTSUID(tsuid, 
+        TSDB.metrics_width(), TSDB.tagk_width(), TSDB.tagv_width());
+    tags = new ArrayList<UIDMeta>(parsed_tags.size());
+    int idx = 0;
+    for (byte[] tag : parsed_tags) {
+      if (idx % 2 == 0) {
+        tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGK, tag));
+      } else {
+        tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGV, tag));
+      }
+      idx++;
+    }
+
+    // We don't want to store any loaded UIDMeta objects (metric or tags) here
+    // since the UIDMeta's are canonical. We can't just set the fields to null
+    // before storage since callers may be looking at them later. So we'll 
+    // copy all fields BUT the UIDMetas and serialize those
+    final TSMeta stored_meta = copyToStorageObject();
+    final PutRequest put = new PutRequest(tsdb.uidTable(), 
+        UniqueId.stringToUid(stored_meta.tsuid), FAMILY, QUALIFIER, 
+        JSON.serializeToBytes(stored_meta), null);
+    tsdb.hbasePutWithRetry(put, (short)3, (short)800);
   }
   
   /**
@@ -339,10 +403,20 @@ public final class TSMeta {
    * replaced by the local object
    */
   private void syncMeta(final TSMeta meta, final boolean overwrite) {
-    // copy non-user-accessible data first
-    tsuid = meta.tsuid;
-    created = meta.created;
-    last_received = meta.last_received;
+    // storage *could* have a missing TSUID if something went pear shaped so
+    // only use the one that's configured. If the local is missing, we're foobar
+    if (meta.tsuid != null && !meta.tsuid.isEmpty()) {
+      tsuid = meta.tsuid;
+    }
+    if (tsuid == null || tsuid.isEmpty()) {
+      throw new IllegalArgumentException("TSUID is empty");
+    }
+    if (meta.created > 0 && meta.created < created) {
+      created = meta.created;
+    }
+    if (meta.last_received > 0 && meta.last_received > last_received) {
+      last_received = meta.last_received;
+    }
     
     // handle user-accessible stuff
     if (!overwrite && !changed.get("display_name")) {
@@ -385,6 +459,7 @@ public final class TSMeta {
     changed.put("display_name", false);
     changed.put("description", false);
     changed.put("notes", false);
+    changed.put("created", false);
     changed.put("custom", false);
     changed.put("units", false);
     changed.put("data_type", false);
@@ -512,6 +587,14 @@ public final class TSMeta {
     }
   }
 
+  /** @param created the created timestamp Unix epoch in seconds */
+  public final void setCreated(final long created) {
+    if (this.created != created) {
+      changed.put("created", true);
+      this.created = created;
+    }
+  }
+  
   /** @param custom optional key/value map */
   public final void setCustom(final HashMap<String, String> custom) {
     // equivalency of maps is a pain, users have to submit the whole map
