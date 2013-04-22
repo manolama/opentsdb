@@ -20,12 +20,15 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.commons.logging.LogFactory;
 import org.hbase.async.Bytes;
 import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseClient;
@@ -33,10 +36,14 @@ import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
 
+import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.meta.TSMeta;
+import net.opentsdb.meta.UIDMeta;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.uid.UniqueId.UniqueIdType;
 import net.opentsdb.utils.Config;
 
 /**
@@ -682,7 +689,7 @@ final class UidManager {
    */
   private static int metaSync(final TSDB tsdb) throws Exception {
     final long start_time = System.currentTimeMillis() / 1000;
-    
+
     // first up, we need the max metric ID so we can split up the data table
     // amongst threads.
     final GetRequest get = new GetRequest(tsdb.uidTable(), new byte[] { 0 });
@@ -704,14 +711,21 @@ final class UidManager {
     final double quotient = (double)max_id / (double)workers;
     final Set<Integer> processed_tsuids = 
       Collections.synchronizedSet(new HashSet<Integer>());
+    final ConcurrentHashMap<String, Long> metric_uids = 
+      new ConcurrentHashMap<String, Long>();
+    final ConcurrentHashMap<String, Long> tagk_uids = 
+      new ConcurrentHashMap<String, Long>();
+    final ConcurrentHashMap<String, Long> tagv_uids = 
+      new ConcurrentHashMap<String, Long>();
     
     long index = 1;
     
-    System.out.println("Max metric ID is [" + max_id + "]");
-    System.out.println("Spooling up [" + workers + "] worker threads");
+    LOG.info("Max metric ID is [" + max_id + "]");
+    LOG.info("Spooling up [" + workers + "] worker threads");
     final Thread[] threads = new Thread[workers];
     for (int i = 0; i < workers; i++) {
-      threads[i] = new MetaSync(tsdb, index, quotient, processed_tsuids, i);
+      threads[i] = new MetaSync(tsdb, index, quotient, processed_tsuids, 
+          metric_uids, tagk_uids, tagv_uids, i);
       threads[i].start();
       index += quotient;
       if (index < max_id) {
@@ -725,7 +739,8 @@ final class UidManager {
     }
     
     final long duration = (System.currentTimeMillis() / 1000) - start_time;
-    System.out.println("Completed meta data synchronization in [" + duration + "] seconds");
+    LOG.info("Completed meta data synchronization in [" + 
+        duration + "] seconds");
     return 0;
   }
   
@@ -754,8 +769,19 @@ final class UidManager {
     /** The end of the ID block to work on */
     final long end_id;
     
-    /** A shared list of TSUIDs that have been processed by this or other threads */
+    /** A shared list of TSUIDs that have been processed by this or other 
+     * threads. It stores hashes instead of the bytes or strings to save
+     * on space */
     final Set<Integer> processed_tsuids;
+    
+    /** List of metric UIDs and their earliest detected timestamp */
+    final ConcurrentHashMap<String, Long> metric_uids;
+    
+    /** List of tagk UIDs and their earliest detected timestamp */
+    final ConcurrentHashMap<String, Long> tagk_uids;
+    
+    /** List of tagv UIDs and their earliest detected timestamp */
+    final ConcurrentHashMap<String, Long> tagv_uids;
     
     /** Diagnostic ID for this thread */
     final int thread_id;
@@ -768,11 +794,18 @@ final class UidManager {
      * @param thread_id The ID of this thread (starts at 0)
      */
     public MetaSync(final TSDB tsdb, final long start_id, final double quotient, 
-        final Set<Integer> processed_tsuids, final int thread_id) {
+        final Set<Integer> processed_tsuids,
+        ConcurrentHashMap<String, Long> metric_uids,
+        ConcurrentHashMap<String, Long> tagk_uids,
+        ConcurrentHashMap<String, Long> tagv_uids,
+        final int thread_id) {
       this.tsdb = tsdb;
       this.start_id = start_id;
       this.end_id = start_id + (long) quotient + 1; // teensy bit of overlap
       this.processed_tsuids = processed_tsuids;
+      this.metric_uids = metric_uids;
+      this.tagk_uids = tagk_uids;
+      this.tagv_uids = tagv_uids;
       this.thread_id = thread_id;
     }
     
@@ -780,21 +813,150 @@ final class UidManager {
      * Do the fun happy stuff
      */
     public void run() {
-      LOG.info("Hello from thread [" + thread_id + "]");
-      System.out.println("Hello from thread [" + thread_id + "] fetching from [" + start_id + "] to [" + end_id + "]");
+      LOG.info("Hello from thread [" + thread_id + "] fetching from [" + start_id + "] to [" + end_id + "]");
       
       final Scanner scanner = getScanner();
+      ArrayList<ArrayList<KeyValue>> rows;
+      byte[] last_tsuid = null;
+      String tsuid_string = "";
       try {
-        ArrayList<ArrayList<KeyValue>> rows;
         while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
           for (final ArrayList<KeyValue> row : rows) {
-            final byte[] key = row.get(0).key();
+            try {
+              final byte[] tsuid = UniqueId.getTSUIDFromKey(row.get(0).key(), 
+                  TSDB.metrics_width(), Const.TIMESTAMP_BYTES);
+              
+              // if the current tsuid is the same as the last, just continue
+              // so we save time
+              if (last_tsuid != null && Arrays.equals(last_tsuid, tsuid)) {
+                continue;
+              }
+              last_tsuid = tsuid;
+              
+              // see if we've already processed this tsuid and if so, continue
+              if (processed_tsuids.contains(Arrays.hashCode(tsuid))) {
+                continue;
+              }
+              tsuid_string = UniqueId.uidToString(tsuid);
+              
+              // we may have a new TSUID or UIDs, so fetch the timestamp of the 
+              // row for use as the "created" time. Depending on speed we could 
+              // parse datapoints, but for now the hourly row time is enough
+              final long timestamp = Bytes.getUnsignedInt(row.get(0).key(), 
+                  TSDB.metrics_width());
+              
+              LOG.info("[" + thread_id + "] Processing TSUID: " + tsuid_string + 
+                  "  time: " + timestamp);
+              
+              // handle the timeseres meta first
+              TSMeta tsuidmeta = TSMeta.getTSMeta(tsdb, tsuid_string);
+              if (tsuidmeta == null) {
+                tsuidmeta = new TSMeta(tsuid, timestamp);
+                tsuidmeta.syncToStorage(tsdb, false);
+                LOG.info("Created meta data for new timeseries [" + 
+                    UniqueId.uidToString(tsuid) + "]");
+              } else {
+                // verify the tsuid is good, it's possible for this to become 
+                // corrupted
+                if (tsuidmeta.getTSUID() == null || 
+                    tsuidmeta.getTSUID().isEmpty()) {
+                  LOG.warn("Replacing corrupt meta data for timeseries [" + 
+                      tsuid_string + "]");
+                  tsuidmeta = new TSMeta(tsuid, timestamp);
+                  tsuidmeta.syncToStorage(tsdb, false);
+                } else {
+                  // update if we have an earlier created timestamp
+                  if (tsuidmeta.getCreated() > timestamp || 
+                      tsuidmeta.getCreated() == 0) {
+                    tsuidmeta.setCreated(timestamp);
+                    tsuidmeta.syncToStorage(tsdb, false);
+                    LOG.info("Updated meta data for timeseries [" + 
+                        tsuid_string + "]");
+                  }
+                }
+              }
+              
+              // now process the UID metric meta data
+              final byte[] metric_uid_bytes = 
+                Arrays.copyOfRange(tsuid, 0, TSDB.metrics_width()); 
+              final String metric_uid = UniqueId.uidToString(metric_uid_bytes);
+              Long last_get = metric_uids.get(metric_uid);
+              if (last_get == null || last_get == 0 || timestamp < last_get) {
+                // fetch and update
+                UIDMeta meta = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
+                    metric_uid_bytes);
+                if (meta.getCreated() > timestamp || meta.getCreated() == 0) {
+                  meta.setCreated(timestamp);
+                  meta.syncToStorage(tsdb, false);
+                  LOG.info("Updating UID [" + metric_uid + "] of type [METRIC]");
+                } else {
+                  LOG.debug("UID [" + metric_uid + 
+                      "] of type [METRIC] is up to date in storage");
+                }
+                metric_uids.put(metric_uid, timestamp);
+              }
+              
+              // loop through the tags and process their meta
+              final List<byte[]> tags = UniqueId.getTagPairsFromTSUID(
+                  tsuid_string, TSDB.metrics_width(), TSDB.tagk_width(), 
+                  TSDB.tagv_width());
+              int idx = 0;
+              for (byte[] tag : tags) {
+                final UniqueIdType type = (idx % 2 == 0) ? UniqueIdType.TAGK : 
+                  UniqueIdType.TAGV;
+                idx++;
+                final String uid = UniqueId.uidToString(tag);
+                
+                // check the maps to see if we need to bother updating
+                if (type == UniqueIdType.TAGK) {
+                  last_get = tagk_uids.get(uid);
+                } else {
+                  last_get = tagv_uids.get(uid);
+                }
+                if (last_get != null && last_get != 0 && last_get <= timestamp) {
+                  continue;
+                }
+  
+                // fetch and update
+                UIDMeta meta = UIDMeta.getUIDMeta(tsdb, type, tag);
+                if (meta.getCreated() > timestamp || meta.getCreated() == 0) {
+                  meta.setCreated(timestamp);
+                  if (meta.getUID() == null || meta.getUID().isEmpty() || 
+                      meta.getType() == null) {
+                    meta = new UIDMeta(type, tag, tsdb.getUidName(type, tag));
+                    meta.setCreated(timestamp);
+                    meta.syncToStorage(tsdb, true);
+                    LOG.info("Replaced corrupt UID [" + uid + "] of type [" + 
+                        type + "]");
+                  } else {
+                    meta.syncToStorage(tsdb, false);
+                    LOG.info("Updated UID [" + uid + "] of type [" + type + "]");
+                  }
+                } else {
+                  LOG.debug("UID [" + uid + "] of type [" + type + 
+                      "] is up to date in storage");
+                }
+                
+                if (type == UniqueIdType.TAGK) {
+                  tagk_uids.put(uid, timestamp);
+                } else {
+                  tagv_uids.put(uid, timestamp);
+                }
+              }
+              
+              // add tsuid to the processed list
+              processed_tsuids.add(Arrays.hashCode(tsuid));
+            } catch (NoSuchUniqueId e) {
+              LOG.warn("Timeseries [" + tsuid_string + 
+                  "] includes a non-existant UID: " + e.getMessage());
+            } catch (Exception e) {
+              throw new RuntimeException("Should never be here", e);
+            }
           }          
         }
-      } catch (RuntimeException e) {
-        throw e;
       } catch (Exception e) {
-        throw new RuntimeException("Should never be here", e);
+        LOG.error("Scanner Exception", e);
+        throw new RuntimeException("Scanner exception", e);
       }
     }
     
@@ -804,13 +966,13 @@ final class UidManager {
      * @throws HBaseException if something goes boom
      */
     private Scanner getScanner() throws HBaseException {
-      final short metric_width = tsdb.metrics_width();
+      final short metric_width = TSDB.metrics_width();
       final byte[] start_row = 
         Arrays.copyOfRange(Bytes.fromLong(start_id), 8 - metric_width, 8);
       final byte[] end_row = 
         Arrays.copyOfRange(Bytes.fromLong(end_id), 8 - metric_width, 8);
 
-      final Scanner scanner = tsdb.getClient().newScanner(tsdb.uidTable());
+      final Scanner scanner = tsdb.getClient().newScanner(tsdb.dataTable());
       scanner.setStartKey(start_row);
       scanner.setStopKey(end_row);
       scanner.setFamily("t".getBytes(CHARSET));
