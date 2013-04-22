@@ -215,6 +215,35 @@ public final class UIDMeta {
   }
   
   /**
+   * Attempts to store a blank, new UID meta object in the proper location.
+   * <b>Note:</b> This should not be called by user accessible methods as it will 
+   * overwrite any data already in the column.
+   * @param tsdb The TSDB to use for storage access
+   * @throws HBaseException if there was an issue fetching
+   * @throws IllegalArgumentException if data was missing
+   * @throws JSONException if the object could not be serialized
+   */
+  public void storeNew(final TSDB tsdb) {
+    if (uid == null || uid.isEmpty()) {
+      throw new IllegalArgumentException("Missing UID");
+    }
+    if (type == null) {
+      throw new IllegalArgumentException("Missing type");
+    }
+
+    // verify that the UID is still in the map before bothering with meta
+    final String name = tsdb.getUidName(type, UniqueId.stringToUid(uid));
+    if (name == null || name.isEmpty()) {
+      this.name = name;
+    }
+    final PutRequest put = new PutRequest(tsdb.uidTable(), 
+        UniqueId.stringToUid(uid), FAMILY, 
+        (type.toString().toLowerCase() + "_meta").getBytes(CHARSET), 
+        JSON.serializeToBytes(this), null);
+    tsdb.hbasePutWithRetry(put, (short)3, (short)800);
+  }
+  
+  /**
    * Attempts to delete the meta object from storage
    * @param tsdb The TSDB to use for access to storage
    * @throws HBaseException if there was an issue
@@ -465,6 +494,14 @@ public final class UIDMeta {
     if (this.custom != null || custom != null) {
       changed.put("custom", true);
       this.custom = custom;
+    }
+  }
+
+  /** @param created the created timestamp Unix epoch in seconds */
+  public final void setCreated(final long created) {
+    if (this.created != created) {
+      changed.put("created", true);
+      this.created = created;
     }
   }
 }
