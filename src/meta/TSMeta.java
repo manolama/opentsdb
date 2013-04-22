@@ -24,6 +24,7 @@ import net.opentsdb.uid.UniqueId.UniqueIdType;
 import net.opentsdb.utils.JSON;
 import net.opentsdb.utils.JSONException;
 
+import org.hbase.async.AtomicIncrementRequest;
 import org.hbase.async.DeleteRequest;
 import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseException;
@@ -36,6 +37,7 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.stumbleupon.async.Callback;
 
 /**
  * Timeseries Metadata is associated with a particular series of data points
@@ -321,6 +323,36 @@ public final class TSMeta {
     } catch (Exception e) {
       throw new RuntimeException("Should never be here", e);
     }
+  }
+  
+  public static void incrementOrSetTSUID(final TSDB tsdb, final byte[] tsuid) {
+    final class TSMetaCB implements Callback<Object, Long> {
+      final byte[] tsuid;
+      
+      public TSMetaCB(final byte[] tsuid) {
+        this.tsuid = tsuid;
+      }
+      
+      @Override
+      public Object call(final Long incremented_value) throws Exception {
+        if (incremented_value == 1) {
+          // new!!!
+          final TSMeta meta = new TSMeta(tsuid, 
+              System.currentTimeMillis() / 1000);
+        } else {
+          // old
+          // TODO - maybe update the search index ever X number of increments?
+          // Otherwise the search would only get last_updated/count whenever
+          // the user runs the full sync CLI
+        }
+        return null;
+      }
+      
+    }
+    
+    final AtomicIncrementRequest air = new AtomicIncrementRequest(
+        tsdb.uidTable(), tsuid, FAMILY, QUALIFIER);
+    tsdb.getClient().bufferAtomicIncrement(air).addCallback(new TSMetaCB(tsuid));
   }
   
   /**
