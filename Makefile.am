@@ -54,7 +54,6 @@ tsdb_SRC := \
 	src/core/WritableDataPoints.java	\
 	src/graph/Plot.java	\
 	src/meta/Annotation.java	\
-	src/meta/MetaManager.java	\
 	src/meta/TSMeta.java	\
 	src/meta/UIDMeta.java	\
 	src/search/SearchPlugin.java	\
