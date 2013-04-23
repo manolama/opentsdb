@@ -160,6 +160,7 @@ public final class UIDMeta {
    * accessible fields
    * @throws HBaseException if there was an issue fetching
    * @throws IllegalArgumentException if parsing failed
+   * @throws NoSuchUniqueId If the UID does not exist
    * @throws IllegalStateException if the data hasn't changed. This is OK!
    * @throws JSONException if the object could not be serialized
    */
@@ -219,8 +220,8 @@ public final class UIDMeta {
    * Attempts to store a blank, new UID meta object in the proper location.
    * <b>Note:</b> This should not be called by user accessible methods as it will 
    * overwrite any data already in the column.
-   * @param tsdb The TSDB to use for storage access
-   * @throws HBaseException if there was an issue fetching
+   * @param tsdb The TSDB to use for calls
+   * @throws HBaseException if there was an issue writing to storage
    * @throws IllegalArgumentException if data was missing
    * @throws JSONException if the object could not be serialized
    */
@@ -231,17 +232,15 @@ public final class UIDMeta {
     if (type == null) {
       throw new IllegalArgumentException("Missing type");
     }
-
-    // verify that the UID is still in the map before bothering with meta
-    final String name = tsdb.getUidName(type, UniqueId.stringToUid(uid));
     if (name == null || name.isEmpty()) {
-      this.name = name;
+      throw new IllegalArgumentException("Missing name");
     }
+
     final PutRequest put = new PutRequest(tsdb.uidTable(), 
         UniqueId.stringToUid(uid), FAMILY, 
         (type.toString().toLowerCase() + "_meta").getBytes(CHARSET), 
-        JSON.serializeToBytes(this), null);
-    tsdb.hbasePutWithRetry(put, (short)3, (short)800);
+        JSON.serializeToBytes(this));
+    tsdb.getClient().put(put);
   }
   
   /**
