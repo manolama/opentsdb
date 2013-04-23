@@ -28,7 +28,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.commons.logging.LogFactory;
 import org.hbase.async.Bytes;
 import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseClient;
@@ -161,6 +160,7 @@ final class UidManager {
     } finally {
       try {
         tsdb.getClient().shutdown().joinUninterruptibly();
+        LOG.info("Gracefully shutdown the TSD");
       } catch (Exception e) {
         LOG.error("Unexpected exception while shutting down", e);
         rc = 42;
@@ -684,6 +684,29 @@ final class UidManager {
   /**
    * Runs through the entire data table and creates TSMeta objects for unique
    * timeseries and/or updates {@code created} timestamps
+   * The process is as follows:
+   * <ul><li>Fetch the max number of Metric UIDs as we'll use those to match
+   * on the data rows</li>
+   * <li>Split the # of UIDs amongst worker threads</li>
+   * <li>Setup a scanner in each thread for the range it will be working on and
+   * start iterating</li>
+   * <li>Fetch the TSUID from the row key</li>
+   * <li>For each unprocessed TSUID:
+   * <ul><li>Check if the metric UID mapping is present, if not, log an error
+   * and continue</li>
+   * <li>See if the meta for the metric UID exists, if not, create it</li>
+   * <li>See if the row timestamp is less than the metric UID meta's created
+   * time. This means we have a record of the UID being used earlier than the
+   * meta data indicates. Update it.</li>
+   * <li>Repeat the previous three steps for each of the TAGK and TAGV tags</li>
+   * <li>Check to see if meta data exists for the timeseries</li>
+   * <li>If not, create the counter column if it's missing, and create the meta
+   * column</li>
+   * <li>If it did exist, check the {@code created} timestamp and if the row's 
+   * time is less, update the meta data</li></ul></li>
+   * <li>Continue on to the next unprocessed timeseries data row</li></ul>
+   * <b>Note:</b> Updates or new entries will also be sent to the search plugin
+   * if configured.
    * @param tsdb The tsdb to use for processing, including a search plugin
    * @return 0 if completed successfully, something else if it dies
    */
@@ -738,6 +761,9 @@ final class UidManager {
       threads[i].join();
     }
     
+    // make sure buffered data is flushed to storage before exiting
+    tsdb.flush().joinUninterruptibly();
+    
     final long duration = (System.currentTimeMillis() / 1000) - start_time;
     LOG.info("Completed meta data synchronization in [" + 
         duration + "] seconds");
@@ -760,7 +786,12 @@ final class UidManager {
     }
   }
 
+  /**
+   * Threaded class that runs through a portion of the total # of metric tags
+   * in the system and processes associated data points.
+   */
   private static class MetaSync extends Thread {
+    /** TSDB to use for storage access */
     final TSDB tsdb;
     
     /** The ID to start the sync with for this thread */
@@ -810,11 +841,9 @@ final class UidManager {
     }
     
     /**
-     * Do the fun happy stuff
+     * Loops through the data set and exits when complete.
      */
     public void run() {
-      LOG.info("Hello from thread [" + thread_id + "] fetching from [" + start_id + "] to [" + end_id + "]");
-      
       final Scanner scanner = getScanner();
       ArrayList<ArrayList<KeyValue>> rows;
       byte[] last_tsuid = null;
@@ -845,36 +874,8 @@ final class UidManager {
               final long timestamp = Bytes.getUnsignedInt(row.get(0).key(), 
                   TSDB.metrics_width());
               
-              LOG.info("[" + thread_id + "] Processing TSUID: " + tsuid_string + 
-                  "  time: " + timestamp);
-              
-              // handle the timeseres meta first
-              TSMeta tsuidmeta = TSMeta.getTSMeta(tsdb, tsuid_string);
-              if (tsuidmeta == null) {
-                tsuidmeta = new TSMeta(tsuid, timestamp);
-                tsuidmeta.syncToStorage(tsdb, false);
-                LOG.info("Created meta data for new timeseries [" + 
-                    UniqueId.uidToString(tsuid) + "]");
-              } else {
-                // verify the tsuid is good, it's possible for this to become 
-                // corrupted
-                if (tsuidmeta.getTSUID() == null || 
-                    tsuidmeta.getTSUID().isEmpty()) {
-                  LOG.warn("Replacing corrupt meta data for timeseries [" + 
-                      tsuid_string + "]");
-                  tsuidmeta = new TSMeta(tsuid, timestamp);
-                  tsuidmeta.syncToStorage(tsdb, false);
-                } else {
-                  // update if we have an earlier created timestamp
-                  if (tsuidmeta.getCreated() > timestamp || 
-                      tsuidmeta.getCreated() == 0) {
-                    tsuidmeta.setCreated(timestamp);
-                    tsuidmeta.syncToStorage(tsdb, false);
-                    LOG.info("Updated meta data for timeseries [" + 
-                        tsuid_string + "]");
-                  }
-                }
-              }
+              LOG.debug("[" + thread_id + "] Processing TSUID: " + tsuid_string + 
+                  "  row timestamp: " + timestamp);
               
               // now process the UID metric meta data
               final byte[] metric_uid_bytes = 
@@ -882,13 +883,32 @@ final class UidManager {
               final String metric_uid = UniqueId.uidToString(metric_uid_bytes);
               Long last_get = metric_uids.get(metric_uid);
               if (last_get == null || last_get == 0 || timestamp < last_get) {
-                // fetch and update
+                // fetch and update. Returns default object if the meta doesn't
+                // exist, so we can just call sync on this to create a missing
+                // entry
                 UIDMeta meta = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
                     metric_uid_bytes);
-                if (meta.getCreated() > timestamp || meta.getCreated() == 0) {
-                  meta.setCreated(timestamp);
-                  meta.syncToStorage(tsdb, false);
+                // we only want to update the time if it was outside of an hour
+                // otherwise it's probably an accurate timestamp
+                if (meta.getCreated() > (timestamp + 3600) || 
+                    meta.getCreated() == 0) {
                   LOG.info("Updating UID [" + metric_uid + "] of type [METRIC]");
+                  meta.setCreated(timestamp);
+                  if (meta.getUID() == null || meta.getUID().isEmpty() || 
+                      meta.getType() == null) {
+                    meta = new UIDMeta(UniqueIdType.METRIC, metric_uid_bytes, 
+                        tsdb.getUidName(UniqueIdType.METRIC, metric_uid_bytes));
+                    meta.setCreated(timestamp);
+                    meta.syncToStorage(tsdb, true);
+                    tsdb.indexUIDMeta(meta);
+                    LOG.info("Replaced corrupt UID [" + metric_uid + 
+                        "] of type [METRIC]");
+                  } else {
+                    meta.syncToStorage(tsdb, false);
+                    tsdb.indexUIDMeta(meta);
+                    LOG.info("Updated UID [" + metric_uid + 
+                        "] of type [METRIC]");
+                  }
                 } else {
                   LOG.debug("UID [" + metric_uid + 
                       "] of type [METRIC] is up to date in storage");
@@ -917,19 +937,26 @@ final class UidManager {
                   continue;
                 }
   
-                // fetch and update
+                // fetch and update. Returns default object if the meta doesn't
+                // exist, so we can just call sync on this to create a missing
+                // entry
                 UIDMeta meta = UIDMeta.getUIDMeta(tsdb, type, tag);
-                if (meta.getCreated() > timestamp || meta.getCreated() == 0) {
+                // we only want to update the time if it was outside of an hour
+                // otherwise it's probably an accurate timestamp
+                if (meta.getCreated() > (timestamp + 3600) || 
+                    meta.getCreated() == 0) {
                   meta.setCreated(timestamp);
                   if (meta.getUID() == null || meta.getUID().isEmpty() || 
                       meta.getType() == null) {
                     meta = new UIDMeta(type, tag, tsdb.getUidName(type, tag));
                     meta.setCreated(timestamp);
                     meta.syncToStorage(tsdb, true);
+                    tsdb.indexUIDMeta(meta);
                     LOG.info("Replaced corrupt UID [" + uid + "] of type [" + 
                         type + "]");
                   } else {
                     meta.syncToStorage(tsdb, false);
+                    tsdb.indexUIDMeta(meta);
                     LOG.info("Updated UID [" + uid + "] of type [" + type + "]");
                   }
                 } else {
@@ -944,19 +971,62 @@ final class UidManager {
                 }
               }
               
+              // handle the timeseres meta last so we don't record it if one
+              // or more of the UIDs had an issue
+              TSMeta tsuidmeta = TSMeta.getTSMeta(tsdb, tsuid_string);
+              if (tsuidmeta == null) {
+                // Take care of situations where the counter is created but the
+                // meta data is not. May happen if the TSD crashes or is killed
+                // improperly before the meta is flushed to storage.
+                if (!TSMeta.counterExistsInStorage(tsdb, tsuid)) {
+                  TSMeta.incrementAndGetCounter(tsdb, tsuid);
+                  LOG.info("Created counter for timeseries [" + 
+                      tsuid_string + "]");
+                } else {
+                  tsuidmeta = new TSMeta(tsuid, timestamp);
+                  tsuidmeta.storeNew(tsdb);
+                  tsdb.indexTSMeta(tsuidmeta);
+                  LOG.info("Created meta data for timeseries [" + 
+                      tsuid_string + "]");
+                }
+              } else {
+                // verify the tsuid is good, it's possible for this to become 
+                // corrupted
+                if (tsuidmeta.getTSUID() == null || 
+                    tsuidmeta.getTSUID().isEmpty()) {
+                  LOG.warn("Replacing corrupt meta data for timeseries [" + 
+                      tsuid_string + "]");
+                  tsuidmeta = new TSMeta(tsuid, timestamp);
+                  tsuidmeta.storeNew(tsdb);
+                  tsdb.indexTSMeta(tsuidmeta);
+                } else {
+                  // we only want to update the time if it was outside of an 
+                  // hour otherwise it's probably an accurate timestamp
+                  if (tsuidmeta.getCreated() > (timestamp + 3600) || 
+                      tsuidmeta.getCreated() == 0) {
+                    tsuidmeta.setCreated(timestamp);
+                    tsuidmeta.syncToStorage(tsdb, false);
+                    tsdb.indexTSMeta(tsuidmeta);
+                    LOG.info("Updated created timestamp for timeseries [" + 
+                        tsuid_string + "]");
+                  }
+                }
+              }
+              
               // add tsuid to the processed list
               processed_tsuids.add(Arrays.hashCode(tsuid));
             } catch (NoSuchUniqueId e) {
               LOG.warn("Timeseries [" + tsuid_string + 
                   "] includes a non-existant UID: " + e.getMessage());
             } catch (Exception e) {
-              throw new RuntimeException("Should never be here", e);
+              throw new RuntimeException("[" + thread_id + 
+                  "] Should never be here", e);
             }
           }          
         }
       } catch (Exception e) {
-        LOG.error("Scanner Exception", e);
-        throw new RuntimeException("Scanner exception", e);
+        LOG.error("[" + thread_id + "]Scanner Exception", e);
+        throw new RuntimeException("[" + thread_id + "]Scanner exception", e);
       }
     }
     
