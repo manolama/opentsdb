@@ -41,7 +41,6 @@ import net.opentsdb.uid.UniqueId.UniqueIdType;
 import net.opentsdb.utils.Config;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.PluginLoader;
-import net.opentsdb.meta.MetaManager;
 import net.opentsdb.meta.TSMeta;
 import net.opentsdb.meta.UIDMeta;
 import net.opentsdb.search.SearchPlugin;
@@ -92,9 +91,6 @@ public final class TSDB {
    */
   private final CompactionQueue compactionq;
 
-  /** Handles processing of new TSUIDs and UIDs */
-  private final MetaManager meta_manager;
-  
   /** Search indexer to use if configure */
   private SearchPlugin search = null;
   
@@ -121,14 +117,11 @@ public final class TSDB {
       DateTime.setDefaultTimezone(config.getString("tsd.core.timezone"));
     }
     if (config.enable_meta_tracking()) {
-      meta_manager = new MetaManager(this);
       // this is cleaner than another constructor and defaults to null. UIDs 
       // will be refactored with DAL code anyways
-      metrics.setMetaManager(meta_manager);
-      tag_names.setMetaManager(meta_manager);
-      tag_values.setMetaManager(meta_manager);
-    } else {
-      meta_manager = null;
+      metrics.setTSDB(this);
+      tag_names.setTSDB(this);
+      tag_values.setTSDB(this);
     }
     LOG.debug(config.dumpConfiguration());
   }
@@ -462,7 +455,7 @@ public final class TSDB {
     if (config.enable_meta_tracking()) {
       final byte[] tsuid = UniqueId.getTSUIDFromKey(row, METRICS_WIDTH, 
           Const.TIMESTAMP_BYTES);
-      TSMeta.incrementOrSetTSUID(this, tsuid);
+      TSMeta.incrementAndGetCounter(this, tsuid);
     }
     final long base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
     Bytes.setInt(row, (int) base_time, metrics.width());
