@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.xml.bind.DatatypeConverter;
 
-import net.opentsdb.meta.MetaManager;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.UIDMeta;
 
 import org.slf4j.Logger;
@@ -79,6 +79,8 @@ public final class UniqueId implements UniqueIdInterface {
   private final byte[] table;
   /** The kind of UniqueId, used as the column qualifier. */
   private final byte[] kind;
+  /** The type of UID represented by this cache */
+  private final UniqueIdType type;
   /** Number of bytes on which each ID is encoded. */
   private final short idWidth;
 
@@ -95,8 +97,8 @@ public final class UniqueId implements UniqueIdInterface {
   /** Number of times we had to read from HBase and populate the cache. */
   private volatile int cacheMisses;
 
-  /** Optional meta manager used to track new UIDs */
-  private MetaManager meta_manager = null;
+  /** Whether or not to generate new UIDMetas */
+  private TSDB tsdb;
   
   /**
    * Constructor.
@@ -115,6 +117,7 @@ public final class UniqueId implements UniqueIdInterface {
       throw new IllegalArgumentException("Empty string as 'kind' argument!");
     }
     this.kind = toBytes(kind);
+    type = stringToUniqueIdType(kind);
     if (width < 1 || width > 8) {
       throw new IllegalArgumentException("Invalid width: " + width);
     }
@@ -144,14 +147,9 @@ public final class UniqueId implements UniqueIdInterface {
     return idWidth;
   }
 
-  /** 
-   * Lets the TSD set a meta manager for this object so that new UIDs can be
-   * pushed into the UID meta data creation queue. If this is never called and
-   * the manager is null, new UIDs will not create meta data entries. 
-   * @param meta_manager The meta_manager to set.
-   */
-  public void setMetaManager(final MetaManager meta_manager) {
-    this.meta_manager = meta_manager;
+  /** @param Whether or not to track new UIDMeta objects */
+  public void setTSDB(final TSDB tsdb) {
+    this.tsdb = tsdb;
   }
   
   /**
@@ -388,11 +386,10 @@ public final class UniqueId implements UniqueIdInterface {
         addIdToCache(name, row);
         addNameToCache(row, name);
         
-        if (meta_manager != null) {
-          final UniqueIdType type = 
-            stringToUniqueIdType(new String(kind, CHARSET));
+        if (tsdb.getConfig().enable_meta_tracking()) {
           final UIDMeta meta = new UIDMeta(type, row, name);
-          meta_manager.queueUIDMeta(meta);
+          meta.storeNew(tsdb);
+          tsdb.indexUIDMeta(meta);
         }
         
         return row;
@@ -742,7 +739,8 @@ public final class UniqueId implements UniqueIdInterface {
    * @since 2.0
    */
   public static UniqueIdType stringToUniqueIdType(final String type) {
-    if (type.toLowerCase().equals("metric")) {
+    if (type.toLowerCase().equals("metric") || 
+        type.toLowerCase().equals("metrics")) {
       return UniqueIdType.METRIC;
     } else if (type.toLowerCase().equals("tagk")) {
       return UniqueIdType.TAGK;
