@@ -12,9 +12,22 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tree;
 
+import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Pattern;
 
+import org.hbase.async.Bytes;
+import org.hbase.async.DeleteRequest;
+import org.hbase.async.GetRequest;
+import org.hbase.async.HBaseException;
+import org.hbase.async.KeyValue;
+import org.hbase.async.PutRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import net.opentsdb.core.TSDB;
 import net.opentsdb.utils.JSON;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
@@ -22,6 +35,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.stumbleupon.async.Deferred;
 
 /**
  * Represents single rule in a tree set. Used for serialization and CRUD
@@ -40,6 +54,14 @@ public final class TreeRule {
     TAGK_CUSTOM,    /** Matches on a UID Meta custom field */
     TAGV_CUSTOM     /** Matches on a UID Meta custom field */
   }
+  
+  private static final Logger LOG = LoggerFactory.getLogger(TreeRule.class);
+  /** Charset used to convert Strings to byte arrays and back. */
+  private static final Charset CHARSET = Charset.forName("ISO-8859-1");
+  /** ASCII Rule prefix. Qualifier is tree_rule:<level>:<order> */
+  private static final byte[] RULE_PREFIX = "tree_rule:".getBytes(CHARSET);
+  /** Name of the CF where trees and branches are stored */
+  private static final byte[] NAME_FAMILY = "name".getBytes(CHARSET);
   
   /** Type of rule */
   @JsonDeserialize(using = JSON.TreeRuleTypeDeserializer.class)
@@ -93,49 +115,235 @@ public final class TreeRule {
   }
   
   /**
+   * Constructor initializes the tree ID
+   * @param tree_id The tree this rule belongs to
+   */
+  public TreeRule(final int tree_id) {
+    this.tree_id = tree_id;
+    initializeChangedMap();
+  }
+  
+  /** TODO - validate rules, i.e. toss errors if they won't work */
+  
+  /**
    * Copies changed fields from the incoming rule to the local rule
    * @param rule The rule to copy from
+   * @param overwrite Whether or not to replace all fields in the local object
+   * @return True if there were changes, false if everything was identical
    */
-  public void copyChanges(final TreeRule rule) {
-    if (rule.changed.get("type")) {
+  public boolean copyChanges(final TreeRule rule, final boolean overwrite) {
+    if (rule == null) {
+      throw new IllegalArgumentException("Cannot copy a null rule");
+    }
+    if (tree_id != rule.tree_id) {
+      throw new IllegalArgumentException("Tree IDs do not match");
+    }
+    if (level != rule.level) {
+      throw new IllegalArgumentException("Levels do not match");
+    }
+    if (order != rule.order) {
+      throw new IllegalArgumentException("Orders do not match");
+    }
+    
+    if (overwrite || (rule.changed.get("type") && type != rule.type)) {
       type = rule.type;
+      changed.put("type", true);
     }
-    if (rule.changed.get("field")) {
+    if (overwrite || (rule.changed.get("field") && !field.equals(rule.field))) {
       field = rule.field;
+      changed.put("field", true);
     }
-    if (rule.changed.get("custom_field")) {
+    if (overwrite || (rule.changed.get("custom_field") && 
+        !custom_field.equals(rule.custom_field))) {
       custom_field = rule.custom_field;
+      changed.put("custom_field", true);
     }
-    if (rule.changed.get("regex")) {
-      // validate and compile
+    if (overwrite || (rule.changed.get("regex") && !regex.equals(rule.regex))) {
+      // validate and compile via the setter
       setRegex(rule.regex);
     }
-    if (rule.changed.get("separator")) {
+    if (overwrite || (rule.changed.get("separator") && 
+        !separator.equals(rule.separator))) {
       separator = rule.separator;
+      changed.put("separator", true);
     }
-    if (rule.changed.get("description")) {
+    if (overwrite || (rule.changed.get("description") &&
+        !description.equals(rule.description))) {
       description = rule.description;
+      changed.put("description", true);
     }
-    if (rule.changed.get("notes")) {
+    if (overwrite || (rule.changed.get("notes") && !notes.equals(rule.notes))) {
       notes = rule.notes;
+      changed.put("notes", true);
     }
-    if (rule.changed.get("regex_group_idx")) {
+    if (overwrite || (rule.changed.get("regex_group_idx") && 
+        regex_group_idx != rule.regex_group_idx)) {
       regex_group_idx = rule.regex_group_idx;
+      changed.put("regex_group_idx", true);
     }
-    if (rule.changed.get("display_format")) {
+    if (overwrite || (rule.changed.get("display_format") && 
+        !display_format.equals(rule.display_format))) {
       display_format = rule.display_format;
+      changed.put("display_format", true);
     }
-    if (rule.changed.get("level")) {
-      level = rule.level;
+    for (boolean has_changes : changed.values()) {
+      if (has_changes) {
+        return true;
+      }
     }
-    if (rule.changed.get("order")) {
-      order = rule.order;
-    }
+    return false;
   }
   
   /** @return the rule ID as [tree_id:level:order] */
-  public String toStringId() {
-    return "[" + tree_id + ":" + level + ":" + order + "]";
+  @Override
+  public String toString() {
+    return "[" + tree_id + ":" + level + ":" + order + ":" + type + "]";
+  }
+  
+  public Deferred<Boolean> storeRule(final TSDB tsdb, final boolean overwrite) {
+    if (tree_id < 1 || tree_id > 65535) {
+      throw new IllegalArgumentException("Invalid Tree ID");
+    }
+    
+    // if there aren't any changes, save time and bandwidth by not writing to
+    // storage
+    boolean has_changes = false;
+    for (Map.Entry<String, Boolean> entry : changed.entrySet()) {
+      if (entry.getValue()) {
+        has_changes = true;
+        break;
+      }
+    }
+    
+    if (!has_changes) {
+      LOG.trace(this + " does not have changes, skipping sync to storage");
+      throw new IllegalStateException("No changes detected in the rule");
+    }
+    
+    // make sure the tree exists, otherwise it's not a good idea to store the
+    // rule since it would be orphaned
+    if (!Tree.treeExists(tsdb, tree_id)) {
+      throw new IllegalArgumentException("Tree: " + tree_id + 
+          " could not be found");
+    }
+    
+    TreeRule stored_rule = fetchRule(tsdb, tree_id, level, order);
+    final byte[] original_rule = stored_rule == null ? new byte[0] :
+      JSON.serializeToBytes(stored_rule);
+    if (stored_rule == null) {
+      stored_rule = this;
+    } else {
+      if (!stored_rule.copyChanges(this, overwrite)) {
+        LOG.trace(this + " does not have changes, skipping sync to storage");
+        throw new IllegalStateException("No changes detected in the rule");
+      }
+    }
+    
+    // reset the change map so we don't keep writing
+    initializeChangedMap();
+    
+    // validate before storing
+    stored_rule.validateRule();
+    
+    final PutRequest put = new PutRequest(tsdb.uidTable(), 
+        Tree.idToBytes(tree_id), NAME_FAMILY, getQualifier(level, order), 
+        JSON.serializeToBytes(stored_rule));
+    return tsdb.getClient().compareAndSet(put, original_rule);
+  }
+  
+  public static TreeRule parseFromStorage(final KeyValue column) {
+    if (column.value() == null) {
+      throw new IllegalArgumentException("Tree rule column value was null");
+    }
+    
+    final TreeRule rule = JSON.parseToObject(column.value(), TreeRule.class);
+    rule.initializeChangedMap();
+    return rule;
+  }
+  
+  public static TreeRule fetchRule(final TSDB tsdb, final int tree_id, 
+      final int level, final int order) {
+    if (tree_id < 1 || tree_id > 65535) {
+      throw new IllegalArgumentException("Invalid Tree ID");
+    }
+    if (level < 0) {
+      throw new IllegalArgumentException("Invalid rule level");
+    }
+    if (order < 0) {
+      throw new IllegalArgumentException("Invalid rule order");
+    }
+    
+    // fetch the whole row
+    final GetRequest get = new GetRequest(tsdb.uidTable(), 
+        Tree.idToBytes(tree_id));
+    get.family(NAME_FAMILY);
+    get.qualifier(getQualifier(level, order));
+    
+    try {
+      final ArrayList<KeyValue> row = 
+        tsdb.getClient().get(get).joinUninterruptibly();
+      if (row == null || row.isEmpty()) {
+        return null;
+      }
+      
+      return parseFromStorage(row.get(0));
+    } catch (HBaseException e) {
+      throw e;
+    } catch (Exception e) {
+      e.printStackTrace();
+      throw new RuntimeException("Should never be here", e);
+    }
+  }
+  
+  public static Deferred<Object> deleteRule(final TSDB tsdb, final int tree_id, 
+      final int level, final int order) {
+    if (tree_id < 1 || tree_id > 65535) {
+      throw new IllegalArgumentException("Invalid Tree ID");
+    }
+    if (level < 0) {
+      throw new IllegalArgumentException("Invalid rule level");
+    }
+    if (order < 0) {
+      throw new IllegalArgumentException("Invalid rule order");
+    }
+    
+    final DeleteRequest delete = new DeleteRequest(tsdb.uidTable(), 
+        Tree.idToBytes(tree_id), NAME_FAMILY, getQualifier(level, order));
+    return tsdb.getClient().delete(delete);
+  }
+  
+  public static void deleteAllRules(final TSDB tsdb, final int tree_id) {
+    if (tree_id < 1 || tree_id > 65535) {
+      throw new IllegalArgumentException("Invalid Tree ID");
+    }
+    
+    // fetch the whole row
+    final GetRequest get = new GetRequest(tsdb.uidTable(), 
+        Tree.idToBytes(tree_id));
+    get.family(NAME_FAMILY);
+    
+    try {
+      final ArrayList<KeyValue> row = 
+        tsdb.getClient().get(get).joinUninterruptibly();
+      if (row == null || row.isEmpty()) {
+        return;
+      }
+      
+      for (KeyValue column : row) {
+        if (column.qualifier().length > RULE_PREFIX.length &&
+            Bytes.memcmp(RULE_PREFIX, column.qualifier(), 0, 
+            RULE_PREFIX.length) == 0) {
+          final DeleteRequest delete = new DeleteRequest(tsdb.uidTable(), 
+              Tree.idToBytes(tree_id), NAME_FAMILY, column.qualifier());
+          tsdb.getClient().delete(delete);
+        }
+      }
+    } catch (HBaseException e) {
+      throw e;
+    } catch (Exception e) {
+      e.printStackTrace();
+      throw new RuntimeException("Should never be here", e);
+    }
   }
   
   /**
@@ -162,6 +370,10 @@ public final class TreeRule {
     }
   }
 
+  public static byte[] RULE_PREFIX() {
+    return RULE_PREFIX;
+  }
+  
   /**
    * Sets or resets the changed map flags
    */
@@ -179,6 +391,48 @@ public final class TreeRule {
     changed.put("level", false);
     changed.put("order", false);
     // tree_id can't change
+  }
+  
+  private void validateRule() {
+    if (type == null) {
+      throw new IllegalArgumentException(
+        "Missing rule type");
+    }
+    
+    switch (type) {
+      case METRIC:
+        // nothing to validate
+        break;
+      case METRIC_CUSTOM:
+      case TAGK_CUSTOM:
+      case TAGV_CUSTOM:
+        if (field == null || field.isEmpty()) {
+          throw new IllegalArgumentException(
+              "Missing field name required for " + type + " rule");
+        }
+        if (custom_field == null || custom_field.isEmpty()) {
+          throw new IllegalArgumentException(
+              "Missing custom field name required for " + type + " rule");
+        }
+      case TAGK:
+        if (field == null || field.isEmpty()) {
+          throw new IllegalArgumentException(
+              "Missing field name required for " + type + " rule");
+        }
+    }
+    
+    if ((regex != null || !regex.isEmpty()) && regex_group_idx < 0) {
+      throw new IllegalArgumentException(
+          "Invalid regex group index. Cannot be less than 0");
+    }
+  }
+  
+  private static byte[] getQualifier(final int level, final int order) {
+    final byte[] suffix = (level + ":" + order).getBytes(CHARSET);
+    final byte[] qualifier = new byte[RULE_PREFIX.length + suffix.length];
+    System.arraycopy(RULE_PREFIX, 0, qualifier, 0, RULE_PREFIX.length);
+    System.arraycopy(suffix, 0, qualifier, RULE_PREFIX.length, suffix.length);
+    return qualifier;
   }
   
   // GETTERS AND SETTERS ----------------------------
@@ -330,8 +584,12 @@ public final class TreeRule {
     }
   }
 
-  /** @param level The top level processing order. Must be 0 or greater */
+  /** @param level The top level processing order. Must be 0 or greater 
+   * @throws IllegalArgumentException if the level was negative */
   public void setLevel(int level) {
+    if (level < 0) {
+      throw new IllegalArgumentException("Negative levels are not allowed");
+    }
     if (this.level != level) {
       changed.put("level", true);
       this.level = level;
@@ -339,8 +597,12 @@ public final class TreeRule {
   }
 
   /** @param order The order of processing within a level. 
-   * Must be 0 or greater */
+   * Must be 0 or greater 
+   * @throws IllegalArgumentException if the order was negative */
   public void setOrder(int order) {
+    if (level < 0) {
+      throw new IllegalArgumentException("Negative orders are not allowed");
+    }
     if (this.order != order) {
       changed.put("order", true);
       this.order = order;
