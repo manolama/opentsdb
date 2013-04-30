@@ -16,8 +16,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 import javax.xml.bind.DatatypeConverter;
@@ -28,19 +30,31 @@ import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
 import org.hbase.async.RowLock;
+import org.hbase.async.Scanner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.core.JsonGenerator;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.uid.NoSuchUniqueId;
+import net.opentsdb.uid.UniqueId;
 import net.opentsdb.utils.JSON;
 import net.opentsdb.utils.JSONException;
 
 /**
+ * 
+ * IDS = Hex encoded byte arrays composed of the tree ID + hash of each previous
+ * branch. Tree ID is encoded on 2 bytes, each hash is then 4 bytes. So the root
+ * for tree # 1 is just {@code 0001}. A child branch could be 
+ * {@code 00001A3B190C2} and so on
+ * 
+ * branch object in storage:
+ *  
  * 
  */
 @JsonIgnoreProperties(ignoreUnknown = true) 
@@ -50,75 +64,51 @@ public class Branch implements Comparable<Branch> {
   
   /** Charset used to convert Strings to byte arrays and back. */
   private static final Charset CHARSET = Charset.forName("ISO-8859-1");
-  /** The prefix to use when addressing branch storage rows */
-  private static byte TREE_BRANCH_PREFIX = 0x01;
   /** Name of the CF where trees and branches are stored */
   private static final byte[] NAME_FAMILY = "name".getBytes(CHARSET);
+  /** Integer width in bytes */
+  private static final short INT_WIDTH = 4;
+  /** Name of the branch qualifier ID */
+  private static final byte[] BRANCH_QUALIFIER = "branch".getBytes(CHARSET);
   
   /** The tree this branch belongs to */
   private int tree_id;
-  
-  /** The ID of this branch */
-  private int branch_id;
-  
-  /** ID of the parent of this branch, 0 means this is root */
-  private int parent_branch_id;
 
-  /** Depth of the branch */
-  private int depth;
-  
-  /** Private name for the branch */
-  private String name = "";
-  
   /** Display name for the branch */
   private String display_name = "";
-  
-  /** Used for derialization only */
-  private int num_branches;
-  
-  /** Used for derialization only */
-  private int num_leaves;
 
-  /** Sorted set of leaves belonging to this branch */
-  //private TreeSet<Leaf> leaves;
+  /** Hash map of leaves belonging to this branch */
   private HashMap<Integer, Leaf> leaves;
   
-  /** Sorted set of child branches */
-  //private TreeSet<Branch> branches;
-  private HashMap<Integer, Branch> branches;
+  /** Hash map of child branches */
+  private TreeSet<Branch> branches;
 
+  /** The path/name of the branch */
+  private TreeMap<Integer, String> path;
+  
   /**
    * Default empty constructor necessary for de/serialization
    */
   public Branch() {
     
   }
-  
+
   /**
    * Constructor that sets the tree ID
    * @param tree_id ID of the tree this branch is associated with
+   * @throws IllegalArgumentException if the parent path is null
    */
-  public Branch(final Tree tree) {
-    tree_id = tree.getTreeId();
-  }
-  
-  /**
-   * Constructor that sets the tree ID
-   * @param tree_id ID of the tree this branch is associated with
-   * @param parent_id ID of the parent this branch belongs to
-   */
-  public Branch(final int tree_id, final int parent_id) {
+  public Branch(final int tree_id) {
     this.tree_id = tree_id;
-    this.parent_branch_id = parent_id;
   }
   
-  /** @return Returns the {@code branch_id} as the hash code */
+  /** @return Returns the {@code display_name}'s hash code */
   @Override
   public int hashCode() {
-    if (name == null || name.isEmpty()) {
+    if (display_name == null || display_name.isEmpty()) {
       return 0;
     }
-    return name.hashCode();
+    return display_name.hashCode();
   }
   
   /**
@@ -140,7 +130,7 @@ public class Branch implements Comparable<Branch> {
     }
     
     final Branch branch = (Branch)obj;
-    return branch_id == branch.branch_id;
+    return display_name == branch.display_name;
   }
   
   /**
@@ -154,116 +144,32 @@ public class Branch implements Comparable<Branch> {
   /** @return Information about this branch including ID, name and display name */
   @Override
   public String toString() {
-    return "ID: [" + hashCode() + "] name: [" + name + 
-    "] displayName[" + display_name + "]";
+    return "ID: [" + hashCode() + "] name: [" + display_name + "]";
   }
   
-  /**
-   * Returns a byte array with the branch serialized to JSON since we want
-   * some fields to go to storage and others to go to the user
-   * @param for_storage Whether or not to serialize for storage only. This will
-   * drop some unnecessary fields to save a tiny bit of space
-   * @return A byte array for storage or display
-   */
-  public byte[] toJson(final boolean for_storage) {
-    // TODO calculate an initial allocation size
-    final ByteArrayOutputStream output = new ByteArrayOutputStream();
-    try {
-      final JsonGenerator json = JSON.getFactory().createGenerator(output);
-      
-      json.writeStartObject();
-      
-      json.writeNumberField("treeId", tree_id);
-      if (for_storage) {
-        json.writeNumberField("branchId", branch_id);
-      } else {
-        json.writeStringField("branchId", idToString(branch_id));
-      }
-      if (for_storage) {
-        json.writeNumberField("parentId", parent_branch_id);
-      } else {
-        json.writeStringField("parentId", idToString(parent_branch_id));
-      }
-      json.writeNumberField("depth", depth);
-      json.writeStringField("displayName", display_name);
-      if (!for_storage) {
-        json.writeNumberField("numBranches", 
-            branches == null ? 0 : branches.size());
-        json.writeNumberField("numLeaves", 
-            leaves == null ? 0 : leaves.size());
-      } else {
-        json.writeStringField("name", name);
-      }
-      
-      if (branches == null) {
-        json.writeNullField("branches");
-      } else {
-        json.writeArrayFieldStart("branches");
-        for (Branch branch : branches.values()) {
-          json.writeStartObject();
-          if (for_storage) {
-            json.writeNumberField("branchId", branch.branch_id);
-          } else {
-            json.writeStringField("branchId", idToString(branch.branch_id));
-          }
-          json.writeStringField("displayName", branch.display_name);
-          json.writeNumberField("numBranches", branch.num_branches);
-          json.writeNumberField("numLeaves", branch.num_leaves);
-          json.writeEndObject();
-        }
-        json.writeEndArray();
-      }
-      
-      if (leaves == null) {
-        json.writeNullField("leaves");
-      } else {
-        json.writeArrayFieldStart("leaves");
-        for (Leaf leaf : leaves.values()) {
-          json.writeStartObject();
-          json.writeNumberField("depth", leaf.getDepth());
-          json.writeStringField("displayName", leaf.getDisplayName());
-          json.writeStringField("tsuid", leaf.getTsuid());
-          json.writeEndObject();
-        }
-        json.writeEndArray();
-      }
-      
-      json.writeEndObject();
-      json.close();
-      
-      // TODO zero copy?
-      return output.toByteArray();
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
   /**
    * Adds a child branch to the local object, merging if the branch already
    * exists. Also checks for leaf collisions.
    * @param branch The branch to add
-   * @param tree The tree to report to with collisions
    * @return True if there were changes, false if the child and all of it's 
    * leaves and branches already existed
    * @throws IllegalArgumentException if the incoming branch is null
    */
-  public boolean addChild(final Branch branch, final Tree tree) {
+  public boolean addChild(final Branch branch) {
     if (branch == null) {
       throw new IllegalArgumentException("Null branches are not allowed");
     }
     if (branches == null) {
-      branches = new HashMap<Integer, Branch>();
-      branches.put(branch.getBranchId(), branch);
+      branches = new TreeSet<Branch>();
+      branches.add(branch);
       return true;
     }
     
-    final Branch local_branch = branches.get(branch.hashCode());
-    if (local_branch == null) {
-      branches.put(branch.hashCode(), branch);
-      return true;
+    if (branches.contains(branch)) {
+      return false;
     }
-    
-    return local_branch.mergeBranches(branch, tree);
+    branches.add(branch);
+    return true;
   }
   
   /**
@@ -288,13 +194,13 @@ public class Branch implements Comparable<Branch> {
       // if we try to sync a leaf with the same hash of an existing key
       // but a different TSUID, it's a collision, so mark it
       if (!leaves.get(leaf.hashCode()).getTsuid().equals(leaf.getTsuid())) {
+        final Leaf collision = leaves.get(leaf.hashCode());
         if (tree != null) {
-          tree.addCollision(leaf.getTsuid());
+          tree.addCollision(leaf.getTsuid(), collision.getTsuid());
         }
         
         // log at info or lower since it's not a system error, rather it's
         // a user issue with the rules or naming schema
-        final Leaf collision = leaves.get(leaf.hashCode());
         LOG.info("Incoming TSUID [" + leaf.getTsuid() + 
             "] collided with existing TSUID [" + collision.getTsuid() + 
             "] on display name [" + collision.getDisplayName() + "]");
@@ -307,75 +213,6 @@ public class Branch implements Comparable<Branch> {
   }
   
   /**
-   * Attempts to merge a branch into the local object, merging the child leaves
-   * and branches.
-   * @param branch The branch to merge into the local branch
-   * @param tree The tree to report to with collisions
-   * @return True if the merge created changes and the branch should be saved,
-   * false if no changes were detected.
-   * @throws IllegalArgumentException if the incoming branch ID is not the same
-   * as the local ID.
-   */
-  public boolean mergeBranches(final Branch branch, final Tree tree) {
-    if (branch_id != branch.branch_id) {
-      throw new IllegalArgumentException(
-          "Incoming branch ID does not match local ID");
-    }
-    
-    boolean changed = false;
-    // sync branches
-    if (branch.branches != null && !branch.branches.isEmpty()) {
-      if (branches == null) {
-        branches = new HashMap<Integer, Branch>();
-        branches.putAll(branch.branches);
-        changed = true;
-      } else {
-        for (Map.Entry<Integer, Branch>  entry : branch.branches.entrySet()) {
-          if (!branches.containsKey(entry.getKey())) {
-            branches.put(entry.getKey(), entry.getValue());
-            changed = true;
-          }
-        }
-      }
-    }
-    
-    // sync leaves
-    if (branch.leaves != null && !branch.leaves.isEmpty()) {
-      if (leaves == null) {
-        leaves = new HashMap<Integer, Leaf>();
-        leaves.putAll(branch.leaves);
-        changed = true;
-      } else {
-        for (Map.Entry<Integer, Leaf> entry : branch.leaves.entrySet()) {
-          final int key = entry.getKey();
-          final Leaf leaf = entry.getValue();
-          if (leaves.containsKey(key)) {
-            // if we try to sync a leaf with the same hash of an existing key
-            // but a different TSUID, it's a collision, so mark it
-            if (!leaves.get(key).getTsuid().equals(leaf.getTsuid())) {
-              if (tree != null) {
-                tree.addCollision(leaf.getTsuid());
-              }
-              
-              // log at info or lower since it's not a system error, rather it's
-              // a user issue with the rules or naming schema
-              final Leaf collision = leaves.get(key);
-              LOG.info("Incoming TSUID [" + leaf.getTsuid() + 
-                  "] collided with existing TSUID [" + collision.getTsuid() + 
-                  "] on display name [" + collision.getDisplayName() + "]");
-            }
-          } else {
-            leaves.put(entry.getKey(), entry.getValue());
-            changed = true;
-          }
-        }
-      }
-    }
-    
-    return changed;
-  }
-  
-  /**
    * Attempts to write the branch to storage with a lock on the row
    * @param tsdb The TSDB to use for access
    * @param lock An optional row lock
@@ -383,63 +220,95 @@ public class Branch implements Comparable<Branch> {
    * @throws IllegalArgumentException if parsing failed
    * @throws JSONException if the object could not be serialized
    */
-  public void storeBranch(final TSDB tsdb, final RowLock lock) {  
-    if (tree_id < 1 || tree_id > 254) {
+  public void storeBranch(final TSDB tsdb, final boolean store_leaves) {  
+    if (tree_id < 1 || tree_id > 65535) {
       throw new IllegalArgumentException("Missing or invalid tree ID");
     }
     
-    // row ID = [ prefix, tree_id ] so we just get the tree ID as a single byte
-    final byte[] row = { TREE_BRANCH_PREFIX, ((Integer)tree_id).byteValue() };  
+    // compile the row key by making sure the display_name is in the path set
+    // row ID = <treeID>[<parent.display_name.hashCode()>...]
+    final byte[] row = this.compileBranchId(); 
+    
+    // compile the object for storage, this will toss exceptions if we are
+    // missing anything important
+    final byte[] storage_data = toStorageJson();
 
-    final PutRequest put;
-    if (lock == null) {
-      put = new PutRequest(tsdb.uidTable(), row, NAME_FAMILY, 
-          Bytes.fromInt(branch_id), toJson(true));
-    } else {
-      put = new PutRequest(tsdb.uidTable(), row, NAME_FAMILY, 
-          Bytes.fromInt(branch_id), toJson(true), lock);
+    final PutRequest put = new PutRequest(tsdb.uidTable(), row, NAME_FAMILY, 
+        BRANCH_QUALIFIER, storage_data);
+    put.setBufferable(true);
+    tsdb.getClient().compareAndSet(put, new byte[0]);
+    
+    // store leaves
+    if (store_leaves && leaves != null && !leaves.isEmpty()) {
+      for (Leaf leaf : leaves.values()) {
+        leaf.storeLeaf(tsdb, row);
+      }
     }
-    tsdb.hbasePutWithRetry(put, (short)3, (short)800);
   }
   
-  /**
-   * Attempts to retrieve the branch from storage, optionally with a lock
-   * @param tsdb The TSDB to use for access
-   * @param tree_id The Tree row to fetch from
-   * @param branch_id The ID of the branch to fetch
-   * @param lock An optional lock if performing an atomic sync
-   * @return The branch from storage
-   * @throws HBaseException if there was an issue fetching
-   * @throws IllegalArgumentException if parsing failed
-   * @throws JSONException if the data was corrupted
-   */
-  public static Branch fetchBranch(final TSDB tsdb, final int tree_id, 
-      final int branch_id, final RowLock lock) {
-    if (tree_id < 1 || tree_id > 254) {
-      throw new IllegalArgumentException("Missing or invalid tree ID");
-    }
-    
-    // row ID = [ prefix, tree_id ] so we just get the tree ID as a single byte
-    final byte[] key = { TREE_BRANCH_PREFIX, ((Integer)tree_id).byteValue() };
-    final GetRequest get = new GetRequest(tsdb.uidTable(), key);
-    get.family(NAME_FAMILY);
-    get.qualifier(Bytes.fromInt(branch_id));
-    if (lock != null) {
-      get.withRowLock(lock);
-    }
-    
+  public static Branch fetchBranch(final TSDB tsdb, final byte[] branch_id, 
+      final boolean load_tsuids) {   
+    final byte[] id = branch_id;
+    final Scanner scanner = setupScanner(tsdb, id);
+    final Branch branch = new Branch();
     try {
-      final ArrayList<KeyValue> row = 
-        tsdb.getClient().get(get).joinUninterruptibly();
-      if (row == null || row.isEmpty()) {
+      ArrayList<ArrayList<KeyValue>> rows;
+      while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
+        System.out.println("Rows: " + rows.size());
+        for (final ArrayList<KeyValue> row : rows) {
+          System.out.println("Columns: " + row.size());
+          for (KeyValue column : row) {
+            System.out.println("Qual: " + new String(column.qualifier()));
+            if (Bytes.equals(BRANCH_QUALIFIER, column.qualifier())) {
+              if (Bytes.equals(id, column.key())) {
+                // it's *this* branch. We deserialize to a new object and copy
+                // since the columns could be in any order and we may get a 
+                // leaf before the branch
+                final Branch local_branch = JSON.parseToObject(column.value(), 
+                    Branch.class);
+                branch.path = local_branch.path;
+                branch.display_name = local_branch.display_name;
+                branch.tree_id = Tree.bytesToId(column.key());
+              } else {
+                // it's a child branch
+                if (branch.branches == null) {
+                  branch.branches = new TreeSet<Branch>();
+                  final Branch child = JSON.parseToObject(column.value(), 
+                      Branch.class);
+                  child.tree_id = Tree.bytesToId(column.key());
+                  branch.branches.add(child);
+                }
+              }
+            } else if (Bytes.memcmp(Leaf.LEAF_PREFIX(), column.qualifier(), 0, 
+                Leaf.LEAF_PREFIX().length) == 0) {
+              if (Bytes.equals(id, column.key())) {
+                // process a leaf and skip if the UIDs for the TSUID can't be 
+                // found
+                try {
+                  if (branch.leaves == null) {
+                    branch.leaves = new HashMap<Integer, Leaf>();
+                  }
+                  final Leaf leaf = Leaf.parseFromStorage(tsdb, column, 
+                      load_tsuids);
+                  branch.leaves.put(leaf.hashCode(), leaf); 
+                  System.out.println("Adding leaf: " + leaf);
+                } catch (NoSuchUniqueId nsu) {
+                  LOG.debug("Invalid UID for in branch: " + branch_id, nsu);
+                }
+              }
+            } else {
+              System.out.println("Unrecognized column: " + new String(column.qualifier(), CHARSET));
+            }
+          }
+        }
+      }
+      
+      // if nothing was found, we just return null
+      if (branch.tree_id < 0 || branch.path == null) {
         return null;
       }
-      return JSON.parseToObject(row.get(0).value(), Branch.class);
-    } catch (HBaseException e) {
-      throw e;
-    } catch (IllegalArgumentException e) {
-      throw e;
-    } catch (JSONException e) {
+      return branch;
+    } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
       throw new RuntimeException("Should never be here", e);
@@ -449,31 +318,149 @@ public class Branch implements Comparable<Branch> {
   /**
    * Converts a branch ID hash to a hex encoded, upper case string with padding
    * @param branch_id The ID to convert
-   * @return the branch ID as an 8 character hex string
+   * @return the branch ID as a character hex string
    */
-  public static String idToString(final int branch_id) {
-    return DatatypeConverter.printHexBinary(Bytes.fromInt(branch_id));
+  public static String idToString(final byte[] branch_id) {
+    return DatatypeConverter.printHexBinary(branch_id);
   }
   
   /**
-   * Converts a hex string to an integer branch ID
+   * Converts a hex string to a branch ID byte array (row key)
    * @param branch_id The branch ID to convert
-   * @return The branch ID as an integer value
+   * @return The branch ID as a byte array
    * @throws NullPointerException if the branch ID was null
    * @throws IllegalArgumentException if the string is not valid hex
    */
-  public static int stringToId(final String branch_id) {
+  public static byte[] stringToId(final String branch_id) {
     if (branch_id == null || branch_id.isEmpty()) {
       throw new IllegalArgumentException("Branch ID was empty");
     }
-    if (branch_id.length() > 8) {
+    if (branch_id.length() < 4) {
       throw new IllegalArgumentException("Branch ID was too long");
     }
     String id = branch_id;
-    while (id.length() < 8) {
+    if (id.length() % 2 != 0) {
       id = "0" + id;
     }
-    return Bytes.getInt(DatatypeConverter.parseHexBinary(id));
+    return DatatypeConverter.parseHexBinary(id);
+  }
+
+  public static byte[] BRANCH_QUALIFIER() {
+    return BRANCH_QUALIFIER;
+  }
+  
+  public byte[] compileBranchId() {
+    if (tree_id < 1 || tree_id > 65535) {
+      throw new IllegalArgumentException("Missing or invalid tree ID");
+    }
+    // root branch path may be empty
+    if (path == null) {
+      throw new IllegalArgumentException("Missing branch path");
+    }
+    if (display_name == null || display_name.isEmpty()) {
+      throw new IllegalArgumentException("Missing display name");
+    }
+    // first, make sure the display name is at the tip of the tree set
+    if (path.isEmpty()) {
+      path.put(0, display_name);
+    } else if (!path.lastEntry().getValue().equals(display_name)) {
+      final int depth = path.lastEntry().getKey() + 1;
+      path.put(depth, display_name);
+    }
+    
+    final byte[] branch_id = new byte[Tree.TREE_ID_WIDTH() + 
+                                      ((path.size() - 1) * INT_WIDTH)];
+    int index = 0;
+    final byte[] tree_bytes = Tree.idToBytes(tree_id);
+    System.arraycopy(tree_bytes, 0, branch_id, index, tree_bytes.length);
+    index += tree_bytes.length;
+    
+    for (Map.Entry<Integer, String> entry : path.entrySet()) {
+      // skip the root, keeps the row keys 4 bytes shorter
+      if (entry.getKey() == 0) {
+        continue;
+      }
+      
+      final byte[] hash = Bytes.fromInt(entry.getValue().hashCode());
+      System.arraycopy(hash, 0, branch_id, index, hash.length);
+      index += hash.length;
+    }
+    
+    return branch_id;
+  }
+  
+  public void prependParentPath(final Map<Integer, String> parent_path) {
+    if (parent_path == null) {
+      throw new IllegalArgumentException("Parent path was null");
+    }
+    path = new TreeMap<Integer, String>();
+    path.putAll(parent_path);
+  }
+  
+  /**
+   * Returns serialized data for the branch to put in storage
+   * @return A byte array for storage
+   */
+  private byte[] toStorageJson() {
+    // grab some memory to avoid reallocs
+    final ByteArrayOutputStream output = new ByteArrayOutputStream(
+        (display_name.length() * 2) + (path.size() * 128));
+    try {
+      final JsonGenerator json = JSON.getFactory().createGenerator(output);
+      
+      json.writeStartObject();
+      
+      // we only need to write a small amount of information
+      json.writeObjectField("path", path);
+      json.writeStringField("displayName", display_name);
+      
+      json.writeEndObject();
+      json.close();
+      
+      // TODO zero copy?
+      return output.toByteArray();
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static Scanner setupScanner(final TSDB tsdb, final byte[] branch_id) {
+    final byte[] start = branch_id;
+    final byte[] end = Arrays.copyOf(branch_id, branch_id.length);
+    final Scanner scanner = tsdb.getClient().newScanner(tsdb.uidTable());
+    scanner.setStartKey(start);
+    
+    // increment the tree ID so we scan the whole tree
+    byte[] tree_id = new byte[INT_WIDTH];
+    for (int i = 0; i < Tree.TREE_ID_WIDTH(); i++) {
+      tree_id[i + (INT_WIDTH - Tree.TREE_ID_WIDTH())] = end[i];
+    }
+    int id = Bytes.getInt(tree_id) + 1;
+    tree_id = Bytes.fromInt(id);
+    for (int i = 0; i < Tree.TREE_ID_WIDTH(); i++) {
+      end[i] = tree_id[i + (INT_WIDTH - Tree.TREE_ID_WIDTH())];
+    }
+    scanner.setStopKey(end);
+    scanner.setFamily(NAME_FAMILY);
+    scanner.setQualifier(BRANCH_QUALIFIER);
+    
+    // set the regex filter
+    
+    // we want one branch below the current ID so we want something like:
+    // {0, 1, 1, 2, 3, 4 }  where { 0, 1 } is the tree ID, { 1, 2, 3, 4 } is the 
+    // branch
+    // "^\\Q\000\001\001\002\003\004\\E(?:.{4})$"
+    
+    final StringBuilder buf = new StringBuilder((start.length * 6) + 20);
+    buf.append("(?s)"  // Ensure we use the DOTALL flag.
+        + "^\\Q");
+    for (final byte b : start) {
+      buf.append((char) (b & 0xFF));
+    }
+    buf.append("\\E(?:.{").append(INT_WIDTH).append("})$");
+    
+    scanner.setKeyRegexp(buf.toString(), CHARSET);
+    return scanner;
   }
   
   // GETTERS AND SETTERS ----------------------------
@@ -484,25 +471,21 @@ public class Branch implements Comparable<Branch> {
   }
 
   /** @return The ID of this branch */
-  public int getBranchId() {
-    return branch_id;
+  public String getBranchId() {
+    return UniqueId.uidToString(compileBranchId());
   }
-
-  /** @return The ID of the parent branch */
-  public int getParentBranchId() {
-    return parent_branch_id;
+  
+  /** @return The path of the tree */
+  public Map<Integer, String> getPath() {
+    compileBranchId();
+    return path;
   }
 
   /** @return Depth of this branch */
   public int getDepth() {
-    return depth;
+    return path.lastKey();
   }
 
-  /** @return The internal name of this branch */
-  public String getName() {
-    return name;
-  }
-  
   /** @return Number of leaves in this branch */
   public int getNumLeaves() {
     return leaves == null ? 0 : leaves.size();
@@ -528,10 +511,7 @@ public class Branch implements Comparable<Branch> {
 
   /** @return Ordered set of child branches */
   public TreeSet<Branch> getBranches() {
-    if (branches == null) {
-      return null;
-    }
-    return new TreeSet<Branch>(branches.values());
+    return branches;
   }
 
   /** @param tree_id ID of the tree this branch belongs to */
@@ -539,68 +519,9 @@ public class Branch implements Comparable<Branch> {
     this.tree_id = tree_id;
   }
   
-  /** @param branch_id ID of the branch */
-  public void setBranchId(int branch_id) {
-    this.branch_id = branch_id;
-  }
-
-  /** @param parent_branch_id ID of the parent branch */
-  public void setParentId(int parent_branch_id) {
-    this.parent_branch_id = parent_branch_id;
-  }
-
-  /** @param depth Depth for the leaf */
-  public void setDepth(int depth) {
-    this.depth = depth;
-  }
-
-  /** @param name Internal name of the leaf */
-  public void setName(String name) {
-    this.name = name;
-    this.branch_id = name.hashCode();
-  }
-  
-  /** @param num_branches Set the number of branches, used for deserialization */
-  public void setNumBranches(int num_branches) {
-    this.num_branches = num_branches;
-  }
-  
-  /** @param num_leaves Set the number of leaves, used for deserialization */
-  public void setNumLeaves(int num_leaves) {
-    this.num_leaves = num_leaves;
-  }
-  
   /** @param display_name Public name to display */
   public void setDisplayName(String display_name) {
     this.display_name = display_name;
   }
 
-  /** @param leaves A set of leaves to store */
-  public void setLeaves(TreeSet<Leaf> leaves) {
-    if (leaves == null) {
-      this.leaves = null;
-      return;
-    }
-    
-    // blow out the old map
-    this.leaves = new HashMap<Integer, Leaf>(leaves.size());
-    for (Leaf leaf : leaves) {
-      this.leaves.put(leaf.hashCode(), leaf);
-    }
-  }
-
-  /** @param branches A set of branches */
-  public void setBranches(TreeSet<Branch> branches) {
-    if (branches == null) {
-      this.branches = null;
-      return;
-    }
-    
-    // blow out the old map
-    this.branches = new HashMap<Integer, Branch>(branches.size());
-    for (Branch branch : branches) {
-      this.branches.put(branch.getBranchId(), branch);
-    }
-  }  
-  
  }
