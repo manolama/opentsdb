@@ -445,7 +445,8 @@ final class HttpQuery {
   /** @return True if the request has content, false if not @since 2.0 */
   public boolean hasContent() {
     return this.request.getContent() != null && 
-      this.request.getContent().readable();
+      this.request.getContent().readable() && 
+      request.getContent().readableBytes() > 0;
   }
   
   /**
