@@ -288,6 +288,8 @@ public final class TSMeta {
       }
       idx++;
     }
+    // HACK
+    meta.tsuid = tsuid;
     return meta;
   }
   
