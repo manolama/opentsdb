@@ -746,7 +746,7 @@ public final class UniqueId implements UniqueIdInterface {
    * @since 2.0
    */
   public static byte[] stringToUid(final String uid, final short uid_length) {
-    if (uid.isEmpty()) {
+    if (uid == null || uid.isEmpty()) {
       throw new IllegalArgumentException("UID was empty");
     }
     String id = uid;
