@@ -12,7 +12,6 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.tree;
 
-import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -23,16 +22,9 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.TSMeta;
 import net.opentsdb.meta.UIDMeta;
 import net.opentsdb.tree.TreeRule.TreeRuleType;
-import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
-import net.opentsdb.utils.JSON;
-import net.opentsdb.utils.JSONException;
 
-import org.hbase.async.Bytes;
-import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseException;
-import org.hbase.async.KeyValue;
-import org.hbase.async.PutRequest;
 import org.hbase.async.RowLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,32 +35,19 @@ import org.slf4j.LoggerFactory;
  */
 public final class TreeBuilder {
   private static final Logger LOG = LoggerFactory.getLogger(TreeBuilder.class);
-  
-  /** Charset used to convert Strings to byte arrays and back. */
-  private static final Charset CHARSET = Charset.forName("ISO-8859-1");
-  /** UID table row where tree definitions are stored */
-  private static byte[] TREE_DEFINITION_ROW = { 0x01, 0x00 };
-  /** The prefix to use when addressing branch storage rows */
-  private static byte TREE_BRANCH_PREFIX = 0x01;
-  /** Name of the CF where trees and branches are stored */
-  private static final byte[] NAME_FAMILY = "name".getBytes(CHARSET);
-  
+
   /** The TSDB to use for fetching/writing data */
   private final TSDB tsdb;
   
-  /** Stores parsed branches ready for synchronization with storage */
-  private HashMap<Integer, Branch> temp_branches = 
-    new HashMap<Integer, Branch>();
+  /** Stores merged branches for testing */
+  private Branch root;
   
   /** 
    * Used when parsing data to determine the max rule ID, necessary when users
    * skip a level on accident
    */
   private int max_rule_level;
-  
-  /** Whether or not the ruleset requires we load meta data before parsing */
-  private boolean load_meta;
-  
+
   /** Filled with messages when the user has asked for a test run */
   private ArrayList<String> test_messages;
   
@@ -105,49 +84,229 @@ public final class TreeBuilder {
     this.tsdb = tsdb;
   }
   
-
-  private void processTimeseries(final Branch parent_branch, final int depth) {
+  public void processTimeseriesMeta(final int tree_id, final TSMeta meta, 
+      final boolean is_testing) {
+    if (tree_id < 1 || tree_id > 254) {
+      throw new IllegalArgumentException("Invalid tree ID");
+    }
+    if (meta == null || meta.getTSUID() == null || meta.getTSUID().isEmpty()) {
+      throw new IllegalArgumentException("Missing TSUID");
+    }
+    
+    // load the tree if we need to. The caller may re-use this object for many
+    // timeseries.
+    if (tree == null || tree.getTreeId() != tree_id) {
+      tree = Tree.fetchTree(tsdb, tree_id);
+      if (tree == null) {
+        throw new IllegalArgumentException("Unable to locate tree for ID: " + 
+            tree_id);
+      }
+      
+      // set the max rule level before proceeding
+      calculateMaxLevel();
+    }
+    
+    // reset the state in case the caller is reusing 
+    resetState();
+    this.meta = meta;
+    
+    // Fetch or initialize the root branch
+    // The root shouldn't change so we should be able to load this once
+    // per tree.
+    root = Branch.fetchBranch(tsdb, Tree.idToBytes(tree.getTreeId()), 
+        false);
+    if (root == null) {
+      LOG.info("Couldn't find the root branch, initializing");
+      root = new Branch(tree.getTreeId());
+      root.setDisplayName("ROOT");
+      final TreeMap<Integer, String> root_path = new TreeMap<Integer, String>();
+      root_path.put(0, "ROOT");
+      root.prependParentPath(root_path);
+      if (!is_testing) {
+        root.storeBranch(tsdb, true);
+        LOG.info("Initialized root branch for tree: " + tree.getTreeId());
+      }
+    }
+    
+    System.out.println("Root: " + root + " Path: " + root.getPath());
+    // process with the depth set to 1 since we're a branch of the root
+    processRuleset(root, 1);
+    
+    // if the tree has strict matching enabled and there was one or more level
+    // that failed to match, we need to ignore the branch
+    if (had_nomatch && tree.getStrictMatch()) {
+      testMessage(
+          "TSUID failed to match one or more rule levels, will not add: " + 
+          meta);
+    } else if (current_branch == null) {
+      LOG.warn("Processed TSUID [" + meta + "] resulted in a null branch");
+    } else if (!is_testing) {
+      // store the tree and leaves
+      Branch cb = current_branch;
+      Map<Integer, String> path = root.getPath();
+      cb.prependParentPath(path);
+      while (cb != null) {
+        cb.storeBranch(tsdb, true);
+        if (cb.getBranches() == null) {
+          cb = null;
+        } else {
+          path = cb.getPath();
+          // we should only have one child if we're building
+          cb = cb.getBranches().first();
+          cb.prependParentPath(path);
+        }
+      }
+    } else {
+      // we are testing, so compile for display
+      Branch cb = current_branch;
+      root.addChild(cb);
+      Map<Integer, String> path = root.getPath();
+      cb.prependParentPath(path);
+      while (cb != null) {
+        if (cb.getBranches() == null) {
+          cb = null;
+        } else {
+          path = cb.getPath();
+          // we should only have one child if we're building
+          cb = cb.getBranches().first();
+          cb.prependParentPath(path);
+        }
+      }
+    }
+  }
+  
+  private boolean processRuleset(final Branch parent_branch, int depth) {
+    System.out.println("[" + depth + "] PB: " + parent_branch);
     // when we've passed the final rule, just return to stop the recursion
     if (rule_idx > max_rule_level) {
-      return;
+      LOG.trace("Finished the rules: " + rule_idx + " of: " + max_rule_level);
+      return true;
     }
     
     // setup the branch for this iteration and set the "current_branch" 
     // reference. It's not final as we'll be copying references back and forth
-    Branch local_branch = new Branch();
-    if (parent_branch != null) {
-      local_branch.setParentBranchId(parent_branch.getBranchId());
-    }
-    local_branch.setDepth(depth);
-    current_branch = local_branch;
+    final Branch previous_branch = current_branch;
+    current_branch = new Branch(tree.getTreeId());
     
     // fetch the current rule level or try to find the next one
     TreeMap<Integer, TreeRule> rule_level = getCurrentRuleLevel();
     if (rule_level == null) {
-      return;
+      LOG.trace("Couldn't find another rule level");
+      return true;
     }
     
     // loop through each rule in the level, processing as we go
     for (Map.Entry<Integer, TreeRule> entry : rule_level.entrySet()) {
       // set the local rule
       rule = entry.getValue();
-      testMessage("Processing rule: " + rule.toStringId());
+      testMessage("Processing rule: " + rule);
       
       // route to the proper handler based on the rule type
       if (rule.getType() == TreeRuleType.METRIC) {
-        processMetricRule(parent_branch);
+        parseMetricRule(parent_branch);
         // local_branch = current_branch; //do we need this???
       } else if (rule.getType() == TreeRuleType.TAGK) {
-        processTagkRule(parent_branch);
+        parseTagkRule(parent_branch);
       } else if (rule.getType() == TreeRuleType.METRIC_CUSTOM) {
-        processMetricCustomRule(parent_branch);
+        parseMetricCustomRule(parent_branch);
       } else if (rule.getType() == TreeRuleType.TAGK_CUSTOM) {
-        
+        parseTagkCustomRule(parent_branch);
+      } else if (rule.getType() == TreeRuleType.TAGV_CUSTOM) {
+        parseTagvRule(parent_branch);
+      } else {
+        throw new IllegalArgumentException("Unkown rule type: " + 
+            rule.getType());
+      }
+      
+      // rules on a given level are ORd so the first one that matches, we bail
+      if (current_branch.getDisplayName() != null && 
+          !current_branch.getDisplayName().isEmpty()) {
+        break;
       }
     }
+    
+    // if no match was found on the level, then we need to set no match
+    if (current_branch.getDisplayName() == null || 
+        current_branch.getDisplayName().isEmpty()) {
+      had_nomatch = true;
+    }
+    
+    // determine if we need to continue processing splits, are done with splits
+    // or need to increment to the next rule level
+    if (splits != null && split_idx >= splits.length) {
+      // finished split processing
+      splits = null;
+      split_idx = 0;
+      rule_idx++;
+    } else if (splits != null) {
+      // we're still processing splits, so continue
+    } else {
+      // didn't have any splits so continue on to the next level
+      rule_idx++;
+    }
+    
+    // call ourselves recursively until we hit a leaf or run out of rules
+    final boolean complete = processRuleset(current_branch, ++depth);
+    
+    // if the recursion loop is complete, we either have a leaf or need to roll
+    // back
+    if (complete) {
+      // if the current branch is null or empty, we didn't match, so roll back
+      // to the previous branch and tell it to be the leaf
+      if (current_branch == null || current_branch.getDisplayName() == null || 
+          current_branch.getDisplayName().isEmpty()) {
+        LOG.trace("Got to a null branch");
+        current_branch = previous_branch;
+        return true;
+      }
+      
+      // if the parent has an empty ID, we need to roll back till we find one
+      if (parent_branch.getDisplayName() == null || parent_branch.getDisplayName().isEmpty()) {
+        testMessage("Depth [" + depth + "] Parent branch was empty, rolling back");
+        return true;
+      }
+      
+      // add the leaf to the parent and roll back
+      final Leaf leaf = new Leaf(current_branch.getDisplayName(), meta.getTSUID());
+      parent_branch.addLeaf(leaf, tree);
+      testMessage("Depth [" + depth + "] Adding leaf [" + leaf + 
+          "] to parent branch [" + parent_branch + "]");
+      current_branch = previous_branch;
+      return false;
+    }
+    
+    // if a rule level failed to match, we just skip the result swap
+    if ((previous_branch == null || previous_branch.getDisplayName().isEmpty()) && 
+        !current_branch.getDisplayName().isEmpty()) {
+      if (depth > 2) {
+        testMessage("Depth [" + depth + "] Skipping a non-matched branch, returning: " + current_branch);
+      }
+      return false;
+    }
+
+    // if the current branch is empty, skip it
+    if (current_branch.getDisplayName() == null || current_branch.getDisplayName().isEmpty()) {
+      testMessage("Depth [" + depth + "] Branch was empty");
+      current_branch = previous_branch;
+      return false;
+    }
+    
+    // if the previous and current branch are the same, we just discard the 
+    // previous, since the current may have a leaf
+    if (current_branch.getDisplayName().equals(previous_branch.getDisplayName())){
+      testMessage("Depth [" + depth + "] Current was the same as previous");
+      return false;
+    }
+    
+    // we've found a new branch, so add it
+    parent_branch.addChild(current_branch);
+    testMessage("Depth [" + depth + "] Adding branch: " + current_branch + 
+        " to parent: " + parent_branch);
+    current_branch = previous_branch;
+    return false;
   }
   
-  private void processMetricRule(final Branch parent_branch) {
+  private void parseMetricRule(final Branch parent_branch) {
     if (meta.getMetric() == null) {
       throw new IllegalStateException(
           "Timeseries metric UID object was null");
@@ -160,7 +319,7 @@ public final class TreeBuilder {
     processParsedValue(parent_branch, metric);
   }
 
-  private void processTagkRule(final Branch parent_branch) {
+  private void parseTagkRule(final Branch parent_branch) {
     final ArrayList<UIDMeta> tags = meta.getTags();
     if (tags == null || tags.isEmpty()) {
       throw new IllegalStateException(
@@ -187,31 +346,115 @@ public final class TreeBuilder {
     // if we didn't find a match, return
     if (!found || tag_name.isEmpty()) {
       testMessage("No match on tagk [" + rule.getField() + "] for rule: " + 
-          rule.toStringId());
+          rule);
       return;
     }
     
     // matched!
     processParsedValue(parent_branch, tag_name);
     testMessage("Matched tagk [" + rule.getField() + "] for rule: " + 
-        rule.toStringId());
+        rule);
   }
   
-  private void processMetricCustomRule(final Branch parent_branch) {
+  private void parseMetricCustomRule(final Branch parent_branch) {
     if (meta.getMetric() == null) {
       throw new IllegalStateException(
           "Timeseries metric UID object was null");
     }
     Map<String, String> custom = meta.getMetric().getCustom();
-    if (custom != null && !custom.isEmpty() && 
-        !custom.containsKey(rule.getCustomField())) {
+    if (custom != null && custom.containsKey(rule.getCustomField())) {
+      if (custom.get(rule.getCustomField()) == null) {
+        throw new IllegalStateException(
+            "Value for custom metric field [" + rule.getCustomField() + 
+            "] was null");
+      }
       processParsedValue(parent_branch, custom.get(rule.getCustomField()));
       testMessage("Matched custom tag [" + rule.getCustomField() 
-          + "] for rule: " + rule.toStringId());
+          + "] for rule: " + rule);
     } else {
       // no match
       testMessage("No match on custom tag [" + rule.getCustomField() 
-          + "] for rule: " + rule.toStringId());
+          + "] for rule: " + rule);
+    }
+  }
+  
+  private void parseTagkCustomRule(final Branch parent_branch) {
+    if (meta.getTags() == null || meta.getTags().isEmpty()) {
+      throw new IllegalStateException(
+        "Timeseries meta data was missing tags");
+    }
+    
+    UIDMeta tagk = null;
+    for (UIDMeta tag: meta.getTags()) {
+      if (tag.getType() == UniqueIdType.TAGK && 
+          tag.getName().equals(rule.getField())) {
+        tagk = tag;
+        break;
+      }
+    }
+    
+    if (tagk == null) {
+      testMessage("No match on tagk [" + rule.getField() + "] for rule: " + 
+          rule);
+      return;
+    }
+    
+    testMessage("Matched tagk [" + rule.getField() + "] for rule: " + 
+        rule);
+    final Map<String, String> custom = tagk.getCustom();
+    if (custom != null && custom.containsKey(rule.getCustomField())) {
+      if (custom.get(rule.getCustomField()) == null) {
+        throw new IllegalStateException(
+            "Value for custom tagk field [" + rule.getCustomField() + 
+            "] was null");
+      }
+      processParsedValue(parent_branch, custom.get(rule.getCustomField()));
+      testMessage("Matched custom tag [" + rule.getCustomField() + 
+          "] for rule: " + rule);
+    } else {
+      testMessage("No match on custom tag [" + rule.getCustomField() + 
+          "] for rule: " + rule);
+      return;
+    }
+  }
+  
+  private void parseTagvRule(final Branch parent_branch) {
+    if (meta.getTags() == null || meta.getTags().isEmpty()) {
+      throw new IllegalStateException(
+        "Timeseries meta data was missing tags");
+    }
+    
+    UIDMeta tagv = null;
+    for (UIDMeta tag: meta.getTags()) {
+      if (tag.getType() == UniqueIdType.TAGV && 
+          tag.getName().equals(rule.getField())) {
+        tagv = tag;
+        break;
+      }
+    }
+    
+    if (tagv == null) {
+      testMessage("No match on tagv [" + rule.getField() + "] for rule: " + 
+          rule);
+      return;
+    }
+    
+    testMessage("Matched tagv [" + rule.getField() + "] for rule: " + 
+        rule);
+    final Map<String, String> custom = tagv.getCustom();
+    if (custom != null && custom.containsKey(rule.getCustomField())) {
+      if (custom.get(rule.getCustomField()) == null) {
+        throw new IllegalStateException(
+            "Value for custom tagv field [" + rule.getCustomField() + 
+            "] was null");
+      }
+      processParsedValue(parent_branch, custom.get(rule.getCustomField()));
+      testMessage("Matched custom tag [" + rule.getCustomField() + 
+          "] for rule: " + rule);
+    } else {
+      testMessage("No match on custom tag [" + rule.getCustomField() + 
+          "] for rule: " + rule);
+      return;
     }
   }
   
@@ -230,43 +473,44 @@ public final class TreeBuilder {
       processSplit(parent_branch, parsed_value);
     } else {
       throw new IllegalStateException("Unable to find a processor for rule: " + 
-          rule.toStringId());
+          rule);
     }
   }
   
-  private void processSplit(final Branch parent_branch, final String value) {
+  private void processSplit(final Branch parent_branch, 
+      final String parsed_value) {
     if (splits == null) {
       // then this is the first time we're processing the value, so we need to
       // execute the split if there's a separator, after some validation
-      if (value == null || value.isEmpty()) {
+      if (parsed_value == null || parsed_value.isEmpty()) {
         throw new IllegalArgumentException("Value was empty for rule: " + 
-            rule.toStringId());
+            rule);
       }
       if (rule.getSeparator() == null || rule.getSeparator().isEmpty()) {
         throw new IllegalArgumentException("Separator was empty for rule: " + 
-            rule.toStringId());
+            rule);
       }      
       
       // split it
-      splits = value.split(rule.getSeparator());
+      splits = parsed_value.split(rule.getSeparator());
       split_idx = 0;
-      setCurrentName(parent_branch, value, splits[split_idx]);
+      setCurrentName(parent_branch, parsed_value, splits[split_idx]);
       split_idx++;
     } else {
       // otherwise we have split values and we just need to grab the next one
-      setCurrentName(parent_branch, value, splits[split_idx]);
+      setCurrentName(parent_branch, parsed_value, splits[split_idx]);
       split_idx++;
     }
   }
   
   private void processRegexRule(final Branch parent_branch, 
-      final String matched_value) {
+      final String parsed_value) {
     if (rule.getCompiledRegex() == null) {
       throw new IllegalArgumentException("Regex was null for rule: " + 
-          rule.toStringId());
+          rule);
     }
-    
-    final Matcher matcher = rule.getCompiledRegex().matcher(matched_value);
+
+    final Matcher matcher = rule.getCompiledRegex().matcher(parsed_value);
     if (matcher.find()) {
       // The first group is always the full string, so we need to increment
       // by one to fetch the proper group
@@ -276,42 +520,42 @@ public final class TreeBuilder {
         if (extracted == null || extracted.isEmpty()) {
           // can't use empty values as a branch/leaf name
           testMessage("Extracted value for rule " + 
-              rule.toStringId() + " was null or empty");
+              rule + " was null or empty");
         } else {
           // found a branch or leaf!
-          setCurrentName(parent_branch, matched_value, extracted);
+          setCurrentName(parent_branch, parsed_value, extracted);
         }
       } else {
         // the group index was out of range
         testMessage("Regex group index [" + 
             rule.getRegexGroupIdx() + "] for rule " + 
-            rule.toStringId() + " was out of bounds [" +
+            rule + " was out of bounds [" +
             matcher.groupCount() + "]");
       }
     }
   }
-   
+
   /**
    * 
    * @param original_value The original, raw value processed by the calling rule
-   * @param parsed_value The post-processed value after the rule worked on it
+   * @param extracted_value The post-processed value after the rule worked on it
    */
   private void setCurrentName(final Branch parent_branch, 
-      final String original_value, final String parsed_value) {
+      final String original_value, final String extracted_value) {
 
-    // set the private name first, the one with the separator
-    if (parent_branch == null || parent_branch.getName().isEmpty()) {
-      current_branch.setName(parsed_value);
-    } else {
-      current_branch.setName(parent_branch.getName() + 
-          tree.getNodeSeparator() + parsed_value);
-    }
+//    // set the private name first, the one with the separator
+//    if (parent_branch == null || parent_branch.getName().isEmpty()) {
+//      current_branch.setName(extracted_value);
+//    } else {
+//      current_branch.setName(parent_branch.getName() + 
+//          tree.getNodeSeparator() + extracted_value);
+//    }
     
     // now parse and set the display name. If the formatter is empty, we just 
     // set it to the parsed value and exit
     String format = rule.getDisplayFormat();
     if (format == null || format.isEmpty()) {
-      current_branch.setDisplayName(parsed_value);
+      current_branch.setDisplayName(extracted_value);
       return;
     }
     
@@ -319,7 +563,7 @@ public final class TreeBuilder {
       format = format.replace("{ovalue}", original_value);
     }
     if (format.contains("{value}")) {
-      format = format.replace("{value}", parsed_value);
+      format = format.replace("{value}", extracted_value);
     }
     if (format.contains("{tsuid}")) {
       format = format.replace("{tsuid}", meta.getTSUID());
@@ -336,10 +580,10 @@ public final class TreeBuilder {
         // we can't match the {tag_name} token since the rule type is invalid
         // so we'll just blank it
         format = format.replace("{tag_name}", "");
-        LOG.warn("Display rule " + rule.toStringId() + 
+        LOG.warn("Display rule " + rule + 
           " was of the wrong type to match on {tag_name}");
         if (test_messages != null) {
-          test_messages.add("Display rule " + rule.toStringId() + 
+          test_messages.add("Display rule " + rule + 
               " was of the wrong type to match on {tag_name}");
         }
       }
@@ -388,84 +632,47 @@ public final class TreeBuilder {
     // no more levels
     return null;
   }
-  
+
   /**
-   * Attempts to retrieve the branch from storage, optionally with a lock
-   * @param branch_id The ID of the branch to fetch
-   * @param lock An optional lock if performing an atomic sync
-   * @return The branch from storage
-   * @throws HBaseException if there was an issue fetching
-   * @throws IllegalArgumentException if parsing failed
-   * @throws JSONException if the data was corrupted
+   * Resets local state variables to their defaults
    */
-  private Branch fetchBranch(final int branch_id, final RowLock lock) {
-    // row ID = [ prefix, tree_id ] so we just get the tree ID as a single byte
-    final byte[] key = { TREE_BRANCH_PREFIX, 
-        ((Integer)tree.getTreeId()).byteValue() };
-    final GetRequest get = new GetRequest(tsdb.uidTable(), key);
-    get.family(NAME_FAMILY);
-    get.qualifier(Bytes.fromInt(branch_id));
-    if (lock != null) {
-      get.withRowLock(lock);
-    }
-    
-    try {
-      final ArrayList<KeyValue> row = 
-        tsdb.getClient().get(get).joinUninterruptibly();
-      if (row == null || row.isEmpty()) {
-        return null;
-      }
-      return JSON.parseToObject(row.get(0).value(), Branch.class);
-    } catch (HBaseException e) {
-      throw e;
-    } catch (IllegalArgumentException e) {
-      throw e;
-    } catch (JSONException e) {
-      throw e;
-    } catch (Exception e) {
-      throw new RuntimeException("Should never be here", e);
-    }
+  private void resetState() {
+    meta = null;
+    splits = null;
+    rule_idx = 0;
+    split_idx = 0;
+    current_branch = null;
+    rule = null;
+    had_nomatch = false;
+    root = null;
+    test_messages = new ArrayList<String>();
+  }
+
+  // GETTERS AND SETTERS --------------------------------
+  
+  /** @return the local tree object */
+  public Tree getTree() {
+    return tree;
   }
   
-  /**
-   * Attempts to write the branch to storage with a lock on the row
-   * @param branch The branch to write to storage
-   * @throws HBaseException if there was an issue fetching
-   * @throws IllegalArgumentException if parsing failed
-   * @throws JSONException if the object could not be serialized
-   */
-  private void storeBranch(final Branch branch) {       
-    // row ID = [ prefix, tree_id ] so we just get the tree ID as a single byte
-    final byte[] row = { TREE_BRANCH_PREFIX, 
-        ((Integer)tree.getTreeId()).byteValue() };  
-    
-    final RowLock lock = tsdb.hbaseAcquireLock(tsdb.uidTable(), row, (short)3);
-    try {
-      final PutRequest put = new PutRequest(tsdb.uidTable(), row, NAME_FAMILY, 
-          Bytes.fromInt(branch.getBranchId()), branch.toJson(true), lock);
-      tsdb.hbasePutWithRetry(put, (short)3, (short)800);
-    } finally {
-      // release the lock!
-      try {
-        tsdb.getClient().unlockRow(lock);
-      } catch (HBaseException e) {
-        LOG.error("Error while releasing the lock on tree row: " + 
-            tree.getTreeId(), e);
-      }
-    }
+  /** @return the root object */
+  public Branch getRootBranch() {
+    return root;
   }
   
-  /**
-   * Compiles the branch name given a branch and value. 
-   * It builds on the name via "name + separator + value"
-   * @param branch The branch to parse the name from
-   * @param value The processed value at a rule level
-   * @return The value to use for the branch name
-   */
-  private String setBranchName(final Branch branch, final String value) {
-    if (branch == null || branch.getName().isEmpty()) {
-      return value;
-    }
-    return branch.getName() + tree.getNodeSeparator() + value;
+  /** @return the current branch object */
+  public Branch getCurrentBranch() {
+    return current_branch;
+  }
+  
+  /** @return the list of test message results */
+  public ArrayList<String> getTestMessage() {
+    return test_messages;
+  }
+  
+  /** @param The tree to store locally */
+  public void setTree(final Tree tree) {
+    this.tree = tree;
+    calculateMaxLevel();
   }
 }
