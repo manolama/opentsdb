@@ -419,6 +419,8 @@ public final class TreeRule {
           throw new IllegalArgumentException(
               "Missing field name required for " + type + " rule");
         }
+      default:
+        throw new IllegalArgumentException("Invalid rule type");
     }
     
     if ((regex != null || !regex.isEmpty()) && regex_group_idx < 0) {
