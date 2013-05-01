@@ -414,11 +414,13 @@ public final class TreeRule {
           throw new IllegalArgumentException(
               "Missing custom field name required for " + type + " rule");
         }
+        break;
       case TAGK:
         if (field == null || field.isEmpty()) {
           throw new IllegalArgumentException(
               "Missing field name required for " + type + " rule");
         }
+        break;
       default:
         throw new IllegalArgumentException("Invalid rule type");
     }
