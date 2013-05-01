@@ -14,6 +14,7 @@ package net.opentsdb.tree;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
@@ -36,6 +37,12 @@ import org.slf4j.LoggerFactory;
 public final class TreeBuilder {
   private static final Logger LOG = LoggerFactory.getLogger(TreeBuilder.class);
 
+  private static ArrayList<TreeBuilder> builder_cache;
+  
+  private static long last_cache_load;
+  
+  private static int cache_timeout = 30;
+  
   /** The TSDB to use for fetching/writing data */
   private final TSDB tsdb;
   
@@ -123,7 +130,7 @@ public final class TreeBuilder {
       root_path.put(0, "ROOT");
       root.prependParentPath(root_path);
       if (!is_testing) {
-        root.storeBranch(tsdb, true);
+        root.storeBranch(tsdb, tree, true);
         LOG.info("Initialized root branch for tree: " + tree.getTreeId());
       }
     }
@@ -146,7 +153,7 @@ public final class TreeBuilder {
       Map<Integer, String> path = root.getPath();
       cb.prependParentPath(path);
       while (cb != null) {
-        cb.storeBranch(tsdb, true);
+        cb.storeBranch(tsdb, tree, true);
         if (cb.getBranches() == null) {
           cb = null;
         } else {
@@ -155,6 +162,14 @@ public final class TreeBuilder {
           cb = cb.getBranches().first();
           cb.prependParentPath(path);
         }
+      }
+      
+      // if we have collisions or no matches, flush em
+      if (tree.getCollisions() != null && !tree.getCollisions().isEmpty()) {
+        tree.storeTree(tsdb, false);
+      }
+      if (tree.getNotMatched() != null && !tree.getNotMatched().isEmpty()) {
+        tree.storeTree(tsdb, false);
       }
     } else {
       // we are testing, so compile for display
@@ -171,6 +186,39 @@ public final class TreeBuilder {
           cb = cb.getBranches().first();
           cb.prependParentPath(path);
         }
+      }
+    }
+  }
+  
+  public static void processTSMeta(final TSDB tsdb, final TSMeta meta) {
+    if ((System.currentTimeMillis() / 1000) - last_cache_load > cache_timeout) {
+      
+      // load trees
+      builder_cache = null;
+      final List<Tree> trees = Tree.fetchAllTrees(tsdb);
+      if (trees != null && !trees.isEmpty()) {
+        builder_cache = new ArrayList<TreeBuilder>(trees.size());
+        for (Tree tree : trees) {
+          final TreeBuilder builder = new TreeBuilder(tsdb);
+          builder.setTree(tree);
+          builder_cache.add(builder);
+        }
+      }
+      
+      last_cache_load = System.currentTimeMillis() / 1000;
+    }
+    
+    // no trees have been configured
+    if (builder_cache == null || builder_cache.isEmpty()) {
+      return;
+    }
+    
+    for (TreeBuilder builder : builder_cache) {
+      try {
+        builder.processTimeseriesMeta(builder.getTree().getTreeId(), 
+            meta, false);
+      } catch (Exception e) {
+        LOG.error("Runtime Exception", e);
       }
     }
   }
@@ -659,12 +707,12 @@ public final class TreeBuilder {
   public Branch getRootBranch() {
     return root;
   }
-  
-  /** @return the current branch object */
-  public Branch getCurrentBranch() {
-    return current_branch;
-  }
-  
+//  
+//  /** @return the current branch object */
+//  public Branch getCurrentBranch() {
+//    return current_branch;
+//  }
+//  
   /** @return the list of test message results */
   public ArrayList<String> getTestMessage() {
     return test_messages;
