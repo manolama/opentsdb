@@ -67,6 +67,7 @@ tsdb_SRC := \
 	src/tools/TSDMain.java	\
 	src/tools/TextImporter.java	\
 	src/tools/UidManager.java	\
+	src/tree/Branch.java	\
 	src/tree/Leaf.java	\
 	src/tree/TreeRule.java	\
 	src/tsd/BadRequestException.java	\
@@ -128,6 +129,7 @@ test_SRC := \
 	test/meta/TestUIDMeta.java	\
 	test/search/TestSearchPlugin.java	\
 	test/stats/TestHistogram.java	\
+	test/tree/TestBranch.java	\
 	test/tree/TestLeaf.java	\
 	test/tree/TestTreeRule.java	\
 	test/tsd/NettyMocks.java	\
