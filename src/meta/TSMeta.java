@@ -327,6 +327,36 @@ public final class TSMeta {
     return meta;
   }
   
+  public static TSMeta parseFromColumn(final TSDB tsdb, final KeyValue column) {
+    if (column.value() == null || column.value().length < 1) {
+      throw new IllegalArgumentException("Empty column value");
+    }
+    
+    final TSMeta meta = JSON.parseToObject(column.value(), TSMeta.class);
+    // fix in case the tsuid is missing
+    if (meta.tsuid == null || meta.tsuid.isEmpty()) {
+      meta.tsuid = UniqueId.uidToString(column.key());
+    }
+    
+    // load each of the UIDMetas parsed from the TSUID
+    meta.metric = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
+        meta.tsuid.substring(0, TSDB.metrics_width() * 2));
+
+    final List<byte[]> tags = UniqueId.getTagPairsFromTSUID(meta.tsuid, 
+        TSDB.metrics_width(), TSDB.tagk_width(), TSDB.tagv_width());
+    meta.tags = new ArrayList<UIDMeta>(tags.size());
+    int idx = 0;
+    for (byte[] tag : tags) {
+      if (idx % 2 == 0) {
+        meta.tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGK, tag));
+      } else {
+        meta.tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGV, tag));
+      }
+      idx++;
+    }
+    return meta;
+  }
+  
   /**
    * Determines if an entry exists in storage or not. This is used by the 
    * MetaManager thread to determine if we need to write a new TSUID entry or
@@ -412,6 +442,8 @@ public final class TSMeta {
           meta.storeNew(tsdb);
           tsdb.indexTSMeta(meta);
           LOG.trace("Created new TSUID entry for: " + meta);
+          
+          tsdb.processTSMetaThroughTrees(meta);
         }
         // TODO - maybe update the search index every X number of increments?
         // Otherwise the search would only get last_updated/count whenever
@@ -478,6 +510,10 @@ public final class TSMeta {
     } catch (Exception e) {
       throw new RuntimeException("Should never be here", e);
     }
+  }
+  
+  public static byte[] META_QUALIFIER() {
+    return META_QUALIFIER;
   }
   
   /**
