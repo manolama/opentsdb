@@ -70,6 +70,7 @@ tsdb_SRC := \
 	src/tree/Branch.java	\
 	src/tree/Leaf.java	\
 	src/tree/Tree.java	\
+	src/tree/TreeBuilder.java	\
 	src/tree/TreeRule.java	\
 	src/tsd/BadRequestException.java	\
 	src/tsd/ConnectionManager.java	\
@@ -133,6 +134,7 @@ test_SRC := \
 	test/tree/TestBranch.java	\
 	test/tree/TestLeaf.java	\
 	test/tree/TestTree.java	\
+	test/tree/TestBuilder.java	\
 	test/tree/TestTreeRule.java	\
 	test/tsd/NettyMocks.java	\
 	test/tsd/TestGraphHandler.java	\
