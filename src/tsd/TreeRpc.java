@@ -174,17 +174,31 @@ final class TreeRpc implements HttpRpc {
    */
   private void handleBranch() {
     try {
-//      final int tree_id = Integer.parseInt(
-//          query.getRequiredQueryStringParam("tree"));
-//      final int branch_id = Branch.stringToId(
-//          query.getRequiredQueryStringParam("branch"));
-//      final Branch branch = Branch.fetchBranch(tsdb, tree_id, branch_id, null);      
-//      if (branch == null) {
-//        throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
-//            "Unable to locate branch '" + Branch.idToString(branch_id) + 
-//            "' for tree '" + tree_id + "'");
-//      }
-//      query.sendReply(query.serializer().formatBranchV1(branch));
+      final int tree_id = parseTreeId(false);
+      final String branch_hex =
+          query.getQueryStringParam("branch");
+      
+      // compile the branch ID. If the user did NOT supply a branch address, 
+      // that would include the tree ID, then we fall back to the tree ID and
+      // the root for that tree
+      final byte[] branch_id;
+      if (branch_hex == null || branch_hex.isEmpty()) {
+        if (tree_id < 1) {
+          throw new IllegalArgumentException(
+              "Missing or invalid branch and tree IDs");
+        }
+        branch_id = Tree.idToBytes(tree_id);
+      } else {
+        branch_id = Branch.stringToId(branch_hex);
+      }
+      
+      final Branch branch = Branch.fetchBranch(tsdb, branch_id, true);      
+      if (branch == null) {
+        throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
+            "Unable to locate branch '" + Branch.idToString(branch_id) + 
+            "' for tree '" + Tree.bytesToId(branch_id) + "'");
+      }
+      query.sendReply(query.serializer().formatBranchV1(branch));
     } catch (NumberFormatException nfe) {
       throw new BadRequestException("Unable to parse 'tree' value");
     }
