@@ -220,7 +220,8 @@ public class Branch implements Comparable<Branch> {
    * @throws IllegalArgumentException if parsing failed
    * @throws JSONException if the object could not be serialized
    */
-  public void storeBranch(final TSDB tsdb, final boolean store_leaves) {  
+  public void storeBranch(final TSDB tsdb, final Tree tree, 
+      final boolean store_leaves) {  
     if (tree_id < 1 || tree_id > 65535) {
       throw new IllegalArgumentException("Missing or invalid tree ID");
     }
@@ -240,8 +241,24 @@ public class Branch implements Comparable<Branch> {
     
     // store leaves
     if (store_leaves && leaves != null && !leaves.isEmpty()) {
-      for (Leaf leaf : leaves.values()) {
-        leaf.storeLeaf(tsdb, row);
+      // to handle collisions on namespaces we need to fetch the branch w leaves
+      final Branch branch = fetchBranch(tsdb, row, false);
+      if (branch != null && branch.leaves != null && !branch.leaves.isEmpty()) {
+        for (Leaf leaf : leaves.values()) {
+          final Leaf existing_leaf = branch.leaves.get(leaf.hashCode());
+          if (existing_leaf != null) {            
+            tree.addCollision(leaf.getTsuid(), existing_leaf.getTsuid());
+            LOG.warn("Leaf collision with [" + leaf.getTsuid() + 
+                "] on existing leaf [" + existing_leaf.getTsuid() + 
+                "] named [" + leaf.getDisplayName() + "]");
+            continue;
+          }
+          leaf.storeLeaf(tsdb, row);
+        }
+      } else {     
+        for (Leaf leaf : leaves.values()) {
+          leaf.storeLeaf(tsdb, row);
+        }
       }
     }
   }
@@ -269,15 +286,18 @@ public class Branch implements Comparable<Branch> {
                 branch.path = local_branch.path;
                 branch.display_name = local_branch.display_name;
                 branch.tree_id = Tree.bytesToId(column.key());
+                System.out.println("Found local branch: " + branch);
               } else {
                 // it's a child branch
                 if (branch.branches == null) {
                   branch.branches = new TreeSet<Branch>();
-                  final Branch child = JSON.parseToObject(column.value(), 
-                      Branch.class);
-                  child.tree_id = Tree.bytesToId(column.key());
-                  branch.branches.add(child);
                 }
+                
+                final Branch child = JSON.parseToObject(column.value(), 
+                    Branch.class);
+                child.tree_id = Tree.bytesToId(column.key());
+                branch.branches.add(child);
+                System.out.println("Found child branch: " + child);
               }
             } else if (Bytes.memcmp(Leaf.LEAF_PREFIX(), column.qualifier(), 0, 
                 Leaf.LEAF_PREFIX().length) == 0) {
@@ -336,7 +356,7 @@ public class Branch implements Comparable<Branch> {
       throw new IllegalArgumentException("Branch ID was empty");
     }
     if (branch_id.length() < 4) {
-      throw new IllegalArgumentException("Branch ID was too long");
+      throw new IllegalArgumentException("Branch ID was too short");
     }
     String id = branch_id;
     if (id.length() % 2 != 0) {
@@ -442,7 +462,6 @@ public class Branch implements Comparable<Branch> {
     }
     scanner.setStopKey(end);
     scanner.setFamily(NAME_FAMILY);
-    scanner.setQualifier(BRANCH_QUALIFIER);
     
     // set the regex filter
     
@@ -457,9 +476,10 @@ public class Branch implements Comparable<Branch> {
     for (final byte b : start) {
       buf.append((char) (b & 0xFF));
     }
-    buf.append("\\E(?:.{").append(INT_WIDTH).append("})$");
+    buf.append("\\E(?:.{").append(INT_WIDTH).append("})?$");
     
     scanner.setKeyRegexp(buf.toString(), CHARSET);
+    LOG.debug("Scanner Regex: " + buf.toString());
     return scanner;
   }
   

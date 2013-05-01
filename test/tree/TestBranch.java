@@ -268,8 +268,8 @@ public final class TestBranch {
   @Test
   public void storeBranch() throws Exception {
     setupStorage();
-    final Branch branch = buildTestBranch(tree);;
-    branch.storeBranch(tsdb, true);
+    final Branch branch = buildTestBranch(tree);
+    branch.storeBranch(tsdb, tree, true);
     assertEquals(1, storage.size());
     assertEquals(3, storage.get("0001").size());
     final Branch parsed = JSON.parseToObject(storage.get("0001").get("branch"), 
@@ -282,7 +282,7 @@ public final class TestBranch {
   public void storeBranchMissingTreeID() throws Exception {
     setupStorage();
     final Branch branch = new Branch();
-    branch.storeBranch(tsdb, false);
+    branch.storeBranch(tsdb, tree, false);
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -290,7 +290,7 @@ public final class TestBranch {
     setupStorage();
     final Branch branch = buildTestBranch(tree);;
     branch.setTreeId(0);
-    branch.storeBranch(tsdb, false);
+    branch.storeBranch(tsdb, tree, false);
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -298,9 +298,25 @@ public final class TestBranch {
     setupStorage();
     final Branch branch = buildTestBranch(tree);;
     branch.setTreeId(65536);
-    branch.storeBranch(tsdb, false);
+    branch.storeBranch(tsdb, tree, false);
   }
 
+  // TODO - finish me
+  @Test
+  public void storeBranchCollision() throws Exception {
+    setupStorage();
+    final Branch branch = buildTestBranch(tree);
+    branch.storeBranch(tsdb, tree, true);
+    branch.storeBranch(tsdb, tree, true);
+    assertEquals(1, storage.size());
+    assertEquals(3, storage.get("0001").size());
+    assertEquals(1, tree.getCollisions().size());
+    final Branch parsed = JSON.parseToObject(storage.get("0001").get("branch"), 
+        Branch.class);
+    parsed.setTreeId(1);
+    assertEquals("ROOT", parsed.getDisplayName());
+  }
+  
   /**
    * Helper to build a default branch for testing
    * @return A branch with some child branches and leaves
