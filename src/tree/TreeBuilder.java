@@ -81,7 +81,7 @@ public final class TreeBuilder {
   
   /** Whether or not the TS failed to match a rule, used for 
    * {@code strict_match} */
-  private boolean had_nomatch;
+  private String not_matched;
   
   /**
    * Default constructor requires a TSDB
@@ -141,13 +141,17 @@ public final class TreeBuilder {
     
     // if the tree has strict matching enabled and there was one or more level
     // that failed to match, we need to ignore the branch
-    if (had_nomatch && tree.getStrictMatch()) {
+    if (not_matched != null && !not_matched.isEmpty() && tree.getStrictMatch()) {
       testMessage(
           "TSUID failed to match one or more rule levels, will not add: " + 
           meta);
     } else if (current_branch == null) {
       LOG.warn("Processed TSUID [" + meta + "] resulted in a null branch");
     } else if (!is_testing) {
+      if (not_matched != null && !not_matched.isEmpty()) {
+        tree.addNotMatched(meta.getTSUID(), not_matched);
+      }
+      
       // store the tree and leaves
       Branch cb = current_branch;
       Map<Integer, String> path = root.getPath();
@@ -276,7 +280,11 @@ public final class TreeBuilder {
     // if no match was found on the level, then we need to set no match
     if (current_branch.getDisplayName() == null || 
         current_branch.getDisplayName().isEmpty()) {
-      had_nomatch = true;
+      if (not_matched == null) {
+        not_matched = new String(rule.toString());
+      } else {
+        not_matched += " " + rule;
+      }
     }
     
     // determine if we need to continue processing splits, are done with splits
@@ -691,7 +699,7 @@ public final class TreeBuilder {
     split_idx = 0;
     current_branch = null;
     rule = null;
-    had_nomatch = false;
+    not_matched = null;
     root = null;
     test_messages = new ArrayList<String>();
   }
