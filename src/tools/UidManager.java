@@ -113,7 +113,8 @@ final class UidManager {
         + "  [kind] <name>: Lookup the ID of this name.\n"
         + "  [kind] <ID>: Lookup the name of this ID.\n"
         + "  metasync: Generates missing TSUID and UID meta entries, updates\n"
-        + "            created timestamps\n\n"
+        + "            created timestamps\n"
+        + "  treesync: Process all timeseries meta objects through tree rules\n\n"
         + "Example values for [kind]:"
         + " metric, tagk (tag name), tagv (tag value).");
     if (argp != null) {
@@ -201,7 +202,7 @@ final class UidManager {
     } else if (args[0].equals("fsck")) {
       return fsck(tsdb.getClient(), table);
     } else if (args[0].equals("metasync")) {
-      // check for the data table existance and initialize our plugins 
+      // check for the data table existence and initialize our plugins 
       // so that update meta data can be pushed to search engines
       try {
         tsdb.getClient().ensureTableExists(
@@ -209,6 +210,21 @@ final class UidManager {
                 "tsd.storage.hbase.data_table")).joinUninterruptibly();
         tsdb.initializePlugins();
         return metaSync(tsdb);
+      } catch (Exception e) {
+        LOG.error("Unexpected exception", e);
+        return 3;
+      }      
+    } else if (args[0].equals("treesync")) {
+      // check for the UID table existence
+      try {
+        tsdb.getClient().ensureTableExists(
+            tsdb.getConfig().getString(
+                "tsd.storage.hbase.uid_table")).joinUninterruptibly();
+        if (!tsdb.getConfig().enable_tree_processing()) {
+          LOG.warn("Tree processing is disabled");
+          return 0;
+        }
+        return treeSync(tsdb);
       } catch (Exception e) {
         LOG.error("Unexpected exception", e);
         return 3;
@@ -768,6 +784,46 @@ final class UidManager {
     LOG.info("Completed meta data synchronization in [" + 
         duration + "] seconds");
     return 0;
+  }
+  
+  private static int treeSync(final TSDB tsdb) throws Exception {
+    final byte[] start_row = new byte[TSDB.metrics_width()];
+    final byte[] end_row = new byte[TSDB.metrics_width()];
+    Arrays.fill(end_row, (byte)0xFF);
+
+    final Scanner scanner = tsdb.getClient().newScanner(tsdb.uidTable());
+    scanner.setStartKey(start_row);
+    scanner.setStopKey(end_row);
+    scanner.setFamily("name".getBytes(CHARSET));
+    scanner.setQualifier("ts_meta".getBytes(CHARSET));
+    
+    try {
+      ArrayList<ArrayList<KeyValue>> rows;
+      while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
+        for (final ArrayList<KeyValue> row : rows) {
+          final String tsuid = UniqueId.uidToString(row.get(0).key());
+          try {
+            final TSMeta meta = TSMeta.parseFromColumn(tsdb, row.get(0));
+            
+            if (meta != null) {
+              tsdb.processTSMetaThroughTrees(meta);
+            }
+          } catch (NoSuchUniqueId e) {
+            LOG.warn("Timeseries [" + tsuid + 
+                "] includes a non-existant UID: " + e.getMessage());
+          } catch (IllegalArgumentException e) {
+            LOG.error("Invalid data when processing TSUID [" + tsuid + "]", e);
+          } catch (Exception e) {
+            throw new RuntimeException("[" + tsuid + 
+                "] Should never be here", e);
+          }
+        }
+      }
+      return 0;
+    } catch (Exception e) {
+      LOG.error("Scanner Exception", e);
+      throw new RuntimeException("Scanner exception", e);
+    }
   }
   
   private static byte[] toBytes(final String s) {
