@@ -35,6 +35,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 /**
@@ -220,35 +221,8 @@ public final class TreeRule {
       throw new IllegalStateException("No changes detected in the rule");
     }
     
-    // make sure the tree exists, otherwise it's not a good idea to store the
-    // rule since it would be orphaned
-    if (!Tree.treeExists(tsdb, tree_id)) {
-      throw new IllegalArgumentException("Tree: " + tree_id + 
-          " could not be found");
-    }
-    
-    TreeRule stored_rule = fetchRule(tsdb, tree_id, level, order);
-    final byte[] original_rule = stored_rule == null ? new byte[0] :
-      JSON.serializeToBytes(stored_rule);
-    if (stored_rule == null) {
-      stored_rule = this;
-    } else {
-      if (!stored_rule.copyChanges(this, overwrite)) {
-        LOG.trace(this + " does not have changes, skipping sync to storage");
-        throw new IllegalStateException("No changes detected in the rule");
-      }
-    }
-    
-    // reset the change map so we don't keep writing
-    initializeChangedMap();
-    
-    // validate before storing
-    stored_rule.validateRule();
-    
-    final PutRequest put = new PutRequest(tsdb.uidTable(), 
-        Tree.idToBytes(tree_id), NAME_FAMILY, getQualifier(level, order), 
-        JSON.serializeToBytes(stored_rule));
-    return tsdb.getClient().compareAndSet(put, original_rule);
+    final StoreCB store_cb = new StoreCB(tsdb, this, overwrite);
+    return fetchRule(tsdb, tree_id, level, order).addCallbackDeferring(store_cb);
   }
   
   public static TreeRule parseFromStorage(final KeyValue column) {
@@ -261,7 +235,7 @@ public final class TreeRule {
     return rule;
   }
   
-  public static TreeRule fetchRule(final TSDB tsdb, final int tree_id, 
+  public static Deferred<TreeRule> fetchRule(final TSDB tsdb, final int tree_id, 
       final int level, final int order) {
     if (tree_id < 1 || tree_id > 65535) {
       throw new IllegalArgumentException("Invalid Tree ID");
@@ -280,13 +254,7 @@ public final class TreeRule {
     get.qualifier(getQualifier(level, order));
     
     try {
-      final ArrayList<KeyValue> row = 
-        tsdb.getClient().get(get).joinUninterruptibly();
-      if (row == null || row.isEmpty()) {
-        return null;
-      }
-      
-      return parseFromStorage(row.get(0));
+      return tsdb.getClient().get(get).addCallbackDeferring(new FetchCB());
     } catch (HBaseException e) {
       throw e;
     } catch (Exception e) {
@@ -437,6 +405,59 @@ public final class TreeRule {
     System.arraycopy(RULE_PREFIX, 0, qualifier, 0, RULE_PREFIX.length);
     System.arraycopy(suffix, 0, qualifier, RULE_PREFIX.length, suffix.length);
     return qualifier;
+  }
+
+  private class StoreCB implements Callback<Deferred<Boolean>, TreeRule> {  
+    
+    private final TSDB tsdb;
+    
+    private final TreeRule local_rule;
+    
+    private final boolean overwrite;
+    
+    public StoreCB(final TSDB tsdb, final TreeRule local_rule, 
+        final boolean overwrite) {
+      this.tsdb = tsdb;
+      this.local_rule = local_rule;
+      this.overwrite = overwrite;
+    }
+    
+    public Deferred<Boolean> call(final TreeRule fetched_rule) {
+      TreeRule stored_rule = fetched_rule;
+      final byte[] original_rule = stored_rule == null ? new byte[0] :
+        JSON.serializeToBytes(stored_rule);
+      if (stored_rule == null) {
+        stored_rule = local_rule;
+      } else {
+        if (!stored_rule.copyChanges(local_rule, overwrite)) {
+          LOG.trace(this + " does not have changes, skipping sync to storage");
+          throw new IllegalStateException("No changes detected in the rule");
+        }
+      }
+      
+      // reset the change map so we don't keep writing
+      initializeChangedMap();
+      
+      // validate before storing
+      stored_rule.validateRule();
+      
+      final PutRequest put = new PutRequest(tsdb.uidTable(), 
+          Tree.idToBytes(tree_id), NAME_FAMILY, getQualifier(level, order), 
+          JSON.serializeToBytes(stored_rule));
+      return tsdb.getClient().compareAndSet(put, original_rule);
+    }
+  }
+  
+  private static class FetchCB implements Callback<Deferred<TreeRule>, 
+    ArrayList<KeyValue>> {
+    
+    public Deferred<TreeRule> call(final ArrayList<KeyValue> row) {
+      if (row == null || row.isEmpty()) {
+        return Deferred.fromResult(null);
+      }
+      
+      return Deferred.fromResult(parseFromStorage(row.get(0)));
+    }
   }
   
   // GETTERS AND SETTERS ----------------------------
