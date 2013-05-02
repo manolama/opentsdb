@@ -256,35 +256,44 @@ public final class Tree {
       throw new IllegalStateException("No changes detected in the tree");
     }
 
-    if (has_set_changes) {
-      // sync collisions and not matched
-      flushCollisions(tsdb);
-      flushNotMatched(tsdb);
-    }
-    
+    Deferred<Boolean> tree_cas = null;
     if (has_tree_changes) {
-      // fetch the stored value first to use in the CAS call
-      Tree stored_tree = fetchTree(tsdb, tree_id);
-      final byte[] original_tree = stored_tree == null ? new byte[0] : 
-        stored_tree.toStorageJson();
-      
-      // now copy changes
-      if (stored_tree == null) {
-        stored_tree = this;
-      } else {
-        stored_tree.copyChanges(this, overwrite);
-      }
-      
-      // reset the change map so we don't keep writing
-      initializeChangedMap();
-      
-      final PutRequest put = new PutRequest(tsdb.uidTable(), 
-          Tree.idToBytes(tree_id), NAME_FAMILY, TREE_QUALIFIER, 
-          stored_tree.toStorageJson());
-      return tsdb.getClient().compareAndSet(put, original_tree);
+      final StoreTreeCB store_cb = new StoreTreeCB(tsdb, this, overwrite);
+      tree_cas = fetchTree(tsdb, tree_id).addCallbackDeferring(store_cb);
     }
     
-    return Deferred.fromResult(true);
+    // MUST be a better way
+    boolean trigger = false;
+    if (has_set_changes) {
+      System.out.println("Have coll changes");
+      if (collisions != null && !collisions.isEmpty()) {
+        final Deferred<Boolean> collisions_cb = new Deferred<Boolean>();
+        collisions_cb.addCallbackDeferring(new FlushCollisionsCB(tsdb));
+        if (tree_cas == null) {
+          System.out.println("setup treecas for not collisions");
+          trigger = true;
+          tree_cas = new Deferred<Boolean>();          
+        }
+        tree_cas.chain(collisions_cb);
+      }
+      if (not_matched != null && !not_matched.isEmpty()) {
+        final Deferred<Boolean> not_matched_cb = new Deferred<Boolean>();
+        not_matched_cb.addCallbackDeferring(new FlushNotMatchedCB(tsdb));
+        if (tree_cas == null) {
+          System.out.println("setup treecas for not matched");
+          trigger = true;
+          tree_cas = new Deferred<Boolean>();          
+        }
+        tree_cas.chain(not_matched_cb);
+      }
+    }
+    
+    if (trigger) {
+      tree_cas.callback(true);
+      System.out.println("Manually issued callback on tree_Cas");
+    }
+    System.out.println("Done w store, returning tree_cas");
+    return tree_cas;
   }
   
   /**
@@ -306,36 +315,8 @@ public final class Tree {
     return rule_level.get(order);
   }
   
-  public int createNewTree(final TSDB tsdb) {
-    List<Tree> trees = fetchAllTrees(tsdb);
-    int max_id = 0;
-    if (trees != null) {
-      for (Tree tree : trees) {
-        System.out.println("Tree: " + tree.tree_id);
-        if (tree.tree_id > max_id) {
-          max_id = tree.tree_id;
-        }
-      }
-    }
-    
-    tree_id = max_id + 1;
-    System.out.println("Found: " + tree_id + " trees");
-    if (tree_id > 65535) {
-      throw new IllegalStateException("Exhausted all Tree IDs");
-    }
-    try {
-      if (storeTree(tsdb, true).joinUninterruptibly()) {
-        return tree_id;
-      } else {
-        return 0;
-      }
-    } catch (IllegalArgumentException e) {
-      throw e;
-    } catch (IllegalStateException e) {
-      throw e;
-    } catch (Exception e) {
-      throw new RuntimeException("Shouldn't be here", e);
-    }
+  public Deferred<Integer> createNewTree(final TSDB tsdb) {
+    return fetchAllTrees(tsdb).addCallbackDeferring(new CreateNewCB(tsdb));
   }
   
   /**
@@ -346,7 +327,7 @@ public final class Tree {
    * @throws IllegalArgumentException if the tree ID was invalid
    * @throws HBaseException if a storage exception occurred
    */
-  public static Tree fetchTree(final TSDB tsdb, final int tree_id) {
+  public static Deferred<Tree> fetchTree(final TSDB tsdb, final int tree_id) {
     if (tree_id < 1 || tree_id > 65535) {
       throw new IllegalArgumentException("Invalid Tree ID");
     }
@@ -356,32 +337,7 @@ public final class Tree {
     get.family(NAME_FAMILY);
     
     try {
-      final ArrayList<KeyValue> row = 
-        tsdb.getClient().get(get).joinUninterruptibly();
-      if (row == null || row.isEmpty()) {
-        return null;
-      }
-      
-      final Tree tree = new Tree();
-      tree.setTreeId(tree_id);
-      for (KeyValue column : row) {
-        if (Bytes.memcmp(TREE_QUALIFIER, column.qualifier()) == 0) {
-          // it's *this* tree. We deserialize to a new object and copy
-          // since the columns could be in any order and we may get a rule 
-          // before the tree object
-          final Tree local_tree = JSON.parseToObject(column.value(), Tree.class);
-          tree.created = local_tree.created;
-          tree.description = local_tree.description;
-          tree.name = local_tree.name;
-          tree.notes = local_tree.notes;
-          tree.strict_match = tree.strict_match;
-        } else if (Bytes.memcmp(TreeRule.RULE_PREFIX(), column.qualifier(), 0, 
-            TreeRule.RULE_PREFIX().length) == 0) {
-          final TreeRule rule = TreeRule.parseFromStorage(column);
-          tree.addRule(rule);
-        }
-      }
-      return tree;
+      return tsdb.getClient().get(get).addCallbackDeferring(new FetchTreeCB());
     } catch (HBaseException e) {
       throw e;
     } catch (Exception e) {
@@ -390,93 +346,44 @@ public final class Tree {
     }
   }
   
-  public static boolean treeExists(final TSDB tsdb, final int tree_id) {
-    if (tree_id < 1 || tree_id > 65535) {
-      throw new IllegalArgumentException("Invalid Tree ID");
-    }
-
-    // fetch the whole row
-    final GetRequest get = new GetRequest(tsdb.uidTable(), idToBytes(tree_id));
-    get.family(NAME_FAMILY);
-    
-    try {
-      final ArrayList<KeyValue> row = 
-        tsdb.getClient().get(get).joinUninterruptibly();
-      if (row == null || row.isEmpty()) {
-        return false;
-      }
-
-      for (KeyValue column : row) {
-        if (Bytes.memcmp(TREE_QUALIFIER, column.qualifier()) == 0) {
-          return true;
-        } 
-      }
-      return false;
-    } catch (HBaseException e) {
-      throw e;
-    } catch (Exception e) {
-      e.printStackTrace();
-      throw new RuntimeException("Should never be here", e);
-    }
-  }
-  
+//  public static boolean treeExists(final TSDB tsdb, final int tree_id) {
+//    if (tree_id < 1 || tree_id > 65535) {
+//      throw new IllegalArgumentException("Invalid Tree ID");
+//    }
+//
+//    // fetch the whole row
+//    final GetRequest get = new GetRequest(tsdb.uidTable(), idToBytes(tree_id));
+//    get.family(NAME_FAMILY);
+//    
+//    try {
+//      final ArrayList<KeyValue> row = 
+//        tsdb.getClient().get(get).joinUninterruptibly();
+//      if (row == null || row.isEmpty()) {
+//        return false;
+//      }
+//
+//      for (KeyValue column : row) {
+//        if (Bytes.memcmp(TREE_QUALIFIER, column.qualifier()) == 0) {
+//          return true;
+//        } 
+//      }
+//      return false;
+//    } catch (HBaseException e) {
+//      throw e;
+//    } catch (Exception e) {
+//      e.printStackTrace();
+//      throw new RuntimeException("Should never be here", e);
+//    }
+//  }
+//  
   /**
    * Attempts to retreive all trees from the tree definition row. If the row
    * doesn't exist and no trees were found, returns an empty list.
    * @param tsdb The TSDB to use for storage
    * @return A list of tree objects. May be empty if none were found
    */
-  public static List<Tree> fetchAllTrees(final TSDB tsdb) {
-    final Scanner scanner = setupScanner(tsdb);
-    
-    try {
-      ArrayList<ArrayList<KeyValue>> rows;
-      final ArrayList<Tree> trees = new ArrayList<Tree>();
-      while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
-        System.out.println("Rows: " + rows.size());
-        for (final ArrayList<KeyValue> row : rows) {
-          if (row.isEmpty()) {
-            continue;
-          }
-          
-          Tree tree = new Tree();
-          System.out.println("Columns: " + row.size() +  "  Key: " + tree.tree_id);
-          for (KeyValue column : row) {
-            if (column.qualifier().length >= TREE_QUALIFIER.length && 
-                Bytes.memcmp(TREE_QUALIFIER, column.qualifier()) == 0) {
-              // it's *this* tree. We deserialize to a new object and copy
-              // since the columns could be in any order and we may get a rule 
-              // before the tree object
-              final Tree local_tree = JSON.parseToObject(column.value(), 
-                  Tree.class);
-              tree.created = local_tree.created;
-              tree.description = local_tree.description;
-              tree.name = local_tree.name;
-              tree.notes = local_tree.notes;
-              tree.strict_match = tree.strict_match;
-              tree.setTreeId(bytesToId(row.get(0).key()));
-            } else if (column.qualifier().length > TreeRule.RULE_PREFIX().length &&
-                Bytes.memcmp(TreeRule.RULE_PREFIX(), column.qualifier(), 
-                0, TreeRule.RULE_PREFIX().length) == 0) {
-              final TreeRule rule = TreeRule.parseFromStorage(column);
-              tree.addRule(rule);
-            } else {
-              System.out.println("No tree in row: " + UniqueId.uidToString(column.key()));
-            }
-          }
-          if (tree.tree_id > 0) {
-            trees.add(tree);
-          }
-        }
-      }
-      
-      return trees;
-    } catch (HBaseException e) {
-      throw e;
-    } catch (Exception e) {
-      e.printStackTrace();
-      throw new RuntimeException("Should never be here", e);
-    }
+  public static Deferred<List<Tree>> fetchAllTrees(final TSDB tsdb) {
+    return new AllTreeScanner(tsdb).fetchTrees();
   }
   
   /**
@@ -612,11 +519,6 @@ public final class Tree {
       throw new IllegalArgumentException("Invalid Tree ID");
     }
     
-    // confirm the tree exists. If it doesn't use the fsck utility to clean up
-    if (!treeExists(tsdb, tree_id)) {
-      throw new IllegalArgumentException("Unable to locate tree: " + tree_id);
-    }
-    
     final ArrayList<Deferred<Object>> results = 
       new ArrayList<Deferred<Object>>();
     
@@ -630,76 +532,8 @@ public final class Tree {
     scanner.setStopKey(end);   
     scanner.setFamily(NAME_FAMILY);
     
-    try {
-      ArrayList<ArrayList<KeyValue>> rows;
-      while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
-        for (final ArrayList<KeyValue> row : rows) {
-          // one delete request per row. We'll almost always delete the whole
-          // row, so preallocate some ram.
-          ArrayList<byte[]> qualifiers = new ArrayList<byte[]>(row.size());
-          for (KeyValue column : row) {
-            // tree
-            if (Bytes.equals(TREE_QUALIFIER, column.qualifier())) {
-              LOG.trace("Deleting tree defnition in row: " + 
-                  Branch.idToString(column.key()));
-              qualifiers.add(column.qualifier());
-              
-            // branches
-            } else if (Bytes.equals(Branch.BRANCH_QUALIFIER(), column.qualifier())) {
-              LOG.trace("Deleting branch in row: " + 
-                  Branch.idToString(column.key()));
-              qualifiers.add(column.qualifier());
-            
-            // leaves
-            } else if (column.qualifier().length > Leaf.LEAF_PREFIX().length &&
-                Bytes.memcmp(Leaf.LEAF_PREFIX(), column.qualifier(), 0, 
-                    Leaf.LEAF_PREFIX().length) == 0) {
-              LOG.trace("Deleting leaf in row: " + 
-                  Branch.idToString(column.key()));
-              qualifiers.add(column.qualifier());
-              
-            // collisions
-            } else if (column.qualifier().length > COLLISION_PREFIX.length && 
-                Bytes.memcmp(COLLISION_PREFIX, column.qualifier(), 0, 
-                    COLLISION_PREFIX.length) == 0) {
-              LOG.trace("Deleting collision in row: " + 
-                  Branch.idToString(column.key()));
-              qualifiers.add(column.qualifier());
-              
-            // not matched
-            } else if (column.qualifier().length > NOT_MATCHED_PREFIX.length && 
-                Bytes.memcmp(NOT_MATCHED_PREFIX, column.qualifier(), 0, 
-                    NOT_MATCHED_PREFIX.length) == 0) {
-              LOG.trace("Deleting not matched in row: " + 
-                  Branch.idToString(column.key()));
-              qualifiers.add(column.qualifier());
-              
-            // tree rule
-            } else if (column.qualifier().length > TreeRule.RULE_PREFIX().length && 
-                Bytes.memcmp(TreeRule.RULE_PREFIX(), column.qualifier(), 0, 
-                    TreeRule.RULE_PREFIX().length) == 0) {
-              LOG.trace("Deleting tree rule in row: " + 
-                  Branch.idToString(column.key()));
-              qualifiers.add(column.qualifier());
-            } 
-          }
-          
-          if (qualifiers.size() > 0) {
-            final DeleteRequest delete = new DeleteRequest(tsdb.uidTable(), 
-                row.get(0).key(), NAME_FAMILY, 
-                qualifiers.toArray(new byte[qualifiers.size()][])
-                );
-            results.add(tsdb.getClient().delete(delete));
-          }
-        }
-      }
-      
-      return Deferred.group(results);
-    } catch (RuntimeException e) {
-      throw e;
-    } catch (Exception e) {
-      throw new RuntimeException("Should never be here", e);
-    }
+    final DeleteTreeScanner delete = new DeleteTreeScanner(tsdb, scanner);
+    return delete.deleteTree();
   }
   
   /**
@@ -755,92 +589,6 @@ public final class Tree {
     changed.put("node_separator", false);
   }
   
-  /**
-   * Loads the collision set from storage and merges the local set into the
-   * storage set, then saves back to storage.
-   * @param tsdb TSDB to use for storage access
-   * @param lock A valid row lock
-   * @throws HBaseException if something went pear shaped
-   */
-  private void flushCollisions(final TSDB tsdb) {
-    // if we don't have any changes or any data, don't bother calling
-    if (!changed.containsKey("collisions") || !changed.get("collisions") ||
-        collisions == null || collisions.isEmpty()) {
-      return;
-    }
-    if (tree_id < 1 || tree_id > 65535) {
-      throw new IllegalArgumentException("Invalid Tree ID");
-    }
-    
-    final byte[] row_key = new byte[TREE_ID_WIDTH + 1];
-    System.arraycopy(idToBytes(tree_id), 0, row_key, 0, TREE_ID_WIDTH);
-    row_key[TREE_ID_WIDTH] = COLLISION_SUFFIX;
-
-    try{
-      for (Map.Entry<String, String> entry : collisions.entrySet()) {
-        final byte[] qualifier = new byte[COLLISION_PREFIX.length + 
-                                          (entry.getKey().length() / 2)];
-        System.arraycopy(COLLISION_PREFIX, 0, qualifier, 0, 
-            COLLISION_PREFIX.length);
-        final byte[] tsuid = UniqueId.stringToUid(entry.getKey());
-        System.arraycopy(tsuid, 0, qualifier, COLLISION_PREFIX.length, 
-            tsuid.length);
-        
-        final PutRequest put = new PutRequest(tsdb.uidTable(), row_key, 
-            NAME_FAMILY, qualifier, entry.getValue().getBytes(CHARSET));
-        tsdb.getClient().compareAndSet(put, new byte[0]);
-      }
-    } catch (HBaseException e) {
-      throw e;
-    } catch (Exception e) {
-      throw new RuntimeException("Should never be here", e);
-    }
-    collisions.clear();
-  }
-  
-  /**
-   * Loads the non matched TSUID set from storage and merges the local set into
-   * the storage set, then saves back to storage.
-   * @param tsdb TSDB to use for storage access
-   * @param lock A valid row lock
-   * @throws HBaseException if something went pear shaped
-   */
-  private void flushNotMatched(final TSDB tsdb) {
-    // if we don't have any changes or any data, don't bother calling
-    if (!changed.containsKey("not_matched") || !changed.get("not_matched") ||
-        not_matched == null || not_matched.isEmpty()) {
-      return;
-    }
-    if (tree_id < 1 || tree_id > 65535) {
-      throw new IllegalArgumentException("Invalid Tree ID");
-    }
-    
-    final byte[] row_key = new byte[TREE_ID_WIDTH + 1];
-    System.arraycopy(idToBytes(tree_id), 0, row_key, 0, TREE_ID_WIDTH);
-    row_key[TREE_ID_WIDTH] = NOT_MATCHED_SUFFIX;
-
-    try{
-      for (Map.Entry<String, String> entry : not_matched.entrySet()) {
-        final byte[] qualifier = new byte[NOT_MATCHED_PREFIX.length + 
-                                          (entry.getKey().length() / 2)];
-        System.arraycopy(NOT_MATCHED_PREFIX, 0, qualifier, 0, 
-            NOT_MATCHED_PREFIX.length);
-        final byte[] tsuid = UniqueId.stringToUid(entry.getKey());
-        System.arraycopy(tsuid, 0, qualifier, NOT_MATCHED_PREFIX.length, 
-            tsuid.length);
-        
-        final PutRequest put = new PutRequest(tsdb.uidTable(), row_key, 
-            NAME_FAMILY, qualifier, entry.getValue().getBytes(CHARSET));
-        tsdb.getClient().compareAndSet(put, new byte[0]);
-      }
-    } catch (HBaseException e) {
-      throw e;
-    } catch (Exception e) {
-      throw new RuntimeException("Should never be here", e);
-    }
-    not_matched.clear();
-  }
-  
   private byte[] toStorageJson() {
     // TODO - precalc how much memory to grab
     final ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -883,6 +631,373 @@ public final class Tree {
     buf.append("\\E(?:.{").append(TREE_ID_WIDTH).append("})$");
     scanner.setKeyRegexp(buf.toString(), CHARSET);
     return scanner;
+  }
+  
+  private class StoreTreeCB implements Callback<Deferred<Boolean>, Tree> {
+    
+    private final TSDB tsdb;
+    
+    private final Tree local_tree;
+    
+    private final boolean overwrite;
+    
+    public StoreTreeCB(final TSDB tsdb, final Tree local_tree, 
+        final boolean overwrite) {
+      this.tsdb = tsdb;
+      this.local_tree = local_tree;
+      this.overwrite = overwrite;
+    }
+
+    @Override
+    public Deferred<Boolean> call(final Tree fetched_tree) throws Exception {
+      
+      Tree stored_tree = fetched_tree;
+      final byte[] original_tree = stored_tree == null ? new byte[0] : 
+        stored_tree.toStorageJson();
+      
+      // now copy changes
+      if (stored_tree == null) {
+        stored_tree = local_tree;
+      } else {
+        stored_tree.copyChanges(local_tree, overwrite);
+      }
+      
+      // reset the change map so we don't keep writing
+      initializeChangedMap();
+      
+      final PutRequest put = new PutRequest(tsdb.uidTable(), 
+          Tree.idToBytes(tree_id), NAME_FAMILY, TREE_QUALIFIER, 
+          stored_tree.toStorageJson());
+      
+      return tsdb.getClient().compareAndSet(put, original_tree);
+    }
+  }
+  
+  private class FlushCollisionsCB implements Callback<Deferred<Boolean>, Boolean> {
+    
+    private final TSDB tsdb;
+    
+    public FlushCollisionsCB(final TSDB tsdb) {
+      this.tsdb = tsdb;
+    }
+    
+    @Override
+    public Deferred<Boolean> call(Boolean cas_result) throws Exception {
+      if (!cas_result) {
+        LOG.warn("CAS failed for tree, skipping flush of collisions");
+        return Deferred.fromResult(false);
+      }
+      
+      final byte[] row_key = new byte[TREE_ID_WIDTH + 1];
+      System.arraycopy(idToBytes(tree_id), 0, row_key, 0, TREE_ID_WIDTH);
+      row_key[TREE_ID_WIDTH] = COLLISION_SUFFIX;
+
+      try{
+        final byte[][] qualifiers = new byte[collisions.size()][];
+        final byte[][] values = new byte[collisions.size()][];
+   
+        int index = 0;
+        for (Map.Entry<String, String> entry : collisions.entrySet()) {
+          qualifiers[index] = new byte[COLLISION_PREFIX.length + 
+                                            (entry.getKey().length() / 2)];
+          System.arraycopy(COLLISION_PREFIX, 0, qualifiers[index], 0, 
+              COLLISION_PREFIX.length);
+          final byte[] tsuid = UniqueId.stringToUid(entry.getKey());
+          System.arraycopy(tsuid, 0, qualifiers[index], 
+              COLLISION_PREFIX.length, tsuid.length);
+ 
+          values[index] = entry.getValue().getBytes(CHARSET);
+          index++;
+        }
+
+        final PutRequest put = new PutRequest(tsdb.uidTable(), row_key, 
+            NAME_FAMILY, qualifiers, values);
+        collisions.clear();
+        tsdb.getClient().put(put).joinUninterruptibly();
+        return Deferred.fromResult(true);
+      } catch (HBaseException e) {
+        throw e;
+      } catch (Exception e) {
+        throw new RuntimeException("Should never be here", e);
+      }
+    }
+  }
+  
+  private class FlushNotMatchedCB implements Callback<Deferred<Boolean>, Boolean> {
+      
+    private final TSDB tsdb;
+    
+    public FlushNotMatchedCB(final TSDB tsdb) {
+      this.tsdb = tsdb;
+    }
+
+    @Override
+    public Deferred<Boolean> call(final Boolean cas_result) throws Exception {
+      if (!cas_result) {
+        LOG.warn("CAS failed for tree, skipping flush of collisions");
+        return Deferred.fromResult(false);
+      }
+      
+      final byte[] row_key = new byte[TREE_ID_WIDTH + 1];
+      System.arraycopy(idToBytes(tree_id), 0, row_key, 0, TREE_ID_WIDTH);
+      row_key[TREE_ID_WIDTH] = NOT_MATCHED_SUFFIX;
+
+      try{
+        final byte[][] qualifiers = new byte[not_matched.size()][];
+        final byte[][] values = new byte[not_matched.size()][];
+        
+        int index = 0;
+        for (Map.Entry<String, String> entry : not_matched.entrySet()) {
+          qualifiers[index] = new byte[NOT_MATCHED_PREFIX.length + 
+                                            (entry.getKey().length() / 2)];
+          System.arraycopy(NOT_MATCHED_PREFIX, 0, qualifiers[index], 0, 
+              NOT_MATCHED_PREFIX.length);
+          final byte[] tsuid = UniqueId.stringToUid(entry.getKey());
+          System.arraycopy(tsuid, 0, qualifiers[index], 
+              NOT_MATCHED_PREFIX.length, tsuid.length);
+          
+          values[index] = entry.getValue().getBytes(CHARSET);
+          index++;
+        }
+        
+        final PutRequest put = new PutRequest(tsdb.uidTable(), row_key, 
+            NAME_FAMILY, qualifiers, values);
+        not_matched.clear();
+        tsdb.getClient().put(put).joinUninterruptibly();
+        return Deferred.fromResult(true);
+      } catch (HBaseException e) {
+        throw e;
+      } catch (Exception e) {
+        throw new RuntimeException("Should never be here", e);
+      }
+    }
+  }
+  
+  private class CreateNewCB implements Callback<Deferred<Integer>, List<Tree>> {
+    final TSDB tsdb;
+    
+    public CreateNewCB(final TSDB tsdb) {
+      this.tsdb = tsdb;
+    }
+
+    @Override
+    public Deferred<Integer> call(List<Tree> trees) throws Exception {
+      
+      class CreatedCB implements Callback<Deferred<Integer>, Boolean> {
+        @Override
+        public Deferred<Integer> call(Boolean create_result) throws Exception {
+          if (create_result) {
+            return Deferred.fromResult(tree_id);
+          } else {
+            return Deferred.fromResult(0);
+          }
+        }
+      }
+      
+      int max_id = 0;
+      if (trees != null) {
+        for (Tree tree : trees) {
+          System.out.println("Tree: " + tree.tree_id);
+          if (tree.tree_id > max_id) {
+            max_id = tree.tree_id;
+          }
+        }
+      }
+      
+      tree_id = max_id + 1;
+      if (tree_id > 65535) {
+        throw new IllegalStateException("Exhausted all Tree IDs");
+      }
+      try {
+        return storeTree(tsdb, true).addCallbackDeferring(new CreatedCB());
+      } catch (IllegalArgumentException e) {
+        throw e;
+      } catch (IllegalStateException e) {
+        throw e;
+      } catch (Exception e) {
+        throw new RuntimeException("Shouldn't be here", e);
+      }
+    }
+  }
+  
+  private static class FetchTreeCB implements Callback<Deferred<Tree>, 
+    ArrayList<KeyValue>> {
+
+    @Override
+    public Deferred<Tree> call(ArrayList<KeyValue> row) throws Exception {
+      if (row == null || row.isEmpty()) {
+        return Deferred.fromResult(null);
+      }
+      
+      final Tree tree = new Tree();
+      tree.setTreeId(bytesToId(row.get(0).key()));
+      for (KeyValue column : row) {
+        if (Bytes.memcmp(TREE_QUALIFIER, column.qualifier()) == 0) {
+          // it's *this* tree. We deserialize to a new object and copy
+          // since the columns could be in any order and we may get a rule 
+          // before the tree object
+          final Tree local_tree = JSON.parseToObject(column.value(), Tree.class);
+          tree.created = local_tree.created;
+          tree.description = local_tree.description;
+          tree.name = local_tree.name;
+          tree.notes = local_tree.notes;
+          tree.strict_match = tree.strict_match;
+        } else if (Bytes.memcmp(TreeRule.RULE_PREFIX(), column.qualifier(), 0, 
+            TreeRule.RULE_PREFIX().length) == 0) {
+          final TreeRule rule = TreeRule.parseFromStorage(column);
+          tree.addRule(rule);
+        }
+      }
+      return Deferred.fromResult(tree);
+    }
+    
+  }
+  
+  private static class AllTreeScanner implements Callback<Deferred<List<Tree>>, 
+    ArrayList<ArrayList<KeyValue>>> {
+
+    private final List<Tree> trees = new ArrayList<Tree>();
+    private final Scanner scanner;
+    
+    public AllTreeScanner(final TSDB tsdb) {
+      scanner = setupScanner(tsdb);
+    }
+    
+    public Deferred<List<Tree>> fetchTrees() {
+      return scanner.nextRows().addCallbackDeferring(this);
+    }
+    
+    @Override
+    public Deferred<List<Tree>> call(ArrayList<ArrayList<KeyValue>> rows)
+        throws Exception {
+      if (rows == null) {
+        return Deferred.fromResult(trees);
+      }
+      
+      for (ArrayList<KeyValue> row : rows) {
+        Tree tree = new Tree();
+        System.out.println("Columns: " + row.size() +  "  Key: " + tree.tree_id);
+        for (KeyValue column : row) {
+          if (column.qualifier().length >= TREE_QUALIFIER.length && 
+              Bytes.memcmp(TREE_QUALIFIER, column.qualifier()) == 0) {
+            // it's *this* tree. We deserialize to a new object and copy
+            // since the columns could be in any order and we may get a rule 
+            // before the tree object
+            final Tree local_tree = JSON.parseToObject(column.value(), 
+                Tree.class);
+            tree.created = local_tree.created;
+            tree.description = local_tree.description;
+            tree.name = local_tree.name;
+            tree.notes = local_tree.notes;
+            tree.strict_match = tree.strict_match;
+            tree.setTreeId(bytesToId(row.get(0).key()));
+          } else if (column.qualifier().length > TreeRule.RULE_PREFIX().length &&
+              Bytes.memcmp(TreeRule.RULE_PREFIX(), column.qualifier(), 
+              0, TreeRule.RULE_PREFIX().length) == 0) {
+            final TreeRule rule = TreeRule.parseFromStorage(column);
+            tree.addRule(rule);
+          } else {
+            System.out.println("No tree in row: " + UniqueId.uidToString(column.key()));
+          }
+        }
+        if (tree.tree_id > 0) {
+          trees.add(tree);
+        }
+      }
+      
+      // call ourself again to get the next set of rows from the scanner
+      return fetchTrees();
+    }
+    
+  }
+  
+  private static class DeleteTreeScanner implements Callback<Deferred<ArrayList<Object>>, 
+    ArrayList<ArrayList<KeyValue>>> {
+
+    private final TSDB tsdb;
+    private final Scanner scanner;
+    private final ArrayList<Deferred<Object>> delete_deferreds = 
+      new ArrayList<Deferred<Object>>();
+    
+    public DeleteTreeScanner(final TSDB tsdb, final Scanner scanner) {
+      this.tsdb = tsdb;
+      this.scanner = scanner;
+    }
+    
+    public Deferred<ArrayList<Object>> deleteTree() {
+      return scanner.nextRows().addCallbackDeferring(this);
+    }
+    
+    @Override
+    public Deferred<ArrayList<Object>> call(ArrayList<ArrayList<KeyValue>> rows)
+        throws Exception {
+      if (rows == null) {
+        return Deferred.group(delete_deferreds);
+      }
+      
+      for (final ArrayList<KeyValue> row : rows) {
+        // one delete request per row. We'll almost always delete the whole
+        // row, so preallocate some ram.
+        ArrayList<byte[]> qualifiers = new ArrayList<byte[]>(row.size());
+        for (KeyValue column : row) {
+          // tree
+          if (Bytes.equals(TREE_QUALIFIER, column.qualifier())) {
+            LOG.trace("Deleting tree defnition in row: " + 
+                Branch.idToString(column.key()));
+            qualifiers.add(column.qualifier());
+            
+          // branches
+          } else if (Bytes.equals(Branch.BRANCH_QUALIFIER(), column.qualifier())) {
+            LOG.trace("Deleting branch in row: " + 
+                Branch.idToString(column.key()));
+            qualifiers.add(column.qualifier());
+          
+          // leaves
+          } else if (column.qualifier().length > Leaf.LEAF_PREFIX().length &&
+              Bytes.memcmp(Leaf.LEAF_PREFIX(), column.qualifier(), 0, 
+                  Leaf.LEAF_PREFIX().length) == 0) {
+            LOG.trace("Deleting leaf in row: " + 
+                Branch.idToString(column.key()));
+            qualifiers.add(column.qualifier());
+            
+          // collisions
+          } else if (column.qualifier().length > COLLISION_PREFIX.length && 
+              Bytes.memcmp(COLLISION_PREFIX, column.qualifier(), 0, 
+                  COLLISION_PREFIX.length) == 0) {
+            LOG.trace("Deleting collision in row: " + 
+                Branch.idToString(column.key()));
+            qualifiers.add(column.qualifier());
+            
+          // not matched
+          } else if (column.qualifier().length > NOT_MATCHED_PREFIX.length && 
+              Bytes.memcmp(NOT_MATCHED_PREFIX, column.qualifier(), 0, 
+                  NOT_MATCHED_PREFIX.length) == 0) {
+            LOG.trace("Deleting not matched in row: " + 
+                Branch.idToString(column.key()));
+            qualifiers.add(column.qualifier());
+            
+          // tree rule
+          } else if (column.qualifier().length > TreeRule.RULE_PREFIX().length && 
+              Bytes.memcmp(TreeRule.RULE_PREFIX(), column.qualifier(), 0, 
+                  TreeRule.RULE_PREFIX().length) == 0) {
+            LOG.trace("Deleting tree rule in row: " + 
+                Branch.idToString(column.key()));
+            qualifiers.add(column.qualifier());
+          } 
+        }
+        
+        if (qualifiers.size() > 0) {
+          final DeleteRequest delete = new DeleteRequest(tsdb.uidTable(), 
+              row.get(0).key(), NAME_FAMILY, 
+              qualifiers.toArray(new byte[qualifiers.size()][])
+              );
+          delete_deferreds.add(tsdb.getClient().delete(delete));
+        }
+      }
+      
+      // call ourself again to get the next set of rows from the scanner
+      return deleteTree();
+    }    
   }
   
   // GETTERS AND SETTERS ----------------------------
