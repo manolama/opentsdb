@@ -153,11 +153,13 @@ final class UniqueIdRpc implements HttpRpc {
       final UniqueIdType type = UniqueId.stringToUniqueIdType(
           query.getRequiredQueryStringParam("type"));
       try {
-        final UIDMeta meta = UIDMeta.getUIDMeta(tsdb, type, uid);
+        final UIDMeta meta = UIDMeta.getUIDMeta(tsdb, type, uid).joinUninterruptibly();
         query.sendReply(query.serializer().formatUidMetaV1(meta));
       } catch (NoSuchUniqueId e) {
         throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
             "Could not find the requested UID", e);
+      } catch (Exception e) {
+        throw new RuntimeException(e);
       }
     // POST
     } else if (method == HttpMethod.POST) {
