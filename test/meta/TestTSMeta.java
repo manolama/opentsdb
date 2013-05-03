@@ -79,17 +79,17 @@ public final class TestTSMeta {
     tagv.setDisplayName("Web server 1");
     
     when(UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, "000001"))
-      .thenReturn(metric);
+      .thenReturn(Deferred.fromResult(metric));
     when(UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, "000002"))
       .thenThrow(new NoSuchUniqueName("metric", "sys.cpu.1"));
     
     when(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGK, new byte[] { 0, 0, 1 }))
-      .thenReturn(tagk);
+      .thenReturn(Deferred.fromResult(tagk));
     when(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGK, new byte[] { 0, 0, 2 }))
       .thenThrow(new NoSuchUniqueName("tagk", "dc"));
     
     when(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGV, new byte[] { 0, 0, 1 }))
-      .thenReturn(tagv);
+      .thenReturn(Deferred.fromResult(tagv));
     when(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGV, new byte[] { 0, 0, 2 }))
       .thenThrow(new NoSuchUniqueName("tagv", "web02"));
     

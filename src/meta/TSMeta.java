@@ -222,19 +222,23 @@ public final class TSMeta {
     }
     
     // before proceeding, make sure each UID object exists by loading the info
-    metric = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
-        tsuid.substring(0, TSDB.metrics_width() * 2));
-    final List<byte[]> parsed_tags = UniqueId.getTagPairsFromTSUID(tsuid, 
-        TSDB.metrics_width(), TSDB.tagk_width(), TSDB.tagv_width());
-    tags = new ArrayList<UIDMeta>(parsed_tags.size());
-    int idx = 0;
-    for (byte[] tag : parsed_tags) {
-      if (idx % 2 == 0) {
-        tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGK, tag));
-      } else {
-        tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGV, tag));
+    try {
+      metric = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
+          tsuid.substring(0, TSDB.metrics_width() * 2)).joinUninterruptibly();
+      final List<byte[]> parsed_tags = UniqueId.getTagPairsFromTSUID(tsuid, 
+          TSDB.metrics_width(), TSDB.tagk_width(), TSDB.tagv_width());
+      tags = new ArrayList<UIDMeta>(parsed_tags.size());
+      int idx = 0;
+      for (byte[] tag : parsed_tags) {
+        if (idx % 2 == 0) {
+          tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGK, tag).joinUninterruptibly());
+        } else {
+          tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGV, tag).joinUninterruptibly());
+        }
+        idx++;
       }
-      idx++;
+    } catch (Exception e1) {
+      throw new RuntimeException(e1);
     }
     
     final RowLock lock = tsdb.hbaseAcquireLock(tsdb.uidTable(), 
@@ -307,24 +311,28 @@ public final class TSMeta {
     }
 
     // load each of the UIDMetas parsed from the TSUID
-    meta.metric = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
-        tsuid.substring(0, TSDB.metrics_width() * 2));
+    try {
+      meta.metric = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
+          tsuid.substring(0, TSDB.metrics_width() * 2)).joinUninterruptibly();
 
-    final List<byte[]> tags = UniqueId.getTagPairsFromTSUID(tsuid, 
-        TSDB.metrics_width(), TSDB.tagk_width(), TSDB.tagv_width());
-    meta.tags = new ArrayList<UIDMeta>(tags.size());
-    int idx = 0;
-    for (byte[] tag : tags) {
-      if (idx % 2 == 0) {
-        meta.tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGK, tag));
-      } else {
-        meta.tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGV, tag));
+      final List<byte[]> tags = UniqueId.getTagPairsFromTSUID(tsuid, 
+          TSDB.metrics_width(), TSDB.tagk_width(), TSDB.tagv_width());
+      meta.tags = new ArrayList<UIDMeta>(tags.size());
+      int idx = 0;
+      for (byte[] tag : tags) {
+        if (idx % 2 == 0) {
+          meta.tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGK, tag).joinUninterruptibly());
+        } else {
+          meta.tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGV, tag).joinUninterruptibly());
+        }
+        idx++;
       }
-      idx++;
+      // HACK
+      meta.tsuid = tsuid;
+      return meta;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
-    // HACK
-    meta.tsuid = tsuid;
-    return meta;
   }
   
   public static TSMeta parseFromColumn(final TSDB tsdb, final KeyValue column) {
@@ -338,23 +346,27 @@ public final class TSMeta {
       meta.tsuid = UniqueId.uidToString(column.key());
     }
     
-    // load each of the UIDMetas parsed from the TSUID
-    meta.metric = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
-        meta.tsuid.substring(0, TSDB.metrics_width() * 2));
-
-    final List<byte[]> tags = UniqueId.getTagPairsFromTSUID(meta.tsuid, 
-        TSDB.metrics_width(), TSDB.tagk_width(), TSDB.tagv_width());
-    meta.tags = new ArrayList<UIDMeta>(tags.size());
-    int idx = 0;
-    for (byte[] tag : tags) {
-      if (idx % 2 == 0) {
-        meta.tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGK, tag));
-      } else {
-        meta.tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGV, tag));
+    try {
+      // load each of the UIDMetas parsed from the TSUID
+      meta.metric = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
+          meta.tsuid.substring(0, TSDB.metrics_width() * 2)).joinUninterruptibly();
+  
+      final List<byte[]> tags = UniqueId.getTagPairsFromTSUID(meta.tsuid, 
+          TSDB.metrics_width(), TSDB.tagk_width(), TSDB.tagv_width());
+      meta.tags = new ArrayList<UIDMeta>(tags.size());
+      int idx = 0;
+      for (byte[] tag : tags) {
+        if (idx % 2 == 0) {
+          meta.tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGK, tag).joinUninterruptibly());
+        } else {
+          meta.tags.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.TAGV, tag).joinUninterruptibly());
+        }
+        idx++;
       }
-      idx++;
+      return meta;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
-    return meta;
   }
   
   /**
