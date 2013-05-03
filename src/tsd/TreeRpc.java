@@ -23,6 +23,8 @@ import java.util.regex.PatternSyntaxException;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 
+import com.stumbleupon.async.Callback;
+
 import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.TSMeta;
 import net.opentsdb.tree.Branch;
@@ -55,31 +57,36 @@ final class TreeRpc implements HttpRpc {
     final String[] uri = query.explodeAPIPath();
     final String endpoint = uri.length > 1 ? uri[1] : ""; 
     
-    if (endpoint.isEmpty()) {
-      handleTree();
-    } else if (endpoint.toLowerCase().equals("branch")) {
-      handleBranch();
-    } else if (endpoint.toLowerCase().equals("rule")) {
-      handleRule();
-    } else if (endpoint.toLowerCase().equals("rules")) {
-      handleRules();
-    } else if (endpoint.toLowerCase().equals("test")) {
-      handleTest();
-    } else if (endpoint.toLowerCase().equals("collisions")) {
-      handleCollisionNotMatched(true);
-    } else if (endpoint.toLowerCase().equals("notmatched")) {
-      handleCollisionNotMatched(false);
-    } else {
-      throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
-          "This endpoint is not supported");
+    try {
+      if (endpoint.isEmpty()) {
+        handleTree();
+      } else if (endpoint.toLowerCase().equals("branch")) {
+        handleBranch();
+      } else if (endpoint.toLowerCase().equals("rule")) {
+        handleRule();
+      } else if (endpoint.toLowerCase().equals("rules")) {
+        handleRules();
+      } else if (endpoint.toLowerCase().equals("test")) {
+        handleTest();
+      } else if (endpoint.toLowerCase().equals("collisions")) {
+        handleCollisionNotMatched(true);
+      } else if (endpoint.toLowerCase().equals("notmatched")) {
+        handleCollisionNotMatched(false);
+      } else {
+        throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
+            "This endpoint is not supported");
+      }
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
 
   /**
    * Handles the plain /tree endpoint CRUD
+   * @throws Exception 
    * @throws BadRequestException if the request was invalid.
    */
-  private void handleTree() {
+  private void handleTree() throws Exception {
     final Tree tree;
     if (query.hasContent()) {
       tree = query.serializer().parseTreeV1();
@@ -91,9 +98,10 @@ final class TreeRpc implements HttpRpc {
     if (method == HttpMethod.GET) {
       if (tree.getTreeId() == 0) {
         query.sendReply(query.serializer().formatTreesV1(
-            Tree.fetchAllTrees(tsdb)));
+            Tree.fetchAllTrees(tsdb).joinUninterruptibly()));
       } else {
-        final Tree single_tree = Tree.fetchTree(tsdb, tree.getTreeId());
+        final Tree single_tree = Tree.fetchTree(tsdb, tree.getTreeId())
+          .joinUninterruptibly();
         if (single_tree == null) {
           throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
             "Unable to locate tree: " + tree.getTreeId());
@@ -109,13 +117,15 @@ final class TreeRpc implements HttpRpc {
       if (tree.getTreeId() > 0) {
         // TODO - see if the tree is loaded in memory
         try {
-          if (!Tree.treeExists(tsdb, tree.getTreeId())) {
+          if (Tree.fetchTree(tsdb, tree.getTreeId())
+              .joinUninterruptibly() == null) {
             throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
                 "Unable to locate tree: " + tree.getTreeId());
           } else {
             if (tree.storeTree(tsdb, (method == HttpMethod.PUT))
                 .joinUninterruptibly()) {
-              final Tree stored_tree = Tree.fetchTree(tsdb, tree.getTreeId());
+              final Tree stored_tree = Tree.fetchTree(tsdb, tree.getTreeId())
+                .joinUninterruptibly();
               query.sendReply(query.serializer().formatTreeV1(stored_tree));
             } else {
               throw new BadRequestException(
@@ -134,14 +144,15 @@ final class TreeRpc implements HttpRpc {
       } else {
         // create a new tree
         try {
-          final int tree_id = tree.createNewTree(tsdb); 
+          final int tree_id = tree.createNewTree(tsdb).joinUninterruptibly(); 
           if (tree_id > 0) {
-            final Tree stored_tree = Tree.fetchTree(tsdb, tree_id);
+            final Tree stored_tree = Tree.fetchTree(tsdb, tree_id)
+              .joinUninterruptibly();
             query.sendReply(query.serializer().formatTreeV1(stored_tree));
           } else {
             throw new BadRequestException(
                 HttpResponseStatus.INTERNAL_SERVER_ERROR, 
-                "Unable to save changes to tre tree: " + tree.getTreeId(),
+                "Unable to save changes to tree: " + tree.getTreeId(),
                 "Plesae try again at a later time");
           }
         } catch (IllegalStateException e) {
@@ -192,23 +203,41 @@ final class TreeRpc implements HttpRpc {
         branch_id = Branch.stringToId(branch_hex);
       }
       
-      final Branch branch = Branch.fetchBranch(tsdb, branch_id, true);      
+      class MyErrBack implements Callback<Object, Exception> {
+
+        @Override
+        public Object call(Exception e) throws Exception {
+          e.printStackTrace();
+          return null;
+        }
+        
+      }
+      
+      System.out.println("Fetching branch");
+      // TODO - fix the "load_uids" stuff. For some reason it hangs when trying
+      // to get the data from HBase
+      final Branch branch = Branch.fetchBranch(tsdb, branch_id, true).addErrback(new MyErrBack())
+        .join();
       if (branch == null) {
         throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
             "Unable to locate branch '" + Branch.idToString(branch_id) + 
             "' for tree '" + Tree.bytesToId(branch_id) + "'");
       }
+      System.out.println("Got branch: " + branch);
       query.sendReply(query.serializer().formatBranchV1(branch));
     } catch (NumberFormatException nfe) {
       throw new BadRequestException("Unable to parse 'tree' value");
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
   
   /**
    * Handles the CRUD calls for a single rule, enabling adding, editing or 
    * deleting the rule
+   * @throws Exception 
    */
-  private void handleRule() {
+  private void handleRule() throws Exception {
     final TreeRule rule;
     if (query.hasContent()) {
       rule = query.serializer().parseTreeRuleV1();
@@ -217,7 +246,8 @@ final class TreeRpc implements HttpRpc {
     }
     
     // no matter what, we'll need a tree to work with, so make sure it exists
-    final Tree tree = Tree.fetchTree(tsdb, rule.getTreeId());
+    final Tree tree = Tree.fetchTree(tsdb, rule.getTreeId())
+      .joinUninterruptibly();
     if (tree == null) {
       throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
           "Unable to locate tree: " + rule.getTreeId());
@@ -236,7 +266,8 @@ final class TreeRpc implements HttpRpc {
         if (rule.storeRule(tsdb, (method == HttpMethod.PUT))
             .joinUninterruptibly()) {
           final TreeRule stored_rule = TreeRule.fetchRule(tsdb, 
-              rule.getTreeId(), rule.getLevel(), rule.getOrder());
+              rule.getTreeId(), rule.getLevel(), rule.getOrder())
+              .joinUninterruptibly();
           query.sendReply(query.serializer().formatTreeRuleV1(stored_rule));
         } else {
           throw new RuntimeException("Unable to save rule " + rule + 
@@ -286,9 +317,13 @@ final class TreeRpc implements HttpRpc {
     }
     
     // make sure the tree exists
-    if (!Tree.treeExists(tsdb, tree_id)) {
-      throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
-          "Unable to locate tree: " + tree_id);
+    try {
+      if (Tree.fetchTree(tsdb, tree_id).joinUninterruptibly() == null) {
+        throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
+            "Unable to locate tree: " + tree_id);
+      }
+    } catch (Exception e1) {
+      throw new RuntimeException(e1);
     }
     
     if (method == HttpMethod.POST || method == HttpMethod.PUT) {
@@ -318,7 +353,7 @@ final class TreeRpc implements HttpRpc {
     }
   }
   
-  private void handleTest() {
+  private void handleTest() throws Exception {
     final Map<String, Object> map;
     if (query.hasContent()) {
       map = query.serializer().parseTreeTSUIDsListV1();
@@ -332,7 +367,7 @@ final class TreeRpc implements HttpRpc {
     }
     
     // make sure the tree exists
-    final Tree tree = Tree.fetchTree(tsdb, tree_id);
+    final Tree tree = Tree.fetchTree(tsdb, tree_id).joinUninterruptibly();
     if (tree == null) {
       throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
           "Unable to locate tree: " + tree_id);
@@ -404,9 +439,13 @@ final class TreeRpc implements HttpRpc {
     }
     
     // make sure the tree exists
-    if (!Tree.treeExists(tsdb, tree_id)) {
-      throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
-          "Unable to locate tree: " + tree_id);
+    try {
+      if (Tree.fetchTree(tsdb, tree_id).joinUninterruptibly() == null) {
+        throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
+            "Unable to locate tree: " + tree_id);
+      }
+    } catch (Exception e1) {
+      throw new RuntimeException(e1);
     }
     
     if (method == HttpMethod.GET || method == HttpMethod.POST || 
