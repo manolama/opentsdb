@@ -30,6 +30,8 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.stumbleupon.async.Callback;
+import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.uid.UniqueId;
@@ -164,7 +166,8 @@ public final class UIDMeta {
    * @throws IllegalStateException if the data hasn't changed. This is OK!
    * @throws JSONException if the object could not be serialized
    */
-  public void syncToStorage(final TSDB tsdb, final boolean overwrite) {
+  public Deferred<Boolean> syncToStorage(final TSDB tsdb, 
+      final boolean overwrite) {
     if (uid == null || uid.isEmpty()) {
       throw new IllegalArgumentException("Missing UID");
     }
@@ -172,47 +175,55 @@ public final class UIDMeta {
       throw new IllegalArgumentException("Missing type");
     }
 
-    // verify that the UID is still in the map before bothering with meta
-    final String name = tsdb.getUidName(type, UniqueId.stringToUid(uid));
-    
-    boolean has_changes = false;
-    for (Map.Entry<String, Boolean> entry : changed.entrySet()) {
-      if (entry.getValue()) {
-        has_changes = true;
-        break;
-      }
-    }
-    if (!has_changes) {
-      LOG.debug(this + " does not have changes, skipping sync to storage");
-      throw new IllegalStateException("No changes detected in UID meta data");
-    }
-    
-    final RowLock lock = tsdb.hbaseAcquireLock(tsdb.uidTable(), 
-        UniqueId.stringToUid(uid), (short)3);
     try {
-      final UIDMeta stored_meta = 
-        getFromStorage(tsdb, type, UniqueId.stringToUid(uid), lock);
-      if (stored_meta != null) {
-        syncMeta(stored_meta, overwrite);
+      // verify that the UID is still in the map before bothering with meta
+      final String name = tsdb.getUidName(type, UniqueId.stringToUid(uid));
+      
+      boolean has_changes = false;
+      for (Map.Entry<String, Boolean> entry : changed.entrySet()) {
+        if (entry.getValue()) {
+          has_changes = true;
+          break;
+        }
+      }
+      if (!has_changes) {
+        LOG.debug(this + " does not have changes, skipping sync to storage");
+        throw new IllegalStateException("No changes detected in UID meta data");
       }
       
-      // verify the name is set locally just to be safe
-      if (name == null || name.isEmpty()) {
-        this.name = name;
+      class StoreUIDMeta implements Callback<Deferred<Boolean>, UIDMeta> {
+  
+        private final UIDMeta local_meta;
+        
+        public StoreUIDMeta(final UIDMeta meta) {
+          local_meta = meta;
+        }
+        
+        @Override
+        public Deferred<Boolean> call(final UIDMeta stored_meta) throws Exception {
+          final byte[] original_meta = stored_meta == null ? new byte[0] :
+            JSON.serializeToBytes(stored_meta);
+          if (stored_meta != null) {
+            local_meta.syncMeta(stored_meta, overwrite);
+          }
+       
+          // verify the name is set locally just to be safe
+          if (name == null || name.isEmpty()) {
+            local_meta.name = name;
+          }
+          
+          final PutRequest put = new PutRequest(tsdb.uidTable(), 
+              UniqueId.stringToUid(uid), FAMILY, 
+              (type.toString().toLowerCase() + "_meta").getBytes(CHARSET), 
+              JSON.serializeToBytes(local_meta));
+          return tsdb.getClient().compareAndSet(put, original_meta);
+        }
+        
       }
-      final PutRequest put = new PutRequest(tsdb.uidTable(), 
-          UniqueId.stringToUid(uid), FAMILY, 
-          (type.toString().toLowerCase() + "_meta").getBytes(CHARSET), 
-          JSON.serializeToBytes(this), lock);
-      tsdb.hbasePutWithRetry(put, (short)3, (short)800);
-      
-    } finally {
-      // release the lock!
-      try {
-        tsdb.getClient().unlockRow(lock);
-      } catch (HBaseException e) {
-        LOG.error("Error while releasing the lock on row: " + uid, e);
-      }
+  
+      return getUIDMeta(tsdb, type, uid).addCallbackDeferring(new StoreUIDMeta(this));
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
   
@@ -225,7 +236,7 @@ public final class UIDMeta {
    * @throws IllegalArgumentException if data was missing
    * @throws JSONException if the object could not be serialized
    */
-  public void storeNew(final TSDB tsdb) {
+  public Deferred<Object> storeNew(final TSDB tsdb) {
     if (uid == null || uid.isEmpty()) {
       throw new IllegalArgumentException("Missing UID");
     }
@@ -240,7 +251,7 @@ public final class UIDMeta {
         UniqueId.stringToUid(uid), FAMILY, 
         (type.toString().toLowerCase() + "_meta").getBytes(CHARSET), 
         JSON.serializeToBytes(this));
-    tsdb.getClient().put(put);
+    return tsdb.getClient().put(put);
   }
   
   /**
@@ -249,7 +260,7 @@ public final class UIDMeta {
    * @throws HBaseException if there was an issue
    * @throws IllegalArgumentException if data was missing (uid and type)
    */
-  public void delete(final TSDB tsdb) {
+  public Deferred<Object> delete(final TSDB tsdb) {
     if (uid == null || uid.isEmpty()) {
       throw new IllegalArgumentException("Missing UID");
     }
@@ -261,7 +272,7 @@ public final class UIDMeta {
         UniqueId.stringToUid(uid), FAMILY, 
         (type.toString().toLowerCase() + "_meta").getBytes(CHARSET));
     try {
-      tsdb.getClient().delete(delete);
+      return tsdb.getClient().delete(delete);
     } catch (Exception e) {
       throw new RuntimeException("Unable to delete UID", e);
     }
@@ -283,7 +294,7 @@ public final class UIDMeta {
    * @return A UIDMeta from storage or a default
    * @throws HBaseException if there was an issue fetching
    */
-  public static UIDMeta getUIDMeta(final TSDB tsdb, final UniqueIdType type, 
+  public static Deferred<UIDMeta> getUIDMeta(final TSDB tsdb, final UniqueIdType type, 
       final String uid) {
     return getUIDMeta(tsdb, type, UniqueId.stringToUid(uid));
   }
@@ -304,73 +315,52 @@ public final class UIDMeta {
    * @return A UIDMeta from storage or a default
    * @throws HBaseException if there was an issue fetching
    */
-  public static UIDMeta getUIDMeta(final TSDB tsdb, final UniqueIdType type, 
+  public static Deferred<UIDMeta> getUIDMeta(final TSDB tsdb, final UniqueIdType type, 
       final byte[] uid) {
-    // verify that the UID is still in the map before bothering with meta
-    final String name = tsdb.getUidName(type, uid);
-    
-    UIDMeta meta;
     try {
-      meta = getFromStorage(tsdb, type, uid, null);
-      if (meta != null) {
-        meta.initializeChangedMap();
-        return meta;
-      }
-    } catch (IllegalArgumentException e) {
-      LOG.error("Unable to parse meta for '" + type + ":" + uid + 
-          "', returning default", e);
-    } catch (JSONException e) {
-      LOG.error("Unable to parse meta for '" + type + ":" + uid + 
-          "', returning default", e);
-    }
-    
-    meta = new UIDMeta();
-    meta.uid = UniqueId.uidToString(uid);
-    meta.type = type;
-    meta.name = name;
-    return meta;
-  }
-    
-  /**
-   * Attempts to fetch metadata from storage for the given type and UID
-   * @param tsdb The TSDB to use for storage access
-   * @param type The UIDMeta type, either "metric", "tagk" or "tagv"
-   * @param uid The UID of the meta to fetch
-   * @param lock An optional lock when performing an atomic update, pass null
-   * if not needed.
-   * @return A UIDMeta object if found, null if the data was not found
-   * @throws HBaseException if there was an issue fetching
-   * @throws IllegalArgumentException if parsing failed
-   * @throws JSONException if the data was corrupted
-   */
-  private static UIDMeta getFromStorage(final TSDB tsdb, 
-      final UniqueIdType type, final byte[] uid, final RowLock lock) {
-    
-    final GetRequest get = new GetRequest(tsdb.uidTable(), uid);
-    get.family(FAMILY);
-    get.qualifier((type.toString().toLowerCase() + "_meta").getBytes(CHARSET));
-    if (lock != null) {
-      get.withRowLock(lock);
-    }
-    
-    try {
-      final ArrayList<KeyValue> row = 
-        tsdb.getClient().get(get).joinUninterruptibly();
-      if (row == null || row.isEmpty()) {
-        return null;
-      }
-      return JSON.parseToObject(row.get(0).value(), UIDMeta.class);
-    } catch (HBaseException e) {
-      throw e;
-    } catch (IllegalArgumentException e) {
-      throw e;
-    } catch (JSONException e) {
-        throw e;
-    } catch (Exception e) {
-      throw new RuntimeException("Should never be here", e);
-    }
-  }
+      // verify that the UID is still in the map before bothering with meta
+      final String name = tsdb.getUidName(type, uid);
+      
+      class FetchMetaCB implements Callback<Deferred<UIDMeta>, 
+          ArrayList<KeyValue>> {
   
+        @Override
+        public Deferred<UIDMeta> call(ArrayList<KeyValue> row) throws Exception {
+          try {
+            if (row == null || row.isEmpty()) {
+              // return the default
+              final UIDMeta meta = new UIDMeta();
+              meta.uid = UniqueId.uidToString(uid);
+              meta.type = type;
+              meta.name = name;
+              return Deferred.fromResult(meta);
+            }
+            final UIDMeta meta = JSON.parseToObject(row.get(0).value(), 
+                UIDMeta.class);
+            meta.initializeChangedMap();
+            return Deferred.fromResult(meta);
+          } catch (HBaseException e) {
+            throw e;
+          } catch (IllegalArgumentException e) {
+            throw e;
+          } catch (JSONException e) {
+            throw e;
+          } catch (Exception e) {
+            throw new RuntimeException("Should never be here", e);
+          }
+        }
+        
+      }
+      
+      final GetRequest get = new GetRequest(tsdb.uidTable(), uid);
+      get.family(FAMILY);
+      get.qualifier((type.toString().toLowerCase() + "_meta").getBytes(CHARSET));
+      return tsdb.getClient().get(get).addCallbackDeferring(new FetchMetaCB());
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+    
   /**
    * Syncs the local object with the stored object for atomic writes, 
    * overwriting the stored data if the user issued a PUT request

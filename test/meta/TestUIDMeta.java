@@ -146,7 +146,7 @@ public final class TestUIDMeta {
   public void getUIDMetaDefault() throws Exception {
     when(client.get((GetRequest) any())).thenReturn(
         Deferred.fromResult((ArrayList<KeyValue>)null));
-    meta = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, "000001");
+    meta = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, "000001").joinUninterruptibly();
     assertEquals(UniqueIdType.METRIC, meta.getType());
     assertEquals("sys.cpu.0", meta.getName());
     assertEquals("000001", meta.getUID());
@@ -154,7 +154,7 @@ public final class TestUIDMeta {
   
   @Test
   public void getUIDMetaExists() throws Exception {
-    meta = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, "000001");
+    meta = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, "000001").joinUninterruptibly();
     assertEquals(UniqueIdType.METRIC, meta.getType());
     assertEquals("sys.cpu.0", meta.getName());
     assertEquals("000001", meta.getUID());
@@ -168,7 +168,7 @@ public final class TestUIDMeta {
   
   @Test
   public void delete() throws Exception {
-    meta = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, "000001");
+    meta = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, "000001").joinUninterruptibly();
     meta.delete(tsdb);
   }
   
@@ -210,7 +210,7 @@ public final class TestUIDMeta {
   
   @Test (expected = IllegalStateException.class)
   public void syncToStorageNoChanges() throws Exception {
-    meta = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, "000001");
+    meta = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, "000001").joinUninterruptibly();
     meta.syncToStorage(tsdb, false);
   }
   
