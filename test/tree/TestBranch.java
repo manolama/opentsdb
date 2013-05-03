@@ -23,14 +23,19 @@ import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.TreeMap;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.storage.MockBase;
+import net.opentsdb.uid.UniqueId;
 import net.opentsdb.utils.JSON;
 
+import org.hbase.async.DeleteRequest;
+import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseClient;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
@@ -49,20 +54,34 @@ import com.stumbleupon.async.Deferred;
 @PowerMockIgnore({"javax.management.*", "javax.xml.*",
                   "ch.qos.*", "org.slf4j.*",
                   "com.sum.*", "org.xml.*"})
-@PrepareForTest({TSDB.class, HBaseClient.class, Scanner.class, PutRequest.class, 
-  KeyValue.class})
+@PrepareForTest({ TSDB.class, HBaseClient.class, GetRequest.class,
+  PutRequest.class, KeyValue.class, Scanner.class, DeleteRequest.class })
 public final class TestBranch {
-  private TSDB tsdb = mock(TSDB.class);
-  private HBaseClient client = mock(HBaseClient.class);
+  private MockBase storage;
   private Tree tree = TestTree.buildTestTree();
-  private HashMap<String, HashMap<String, byte[]>> storage = 
-    new HashMap<String, HashMap<String, byte[]>>();
-  private int scanner_nexts = 0;
-  final Scanner scanner = mock(Scanner.class);
+  final static private Method toStorageJson;
+  static {
+    try {
+      toStorageJson = Branch.class.getDeclaredMethod("toStorageJson");
+      toStorageJson.setAccessible(true);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed in static initializer", e);
+    }
+  }
+  
+  final static private Method LeaftoStorageJson;
+  static {
+    try {
+      LeaftoStorageJson = Leaf.class.getDeclaredMethod("toStorageJson");
+      LeaftoStorageJson.setAccessible(true);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed in static initializer", e);
+    }
+  }
   
   @Test
   public void testHashCode() {
-    final Branch branch = buildTestBranch(tree);;
+    final Branch branch = buildTestBranch(tree);
     assertEquals(2521314, branch.hashCode());
   }
   
@@ -239,9 +258,8 @@ public final class TestBranch {
   @Test
   public void fetchBranch() throws Exception {
     setupStorage();
-    final Branch branch = Branch.fetchBranch(tsdb, 
-        Branch.stringToId("00010001BECD000181A8"), false);
-    System.out.println(JSON.serializeToString(branch));
+    final Branch branch = Branch.fetchBranch(storage.getTSDB(), 
+        Branch.stringToId("00010001BECD000181A8"), false).joinUninterruptibly();
     assertNotNull(branch);
     assertEquals(1, branch.getTreeId());
     assertEquals("cpu", branch.getDisplayName());
@@ -253,15 +271,8 @@ public final class TestBranch {
   @Test
   public void fetchBranchNotFound() throws Exception {
     setupStorage();
-    when(scanner.nextRows()).thenAnswer(
-        new Answer<Deferred<ArrayList<ArrayList<KeyValue>>>> () {
-          @Override
-          public Deferred<ArrayList<ArrayList<KeyValue>>> answer(
-              InvocationOnMock arg0) throws Throwable {
-            return Deferred.fromResult(null);
-        }});
-    final Branch branch = Branch.fetchBranch(tsdb, 
-        Branch.stringToId("00010001BECD000181A8"), false);
+    final Branch branch = Branch.fetchBranch(storage.getTSDB(), 
+        Branch.stringToId("00010001BECD000181A0"), false).joinUninterruptibly();
     assertNull(branch);
   }
 
@@ -269,10 +280,11 @@ public final class TestBranch {
   public void storeBranch() throws Exception {
     setupStorage();
     final Branch branch = buildTestBranch(tree);
-    branch.storeBranch(tsdb, tree, true);
-    assertEquals(1, storage.size());
-    assertEquals(3, storage.get("0001").size());
-    final Branch parsed = JSON.parseToObject(storage.get("0001").get("branch"), 
+    branch.storeBranch(storage.getTSDB(), tree, true);
+    assertEquals(3, storage.numRows());
+    assertEquals(3, storage.numColumns(new byte[] { 0, 1 }));
+    final Branch parsed = JSON.parseToObject(storage.getColumn(
+        new byte[] { 0, 1 }, "branch".getBytes(MockBase.ASCII())), 
         Branch.class);
     parsed.setTreeId(1);
     assertEquals("ROOT", parsed.getDisplayName());
@@ -282,7 +294,7 @@ public final class TestBranch {
   public void storeBranchMissingTreeID() throws Exception {
     setupStorage();
     final Branch branch = new Branch();
-    branch.storeBranch(tsdb, tree, false);
+    branch.storeBranch(storage.getTSDB(), tree, false);
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -290,7 +302,7 @@ public final class TestBranch {
     setupStorage();
     final Branch branch = buildTestBranch(tree);;
     branch.setTreeId(0);
-    branch.storeBranch(tsdb, tree, false);
+    branch.storeBranch(storage.getTSDB(), tree, false);
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -298,20 +310,24 @@ public final class TestBranch {
     setupStorage();
     final Branch branch = buildTestBranch(tree);;
     branch.setTreeId(65536);
-    branch.storeBranch(tsdb, tree, false);
+    branch.storeBranch(storage.getTSDB(), tree, false);
   }
 
-  // TODO - finish me
   @Test
   public void storeBranchCollision() throws Exception {
     setupStorage();
     final Branch branch = buildTestBranch(tree);
-    branch.storeBranch(tsdb, tree, true);
-    branch.storeBranch(tsdb, tree, true);
-    assertEquals(1, storage.size());
-    assertEquals(3, storage.get("0001").size());
+    Leaf leaf = new Leaf("Alarms", "ABCD");
+    byte[] qualifier = compileLeafQualifier(leaf.getTsuid());
+    storage.addColumn(branch.compileBranchId(), 
+        qualifier, (byte[])LeaftoStorageJson.invoke(leaf));
+    
+    branch.storeBranch(storage.getTSDB(), tree, true);
+    assertEquals(3, storage.numRows());
+    assertEquals(3, storage.numColumns(new byte[] { 0, 1 }));
     assertEquals(1, tree.getCollisions().size());
-    final Branch parsed = JSON.parseToObject(storage.get("0001").get("branch"), 
+    final Branch parsed = JSON.parseToObject(storage.getColumn(
+        new byte[] { 0, 1 }, "branch".getBytes(MockBase.ASCII())), 
         Branch.class);
     parsed.setTreeId(1);
     assertEquals("ROOT", parsed.getDisplayName());
@@ -338,14 +354,10 @@ public final class TestBranch {
     child.setDisplayName("Network");
     root.addChild(child);
 
-    Leaf leaf = new Leaf();
-    leaf.setDisplayName("Alarms");
-    leaf.setTsuid("ABCD");
+    Leaf leaf = new Leaf("Alarms", "ABCD");
     root.addLeaf(leaf, tree);
     
-    leaf = new Leaf();
-    leaf.setDisplayName("Employees in Office");
-    leaf.setTsuid("EF00");
+    leaf = new Leaf("Employees in Office", "EF00");
     root.addLeaf(leaf, tree);
 
     return root;
@@ -354,105 +366,53 @@ public final class TestBranch {
   /**
    * Mocks classes for testing the storage calls
    */
-  private void setupStorage() {
-    when(tsdb.getClient()).thenReturn(client);
-    when(tsdb.uidTable()).thenReturn("tsdb-uid".getBytes());
-
-    Charset ascii = Charset.forName("ISO-8859-1");
-    Charset utf = Charset.forName("UTF-8");
-    final byte[] LEAF_PREFIX = "leaf:".getBytes(ascii);
+  private void setupStorage() throws Exception {
+    storage = new MockBase(true, true, true, true);
     
-    // main branch
-    byte[] main_row = Branch.stringToId("00010001BECD000181A8");
-    ArrayList<KeyValue> main = new ArrayList<KeyValue>();
-    KeyValue branch = mock(KeyValue.class);
-    main.add(branch);
-    when(branch.qualifier()).thenReturn("branch".getBytes(ascii));
-    when(branch.value()).thenReturn(
-        ("{\"path\":{\"0\":\"ROOT\",\"1\":\"sys\",\"2\":\"cpu\"},\"displayName" + 
-        "\":\"cpu\"}").getBytes(utf));
-    when(branch.key()).thenReturn(main_row);
+    Branch branch = new Branch(1);
+    TreeMap<Integer, String> path = new TreeMap<Integer, String>();
+    path.put(0, "ROOT");
+    path.put(1, "sys");
+    path.put(2, "cpu");
+    branch.prependParentPath(path);
+    branch.setDisplayName("cpu");
+    System.out.println(MockBase.bytesToString(branch.compileBranchId()));
+    storage.addColumn(branch.compileBranchId(), 
+        "branch".getBytes(MockBase.ASCII()), 
+        (byte[])toStorageJson.invoke(branch));
     
-    KeyValue leaf1 = mock(KeyValue.class);
-    main.add(leaf1);
-    final byte[] leaf1q = new byte[5 + 9];
-    System.arraycopy(LEAF_PREFIX, 0, leaf1q, 0, LEAF_PREFIX.length);
-    System.arraycopy(new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 1}, 0, leaf1q, 5, 9);
-    when(leaf1.qualifier()).thenReturn(leaf1q);
-    when(leaf1.value()).thenReturn("{\"displayName\":\"user\"}".getBytes(utf));
-    when(leaf1.key()).thenReturn(main_row);
+    Leaf leaf = new Leaf("user", "000001000001000001");
+    byte[] qualifier = compileLeafQualifier(leaf.getTsuid());
+    storage.addColumn(branch.compileBranchId(), 
+        qualifier, (byte[])LeaftoStorageJson.invoke(leaf));
     
-    KeyValue leaf2 = mock(KeyValue.class);
-    main.add(leaf2);
-    final byte[] leaf2q = new byte[5 + 9];
-    System.arraycopy(LEAF_PREFIX, 0, leaf2q, 0, LEAF_PREFIX.length);
-    System.arraycopy(new byte[] { 0, 0, 2, 0, 0, 2, 0, 0, 2}, 0, leaf2q, 5, 9);
-    when(leaf2.qualifier()).thenReturn(leaf2q);
-    when(leaf2.value()).thenReturn("{\"displayName\":\"nice\"}".getBytes(utf));
-    when(leaf2.key()).thenReturn(main_row);
+    leaf = new Leaf("nice", "000002000002000002");
+    qualifier = compileLeafQualifier(leaf.getTsuid());
+    storage.addColumn(branch.compileBranchId(), 
+        qualifier, (byte[])LeaftoStorageJson.invoke(leaf));
     
     // child branch
-    byte[] child_row = Branch.stringToId("00010001BECD000181A8000190AC");
-    ArrayList<KeyValue> child = new ArrayList<KeyValue>();
+    branch = new Branch(1);
+    path.put(3, "mboard");
+    branch.prependParentPath(path);
+    branch.setDisplayName("mboard");
+    storage.addColumn(branch.compileBranchId(), 
+        "branch".getBytes(MockBase.ASCII()), 
+        (byte[])toStorageJson.invoke(branch));
     
-    KeyValue branch2 = mock(KeyValue.class);
-    child.add(branch2);
-    when(branch2.qualifier()).thenReturn("branch".getBytes(ascii));
-    when(branch2.value()).thenReturn(
-        ("{\"path\":{\"0\":\"ROOT\",\"1\":\"sys\",\"2\":\"cpu\",\"3\":\"gpu\"}" + 
-        ",\"displayName\":\"gpu\"}").getBytes(utf));
-    when(branch2.key()).thenReturn(child_row);
-    
-    KeyValue leaf3 = mock(KeyValue.class);
-    child.add(leaf3);
-    final byte[] leaf3q = new byte[5 + 9];
-    System.arraycopy(LEAF_PREFIX, 0, leaf3q, 0, LEAF_PREFIX.length);
-    System.arraycopy(new byte[] { 0, 0, 3, 0, 0, 3, 0, 0, 3}, 0, leaf3q, 5, 9);
-    when(leaf3.qualifier()).thenReturn(leaf3q);
-    when(leaf3.value()).thenReturn("{\"displayName\":\"nvidia\"}".getBytes(utf));
-    when(leaf3.key()).thenReturn(child_row);
-    
-    final ArrayList<ArrayList<KeyValue>> rows = 
-      new ArrayList<ArrayList<KeyValue>>();
-    rows.add(main);
-    rows.add(child);
-    
-    when(client.newScanner((byte[]) any())).thenReturn(scanner);
-   
-    when(scanner.nextRows()).thenAnswer(
-        new Answer<Deferred<ArrayList<ArrayList<KeyValue>>>>() {
-
-          @Override
-          public Deferred<ArrayList<ArrayList<KeyValue>>> answer(
-              final InvocationOnMock invocation) throws Throwable {
-            if (scanner_nexts > 0) {
-              return Deferred.fromResult(null);
-            }
-            
-            scanner_nexts++;
-            return Deferred.fromResult(rows);
-          }
-          
-        });
-    
-    when (client.compareAndSet((PutRequest)any(), (byte[])any()))
-      .thenAnswer(new Answer<Deferred<Boolean>>() {
-
-        @Override
-        public Deferred<Boolean> answer(final InvocationOnMock invocation) 
-          throws Throwable {
-          final Object[] args = invocation.getArguments();
-          final PutRequest put = (PutRequest)args[0];
-          final String key = Branch.idToString(put.key());
-          HashMap<String, byte[]> column = storage.get(key);
-          if (column == null) {
-            column = new HashMap<String, byte[]>();
-            storage.put(key, column);
-          }
-          column.put(new String(put.qualifier()), put.value());
-          return Deferred.fromResult(true);
-        }
-        
-      });
+    leaf = new Leaf("Asus", "000003000003000003");
+    qualifier = compileLeafQualifier(leaf.getTsuid());
+    storage.addColumn(branch.compileBranchId(), 
+        qualifier, (byte[])LeaftoStorageJson.invoke(leaf));
+  }
+  
+  private byte[] compileLeafQualifier(final String tsuid) {
+    final byte[] qualifier = new byte[Leaf.LEAF_PREFIX().length + 
+                                (tsuid.length() / 2)];
+    System.arraycopy(Leaf.LEAF_PREFIX(), 0, qualifier, 0, 
+        Leaf.LEAF_PREFIX().length);
+    System.arraycopy(UniqueId.stringToUid(tsuid), 0, 
+        qualifier, Leaf.LEAF_PREFIX().length, (tsuid.length() / 2));
+    return qualifier;
   }
 }

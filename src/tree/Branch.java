@@ -39,6 +39,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.stumbleupon.async.Callback;
+import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.uid.NoSuchUniqueId;
@@ -220,11 +222,14 @@ public class Branch implements Comparable<Branch> {
    * @throws IllegalArgumentException if parsing failed
    * @throws JSONException if the object could not be serialized
    */
-  public void storeBranch(final TSDB tsdb, final Tree tree, 
+  public Deferred<ArrayList<Object>> storeBranch(final TSDB tsdb, final Tree tree, 
       final boolean store_leaves) {  
     if (tree_id < 1 || tree_id > 65535) {
       throw new IllegalArgumentException("Missing or invalid tree ID");
     }
+
+    final ArrayList<Deferred<Boolean>> storage_results = 
+      new ArrayList<Deferred<Boolean>>(leaves != null ? leaves.size() + 1 : 1);
     
     // compile the row key by making sure the display_name is in the path set
     // row ID = <treeID>[<parent.display_name.hashCode()>...]
@@ -237,47 +242,80 @@ public class Branch implements Comparable<Branch> {
     final PutRequest put = new PutRequest(tsdb.uidTable(), row, NAME_FAMILY, 
         BRANCH_QUALIFIER, storage_data);
     put.setBufferable(true);
-    tsdb.getClient().compareAndSet(put, new byte[0]);
+    storage_results.add(tsdb.getClient().compareAndSet(put, new byte[0]));
+    
+    class StoreLeaves implements Callback<Deferred<ArrayList<Object>>, Branch> {
+
+      @Override
+      public Deferred<ArrayList<Object>> call(final Branch branch) throws Exception {
+        System.out.println("In leaf callback");
+        if (branch == null) {
+          LOG.error("Couldn't find branch " + getBranchId() + " in storage");
+          return Deferred.group(storage_results);
+        }
+        System.out.println("Gonna dump leaves: " + leaves.size());
+        for (Leaf leaf : leaves.values()) {
+          System.out.println("Processing Leaf: " + leaf);
+          if (branch.leaves != null && !branch.leaves.isEmpty()) {
+            final Leaf existing_leaf = branch.leaves.get(leaf.hashCode());
+            System.out.println("Existing Leaf: " + existing_leaf);
+            if (existing_leaf != null) {
+              tree.addCollision(leaf.getTsuid(), existing_leaf.getTsuid());
+              LOG.warn("Leaf collision with [" + leaf.getTsuid() + 
+                  "] on existing leaf [" + existing_leaf.getTsuid() + 
+                  "] named [" + leaf.getDisplayName() + "]");
+              System.out.println("Skipping existing: " + leaf);
+              continue;
+            }
+          }
+          System.out.println("Writing leaf to storage: " + leaf);
+          storage_results.add(leaf.storeLeaf(tsdb, row));
+        }
+        
+        return Deferred.group(storage_results);
+      }
+      
+    }
     
     // store leaves
     if (store_leaves && leaves != null && !leaves.isEmpty()) {
+      System.out.println("Fetching branch to then write the leaves");
       // to handle collisions on namespaces we need to fetch the branch w leaves
-      final Branch branch = fetchBranch(tsdb, row, false);
-      if (branch != null && branch.leaves != null && !branch.leaves.isEmpty()) {
-        for (Leaf leaf : leaves.values()) {
-          final Leaf existing_leaf = branch.leaves.get(leaf.hashCode());
-          if (existing_leaf != null) {            
-            tree.addCollision(leaf.getTsuid(), existing_leaf.getTsuid());
-            LOG.warn("Leaf collision with [" + leaf.getTsuid() + 
-                "] on existing leaf [" + existing_leaf.getTsuid() + 
-                "] named [" + leaf.getDisplayName() + "]");
-            continue;
-          }
-          leaf.storeLeaf(tsdb, row);
-        }
-      } else {     
-        for (Leaf leaf : leaves.values()) {
-          leaf.storeLeaf(tsdb, row);
-        }
-      }
+      return fetchBranch(tsdb, row, false).addCallbackDeferring(new StoreLeaves());
     }
+    
+    return Deferred.group(storage_results);
   }
   
-  public static Branch fetchBranch(final TSDB tsdb, final byte[] branch_id, 
-      final boolean load_tsuids) {   
+  public static Deferred<Branch> fetchBranch(final TSDB tsdb, 
+      final byte[] branch_id, final boolean load_tsuids) {   
     final byte[] id = branch_id;
     final Scanner scanner = setupScanner(tsdb, id);
     final Branch branch = new Branch();
-    try {
-      ArrayList<ArrayList<KeyValue>> rows;
-      while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
-        System.out.println("Rows: " + rows.size());
+    
+    class FetchBranchCB implements Callback<Deferred<Branch>, 
+      ArrayList<ArrayList<KeyValue>>> {
+  
+      public Deferred<Branch> fetchBranch() {
+        return scanner.nextRows().addCallbackDeferring(this);
+      }
+      
+      @Override
+      public Deferred<Branch> call(ArrayList<ArrayList<KeyValue>> rows)
+          throws Exception {
+        if (rows == null) {
+          if (branch.tree_id < 1 || branch.path == null) {
+            return Deferred.fromResult(null);
+          }
+          return Deferred.fromResult(branch);
+        }
+        
         for (final ArrayList<KeyValue> row : rows) {
           System.out.println("Columns: " + row.size());
           for (KeyValue column : row) {
             System.out.println("Qual: " + new String(column.qualifier()));
             if (Bytes.equals(BRANCH_QUALIFIER, column.qualifier())) {
-              if (Bytes.equals(id, column.key())) {
+              if (Bytes.equals(branch_id, column.key())) {
                 // it's *this* branch. We deserialize to a new object and copy
                 // since the columns could be in any order and we may get a 
                 // leaf before the branch
@@ -304,6 +342,7 @@ public class Branch implements Comparable<Branch> {
               if (Bytes.equals(id, column.key())) {
                 // process a leaf and skip if the UIDs for the TSUID can't be 
                 // found
+                System.out.println("Found child leaf");
                 try {
                   if (branch.leaves == null) {
                     branch.leaves = new HashMap<Integer, Leaf>();
@@ -313,26 +352,22 @@ public class Branch implements Comparable<Branch> {
                   branch.leaves.put(leaf.hashCode(), leaf); 
                   System.out.println("Adding leaf: " + leaf);
                 } catch (NoSuchUniqueId nsu) {
+                  System.out.println("NSU!!!!!!!");
                   LOG.debug("Invalid UID for in branch: " + branch_id, nsu);
                 }
+              } else {
+                System.out.println("Found someone else's leaf leaf");
               }
             } else {
               System.out.println("Unrecognized column: " + new String(column.qualifier(), CHARSET));
             }
           }
         }
-      }
-      
-      // if nothing was found, we just return null
-      if (branch.tree_id < 0 || branch.path == null) {
-        return null;
-      }
-      return branch;
-    } catch (RuntimeException e) {
-      throw e;
-    } catch (Exception e) {
-      throw new RuntimeException("Should never be here", e);
+        return fetchBranch();
+      }      
     }
+    
+    return new FetchBranchCB().fetchBranch();
   }
   
   /**
@@ -492,7 +527,11 @@ public class Branch implements Comparable<Branch> {
 
   /** @return The ID of this branch */
   public String getBranchId() {
-    return UniqueId.uidToString(compileBranchId());
+    final byte[] id = compileBranchId();
+    if (id == null) {
+      return null;
+    }
+    return UniqueId.uidToString(id);
   }
   
   /** @return The path of the tree */
