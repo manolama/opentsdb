@@ -24,6 +24,7 @@ import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
 
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.uid.UniqueId;
@@ -108,7 +109,7 @@ public class Leaf implements Comparable<Leaf> {
     return "name: " + display_name + " tsuid: " + tsuid;
   }
   
-  public void storeLeaf(final TSDB tsdb, final byte[] branch_id) {
+  public Deferred<Boolean> storeLeaf(final TSDB tsdb, final byte[] branch_id) {
     final byte[] qualifier = new byte[LEAF_PREFIX.length + (tsuid.length() / 2)];
     System.arraycopy(LEAF_PREFIX, 0, qualifier, 0, LEAF_PREFIX.length);
     final byte[] tsuid_bytes = UniqueId.stringToUid(tsuid);
@@ -117,7 +118,7 @@ public class Leaf implements Comparable<Leaf> {
     
     final PutRequest put = new PutRequest(tsdb.uidTable(), branch_id, 
         NAME_FAMILY, qualifier, toStorageJson());
-    tsdb.getClient().compareAndSet(put, new byte[0]);
+    return tsdb.getClient().compareAndSet(put, new byte[0]);
   }
   
   public static Leaf parseFromStorage(final TSDB tsdb, final KeyValue column, 
@@ -125,33 +126,40 @@ public class Leaf implements Comparable<Leaf> {
     if (column.value() == null) {
       throw new IllegalArgumentException("Leaf column value was null");
     }
-    // qualifier has the TSUID in the format  "leaf:<tsuid>"
-    // and we should only be here if the qualifier matched on "leaf:"
-    final Leaf leaf = JSON.parseToObject(column.value(), Leaf.class);
-    leaf.tsuid = UniqueId.uidToString(Arrays.copyOfRange(column.qualifier(), 
-        LEAF_PREFIX.length, column.qualifier().length));
-    
-    if (load_uids) {
-      final byte[] metric = UniqueId.stringToUid(
-          leaf.tsuid.substring(0, TSDB.metrics_width() * 2));
-      leaf.metric = tsdb.getUidName(UniqueIdType.METRIC, metric);
-      
-      List<byte[]> tags = UniqueId.getTagPairsFromTSUID(leaf.tsuid, 
-          TSDB.metrics_width(), TSDB.tagk_width(), TSDB.tagv_width());
-      leaf.tags = new HashMap<String, String>();
-      int idx = 0;
-      String tagk = "";
-      for (byte[] uid : tags) {
-        if (idx % 2 == 0) {
-          tagk = tsdb.getUidName(UniqueIdType.TAGK, uid);
-        } else {
-          final String tagv = tsdb.getUidName(UniqueIdType.TAGV, uid);
-          leaf.tags.put(tagk, tagv);
+    try {
+      // qualifier has the TSUID in the format  "leaf:<tsuid>"
+      // and we should only be here if the qualifier matched on "leaf:"
+      final Leaf leaf = JSON.parseToObject(column.value(), Leaf.class);
+      leaf.tsuid = UniqueId.uidToString(Arrays.copyOfRange(column.qualifier(), 
+          LEAF_PREFIX.length, column.qualifier().length));
+      System.out.println("Parsed leaf: " + leaf);
+      if (load_uids) {
+        System.out.println("Told to load unique Ids for leaf");
+        final byte[] metric = UniqueId.stringToUid(
+            leaf.tsuid.substring(0, TSDB.metrics_width() * 2));
+        System.out.println("Parse metric UID: " + UniqueId.uidToString(metric));
+        leaf.metric = tsdb.getUidName(UniqueIdType.METRIC, metric);
+        System.out.println("Got Metric for leaf");
+        List<byte[]> tags = UniqueId.getTagPairsFromTSUID(leaf.tsuid, 
+            TSDB.metrics_width(), TSDB.tagk_width(), TSDB.tagv_width());
+        leaf.tags = new HashMap<String, String>();
+        int idx = 0;
+        String tagk = "";
+        for (byte[] uid : tags) {
+          System.out.println("Working on tag: " + idx);
+          if (idx % 2 == 0) {
+            tagk = tsdb.getUidName(UniqueIdType.TAGK, uid);
+          } else {
+            final String tagv = tsdb.getUidName(UniqueIdType.TAGV, uid);
+            leaf.tags.put(tagk, tagv);
+          }
+          idx++;
         }
-        idx++;
       }
+      return leaf;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
-    return leaf;
   }
   
   public static byte[] LEAF_PREFIX() {
