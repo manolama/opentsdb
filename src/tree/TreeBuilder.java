@@ -13,7 +13,6 @@
 package net.opentsdb.tree;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -25,10 +24,11 @@ import net.opentsdb.meta.UIDMeta;
 import net.opentsdb.tree.TreeRule.TreeRuleType;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
 
-import org.hbase.async.HBaseException;
-import org.hbase.async.RowLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.stumbleupon.async.Callback;
+import com.stumbleupon.async.Deferred;
 
 /**
  * Methods to compile a tree given a single TSUID or more.
@@ -37,12 +37,6 @@ import org.slf4j.LoggerFactory;
 public final class TreeBuilder {
   private static final Logger LOG = LoggerFactory.getLogger(TreeBuilder.class);
 
-  private static ArrayList<TreeBuilder> builder_cache;
-  
-  private static long last_cache_load;
-  
-  private static int cache_timeout = 30;
-  
   /** The TSDB to use for fetching/writing data */
   private final TSDB tsdb;
   
@@ -91,6 +85,11 @@ public final class TreeBuilder {
     this.tsdb = tsdb;
   }
   
+  public TreeBuilder(final TSDB tsdb, final Tree tree) {
+    this.tsdb = tsdb;
+    this.tree = tree;
+  }
+  
   public void processTimeseriesMeta(final int tree_id, final TSMeta meta, 
       final boolean is_testing) {
     if (tree_id < 1 || tree_id > 254) {
@@ -103,10 +102,14 @@ public final class TreeBuilder {
     // load the tree if we need to. The caller may re-use this object for many
     // timeseries.
     if (tree == null || tree.getTreeId() != tree_id) {
-      tree = Tree.fetchTree(tsdb, tree_id);
-      if (tree == null) {
-        throw new IllegalArgumentException("Unable to locate tree for ID: " + 
-            tree_id);
+      try {
+        tree = Tree.fetchTree(tsdb, tree_id).joinUninterruptibly();
+        if (tree == null) {
+          throw new IllegalArgumentException("Unable to locate tree for ID: " + 
+              tree_id);
+        }
+      } catch (Exception e){
+        throw new RuntimeException("Unexpected exception", e);
       }
       
       // set the max rule level before proceeding
@@ -120,8 +123,13 @@ public final class TreeBuilder {
     // Fetch or initialize the root branch
     // The root shouldn't change so we should be able to load this once
     // per tree.
-    root = Branch.fetchBranch(tsdb, Tree.idToBytes(tree.getTreeId()), 
-        false);
+    try {
+      root = Branch.fetchBranch(tsdb, Tree.idToBytes(tree.getTreeId()), 
+          false).joinUninterruptibly();
+    } catch (Exception e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
     if (root == null) {
       LOG.info("Couldn't find the root branch, initializing");
       root = new Branch(tree.getTreeId());
@@ -148,7 +156,7 @@ public final class TreeBuilder {
     } else if (current_branch == null) {
       LOG.warn("Processed TSUID [" + meta + "] resulted in a null branch");
     } else if (!is_testing) {
-      if (not_matched != null && !not_matched.isEmpty()) {
+      if (not_matched != null && !not_matched.isEmpty() && tree.getStrictMatch()) {
         tree.addNotMatched(meta.getTSUID(), not_matched);
       }
       
@@ -157,6 +165,7 @@ public final class TreeBuilder {
       Map<Integer, String> path = root.getPath();
       cb.prependParentPath(path);
       while (cb != null) {
+        System.out.println("Flushing branch: " + cb);
         cb.storeBranch(tsdb, tree, true);
         if (cb.getBranches() == null) {
           cb = null;
@@ -194,37 +203,28 @@ public final class TreeBuilder {
     }
   }
   
-  public static void processTSMeta(final TSDB tsdb, final TSMeta meta) {
-    if ((System.currentTimeMillis() / 1000) - last_cache_load > cache_timeout) {
+  public static Deferred<Boolean> processTSMeta(final TSDB tsdb, final TSMeta meta) {
+    
+    class ProcessTreesCB implements Callback<Deferred<Boolean>, List<Tree>> {
       
-      // load trees
-      builder_cache = null;
-      final List<Tree> trees = Tree.fetchAllTrees(tsdb);
-      if (trees != null && !trees.isEmpty()) {
-        builder_cache = new ArrayList<TreeBuilder>(trees.size());
-        for (Tree tree : trees) {
-          final TreeBuilder builder = new TreeBuilder(tsdb);
-          builder.setTree(tree);
-          builder_cache.add(builder);
+      @Override
+      public Deferred<Boolean> call(List<Tree> trees) throws Exception {
+        if (trees == null || trees.isEmpty()) {
+          LOG.debug("No trees found to process meta through");
+          return Deferred.fromResult(false);
         }
+        
+        for (Tree tree : trees) {
+          final TreeBuilder builder = new TreeBuilder(tsdb, tree);
+          builder.processTimeseriesMeta(tree.getTreeId(), meta, false);
+        }
+        
+        return Deferred.fromResult(true);
       }
       
-      last_cache_load = System.currentTimeMillis() / 1000;
     }
     
-    // no trees have been configured
-    if (builder_cache == null || builder_cache.isEmpty()) {
-      return;
-    }
-    
-    for (TreeBuilder builder : builder_cache) {
-      try {
-        builder.processTimeseriesMeta(builder.getTree().getTreeId(), 
-            meta, false);
-      } catch (Exception e) {
-        LOG.error("Runtime Exception", e);
-      }
-    }
+    return Tree.fetchAllTrees(tsdb).addCallbackDeferring(new ProcessTreesCB());
   }
   
   private boolean processRuleset(final Branch parent_branch, int depth) {
