@@ -25,6 +25,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import javax.xml.bind.DatatypeConverter;
 
@@ -41,7 +42,6 @@ import org.hbase.async.Scanner;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import com.google.common.primitives.UnsignedBytes;
 import com.stumbleupon.async.Deferred;
 
 /**
@@ -74,12 +74,10 @@ public final class MockBase {
   private HBaseClient client = mock(HBaseClient.class);
   private TreeMap<String, HashMap<String, byte[]>> storage = 
     new TreeMap<String, HashMap<String, byte[]>>();
-  private int scanner_calls = 0;
-  
-  
+  private HashSet<Integer> used_scanners = new HashSet<Integer>(2);
+
   private MockScanner local_scanner;
-  // scanner mocks
-  private final Scanner scanner = mock(Scanner.class);
+  private Scanner current_scanner;
   
   /**
    * Initializes the storage class and enables mocks of the various
@@ -116,10 +114,35 @@ public final class MockBase {
     }
     
     if (default_scan) {
-      when(client.newScanner((byte[]) any())).thenReturn(scanner);
-      local_scanner = new MockScanner();
-      local_scanner.captureSetters();
-      when(scanner.nextRows()).thenAnswer(local_scanner);
+      current_scanner = mock(Scanner.class);
+      local_scanner = new MockScanner(current_scanner);
+//      local_scanner.captureSetters(current_scanner);
+//      
+      when(client.newScanner((byte[]) any())).thenAnswer(new Answer<Scanner>() {
+
+        @Override
+        public Scanner answer(InvocationOnMock arg0) throws Throwable {
+          System.out.println("Asked for a new scanner: " + local_scanner.hashCode());
+//          last_scanner = current_scanner;
+//          current_scanner = mock(Scanner.class);;
+//
+//          local_scanner = new MockScanner();
+//          local_scanner.captureSetters();
+//          System.out.println("Rotating scanners. Old : " + 
+//              last_scanner.hashCode() + "  new: "  current_scanner.hashCode());
+          if (used_scanners.contains(current_scanner.hashCode())) {
+            
+            current_scanner = mock(Scanner.class);
+            local_scanner = new MockScanner(current_scanner);
+            //local_scanner.captureSetters(current_scanner);
+            System.out.println("Current scanner has been used, issuing a new one: " + local_scanner.hashCode());
+          }
+          when(current_scanner.nextRows()).thenAnswer(local_scanner);
+          return current_scanner;
+        }
+        
+      });      
+
     }
   }
 
@@ -159,6 +182,24 @@ public final class MockBase {
   
   public void flushRow(final byte[] key) {
     storage.remove(bytesToString(key));
+  }
+  
+  public void dumpToSystemOut(final boolean qualifier_ascii) {
+    if (storage.isEmpty()) {
+      System.out.println("Empty");
+      return;
+    }
+    
+    for (Map.Entry<String, HashMap<String, byte[]>> row : storage.entrySet()) {
+      System.out.println("Row: " + row.getKey());
+      
+      for (Map.Entry<String, byte[]> column : row.getValue().entrySet()) {
+        System.out.println("  Qualifier: " + (qualifier_ascii ?
+            "\"" + new String(stringToBytes(column.getKey()), ASCII) + "\""
+            : column.getKey()));
+        System.out.println("    Value: " + new String(column.getValue(), ASCII));
+      }
+    }
   }
   
   public static String bytesToString(final byte[] bytes) {
@@ -326,12 +367,13 @@ public final class MockBase {
   private class MockScanner implements 
     Answer<Deferred<ArrayList<ArrayList<KeyValue>>>> {
     
-    private String start;
-    private String stop;
-    private HashSet<String> scnr_qualifiers;
-    private String regex;
+    private String start = null;
+    private String stop = null;
+    private HashSet<String> scnr_qualifiers = null;
+    private String regex = null;
     
-    public void captureSetters() {
+    public MockScanner(final Scanner mock_scanner) {
+
       // capture the scanner fields when set
       doAnswer(new Answer<Object>() {
         @Override
@@ -340,7 +382,7 @@ public final class MockBase {
           regex = (String)args[0];
           return null;
         }      
-      }).when(scanner).setKeyRegexp(anyString());
+      }).when(mock_scanner).setKeyRegexp(anyString());
       
       doAnswer(new Answer<Object>() {
         @Override
@@ -349,7 +391,7 @@ public final class MockBase {
           start = bytesToString((byte[])args[0]);
           return null;
         }      
-      }).when(scanner).setStartKey((byte[])any());
+      }).when(mock_scanner).setStartKey((byte[])any());
       
       doAnswer(new Answer<Object>() {
         @Override
@@ -358,7 +400,7 @@ public final class MockBase {
           stop = bytesToString((byte[])args[0]);
           return null;
         }      
-      }).when(scanner).setStopKey((byte[])any());
+      }).when(mock_scanner).setStopKey((byte[])any());
       
       doAnswer(new Answer<Object>() {
         @Override
@@ -368,7 +410,7 @@ public final class MockBase {
           scnr_qualifiers.add(bytesToString((byte[])args[0]));
           return null;
         }      
-      }).when(scanner).setQualifier((byte[])any());
+      }).when(mock_scanner).setQualifier((byte[])any());
       
       doAnswer(new Answer<Object>() {
         @Override
@@ -381,23 +423,35 @@ public final class MockBase {
           }
           return null;
         }      
-      }).when(scanner).setQualifiers((byte[][])any());
+      }).when(mock_scanner).setQualifiers((byte[][])any());
       
     }
     
     @Override
     public Deferred<ArrayList<ArrayList<KeyValue>>> answer(
         final InvocationOnMock invocation) throws Throwable {
-      if (scanner_calls > 0) {
+      
+      System.out.println("In scanner answer");
+      if (used_scanners.contains(current_scanner.hashCode())) {
+        System.out.println("Done w scanners");
         return Deferred.fromResult(null);
       }
-
-      final Pattern pattern = (regex == null ? null : 
-        Pattern.compile(regex));
+      used_scanners.add(current_scanner.hashCode());
+      
+      Pattern pattern = null;
+      if (regex != null && !regex.isEmpty()) {
+        try {
+          Pattern.compile(regex);
+        } catch (PatternSyntaxException e) {
+          e.printStackTrace();
+        }
+        System.out.println("Compiled a scanner regex");
+      }
       
       // return all matches
       ArrayList<ArrayList<KeyValue>> results = 
         new ArrayList<ArrayList<KeyValue>>();
+      System.out.println("HERERERE");
       System.out.println("ST: " + start + "  Ed: " + stop);
       for (Map.Entry<String, HashMap<String, byte[]>> row : storage.entrySet()) {
         
@@ -443,7 +497,6 @@ public final class MockBase {
           results.add(kvs);
         }
       }
-      scanner_calls++;
       
       if (results.isEmpty()) {
         return Deferred.fromResult(null);
