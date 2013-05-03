@@ -132,10 +132,11 @@ test_SRC := \
 	test/meta/TestUIDMeta.java	\
 	test/search/TestSearchPlugin.java	\
 	test/stats/TestHistogram.java	\
+	test/storage/MockBase.java	\
 	test/tree/TestBranch.java	\
 	test/tree/TestLeaf.java	\
 	test/tree/TestTree.java	\
-	test/tree/TestBuilder.java	\
+	test/tree/TestTreeBuilder.java	\
 	test/tree/TestTreeRule.java	\
 	test/tsd/NettyMocks.java	\
 	test/tsd/TestGraphHandler.java	\
