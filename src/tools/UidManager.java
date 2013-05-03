@@ -943,7 +943,7 @@ final class UidManager {
                 // exist, so we can just call sync on this to create a missing
                 // entry
                 UIDMeta meta = UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
-                    metric_uid_bytes);
+                    metric_uid_bytes).joinUninterruptibly();
                 // we only want to update the time if it was outside of an hour
                 // otherwise it's probably an accurate timestamp
                 if (meta.getCreated() > (timestamp + 3600) || 
@@ -996,7 +996,7 @@ final class UidManager {
                 // fetch and update. Returns default object if the meta doesn't
                 // exist, so we can just call sync on this to create a missing
                 // entry
-                UIDMeta meta = UIDMeta.getUIDMeta(tsdb, type, tag);
+                UIDMeta meta = UIDMeta.getUIDMeta(tsdb, type, tag).joinUninterruptibly();
                 // we only want to update the time if it was outside of an hour
                 // otherwise it's probably an accurate timestamp
                 if (meta.getCreated() > (timestamp + 3600) || 
