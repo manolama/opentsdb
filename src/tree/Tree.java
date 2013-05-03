@@ -335,6 +335,7 @@ public final class Tree {
     // fetch the whole row
     final GetRequest get = new GetRequest(tsdb.uidTable(), idToBytes(tree_id));
     get.family(NAME_FAMILY);
+    get.qualifier(TREE_QUALIFIER);
     
     try {
       return tsdb.getClient().get(get).addCallbackDeferring(new FetchTreeCB());
@@ -345,37 +346,7 @@ public final class Tree {
       throw new RuntimeException("Should never be here", e);
     }
   }
-  
-//  public static boolean treeExists(final TSDB tsdb, final int tree_id) {
-//    if (tree_id < 1 || tree_id > 65535) {
-//      throw new IllegalArgumentException("Invalid Tree ID");
-//    }
-//
-//    // fetch the whole row
-//    final GetRequest get = new GetRequest(tsdb.uidTable(), idToBytes(tree_id));
-//    get.family(NAME_FAMILY);
-//    
-//    try {
-//      final ArrayList<KeyValue> row = 
-//        tsdb.getClient().get(get).joinUninterruptibly();
-//      if (row == null || row.isEmpty()) {
-//        return false;
-//      }
-//
-//      for (KeyValue column : row) {
-//        if (Bytes.memcmp(TREE_QUALIFIER, column.qualifier()) == 0) {
-//          return true;
-//        } 
-//      }
-//      return false;
-//    } catch (HBaseException e) {
-//      throw e;
-//    } catch (Exception e) {
-//      e.printStackTrace();
-//      throw new RuntimeException("Should never be here", e);
-//    }
-//  }
-//  
+
   /**
    * Attempts to retreive all trees from the tree definition row. If the row
    * doesn't exist and no trees were found, returns an empty list.
