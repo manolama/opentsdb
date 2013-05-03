@@ -521,9 +521,10 @@ public final class MockBase {
     public Deferred<ArrayList<ArrayList<KeyValue>>> answer(
         final InvocationOnMock invocation) throws Throwable {
       
-      System.out.println("In scanner answer");
+      // It's critical to see if this scanner has been processed before, 
+      // otherwise the code under test will likely wind up in an infinite loop.
+      // If the scanner has been seen before, we return null.
       if (used_scanners.contains(current_scanner.hashCode())) {
-        System.out.println("Done w scanners");
         return Deferred.fromResult(null);
       }
       used_scanners.add(current_scanner.hashCode());
@@ -535,33 +536,22 @@ public final class MockBase {
         } catch (PatternSyntaxException e) {
           e.printStackTrace();
         }
-        System.out.println("Compiled a scanner regex");
       }
       
       // return all matches
       ArrayList<ArrayList<KeyValue>> results = 
         new ArrayList<ArrayList<KeyValue>>();
-      System.out.println("HERERERE");
-      System.out.println("ST: " + start + "  Ed: " + stop);
       for (Map.Entry<String, HashMap<String, byte[]>> row : storage.entrySet()) {
         
         // if it's before the start row, after the end row or doesn't
         // match the given regex, continue on to the next row
-        if (start != null) {
-          if (row.getKey().compareTo(start) < 0) {
-            System.out.println("start diff " + row.getKey().compareTo(start));
-            continue;
-          }
+        if (start != null && row.getKey().compareTo(start) < 0) {
+          continue;
         }
-        if (stop != null) {
-
-          if (row.getKey().compareTo(stop) > 0) {
-            System.out.println("End diff " + row.getKey().compareTo(stop));
-            continue;
-          }
+        if (stop != null && row.getKey().compareTo(stop) > 0) {
+          continue;
         }
         if (pattern != null && !pattern.matcher(row.getKey()).find()) {
-          System.out.println("Didn't match pattern: " + row.getKey());
           continue;
         }
         
