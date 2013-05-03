@@ -17,7 +17,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import java.util.HashMap;
 import java.util.regex.PatternSyntaxException;
 
 import net.opentsdb.core.TSDB;
@@ -212,17 +211,6 @@ public final class TestTreeRule {
     assertEquals(3, storage.numColumns(new byte[] { 0, 1 }));
   }
   
-  @Test (expected = IllegalArgumentException.class)
-  public void storeRuleTreeDoesNotExist() throws Exception {
-    setupStorage();
-    final TreeRule rule = new TreeRule(2);
-    rule.setLevel(1);
-    rule.setOrder(0);
-    rule.setType(TreeRuleType.METRIC);
-    rule.setNotes("Just some notes");
-    rule.storeRule(storage.getTSDB(), false);
-  }
-  
   @Test
   public void storeRuleMege() throws Exception {
     setupStorage();
@@ -400,10 +388,5 @@ public final class TestTreeRule {
     storage.addColumn(new byte[] { 0, 1 }, 
         "tree_rule:2:1".getBytes(MockBase.ASCII()),
         JSON.serializeToBytes(stored_rule));
-
-    PowerMockito.spy(Tree.class);
-    PowerMockito.doReturn(true).when(Tree.class, "treeExists", storage.getTSDB(), 1);
-    PowerMockito.doReturn(false).when(Tree.class, "treeExists", storage.getTSDB(), 2);
-
   }
 }
