@@ -200,6 +200,7 @@ public final class TSDB {
     if (uid == null) {
       throw new IllegalArgumentException("Missing UID");
     }
+
     switch (type) {
       case METRIC:
         return this.metrics.getName(uid);
@@ -784,10 +785,11 @@ public final class TSDB {
    * Processes the TSMeta through all of the trees if configured to do so
    * @param meta The meta data to process
    */
-  public void processTSMetaThroughTrees(final TSMeta meta) {
+  public Deferred<Boolean> processTSMetaThroughTrees(final TSMeta meta) {
     if (config.enable_tree_processing()) {
-      TreeBuilder.processTSMeta(this, meta);
+      return TreeBuilder.processTSMeta(this, meta);
     }
+    return Deferred.fromResult(false);
   }
   
   // ------------------ //
