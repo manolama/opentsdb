@@ -76,6 +76,8 @@ final class TreeRpc implements HttpRpc {
         throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
             "This endpoint is not supported");
       }
+    } catch (BadRequestException e) {
+      throw e;
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -156,9 +158,8 @@ final class TreeRpc implements HttpRpc {
                 "Plesae try again at a later time");
           }
         } catch (IllegalStateException e) {
-          throw new BadRequestException(HttpResponseStatus.BAD_REQUEST,
-              "Exhausted all 655535 tree IDs", 
-              "Please delete or edit an existing tree");
+          throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
+              "Unable to create new tree", e);
         } catch (Exception e) {
           throw new RuntimeException(e);
         }
