@@ -64,6 +64,16 @@ import com.stumbleupon.async.Deferred;
 public final class TestTree {
   private MockBase storage;
   
+  final static private Method TreetoStorageJson;
+  static {
+    try {
+      TreetoStorageJson = Tree.class.getDeclaredMethod("toStorageJson");
+      TreetoStorageJson.setAccessible(true);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed in static initializer", e);
+    }
+  }
+  
   @Test
   public void copyChanges() throws Exception {
     final Tree tree = buildTestTree();
@@ -99,14 +109,6 @@ public final class TestTree {
     assertTrue(json.contains("\"name\":\"Test Tree\""));
     assertTrue(json.contains("\"description\":\"My Description\""));
   }
-  
-//  @Test
-//  public void deserialize() throws Exception {
-//    Tree tree = JSON.parseToObject(getSerializedTree(), Tree.class);
-//    assertNotNull(tree);
-//    assertEquals("Test Tree", tree.getName());
-//    assertEquals(5, tree.getRules().size());
-//  }
 
   @Test
   public void addRule() throws Exception {
@@ -660,17 +662,11 @@ public final class TestTree {
   private void setupStorage(final boolean default_get, 
       final boolean default_put) throws Exception {
     storage = new MockBase(default_get, default_put, true, true);
-
-    // we need to hack the private method to get storage json formats or the
-    // CAS calls fail
-    // TODO - static
-    final Method treeToJSON = Tree.class.getDeclaredMethod("toStorageJson");
-    treeToJSON.setAccessible(true);
     
     byte[] key = new byte[] { 0, 1 };
     // set pre-test values
     storage.addColumn(key, "tree".getBytes(MockBase.ASCII()), 
-        (byte[])treeToJSON.invoke(buildTestTree()));
+        (byte[])TreetoStorageJson.invoke(buildTestTree()));
     
     TreeRule rule = new TreeRule(1);
     rule.setField("host");
@@ -704,7 +700,7 @@ public final class TestTree {
     tree2.setName("2nd Tree");
     tree2.setDescription("Other Tree");
     storage.addColumn(key, "tree".getBytes(MockBase.ASCII()), 
-        (byte[])treeToJSON.invoke(tree2));
+        (byte[])TreetoStorageJson.invoke(tree2));
     
     rule = new TreeRule(2);
     rule.setField("host");
