@@ -55,6 +55,21 @@ public final class NettyMocks {
   }
   
   /**
+   * Optional constructor that adds the config and settings to an existing TSDB
+   * mock object
+   * @param tsdb The TSDB mock to add a config to
+   * @return The mocked TSDB object
+   */
+  public static TSDB getMockedHTTPTSDB(final TSDB tsdb) {
+    final Config config = mock(Config.class);
+    HashMap<String, String> properties = new HashMap<String, String>();
+    properties.put("tsd.http.show_stack_trace", "true");
+    Whitebox.setInternalState(config, "properties", properties);
+    when(tsdb.getConfig()).thenReturn(config);
+    return tsdb;
+  }
+  
+  /**
    * Returns a mocked Channel object that simply sets the name to
    * [fake channel]
    * @return A Channel mock
