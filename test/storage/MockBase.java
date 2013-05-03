@@ -47,8 +47,9 @@ import com.stumbleupon.async.Deferred;
 /**
  * Mock HBase implementation useful in testing calls to and from storage with
  * actual pretend data. The underlying data store is just a simple tree map 
- * with a hash map of byte arrays. The keys are all Strings (since you can't 
- * store bytes[] as a key) and qualifiers are converted to and from via ASCII.
+ * with a hash map of byte arrays. Keys and qualifiers are all converted to hex
+ * encoded strings, since you can't use byte arrays as map keys in the default
+ * Java collections.
  * <p>
  * It's not a perfect mock but is useful for the majority of unit tests. Gets,
  * puts, cas, deletes and scans are currently supported. See notes for each
@@ -56,7 +57,7 @@ import com.stumbleupon.async.Deferred;
  * <p>
  * <b>Note:</b> At this time, the implementation does not support multiple 
  * column families since almost all unit tests for OpenTSDB only work with one
- * CF at a time. Also, we only have the one table for now.
+ * CF at a time. There is also only one table and we don't have any timestamps.
  * <p>
  * <b>Warning:</b> To use this class, you need to prepare the classes for testing
  * with the @PrepareForTest annotation. The classes you need to prepare are:
@@ -75,16 +76,17 @@ public final class MockBase {
   private TreeMap<String, HashMap<String, byte[]>> storage = 
     new TreeMap<String, HashMap<String, byte[]>>();
   private HashSet<Integer> used_scanners = new HashSet<Integer>(2);
-
   private MockScanner local_scanner;
   private Scanner current_scanner;
   
   /**
-   * Initializes the storage class and enables mocks of the various
-   * @param default_get
-   * @param default_put
-   * @param default_delete
-   * @param default_scan
+   * Setups up mock intercepts for all of the calls. Depending on the given
+   * flags, some mocks may not be enabled, allowing local unit tests to setup
+   * their own mocks.
+   * @param default_get Enable the default .get() mock
+   * @param default_put Enable the default .put() and .compareAndSet() mocks
+   * @param default_delete Enable the default .delete() mock
+   * @param default_scan Enable the Scanner mock implementation
    * @return
    */
   public MockBase(
@@ -116,26 +118,18 @@ public final class MockBase {
     if (default_scan) {
       current_scanner = mock(Scanner.class);
       local_scanner = new MockScanner(current_scanner);
-//      local_scanner.captureSetters(current_scanner);
-//      
+
+      // to faciliate unit tests where more than one scanner is used (i.e. in a
+      // callback chain) we have to provide a new mock scanner for each new
+      // scanner request. That's the way the mock scanner method knows when a
+      // second call has been issued and it should return a null.
       when(client.newScanner((byte[]) any())).thenAnswer(new Answer<Scanner>() {
 
         @Override
         public Scanner answer(InvocationOnMock arg0) throws Throwable {
-          System.out.println("Asked for a new scanner: " + local_scanner.hashCode());
-//          last_scanner = current_scanner;
-//          current_scanner = mock(Scanner.class);;
-//
-//          local_scanner = new MockScanner();
-//          local_scanner.captureSetters();
-//          System.out.println("Rotating scanners. Old : " + 
-//              last_scanner.hashCode() + "  new: "  current_scanner.hashCode());
-          if (used_scanners.contains(current_scanner.hashCode())) {
-            
+          if (used_scanners.contains(current_scanner.hashCode())) {            
             current_scanner = mock(Scanner.class);
             local_scanner = new MockScanner(current_scanner);
-            //local_scanner.captureSetters(current_scanner);
-            System.out.println("Current scanner has been used, issuing a new one: " + local_scanner.hashCode());
           }
           when(current_scanner.nextRows()).thenAnswer(local_scanner);
           return current_scanner;
@@ -146,6 +140,14 @@ public final class MockBase {
     }
   }
 
+  /**
+   * Add a column to the hash table. The proper row will be created if it doesn't
+   * exist. If the column already exists, the original value will be overwritten 
+   * with the new data
+   * @param key The row key
+   * @param qualifier The qualifier
+   * @param value The value to store
+   */
   public void addColumn(final byte[] key, final byte[] qualifier, 
       final byte[] value) {
     if (!storage.containsKey(bytesToString(key))) {
@@ -154,10 +156,16 @@ public final class MockBase {
     storage.get(bytesToString(key)).put(bytesToString(qualifier), value);
   }
   
+  /** @return TTotal number of rows in the hash table */
   public int numRows() {
     return storage.size();
   }
   
+  /**
+   * Total number of columns in the given row
+   * @param key The row to search for
+   * @return -1 if the row did not exist, otherwise the number of columns.
+   */
   public int numColumns(final byte[] key) {
     if (!storage.containsKey(bytesToString(key))) {
       return -1;
@@ -165,25 +173,50 @@ public final class MockBase {
     return storage.get(bytesToString(key)).size();
   }
 
-  public byte[] getColumn (final byte[] key, final byte[] column) {
+  /**
+   * Retrieve the contents of a single column
+   * @param key The row key of the column
+   * @param qualifier The column qualifier
+   * @return The byte array of data or null if not found
+   */
+  public byte[] getColumn (final byte[] key, final byte[] qualifier) {
     if (!storage.containsKey(bytesToString(key))) {
       return null;
     }
-    return storage.get(bytesToString(key)).get(bytesToString(column));
+    return storage.get(bytesToString(key)).get(bytesToString(qualifier));
   }
   
+  /**
+   * Return the mocked TSDB object to use for HBaseClient access
+   * @return
+   */
   public TSDB getTSDB() {
     return tsdb;
   }
   
+  /**
+   * Clears the entire hash table. Use it if your unit test needs to start fresh
+   */
   public void flushStorage() {
     storage.clear();
   }
   
+  /**
+   * Removes the entire row from the hash table
+   * @param key The row to remove
+   */
   public void flushRow(final byte[] key) {
     storage.remove(bytesToString(key));
   }
   
+  /**
+   * Dumps the entire storage hash to stdout with the row keys and (optionally)
+   * qualifiers as hex encoded byte strings. The byte values will pass be
+   * converted to ASCII strings. Useful for debugging when writing unit tests,
+   * but don't depend on it.
+   * @param qualifier_ascii Whether or not the qualifiers should be converted
+   * to ASCII.
+   */
   public void dumpToSystemOut(final boolean qualifier_ascii) {
     if (storage.isEmpty()) {
       System.out.println("Empty");
@@ -202,18 +235,37 @@ public final class MockBase {
     }
   }
   
+  /**
+   * Helper to convert an array of bytes to a hexadecimal encoded string.
+   * @param bytes The byte array to convert
+   * @return A hex string
+   */
   public static String bytesToString(final byte[] bytes) {
     return DatatypeConverter.printHexBinary(bytes);
   }
   
+  /**
+   * Helper to convert a hex encoded string into a byte array.
+   * <b>Warning:</b> This method won't pad the string to make sure it's an
+   * even number of bytes.
+   * @param bytes The hex encoded string to convert
+   * @return A byte array from the hex string
+   * @throws IllegalArgumentException if the string contains illegal characters
+   * or can't be converted.
+   */
   public static byte[] stringToBytes(final String bytes) {
     return DatatypeConverter.parseHexBinary(bytes);
   }
   
+  /** @return Returns the ASCII character set */
   public static Charset ASCII() {
     return ASCII;
   }
   
+  /**
+   * Gets one or more columns from a row. If the row does not exist, a null is
+   * returned. If no qualifiers are given, the entire row is returned.
+   */
   private class MockGet implements Answer<Deferred<ArrayList<KeyValue>>> {
     @Override
     public Deferred<ArrayList<KeyValue>> answer(InvocationOnMock invocation)
@@ -264,6 +316,10 @@ public final class MockBase {
     }
   }
   
+  /**
+   * Stores one or more columns in a row. If the row does not exist, it's
+   * created.
+   */
   private class MockPut implements Answer<Deferred<Boolean>> {
     @Override
     public Deferred<Boolean> answer(final InvocationOnMock invocation) 
@@ -286,7 +342,17 @@ public final class MockBase {
     }
   }
   
+  /**
+   * Imitates the compareAndSet client call where a {@code PutRequest} is passed
+   * along with a byte array to compared the stored value against. If the stored
+   * value doesn't match, the put is ignored and a "false" is returned. If the 
+   * comparator matches, the new put is recorded.
+   * <b>Warning:</b> While a put works on multiple qualifiers, CAS only works
+   * with one. So if the put includes more than one qualifier, only the first
+   * one will be processed in this CAS call. 
+   */
   private class MockCAS implements Answer<Deferred<Boolean>> {
+    
     @Override
     public Deferred<Boolean> answer(final InvocationOnMock invocation) 
       throws Throwable {
@@ -323,8 +389,13 @@ public final class MockBase {
       column.put(bytesToString(put.qualifiers()[0]), put.value());
       return Deferred.fromResult(true);
     }
+    
   }
   
+  /**
+   * Deletes one or more columns. If a row no longer has any valid columns, the
+   * entire row will be removed.
+   */
   private class MockDelete implements Answer<Deferred<Object>> {
     
     @Override
@@ -364,6 +435,25 @@ public final class MockBase {
     
   }
   
+  /**
+   * This is a limited implementation of the scanner object. The only fields
+   * caputred and acted on are:
+   * <ul><li>KeyRegexp</li>
+   * <li>StartKey</li>
+   * <li>StopKey</li>
+   * <li>Qualifier</li>
+   * <li>Qualifiers</li></ul>
+   * Hence timestamps are ignored as are the max number of rows and qualifiers.
+   * All matching rows/qualifiers will be returned in the first {@code nextRows}
+   * call. The second {@code nextRows} call will always return null. Multiple
+   * qualifiers are supported for matching.
+   * <p>
+   * Since the treemap is hex sorted, it should mimic the byte order of HBase
+   * and the start and stop rows should match properly.
+   * <p>
+   * The KeyRegexp can be set and it will run against the hex value of the 
+   * row key. In testing it seems to work nicely even with byte patterns.
+   */
   private class MockScanner implements 
     Answer<Deferred<ArrayList<ArrayList<KeyValue>>>> {
     
