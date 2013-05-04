@@ -18,10 +18,8 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 
 import net.opentsdb.core.TSDB;
@@ -34,7 +32,6 @@ import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
-import org.hbase.async.RowLock;
 import org.hbase.async.Scanner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +41,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
@@ -258,8 +254,41 @@ public final class Tree {
 
     Deferred<Boolean> tree_cas = null;
     if (has_tree_changes) {
-      final StoreTreeCB store_cb = new StoreTreeCB(tsdb, this, overwrite);
-      tree_cas = fetchTree(tsdb, tree_id).addCallbackDeferring(store_cb);
+      
+      final class StoreTreeCB implements Callback<Deferred<Boolean>, Tree> {
+        
+        final private Tree local_tree;
+        
+        public StoreTreeCB(final Tree local_tree) {
+          this.local_tree = local_tree;
+        }
+        
+        @Override
+        public Deferred<Boolean> call(final Tree fetched_tree) throws Exception {
+          
+          Tree stored_tree = fetched_tree;
+          final byte[] original_tree = stored_tree == null ? new byte[0] : 
+            stored_tree.toStorageJson();
+          
+          // now copy changes
+          if (stored_tree == null) {
+            stored_tree = local_tree;
+          } else {
+            stored_tree.copyChanges(local_tree, overwrite);
+          }
+          
+          // reset the change map so we don't keep writing
+          initializeChangedMap();
+          
+          final PutRequest put = new PutRequest(tsdb.uidTable(), 
+              Tree.idToBytes(tree_id), NAME_FAMILY, TREE_QUALIFIER, 
+              stored_tree.toStorageJson());
+          
+          return tsdb.getClient().compareAndSet(put, original_tree);
+        }
+      }
+      
+      tree_cas = fetchTree(tsdb, tree_id).addCallbackDeferring(new StoreTreeCB(this));
     }
     
     // MUST be a better way
@@ -603,47 +632,7 @@ public final class Tree {
     scanner.setKeyRegexp(buf.toString(), CHARSET);
     return scanner;
   }
-  
-  private class StoreTreeCB implements Callback<Deferred<Boolean>, Tree> {
-    
-    private final TSDB tsdb;
-    
-    private final Tree local_tree;
-    
-    private final boolean overwrite;
-    
-    public StoreTreeCB(final TSDB tsdb, final Tree local_tree, 
-        final boolean overwrite) {
-      this.tsdb = tsdb;
-      this.local_tree = local_tree;
-      this.overwrite = overwrite;
-    }
-
-    @Override
-    public Deferred<Boolean> call(final Tree fetched_tree) throws Exception {
-      
-      Tree stored_tree = fetched_tree;
-      final byte[] original_tree = stored_tree == null ? new byte[0] : 
-        stored_tree.toStorageJson();
-      
-      // now copy changes
-      if (stored_tree == null) {
-        stored_tree = local_tree;
-      } else {
-        stored_tree.copyChanges(local_tree, overwrite);
-      }
-      
-      // reset the change map so we don't keep writing
-      initializeChangedMap();
-      
-      final PutRequest put = new PutRequest(tsdb.uidTable(), 
-          Tree.idToBytes(tree_id), NAME_FAMILY, TREE_QUALIFIER, 
-          stored_tree.toStorageJson());
-      
-      return tsdb.getClient().compareAndSet(put, original_tree);
-    }
-  }
-  
+ 
   private class FlushCollisionsCB implements Callback<Deferred<Boolean>, Boolean> {
     
     private final TSDB tsdb;
