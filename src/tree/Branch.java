@@ -411,6 +411,7 @@ public final class Branch implements Comparable<Branch> {
   public static Deferred<Branch> fetchBranch(final TSDB tsdb, 
       final byte[] branch_id, final boolean load_leaf_uids) {
     
+    final Deferred<Branch> result = new Deferred<Branch>();
     final Scanner scanner = setupBranchScanner(tsdb, branch_id);
     
     // This is the branch that will be loaded with data from the scanner and
@@ -474,28 +475,13 @@ public final class Branch implements Comparable<Branch> {
     }
     
     /**
-     * Final callback that waits on all of the leaves to finish loading before 
-     * returning the branch object.
-     */
-    final class FinalCB implements Callback<Deferred<Branch>, 
-      ArrayList<Object>> {
-
-      @Override
-      public Deferred<Branch> call(final ArrayList<Object> calls) 
-        throws Exception {
-        return Deferred.fromResult(branch);
-      }
-      
-    }
-    
-    /**
      * Scanner callback executed recursively each time we get a set of data
      * from storage. This is responsible for determining what columns are 
      * returned and issuing requests to load leaf objects.
      * When the scanner returns a null set of rows, the method initiates the
      * final callback.
      */
-    final class FetchBranchCB implements Callback<Deferred<Branch>, 
+    final class FetchBranchCB implements Callback<Object, 
       ArrayList<ArrayList<KeyValue>>> {
   
       /**
@@ -504,8 +490,8 @@ public final class Branch implements Comparable<Branch> {
        * @return The branch if loaded successfully, null if the branch was not
        * found.
        */
-      public Deferred<Branch> fetchBranch() {
-        return scanner.nextRows().addCallbackDeferring(this);
+      public Object fetchBranch() {
+        return scanner.nextRows().addCallback(this);
       }
       
       /**
@@ -514,13 +500,14 @@ public final class Branch implements Comparable<Branch> {
        * @return The final branch callback if the scanner returns a null set
        */
       @Override
-      public Deferred<Branch> call(final ArrayList<ArrayList<KeyValue>> rows)
+      public Object call(final ArrayList<ArrayList<KeyValue>> rows)
           throws Exception {
         if (rows == null) {
           if (branch.tree_id < 1 || branch.path == null) {
-            return Deferred.fromResult(null);
+            result.callback(null);
           }
-          return Deferred.group(leaf_group).addCallbackDeferring(new FinalCB());
+          result.callback(branch);
+          return null;
         }
         
         for (final ArrayList<KeyValue> row : rows) {
@@ -570,7 +557,8 @@ public final class Branch implements Comparable<Branch> {
     }
     
     // start scanning
-    return new FetchBranchCB().fetchBranch();
+    new FetchBranchCB().fetchBranch();
+    return result;
   }
   
   /**
