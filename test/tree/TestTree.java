@@ -18,16 +18,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.when;
-import static org.powermock.api.mockito.PowerMockito.mock;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.nio.charset.Charset;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -47,13 +42,9 @@ import org.hbase.async.PutRequest;
 import org.hbase.async.Scanner;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
-
-import com.stumbleupon.async.Deferred;
 
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore({"javax.management.*", "javax.xml.*",
@@ -104,7 +95,6 @@ public final class TestTree {
   public void serialize() throws Exception {
     final String json = JSON.serializeToString(buildTestTree());
     assertNotNull(json);
-    System.out.println(json);
     assertTrue(json.contains("\"created\":1356998400"));
     assertTrue(json.contains("\"name\":\"Test Tree\""));
     assertTrue(json.contains("\"description\":\"My Description\""));
@@ -187,7 +177,8 @@ public final class TestTree {
     setupStorage(true, true);
     final Tree tree = buildTestTree();
     tree.setName("New Name");
-    assertTrue(tree.storeTree(storage.getTSDB(), false).joinUninterruptibly());
+    assertNotNull(tree.storeTree(storage.getTSDB(), false)
+        .joinUninterruptibly());
   }
   
   @Test (expected = IllegalStateException.class)
@@ -219,7 +210,8 @@ public final class TestTree {
     setupStorage(true, true);
     final Tree tree = buildTestTree();
     tree.addCollision("010203", "AABBCCDD");
-    assertTrue(tree.storeTree(storage.getTSDB(), false).joinUninterruptibly());
+    assertNotNull(tree.storeTree(storage.getTSDB(), false)
+        .joinUninterruptibly());
     assertEquals(4, storage.numRows());
     assertEquals(3, storage.numColumns(new byte[] { 0, 1, 1 }));
   }
@@ -229,7 +221,8 @@ public final class TestTree {
     setupStorage(true, true);
     final Tree tree = buildTestTree();
     tree.addCollision("010101", "AAAAAA");
-    assertTrue(tree.storeTree(storage.getTSDB(), false).joinUninterruptibly());
+    assertNotNull(tree.storeTree(storage.getTSDB(), false)
+        .joinUninterruptibly());
     assertEquals(4, storage.numRows());
     assertEquals(2, storage.numColumns(new byte[] { 0, 1, 1 }));
   }
@@ -239,7 +232,8 @@ public final class TestTree {
     setupStorage(true, true);
     final Tree tree = buildTestTree();
     tree.addNotMatched("010203", "Failed rule 2:2");
-    assertTrue(tree.storeTree(storage.getTSDB(), false).joinUninterruptibly());
+    assertNotNull(tree.storeTree(storage.getTSDB(), false)
+        .joinUninterruptibly());
     assertEquals(4, storage.numRows());
     assertEquals(3, storage.numColumns(new byte[] { 0, 1, 2 }));
   }
@@ -249,7 +243,8 @@ public final class TestTree {
     setupStorage(true, true);
     final Tree tree = buildTestTree();
     tree.addNotMatched("010101", "Failed rule 4:4");
-    assertTrue(tree.storeTree(storage.getTSDB(), false).joinUninterruptibly());
+    assertNotNull(tree.storeTree(storage.getTSDB(), false)
+        .joinUninterruptibly());
     assertEquals(4, storage.numRows());
     assertEquals(2, storage.numColumns(new byte[] { 0, 1, 2 }));
   }
@@ -288,7 +283,8 @@ public final class TestTree {
     setupStorage(true, true);
     final Tree tree = new Tree();
     tree.setName("New Tree");
-    final int tree_id = tree.createNewTree(storage.getTSDB()).joinUninterruptibly();
+    final int tree_id = tree.createNewTree(storage.getTSDB())
+    .joinUninterruptibly();
     assertEquals(3, tree_id);
     assertEquals(5, storage.numRows());
     assertEquals(1, storage.numColumns(new byte[] { 0, 3 }));
@@ -300,7 +296,8 @@ public final class TestTree {
     storage.flushStorage();
     final Tree tree = new Tree();
     tree.setName("New Tree");
-    final int tree_id = tree.createNewTree(storage.getTSDB()).joinUninterruptibly();
+    final int tree_id = tree.createNewTree(storage.getTSDB())
+    .joinUninterruptibly();
     assertEquals(1, tree_id);
     assertEquals(1, storage.numRows());
     assertEquals(1, storage.numColumns(new byte[] { 0, 1 }));
@@ -329,7 +326,8 @@ public final class TestTree {
   @Test
   public void fetchTree() throws Exception {
     setupStorage(true, true);
-    final Tree tree = Tree.fetchTree(storage.getTSDB(), 1).joinUninterruptibly();
+    final Tree tree = Tree.fetchTree(storage.getTSDB(), 1)
+    .joinUninterruptibly();
     assertNotNull(tree);
     assertEquals("Test Tree", tree.getName());
     assertEquals(2, tree.getRules().size());
@@ -356,19 +354,18 @@ public final class TestTree {
   @Test
   public void fetchAllTrees() throws Exception {
     setupStorage(true, true);
-    final List<Tree> trees = Tree.fetchAllTrees(storage.getTSDB()).joinUninterruptibly();
+    final List<Tree> trees = Tree.fetchAllTrees(storage.getTSDB())
+    .joinUninterruptibly();
     assertNotNull(trees);
     assertEquals(2, trees.size());
-    for (Tree tree : trees) {
-      System.out.println("Returned tree ID: " + tree.getTreeId());
-    }
   }
   
   @Test
   public void fetchAllTreesNone() throws Exception {
     setupStorage(true, true);
     storage.flushStorage();
-    final List<Tree> trees = Tree.fetchAllTrees(storage.getTSDB()).joinUninterruptibly();
+    final List<Tree> trees = Tree.fetchAllTrees(storage.getTSDB())
+    .joinUninterruptibly();
     assertNotNull(trees);
     assertEquals(0, trees.size());
   }
@@ -376,7 +373,8 @@ public final class TestTree {
   @Test
   public void fetchAllCollisions() throws Exception {
     setupStorage(true, true);
-    Map<String, String> collisions = Tree.fetchCollisions(storage.getTSDB(), 1, null);
+    Map<String, String> collisions = 
+      Tree.fetchCollisions(storage.getTSDB(), 1, null).joinUninterruptibly();
     assertNotNull(collisions);
     assertEquals(2, collisions.size());
     assertTrue(collisions.containsKey("010101"));
@@ -387,7 +385,8 @@ public final class TestTree {
   public void fetchAllCollisionsNone() throws Exception {
     setupStorage(true, true);
     storage.flushRow(new byte[] { 0, 1, 1 });
-    Map<String, String> collisions = Tree.fetchCollisions(storage.getTSDB(), 1, null);
+    Map<String, String> collisions = 
+      Tree.fetchCollisions(storage.getTSDB(), 1, null).joinUninterruptibly();
     assertNotNull(collisions);
     assertEquals(0, collisions.size());
   }
@@ -397,7 +396,8 @@ public final class TestTree {
     setupStorage(true, true);
     final ArrayList<String> tsuids = new ArrayList<String>(1);
     tsuids.add("020202");
-    Map<String, String> collisions = Tree.fetchCollisions(storage.getTSDB(), 1, tsuids);
+    Map<String, String> collisions = 
+      Tree.fetchCollisions(storage.getTSDB(), 1, tsuids).joinUninterruptibly();
     assertNotNull(collisions);
     assertEquals(1, collisions.size());
     assertTrue(collisions.containsKey("020202"));
@@ -408,7 +408,8 @@ public final class TestTree {
     setupStorage(true, true);
     final ArrayList<String> tsuids = new ArrayList<String>(1);
     tsuids.add("030303");
-    Map<String, String> collisions = Tree.fetchCollisions(storage.getTSDB(), 1, tsuids);
+    Map<String, String> collisions = 
+      Tree.fetchCollisions(storage.getTSDB(), 1, tsuids).joinUninterruptibly();
     assertNotNull(collisions);
     assertEquals(0, collisions.size());
   }
@@ -428,7 +429,8 @@ public final class TestTree {
   @Test
   public void fetchAllNotMatched() throws Exception {
     setupStorage(true, true);
-    Map<String, String> not_matched = Tree.fetchNotMatched(storage.getTSDB(), 1, null);
+    Map<String, String> not_matched = 
+      Tree.fetchNotMatched(storage.getTSDB(), 1, null).joinUninterruptibly();
     assertNotNull(not_matched);
     assertEquals(2, not_matched.size());
     assertTrue(not_matched.containsKey("010101"));
@@ -441,7 +443,8 @@ public final class TestTree {
   public void fetchAllNotMatchedNone() throws Exception {
     setupStorage(true, true);
     storage.flushRow(new byte[] { 0, 1, 2 });
-    Map<String, String> not_matched = Tree.fetchNotMatched(storage.getTSDB(), 1, null);
+    Map<String, String> not_matched = 
+      Tree.fetchNotMatched(storage.getTSDB(), 1, null).joinUninterruptibly();
     assertNotNull(not_matched);
     assertEquals(0, not_matched.size());
   }
@@ -451,7 +454,8 @@ public final class TestTree {
     setupStorage(true, true);
     final ArrayList<String> tsuids = new ArrayList<String>(1);
     tsuids.add("020202");
-    Map<String, String> not_matched = Tree.fetchNotMatched(storage.getTSDB(), 1, tsuids);
+    Map<String, String> not_matched = 
+      Tree.fetchNotMatched(storage.getTSDB(), 1, tsuids).joinUninterruptibly();
     assertNotNull(not_matched);
     assertEquals(1, not_matched.size());
     assertTrue(not_matched.containsKey("020202"));
@@ -463,7 +467,8 @@ public final class TestTree {
     setupStorage(true, true);
     final ArrayList<String> tsuids = new ArrayList<String>(1);
     tsuids.add("030303");
-    Map<String, String> not_matched = Tree.fetchNotMatched(storage.getTSDB(), 1, tsuids);
+    Map<String, String> not_matched = 
+      Tree.fetchNotMatched(storage.getTSDB(), 1, tsuids).joinUninterruptibly();
     assertNotNull(not_matched);
     assertEquals(0, not_matched.size());
   }
@@ -483,7 +488,8 @@ public final class TestTree {
   @Test
   public void deleteTree() throws Exception {
     setupStorage(true, true);
-    assertNotNull(Tree.deleteTree(storage.getTSDB(), 1).joinUninterruptibly());
+    assertNotNull(Tree.deleteTree(storage.getTSDB(), 1, true)
+        .joinUninterruptibly());
     assertEquals(0, storage.numRows());
   }
   
@@ -756,7 +762,8 @@ public final class TestTree {
     tsuid_bytes = UniqueId.stringToUid(tsuid);
     System.arraycopy(tsuid_bytes, 0, qualifier, Tree.NOT_MATCHED_PREFIX().length, 
     tsuid_bytes.length);
-    storage.addColumn(key, qualifier, "Failed rule 0:0".getBytes(MockBase.ASCII()));
+    storage.addColumn(key, qualifier, "Failed rule 0:0"
+        .getBytes(MockBase.ASCII()));
     
     tsuid = "020202";
     qualifier = new byte[Tree.NOT_MATCHED_PREFIX().length + 
@@ -766,7 +773,8 @@ public final class TestTree {
     tsuid_bytes = UniqueId.stringToUid(tsuid);
     System.arraycopy(tsuid_bytes, 0, qualifier, Tree.NOT_MATCHED_PREFIX().length, 
     tsuid_bytes.length);
-    storage.addColumn(key, qualifier, "Failed rule 1:1".getBytes(MockBase.ASCII()));
+    storage.addColumn(key, qualifier, "Failed rule 1:1"
+        .getBytes(MockBase.ASCII()));
     
   }
 }
