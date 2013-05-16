@@ -505,8 +505,9 @@ public final class Branch implements Comparable<Branch> {
         if (rows == null) {
           if (branch.tree_id < 1 || branch.path == null) {
             result.callback(null);
+          } else {
+            result.callback(branch);
           }
-          result.callback(branch);
           return null;
         }
         
