@@ -267,7 +267,7 @@ class HttpJsonSerializer extends HttpSerializer {
           continue;
         }
         
-        if (entry.getKey().toLowerCase().equals("tree")) {
+        if (entry.getKey().toLowerCase().equals("treeid")) {
           tree.setTreeId(Integer.parseInt(entry.getValue()));
         } else if (entry.getKey().toLowerCase().equals("name")) {
           tree.setName(entry.getValue());
