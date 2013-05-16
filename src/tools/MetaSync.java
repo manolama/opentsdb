@@ -109,6 +109,7 @@ final class MetaSync extends Thread {
     // list of deferred calls used to act as a buffer
     final ArrayList<Deferred<Boolean>> storage_calls = 
       new ArrayList<Deferred<Boolean>>();
+    final Deferred<Object> result = new Deferred<Object>();
     
     /**
      * Called when we have encountered a previously un-processed UIDMeta object.
@@ -299,7 +300,7 @@ final class MetaSync extends Thread {
      * rows. Note that we don't process the actual data points, just the row
      * keys.
      */
-    final class MetaScanner implements Callback<Deferred<Object>, 
+    final class MetaScanner implements Callback<Object, 
       ArrayList<ArrayList<KeyValue>>> {
       
       private final Scanner scanner;
@@ -319,32 +320,16 @@ final class MetaSync extends Thread {
        * @return A meaningless deferred to wait on until all data rows have
        * been processed.
        */
-      public Deferred<Object> scan() {
-        return scanner.nextRows().addCallbackDeferring(this);
+      public Object scan() {
+        return scanner.nextRows().addCallback(this);
       }
 
       @Override
-      public Deferred<Object> call(ArrayList<ArrayList<KeyValue>> rows)
+      public Object call(ArrayList<ArrayList<KeyValue>> rows)
           throws Exception {
         if (rows == null) {
-          
-          /**
-           * Called to wait on the list of storage calls so that we can return
-           * only after all of the calls are complete.
-           */
-          final class FinalCB implements Callback<Deferred<Object>, 
-            ArrayList<Object>> {
-
-            @Override
-            public Deferred<Object> call(final ArrayList<Object> calls)
-                throws Exception {
-              return null;
-            }
-            
-          }
-          
-          return Deferred.group(storage_calls)
-            .addCallbackDeferring(new FinalCB());
+          result.callback(null);
+          return null;
         }
         
         for (final ArrayList<KeyValue> row : rows) {
@@ -484,14 +469,11 @@ final class MetaSync extends Thread {
          * process the Scanner's limit in rows, wait for all of the storage
          * calls to complete, then continue on to the next set.
          */
-        final class ContinueCB implements Callback<Deferred<Object>, 
-          ArrayList<Object>> {
+        final class ContinueCB implements Callback<Object, ArrayList<Object>> {
 
           @Override
-          public Deferred<Object> call(ArrayList<Object> puts)
+          public Object call(ArrayList<Object> puts)
               throws Exception {
-            LOG.debug("[" + thread_id + "] Processed [" + puts.size() 
-                + "] storage calls, continuing");
             storage_calls.clear();
             return scan();
           }
@@ -500,15 +482,16 @@ final class MetaSync extends Thread {
         
         // call ourself again but wait for the current set of storage calls to
         // complete so we don't OOM
-        return Deferred.group(storage_calls)
-          .addCallbackDeferring(new ContinueCB());
+        Deferred.group(storage_calls).addCallback(new ContinueCB());
+        return null;
       }
       
     }
 
     final MetaScanner scanner = new MetaScanner();
     try {
-      scanner.scan().joinUninterruptibly();
+      scanner.scan();
+      result.joinUninterruptibly();
       LOG.info("[" + thread_id + "] Complete");
     } catch (Exception e) {
       LOG.error("[" + thread_id + "] Scanner Exception", e);
