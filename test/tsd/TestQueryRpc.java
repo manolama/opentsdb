@@ -31,6 +31,7 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
@@ -41,6 +42,9 @@ import org.powermock.modules.junit4.PowerMockRunner;
  * core.TestTSQuery and TestTSSubQuery classes
  */
 @RunWith(PowerMockRunner.class)
+@PowerMockIgnore({"javax.management.*", "javax.xml.*",
+                  "ch.qos.*", "org.slf4j.*",
+                  "com.sum.*", "org.xml.*"})
 @PrepareForTest({TSDB.class, Config.class, HttpQuery.class, Query.class})
 public final class TestQueryRpc {
   private TSDB tsdb = null;
