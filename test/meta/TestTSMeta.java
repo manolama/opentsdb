@@ -150,7 +150,6 @@ public final class TestTSMeta {
   public void getTSMeta() throws Exception {
     meta = TSMeta.getTSMeta(tsdb, "000001000001000001").joinUninterruptibly();
     assertNotNull(meta);
-    System.out.println(JSON.serializeToString(meta));
     assertEquals("000001000001000001", meta.getTSUID());
     assertEquals("sys.cpu.0", meta.getMetric().getName());
     assertEquals(2, meta.getTags().size());
