@@ -24,6 +24,7 @@ import net.opentsdb.tree.Tree;
 import net.opentsdb.tree.TreeBuilder;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.JSON;
 
 import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
@@ -127,13 +128,15 @@ final class TreeSync {
     
     // load or initialize the root for every tree so we save time later on
     for (TreeBuilder builder : tree_builders) {
-      builder.loadRoot(true).joinUninterruptibly();
+      builder.loadRoot(false).joinUninterruptibly();
     }
     
     // setup an array for storing the tree processing calls so we can block 
     // until each call has completed
     final ArrayList<Deferred<Boolean>> tree_calls = 
       new ArrayList<Deferred<Boolean>>();
+    
+    final Deferred<Boolean> completed = new Deferred<Boolean>();
     
     /**
      * Scanner callback that loops through the UID table recursively until 
@@ -156,26 +159,8 @@ final class TreeSync {
       public Deferred<Boolean> call(ArrayList<ArrayList<KeyValue>> rows)
           throws Exception {
         if (rows == null) {
-          
-          /**
-           * Super simple final callback executed after we have scanned the
-           * entire UID table. Used to wait on the list of storage calls before
-           * returning so they have time to complete.
-           */
-          final class FinalCB implements Callback<Deferred<Boolean>, 
-            ArrayList<Object>> {
-
-            @Override
-            public Deferred<Boolean> call(final ArrayList<Object> tree_calls)
-                throws Exception {
-              return Deferred.fromResult(true);
-            }
-            
-          }
-          
-          // no more rows were found, so we collate the previous deferreds and
-          // wait until they're finished
-          return Deferred.group(tree_calls).addCallbackDeferring(new FinalCB());
+          completed.callback(true);
+          return null;
         }
         
         for (final ArrayList<KeyValue> row : rows) {
@@ -216,7 +201,8 @@ final class TreeSync {
             @Override
             public Deferred<Boolean> call(TSMeta meta) throws Exception {
               if (meta != null) {
-                LOG.debug("Processing TSMeta: " + meta);
+                LOG.debug("Processing TSMeta: " + meta + " w value: " + 
+                    JSON.serializeToString(meta));
                 for (TreeBuilder builder : tree_builders) {
                   builder_calls.add(builder.processTimeseriesMeta(meta));
                 }
@@ -286,14 +272,15 @@ final class TreeSync {
         // request the next set of rows from the scanner, but wait until the
         // current set of TSMetas has been processed so we don't slaughter our
         // host
-        return Deferred.group(tree_calls)
-          .addCallbackDeferring(new ContinueCB());
+        Deferred.group(tree_calls).addCallbackDeferring(new ContinueCB());
+        return null;
       }
       
     }
     
     final TsuidScanner tree_scanner = new TsuidScanner();
-    tree_scanner.scan().joinUninterruptibly();
+    tree_scanner.scan();
+    completed.joinUninterruptibly();
     return 0;
   }
 
