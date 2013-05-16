@@ -197,9 +197,9 @@ final class UniqueIdRpc implements HttpRpc {
       }
       
       try {
-        final UIDMeta updated_meta = meta.syncToStorage(tsdb, 
-            method == HttpMethod.PUT).addCallbackDeferring(
-                new SyncCB()).joinUninterruptibly();
+        final Deferred<UIDMeta> process_meta = meta.syncToStorage(tsdb, 
+            method == HttpMethod.PUT).addCallbackDeferring(new SyncCB());
+        final UIDMeta updated_meta = process_meta.joinUninterruptibly();
         tsdb.indexUIDMeta(updated_meta);
         query.sendReply(query.serializer().formatUidMetaV1(updated_meta));
       } catch (IllegalStateException e) {
@@ -285,7 +285,7 @@ final class UniqueIdRpc implements HttpRpc {
        * Storage callback used to determine if the storage call was successful
        * or not. Also returns the updated object from storage.
        */
-      class SyncDB implements Callback<Deferred<TSMeta>, Boolean> {
+      class SyncCB implements Callback<Deferred<TSMeta>, Boolean> {
 
         @Override
         public Deferred<TSMeta> call(Boolean success) throws Exception {
@@ -302,9 +302,9 @@ final class UniqueIdRpc implements HttpRpc {
       }
       
       try {
-        final TSMeta updated_meta = meta.syncToStorage(tsdb, 
-            method == HttpMethod.PUT).addCallbackDeferring(new SyncDB())
-            .joinUninterruptibly();
+        final Deferred<TSMeta> process_meta = meta.syncToStorage(tsdb, 
+            method == HttpMethod.PUT).addCallbackDeferring(new SyncCB());
+        final TSMeta updated_meta = process_meta.joinUninterruptibly();
         tsdb.indexTSMeta(updated_meta);
         query.sendReply(query.serializer().formatTSMetaV1(updated_meta));
       } catch (IllegalStateException e) {
