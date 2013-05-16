@@ -68,6 +68,7 @@ tsdb_SRC := \
   src/tools/MetaSync.java	\
 	src/tools/TSDMain.java	\
 	src/tools/TextImporter.java	\
+	src/tools/TreeSync.java	\
 	src/tools/UidManager.java	\
 	src/tree/Branch.java	\
 	src/tree/Leaf.java	\
