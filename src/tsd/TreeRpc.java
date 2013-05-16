@@ -23,7 +23,7 @@ import java.util.regex.PatternSyntaxException;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 
-import com.stumbleupon.async.Callback;
+import com.stumbleupon.async.DeferredGroupException;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.TSMeta;
@@ -31,9 +31,11 @@ import net.opentsdb.tree.Branch;
 import net.opentsdb.tree.Tree;
 import net.opentsdb.tree.TreeBuilder;
 import net.opentsdb.tree.TreeRule;
+import net.opentsdb.uid.NoSuchUniqueId;
 
 /**
- * 
+ * Handles API calls for trees such as fetching, editing or deleting trees, 
+ * branches and rules.
  * @since 2.0
  */
 final class TreeRpc implements HttpRpc {
@@ -47,6 +49,11 @@ final class TreeRpc implements HttpRpc {
   /** Query method via the API */
   private HttpMethod method;
   
+  /**
+   * Routes the request to the proper handler
+   * @param tsdb The TSDB to which we belong
+   * @param query The HTTP query to use for parsing and responding
+   */
   @Override
   public void execute(TSDB tsdb, HttpQuery query) throws IOException {
     this.tsdb = tsdb;
@@ -84,11 +91,11 @@ final class TreeRpc implements HttpRpc {
   }
 
   /**
-   * Handles the plain /tree endpoint CRUD
-   * @throws Exception 
+   * Handles the plain /tree endpoint CRUD. If a POST or PUT is requested and
+   * no tree ID is provided, we'll assume the user wanted to create a new tree.
    * @throws BadRequestException if the request was invalid.
    */
-  private void handleTree() throws Exception {
+  private void handleTree() {
     final Tree tree;
     if (query.hasContent()) {
       tree = query.serializer().parseTreeV1();
@@ -96,36 +103,37 @@ final class TreeRpc implements HttpRpc {
       tree = parseTree();
     }
     
-    // if get, then we're just returning one or more trees
-    if (method == HttpMethod.GET) {
-      if (tree.getTreeId() == 0) {
-        query.sendReply(query.serializer().formatTreesV1(
-            Tree.fetchAllTrees(tsdb).joinUninterruptibly()));
-      } else {
-        final Tree single_tree = Tree.fetchTree(tsdb, tree.getTreeId())
-          .joinUninterruptibly();
-        if (single_tree == null) {
-          throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
-            "Unable to locate tree: " + tree.getTreeId());
+    try {
+      // if get, then we're just returning one or more trees
+      if (method == HttpMethod.GET) {
+  
+        if (tree.getTreeId() == 0) {
+          query.sendReply(query.serializer().formatTreesV1(
+              Tree.fetchAllTrees(tsdb).joinUninterruptibly()));
+        } else {
+          final Tree single_tree = Tree.fetchTree(tsdb, tree.getTreeId())
+            .joinUninterruptibly();
+          if (single_tree == null) {
+            throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
+              "Unable to locate tree: " + tree.getTreeId());
+          }
+          query.sendReply(query.serializer().formatTreeV1(single_tree));
         }
-        query.sendReply(query.serializer().formatTreeV1(single_tree));
-      }
-    } else if (method == HttpMethod.POST || method == HttpMethod.PUT) {
-      // For post or put, we're either editing a tree or creating a new one. If
-      // the tree ID is missing, we need to create a new one, otherwise we edit
-      // an existing tree.
-      
-      // if the tree ID is set, fetch, copy, save
-      if (tree.getTreeId() > 0) {
-        // TODO - see if the tree is loaded in memory
-        try {
+  
+      } else if (method == HttpMethod.POST || method == HttpMethod.PUT) {
+        // For post or put, we're either editing a tree or creating a new one. 
+        // If the tree ID is missing, we need to create a new one, otherwise we 
+        // edit an existing tree.
+        
+        // if the tree ID is set, fetch, copy, save
+        if (tree.getTreeId() > 0) {
           if (Tree.fetchTree(tsdb, tree.getTreeId())
               .joinUninterruptibly() == null) {
             throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
                 "Unable to locate tree: " + tree.getTreeId());
           } else {
             if (tree.storeTree(tsdb, (method == HttpMethod.PUT))
-                .joinUninterruptibly()) {
+                .joinUninterruptibly() != null) {
               final Tree stored_tree = Tree.fetchTree(tsdb, tree.getTreeId())
                 .joinUninterruptibly();
               query.sendReply(query.serializer().formatTreeV1(stored_tree));
@@ -136,16 +144,8 @@ final class TreeRpc implements HttpRpc {
                   "Plesae try again at a later time");
             }
           }
-        } catch (IllegalStateException e) {
-          query.sendStatusOnly(HttpResponseStatus.NOT_MODIFIED);
-        } catch (IllegalArgumentException e) {
-          throw new BadRequestException(e);
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      } else {
-        // create a new tree
-        try {
+        } else {
+          // create a new tree
           final int tree_id = tree.createNewTree(tsdb).joinUninterruptibly(); 
           if (tree_id > 0) {
             final Tree stored_tree = Tree.fetchTree(tsdb, tree_id)
@@ -157,25 +157,44 @@ final class TreeRpc implements HttpRpc {
                 "Unable to save changes to tree: " + tree.getTreeId(),
                 "Plesae try again at a later time");
           }
-        } catch (IllegalStateException e) {
-          throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
-              "Unable to create new tree", e);
-        } catch (Exception e) {
-          throw new RuntimeException(e);
         }
-      }
-    } else if (method == HttpMethod.DELETE) {
-      try {
-        Tree.deleteTree(tsdb, tree.getTreeId()).joinUninterruptibly(); 
+        
+      // handle DELETE requests
+      } else if (method == HttpMethod.DELETE) {
+        
+        final String delete_all = query.getQueryStringParam("definition");
+        final boolean delete_definition;
+        if (delete_all == null) {
+          delete_definition = false;
+        } else {
+          if (delete_all.toLowerCase().equals("true")) {
+            delete_definition = true;
+          } else {
+            delete_definition = false;
+          }
+        }
+        if (Tree.fetchTree(tsdb, tree.getTreeId()).joinUninterruptibly() == 
+          null) {
+          throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
+              "Unable to locate tree: " + tree.getTreeId());
+        }
+        Tree.deleteTree(tsdb, tree.getTreeId(), delete_definition)
+          .joinUninterruptibly(); 
         query.sendStatusOnly(HttpResponseStatus.NO_CONTENT);
-      } catch (IllegalArgumentException e) {
-        throw new BadRequestException(e);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
+        
+      } else {
+        throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
+          "Unsupported HTTP request method");
       }
-    } else {
-      throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
-        "Unsupported HTTP request method");
+      
+    } catch (BadRequestException e) {
+      throw e;
+    } catch (IllegalStateException e) {
+      query.sendStatusOnly(HttpResponseStatus.NOT_MODIFIED);
+    } catch (IllegalArgumentException e) {
+      throw new BadRequestException(e);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
   
@@ -185,6 +204,11 @@ final class TreeRpc implements HttpRpc {
    * @throws BadRequestException if the request was invalid.
    */
   private void handleBranch() {
+    if (method != HttpMethod.GET) {
+      throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
+        "Unsupported HTTP request method");
+    }
+    
     try {
       final int tree_id = parseTreeId(false);
       final String branch_hex =
@@ -196,7 +220,7 @@ final class TreeRpc implements HttpRpc {
       final byte[] branch_id;
       if (branch_hex == null || branch_hex.isEmpty()) {
         if (tree_id < 1) {
-          throw new IllegalArgumentException(
+          throw new BadRequestException(
               "Missing or invalid branch and tree IDs");
         }
         branch_id = Tree.idToBytes(tree_id);
@@ -204,30 +228,19 @@ final class TreeRpc implements HttpRpc {
         branch_id = Branch.stringToId(branch_hex);
       }
       
-      class MyErrBack implements Callback<Object, Exception> {
-
-        @Override
-        public Object call(Exception e) throws Exception {
-          e.printStackTrace();
-          return null;
-        }
-        
-      }
-      
-      System.out.println("Fetching branch");
-      // TODO - fix the "load_uids" stuff. For some reason it hangs when trying
-      // to get the data from HBase
-      final Branch branch = Branch.fetchBranch(tsdb, branch_id, true).addErrback(new MyErrBack())
-        .join();
+      // fetch it
+      final Branch branch = Branch.fetchBranch(tsdb, branch_id, true).join();
       if (branch == null) {
         throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
             "Unable to locate branch '" + Branch.idToString(branch_id) + 
             "' for tree '" + Tree.bytesToId(branch_id) + "'");
       }
-      System.out.println("Got branch: " + branch);
       query.sendReply(query.serializer().formatBranchV1(branch));
-    } catch (NumberFormatException nfe) {
-      throw new BadRequestException("Unable to parse 'tree' value");
+      
+    } catch (BadRequestException e) {
+      throw e;
+    } catch (IllegalArgumentException e) {
+      throw new BadRequestException(e);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -236,9 +249,9 @@ final class TreeRpc implements HttpRpc {
   /**
    * Handles the CRUD calls for a single rule, enabling adding, editing or 
    * deleting the rule
-   * @throws Exception 
+   * @throws BadRequestException if the request was invalid.
    */
-  private void handleRule() throws Exception {
+  private void handleRule() {
     final TreeRule rule;
     if (query.hasContent()) {
       rule = query.serializer().parseTreeRuleV1();
@@ -246,25 +259,32 @@ final class TreeRpc implements HttpRpc {
       rule = parseRule();
     }
     
-    // no matter what, we'll need a tree to work with, so make sure it exists
-    final Tree tree = Tree.fetchTree(tsdb, rule.getTreeId())
-      .joinUninterruptibly();
-    if (tree == null) {
-      throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
-          "Unable to locate tree: " + rule.getTreeId());
-    }
-    
-    // if get, then we're just returning a rule from a tree
-    if (method == HttpMethod.GET) {
-      final TreeRule tree_rule = tree.getRule(rule.getLevel(), rule.getOrder());
-      if (tree_rule == null) {
+    try {
+      
+      // no matter what, we'll need a tree to work with, so make sure it exists
+      Tree tree = null;
+        tree = Tree.fetchTree(tsdb, rule.getTreeId())
+          .joinUninterruptibly();
+  
+      if (tree == null) {
         throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
-            "Unable to locate rule: " + rule);
+            "Unable to locate tree: " + rule.getTreeId());
       }
-      query.sendReply(query.serializer().formatTreeRuleV1(tree_rule));
-    } else if (method == HttpMethod.POST || method == HttpMethod.PUT) {
-      try {
-        if (rule.storeRule(tsdb, (method == HttpMethod.PUT))
+      
+      // if get, then we're just returning a rule from a tree
+      if (method == HttpMethod.GET) {
+        
+        final TreeRule tree_rule = tree.getRule(rule.getLevel(), 
+            rule.getOrder());
+        if (tree_rule == null) {
+          throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
+              "Unable to locate rule: " + rule);
+        }
+        query.sendReply(query.serializer().formatTreeRuleV1(tree_rule));
+        
+      } else if (method == HttpMethod.POST || method == HttpMethod.PUT) {
+  
+        if (rule.syncToStorage(tsdb, (method == HttpMethod.PUT))
             .joinUninterruptibly()) {
           final TreeRule stored_rule = TreeRule.fetchRule(tsdb, 
               rule.getTreeId(), rule.getLevel(), rule.getOrder())
@@ -274,29 +294,39 @@ final class TreeRpc implements HttpRpc {
           throw new RuntimeException("Unable to save rule " + rule + 
               " to storage");
         }
-      } catch (IllegalStateException e) {
-        query.sendStatusOnly(HttpResponseStatus.NOT_MODIFIED);
-      } catch (IllegalArgumentException e) {
-        throw new BadRequestException(e);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    } else if (method == HttpMethod.DELETE) {
-      try {
+  
+      } else if (method == HttpMethod.DELETE) {
+  
+        if (tree.getRule(rule.getLevel(), rule.getOrder()) == null) {
+          throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
+              "Unable to locate rule: " + rule);
+        }
         TreeRule.deleteRule(tsdb, tree.getTreeId(), rule.getLevel(), 
             rule.getOrder()); 
         query.sendStatusOnly(HttpResponseStatus.NO_CONTENT);
-      } catch (IllegalArgumentException e) {
-        throw new BadRequestException(e);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
+  
+      } else {
+        throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
+          "Unsupported HTTP request method");
       }
-    } else {
-      throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
-        "Unsupported HTTP request method");
+    
+    } catch (BadRequestException e) {
+      throw e;
+    } catch (IllegalStateException e) {
+      query.sendStatusOnly(HttpResponseStatus.NOT_MODIFIED);
+    } catch (IllegalArgumentException e) {
+      throw new BadRequestException(e);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
   
+  /**
+   * Handles requests to replace or delete all of the rules in the given tree.
+   * It's an efficiency helper for cases where folks don't want to make a single
+   * call per rule when updating many rules at once.
+   * @throws BadRequestException if the request was invalid.
+   */
   private void handleRules() {
     int tree_id = 0;
     List<TreeRule> rules = null;
@@ -310,7 +340,8 @@ final class TreeRpc implements HttpRpc {
       tree_id = rules.get(0).getTreeId();
       for (TreeRule rule : rules) {
         if (rule.getTreeId() != tree_id) {
-          throw new BadRequestException("All rules must belong to the same tree");
+          throw new BadRequestException(
+              "All rules must belong to the same tree");
         }
       }
     } else {
@@ -323,38 +354,46 @@ final class TreeRpc implements HttpRpc {
         throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
             "Unable to locate tree: " + tree_id);
       }
-    } catch (Exception e1) {
-      throw new RuntimeException(e1);
-    }
     
-    if (method == HttpMethod.POST || method == HttpMethod.PUT) {
-      TreeRule.deleteAllRules(tsdb, tree_id);
-      try {
+      if (method == HttpMethod.POST || method == HttpMethod.PUT) {
+        if (rules == null || rules.isEmpty()) {
+          if (rules == null || rules.isEmpty()) {
+            throw new BadRequestException("Missing tree rules");
+          }
+        }
+        
+        TreeRule.deleteAllRules(tsdb, tree_id);
         for (TreeRule rule : rules) {
-          rule.storeRule(tsdb, true);
+          rule.syncToStorage(tsdb, true);
         }
         query.sendStatusOnly(HttpResponseStatus.NO_CONTENT);
-      } catch (IllegalArgumentException e) {
-        throw new BadRequestException(e);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    } else if (method == HttpMethod.DELETE) {
-      try {
+  
+      } else if (method == HttpMethod.DELETE) {
+  
         TreeRule.deleteAllRules(tsdb, tree_id);
         query.sendStatusOnly(HttpResponseStatus.NO_CONTENT);
-      } catch (IllegalArgumentException e) {
-        throw new BadRequestException(e);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
+  
+      } else {
+        throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
+          "Unsupported HTTP request method");
       }
-    } else {
-      throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
-        "Unsupported HTTP request method");
+    
+    } catch (BadRequestException e) {
+      throw e;
+    } catch (IllegalArgumentException e) {
+      throw new BadRequestException(e);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
   
-  private void handleTest() throws Exception {
+  /**
+   * Runs the specified TSMeta object through a tree's rule set to determine
+   * what the results would be or debug a meta that wasn't added to a tree
+   * successfully
+   * @throws BadRequestException if the request was invalid.
+   */
+  private void handleTest() {
     final Map<String, Object> map;
     if (query.hasContent()) {
       map = query.serializer().parseTreeTSUIDsListV1();
@@ -368,64 +407,95 @@ final class TreeRpc implements HttpRpc {
     }
     
     // make sure the tree exists
-    final Tree tree = Tree.fetchTree(tsdb, tree_id).joinUninterruptibly();
-    if (tree == null) {
-      throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
-          "Unable to locate tree: " + tree_id);
-    }
-    
-    // ugly, but keeps from having to create a dedicated class just to 
-    // convert one field.
-    @SuppressWarnings("unchecked")
-    final List<String> tsuids = (List<String>)map.get("tsuids");
-    if (tsuids == null || tsuids.isEmpty()) {
-      throw new BadRequestException("Missing or empty TSUID list");
-    }
-    
-    if (method == HttpMethod.GET || method == HttpMethod.POST || 
-        method == HttpMethod.PUT) {
-      try {
+    Tree tree = null;
+    try {
+      
+      tree = Tree.fetchTree(tsdb, tree_id).joinUninterruptibly();
+      if (tree == null) {
+        throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
+            "Unable to locate tree: " + tree_id);
+      }
+      
+      // ugly, but keeps from having to create a dedicated class just to 
+      // convert one field.
+      @SuppressWarnings("unchecked")
+      final List<String> tsuids = (List<String>)map.get("tsuids");
+      if (tsuids == null || tsuids.isEmpty()) {
+        throw new BadRequestException("Missing or empty TSUID list");
+      }
+      
+      if (method == HttpMethod.GET || method == HttpMethod.POST || 
+          method == HttpMethod.PUT) {
+        
         final HashMap<String, HashMap<String, Object>> results = 
           new HashMap<String, HashMap<String, Object>>(tsuids.size());
-        final TreeBuilder builder = new TreeBuilder(tsdb);
-        builder.setTree(tree);
+        final TreeBuilder builder = new TreeBuilder(tsdb, tree);
         for (String tsuid : tsuids) {
           final HashMap<String, Object> tsuid_results = 
             new HashMap<String, Object>();
           
-          final TSMeta meta = TSMeta.getTSMeta(tsdb, tsuid);
-          // if the meta doesn't exist, we can't process, so just log a message
-          // to the results and move on to the next TSUID
-          if (meta == null) {
-            tsuid_results.put("tree", null);
-            tsuid_results.put("meta", null);
-            final ArrayList<String> messages = new ArrayList<String>(1);
-            messages.add("Unable to locate TSUID meta data");
-            tsuid_results.put("messages", messages);
+          try {
+            final TSMeta meta = TSMeta.getTSMeta(tsdb, tsuid)
+              .joinUninterruptibly();
+            // if the meta doesn't exist, we can't process, so just log a 
+            // message to the results and move on to the next TSUID
+            if (meta == null) {
+              tsuid_results.put("treeid", null);
+              tsuid_results.put("meta", null);
+              final ArrayList<String> messages = new ArrayList<String>(1);
+              messages.add("Unable to locate TSUID meta data");
+              tsuid_results.put("messages", messages);
+              results.put(tsuid, tsuid_results);
+              continue;
+            }
+            
+            builder.processTimeseriesMeta(meta, true).joinUninterruptibly();
+            tsuid_results.put("treeid", builder.getRootBranch());
+            tsuid_results.put("meta", meta);
+            tsuid_results.put("messages", builder.getTestMessage());
+            
             results.put(tsuid, tsuid_results);
-            continue;
+          } catch (DeferredGroupException e) {
+            // we want to catch NSU errors and handle them gracefully for
+            // TSUIDs where they may have been deleted
+            Throwable ex = e;
+            while (ex.getClass().equals(DeferredGroupException.class)) {
+              ex = ex.getCause();
+            }
+            
+            if (ex.getClass().equals(NoSuchUniqueId.class)) {
+              tsuid_results.put("treeid", null);
+              tsuid_results.put("meta", null);
+              final ArrayList<String> messages = new ArrayList<String>(1);
+              messages.add("TSUID was missing a UID name: " + ex.getMessage());
+              tsuid_results.put("messages", messages);
+              results.put(tsuid, tsuid_results);
+            }
           }
-          
-          builder.processTimeseriesMeta(tree_id, meta, true);
-          tsuid_results.put("tree", builder.getRootBranch());
-          tsuid_results.put("meta", meta);
-          tsuid_results.put("messages", builder.getTestMessage());
-          
-          results.put(tsuid, tsuid_results);
         }
         
         query.sendReply(query.serializer().formatTreeTestV1(results));
-      } catch (IllegalArgumentException e) {
-        throw new BadRequestException(e);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
+  
+      } else {
+        throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
+          "Unsupported HTTP request method");
       }
-    } else {
-      throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
-      "Unsupported HTTP request method");
+    
+    } catch (BadRequestException e) {
+      throw e;
+    } catch (IllegalArgumentException e) {
+      throw new BadRequestException(e);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
   
+  /**
+   * Handles requests to fetch collisions or not-matched entries for the given
+   * tree. To cut down on code, this method uses a flag to determine if we want
+   * collisions or not-matched entries, since they both have the same data types.
+   * @param for_collisions
+   */
   private void handleCollisionNotMatched(final boolean for_collisions) {
     final Map<String, Object> map;
     if (query.hasContent()) {
@@ -441,37 +511,39 @@ final class TreeRpc implements HttpRpc {
     
     // make sure the tree exists
     try {
+      
       if (Tree.fetchTree(tsdb, tree_id).joinUninterruptibly() == null) {
         throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
             "Unable to locate tree: " + tree_id);
       }
-    } catch (Exception e1) {
-      throw new RuntimeException(e1);
-    }
-    
-    if (method == HttpMethod.GET || method == HttpMethod.POST || 
-        method == HttpMethod.PUT) {
-      try {
+  
+      if (method == HttpMethod.GET || method == HttpMethod.POST || 
+          method == HttpMethod.PUT) {
+  
         // ugly, but keeps from having to create a dedicated class just to 
         // convert one field.
         @SuppressWarnings("unchecked")
         final List<String> tsuids = (List<String>)map.get("tsuids");
         final Map<String, String> results = for_collisions ? 
-            Tree.fetchCollisions(tsdb, tree_id, tsuids) :
-              Tree.fetchNotMatched(tsdb, tree_id, tsuids);
+            Tree.fetchCollisions(tsdb, tree_id, tsuids).joinUninterruptibly() :
+              Tree.fetchNotMatched(tsdb, tree_id, tsuids).joinUninterruptibly();
         query.sendReply(query.serializer().formatTreeCollisionNotMatchedV1(
             results, for_collisions));
-      } catch (ClassCastException e) {
-        throw new BadRequestException(
-            "Unable to convert the given data to a list", e);
-      } catch (IllegalArgumentException e) {
-        throw new BadRequestException(e);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
+  
+      } else {
+        throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
+        "Unsupported HTTP request method");
       }
-    } else {
-      throw new BadRequestException(HttpResponseStatus.BAD_REQUEST, 
-      "Unsupported HTTP request method");
+    
+    } catch (ClassCastException e) {
+      throw new BadRequestException(
+          "Unable to convert the given data to a list", e);
+    } catch (BadRequestException e) {
+      throw e;
+    } catch (IllegalArgumentException e) {
+      throw new BadRequestException(e);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
   
@@ -554,22 +626,24 @@ final class TreeRpc implements HttpRpc {
     if (query.hasQueryStringParam("display_format")) {
       rule.setDisplayFormat(query.getQueryStringParam("display_format"));
     }
-    if (query.hasQueryStringParam("level")) {
+    //if (query.hasQueryStringParam("level")) {
       try {
-        rule.setLevel(Integer.parseInt(query.getQueryStringParam("level")));
+        rule.setLevel(Integer.parseInt(
+            query.getRequiredQueryStringParam("level")));
       } catch (NumberFormatException e) {
         throw new BadRequestException(
             "Unable to parse the 'level' parameter", e);
       }
-    }
-    if (query.hasQueryStringParam("order")) {
+    //}
+    //if (query.hasQueryStringParam("order")) {
       try {
-        rule.setOrder(Integer.parseInt(query.getQueryStringParam("order")));
+        rule.setOrder(Integer.parseInt(
+            query.getRequiredQueryStringParam("order")));
       } catch (NumberFormatException e) {
         throw new BadRequestException(
             "Unable to parse the 'order' parameter", e);
       }
-    }
+    //}
     return rule;
   }
   
@@ -582,10 +656,10 @@ final class TreeRpc implements HttpRpc {
   private int parseTreeId(final boolean required) {
     try{
       if (required) {
-        return Integer.parseInt(query.getRequiredQueryStringParam("tree"));
+        return Integer.parseInt(query.getRequiredQueryStringParam("treeid"));
       } else {
-        if (query.hasQueryStringParam("tree")) {
-          return Integer.parseInt(query.getQueryStringParam("tree"));
+        if (query.hasQueryStringParam("treeid")) {
+          return Integer.parseInt(query.getQueryStringParam("treeid"));
         } else {
           return 0;
         }
@@ -595,8 +669,15 @@ final class TreeRpc implements HttpRpc {
     }
   }
 
+  /**
+   * Used to parse a list of TSUIDs from the query string for collision or not
+   * matched requests. TSUIDs must be comma separated.
+   * @return A map with a list of tsuids. If found, the tsuids array will be 
+   * under the "tsuid" key. The map is necessary for compatability with POJO 
+   * parsing. 
+   */
   private Map<String, Object> parseTSUIDsList() {
-    HashMap<String, Object> map = new HashMap<String, Object>();
+    final HashMap<String, Object> map = new HashMap<String, Object>();
     map.put("treeId", parseTreeId(true));
     
     final String tsquery = query.getQueryStringParam("tsuids");

@@ -14,14 +14,11 @@ package net.opentsdb.tsd;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyInt;
+import static org.mockito.Matchers.anyString;
+import static org.powermock.api.mockito.PowerMockito.mock;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.TreeMap;
 
 import net.opentsdb.core.TSDB;
@@ -36,6 +33,7 @@ import net.opentsdb.tree.TreeRule;
 import net.opentsdb.tree.TreeRule.TreeRuleType;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
+import net.opentsdb.utils.Config;
 import net.opentsdb.utils.JSON;
 
 import org.hbase.async.DeleteRequest;
@@ -44,7 +42,11 @@ import org.hbase.async.HBaseClient;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
 import org.hbase.async.Scanner;
+import org.jboss.netty.handler.codec.http.DefaultHttpRequest;
+import org.jboss.netty.handler.codec.http.HttpMethod;
+import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import org.jboss.netty.handler.codec.http.HttpVersion;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -52,8 +54,6 @@ import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
-
-import com.stumbleupon.async.Deferred;
 
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore({"javax.management.*", "javax.xml.*",
@@ -63,29 +63,15 @@ import com.stumbleupon.async.Deferred;
   PutRequest.class, KeyValue.class, Scanner.class, DeleteRequest.class })
 public final class TestTreeRpc {
   private TSDB tsdb;
+  private HBaseClient client = mock(HBaseClient.class);
   private MockBase storage;
   private TreeRpc rpc = new TreeRpc();
-  private Tree tree = TestTree.buildTestTree();
-  // for UTs we'll use 1 byte tag IDs
-  private String tsuid = "0102030405";
-  private TSMeta meta = new TSMeta(tsuid);
-  private UIDMeta metric = new UIDMeta(UniqueIdType.METRIC, new byte[] { 1 }, 
-      "sys.cpu.0");
-  private UIDMeta tagk1 = new UIDMeta(UniqueIdType.TAGK, new byte[] { 2 }, 
-      "host");
-  private UIDMeta tagv1 = new UIDMeta(UniqueIdType.TAGV, new byte[] { 3 }, 
-      "web-01.lga.mysite.com");
-  private UIDMeta tagk2 = new UIDMeta(UniqueIdType.TAGK, new byte[] { 4 }, 
-      "type");
-  private UIDMeta tagv2 = new UIDMeta(UniqueIdType.TAGV, new byte[] { 5 }, 
-      "user");
-  private byte[] leaf_qualifier;
   
-  final static private Method toStorageJson;
+  final static private Method branchToStorageJson;
   static {
     try {
-      toStorageJson = Branch.class.getDeclaredMethod("toStorageJson");
-      toStorageJson.setAccessible(true);
+      branchToStorageJson = Branch.class.getDeclaredMethod("toStorageJson");
+      branchToStorageJson.setAccessible(true);
     } catch (Exception e) {
       throw new RuntimeException("Failed in static initializer", e);
     }
@@ -101,35 +87,1048 @@ public final class TestTreeRpc {
     }
   }
   
+  final static private Method LeaftoStorageJson;
+  static {
+    try {
+      LeaftoStorageJson = Leaf.class.getDeclaredMethod("toStorageJson");
+      LeaftoStorageJson.setAccessible(true);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed in static initializer", e);
+    }
+  }
+  
+  final static private Method TSMetagetStorageJSON;
+  static {
+    try {
+      TSMetagetStorageJSON = TSMeta.class.getDeclaredMethod("getStorageJSON");
+      TSMetagetStorageJSON.setAccessible(true);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed in static initializer", e);
+    }
+  }
+  
+  final static private Method UIDMetagetStorageJSON;
+  static {
+    try {
+      UIDMetagetStorageJSON = UIDMeta.class.getDeclaredMethod("getStorageJSON");
+      UIDMetagetStorageJSON.setAccessible(true);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed in static initializer", e);
+    }
+  }
+  
   @Before
   public void before() throws Exception {
-    storage = new MockBase(true, true, true, true);
-    tsdb = NettyMocks.getMockedHTTPTSDB(storage.getTSDB());
+    final Config config = new Config(false);
+    PowerMockito.whenNew(HBaseClient.class)
+      .withArguments(anyString(), anyString()).thenReturn(client);
+    tsdb = new TSDB(config);
+    storage = new MockBase(tsdb, client, true, true, true, true);
+  }
+  
+  @Test
+  public void constructor() throws Exception {
+    new TreeRpc();
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void noRoute() throws Exception {
+    HttpQuery query = NettyMocks.getQuery(tsdb,  "/api/tree/noroute");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTreeBadMethod() throws Exception {
+    final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
+        HttpMethod.TRACE, "/api/tree");
+    final HttpQuery query = new HttpQuery(tsdb, req, NettyMocks.fakeChannel());
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleTreeGetAll() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"name\":\"Test Tree\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"name\":\"2nd Tree\""));
+  }
+  
+  @Test
+  public void handleTreeGetSingle() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?treeid=2");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"name\":\"2nd Tree\""));
+    assertFalse(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"name\":\"Test Tree\""));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTreeGetNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, "/api/tree?treeid=3");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTreeGetBadID655536() throws Exception {
+    HttpQuery query = NettyMocks.getQuery(tsdb, "/api/tree?treeid=655536");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleTreeQSCreate() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?name=NewTree&method=post");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals(1, storage.numColumns(new byte[] { 0, 3 }));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTreeQSCreateNoName() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?method=post&description=HelloWorld");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTreeQSCreateOutOfIDs() throws Exception {
+    setupStorage();
+    storage.addColumn(new byte[] { (byte) 0xFF, (byte) 0xFF }, 
+        "tree".getBytes(MockBase.ASCII()), "{}".getBytes(MockBase.ASCII()));
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?method=post");
+    rpc.execute(tsdb, query);
+  }
     
-    // set private fields via reflection so the UTs can change things at will
-    Field tag_metric = TSMeta.class.getDeclaredField("metric");
-    tag_metric.setAccessible(true);
-    tag_metric.set(meta, metric);
-    tag_metric.setAccessible(false);
-    
-    ArrayList<UIDMeta> tags = new ArrayList<UIDMeta>(4);
-    tags.add(tagk1);
-    tags.add(tagv1);
-    tags.add(tagk2);
-    tags.add(tagv2);
-    Field tags_field = TSMeta.class.getDeclaredField("tags");
-    tags_field.setAccessible(true);
-    tags_field.set(meta, tags);
-    tags_field.setAccessible(false);
+  @Test
+  public void handleTreePOSTCreate() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+      "/api/tree", "{\"name\":\"New Tree\"}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals(1, storage.numColumns(new byte[] { 0, 3 }));
+  }
 
-    leaf_qualifier = new byte[Leaf.LEAF_PREFIX().length + 
-                                      (tsuid.length() / 2)];
-    System.arraycopy(Leaf.LEAF_PREFIX(), 0, leaf_qualifier, 0, 
-        Leaf.LEAF_PREFIX().length);
-    byte[] tsuid_bytes = UniqueId.stringToUid(tsuid);
-    System.arraycopy(tsuid_bytes, 0, leaf_qualifier, Leaf.LEAF_PREFIX().length, 
-        tsuid_bytes.length);
+  @Test
+  public void handleTreeQSModify() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?treeid=1&method=post&description=HelloWorld");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"description\":\"HelloWorld\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"name\":\"Test Tree\""));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTreeQSModifyNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?treeid=3&method=post&description=HelloWorld");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleTreeQSModifyNotModified() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?treeid=1&method=post");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NOT_MODIFIED, query.response().getStatus());
+  }
+  
+  @Test
+  public void handleTreePOSTModify() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+      "/api/tree", "{\"treeId\":1,\"description\":\"Hello World\"}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"description\":\"Hello World\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"name\":\"Test Tree\""));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTreeQSPutNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?treeid=3&method=put&description=HelloWorld");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleTreeQSPutNotModified() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?treeid=1&method=put");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NOT_MODIFIED, query.response().getStatus());
+  }
+  
+  @Test
+  public void handleTreeQSPut() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?treeid=1&method=put&description=HelloWorld");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"description\":\"HelloWorld\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"name\":\"\""));
+  }
+  
+  @Test
+  public void handleTreePOSTPut() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.putQuery(tsdb, 
+      "/api/tree", "{\"treeId\":1,\"description\":\"Hello World\"}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"description\":\"Hello World\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"name\":\"\""));
+  }
 
+  @Test
+  public void handleTreeQSDeleteDefault() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?treeid=1&method=delete");
+    // make sure the root is there BEFORE we delete
+    assertEquals(4, storage.numColumns(new byte[] { 0, 1 }));
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NO_CONTENT, query.response().getStatus());
+    // make sure the definition is still there but the root is gone
+    assertEquals(3, storage.numColumns(new byte[] { 0, 1 }));
+    assertEquals(-1, storage.numColumns(
+        Branch.stringToId("00010001BECD000181A8")));
+    assertEquals(-1, storage.numColumns(
+        Branch.stringToId("00010001BECD000181A8BF992A99")));
+  }
+  
+  @Test
+  public void handleTreeQSDeleteDefinition() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?treeid=1&method=delete&definition=true");
+    // make sure the root is there BEFORE we delete
+    assertEquals(4, storage.numColumns(new byte[] { 0, 1 }));
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NO_CONTENT, query.response().getStatus());
+    // make sure the definition has been deleted too
+    assertEquals(-1, storage.numColumns(new byte[] { 0, 1 }));
+    assertEquals(-1, storage.numColumns(
+        Branch.stringToId("00010001BECD000181A8")));
+    assertEquals(-1, storage.numColumns(
+        Branch.stringToId("00010001BECD000181A8BF992A99")));
+  }
+  
+  @Test
+  public void handleTreePOSTDeleteDefault() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.deleteQuery(tsdb, 
+      "/api/tree", "{\"treeId\":1}");
+    // make sure the root is there BEFORE we delete
+    assertEquals(4, storage.numColumns(new byte[] { 0, 1 }));
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NO_CONTENT, query.response().getStatus());
+    // make sure the definition is still there but the root is gone
+    assertEquals(3, storage.numColumns(new byte[] { 0, 1 }));
+    assertEquals(-1, storage.numColumns(
+        Branch.stringToId("00010001BECD000181A8")));
+    assertEquals(-1, storage.numColumns(
+        Branch.stringToId("00010001BECD000181A8BF992A99")));
+  }
+  
+  @Test
+  public void handleTreePOSTDeleteDefinition() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.deleteQuery(tsdb, 
+      "/api/tree?definition=true", "{\"treeId\":1}");
+    // make sure the root is there BEFORE we delete
+    assertEquals(4, storage.numColumns(new byte[] { 0, 1 }));
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NO_CONTENT, query.response().getStatus());
+    // make sure the definition has been deleted too
+    assertEquals(-1, storage.numColumns(new byte[] { 0, 1 }));
+    assertEquals(-1, storage.numColumns(
+        Branch.stringToId("00010001BECD000181A8")));
+    assertEquals(-1, storage.numColumns(
+        Branch.stringToId("00010001BECD000181A8BF992A99")));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTreeQSDeleteNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree?treeid=3&method=delete");
+    rpc.execute(tsdb, query);
+  }
+
+  @Test
+  public void handleBranchRoot() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, "/api/tree/branch?treeid=1");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"displayName\":\"ROOT\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"numBranches\":3"));
+  }
+  
+  @Test
+  public void handleBranchChild() throws Exception {
+    setupStorage();
+    setupBranch();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/branch?branch=00010001BECD000181A8");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"metric\":\"sys.cpu.0\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"numBranches\":2"));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleBranchNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/branch?branch=00010001BECD000181A8BBBBB");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleBranchNoTree() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/branch");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleBranchBadMethod() throws Exception {
+    final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
+        HttpMethod.TRACE, "/api/tree/branch");
+    final HttpQuery query = new HttpQuery(tsdb, req, NettyMocks.fakeChannel());
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleRuleGetQS() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&level=1&order=0");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"type\":\"METRIC\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"level\":1"));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRuleGetQSNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&level=2&order=2");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRuleGetQSTreeNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=4&level=1&order=0");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRuleGetQSMissingTree() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?level=1&order=0");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRuleGetQSMissingLevel() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&order=0");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRuleGetQSMissingOrder() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&level=1");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleRuleQSNew() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&level=2&order=1&description=Testing" +
+      "&method=post&type=metric");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"description\":\"Testing\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"level\":2"));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRuleQSNewFailValidation() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&level=2&order=1&description=Testing" +
+      "&method=post&type=tagk");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRuleQSNewMissingType() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&level=2&order=1&description=Testing&method=post");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleRuleQSNotModified() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&level=1&order=0&method=post");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NOT_MODIFIED, query.response().getStatus());
+  }
+  
+  @Test
+  public void handleRuleQSModify() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&level=1&order=0&description=Testing&method=post");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"description\":\"Testing\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"level\":1"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"notes\":\"Metric rule\""));
+  }
+  
+  @Test
+  public void handleRulePOSTNew() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+      "/api/tree/rule", "{\"treeId\":1,\"level\":2,\"order\":2,\"description\":" +
+      "\"Testing\",\"type\":\"metric\"}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"description\":\"Testing\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"level\":2"));
+  }
+
+  @Test
+  public void handleRulePOSTModify() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+      "/api/tree/rule", "{\"treeId\":1,\"level\":1,\"order\":0,\"description\":" +
+      "\"Testing\"}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"description\":\"Testing\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"level\":1"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"notes\":\"Metric rule\""));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRulesPOSTNoRules() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+      "/api/tree/rules", "");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleRuleQSPut() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&level=1&order=0&description=Testing" + 
+      "&method=put&type=metric");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"description\":\"Testing\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"level\":1"));
+    assertFalse(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"notes\":\"Metric rule\""));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRuleQSPutMissingType() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&level=1&order=0&description=Testing&method=put");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleRulePUT() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.putQuery(tsdb, 
+      "/api/tree/rule", "{\"treeId\":1,\"level\":1,\"order\":0,\"description\":" +
+      "\"Testing\",\"type\":\"metric\"}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"description\":\"Testing\""));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"level\":1"));
+    assertFalse(query.response().getContent().toString(MockBase.ASCII())
+        .contains("\"notes\":\"Metric rule\""));
+  }
+  
+  @Test
+  public void handleRuleQSDelete() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&level=1&order=0&method=delete");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NO_CONTENT, query.response().getStatus());
+    assertEquals(3, storage.numColumns(new byte[] { 0, 1 }));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRuleQSDeleteNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rule?treeid=1&level=2&order=0&method=delete");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleRuleDELETE() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.deleteQuery(tsdb, 
+      "/api/tree/rule", "{\"treeId\":1,\"level\":1,\"order\":0}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NO_CONTENT, query.response().getStatus());
+    assertEquals(3, storage.numColumns(new byte[] { 0, 1 }));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRuleBadMethod() throws Exception {
+    final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
+        HttpMethod.TRACE, "/api/tree/rule");
+    final HttpQuery query = new HttpQuery(tsdb, req, NettyMocks.fakeChannel());
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRulesGetQS() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rules?treeid=1");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleRulesPOST() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+      "/api/tree/rules", "[{\"treeId\":1,\"level\":0,\"order\":0,\"type\":" +
+      "\"METRIC\"},{\"treeId\":1,\"level\":0,\"order\":1,\"type\":\"tagk\"," +
+      "\"field\":\"fqdn\"},{\"treeId\":1,\"level\":1,\"order\":0,\"type\":" +
+      "\"tagk\",\"field\":\"host\"}]");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NO_CONTENT, query.response().getStatus());
+    assertEquals(5, storage.numColumns(new byte[] { 0, 1 }));
+    final String rule = new String(storage.getColumn(new byte[] { 0, 1 }, 
+        "tree_rule:0:0".getBytes(MockBase.ASCII())), MockBase.ASCII());
+    assertTrue(rule.contains("\"type\":\"METRIC\""));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRulesPOSTEmpty() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+      "/api/tree/rules", "[]]");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleRulesPUT() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.putQuery(tsdb, 
+      "/api/tree/rules", "[{\"treeId\":1,\"level\":0,\"order\":0,\"type\":" +
+      "\"METRIC\"},{\"treeId\":1,\"level\":0,\"order\":1,\"type\":\"tagk\"," +
+      "\"field\":\"fqdn\"},{\"treeId\":1,\"level\":1,\"order\":0,\"type\":" +
+      "\"tagk\",\"field\":\"host\"}]");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NO_CONTENT, query.response().getStatus());
+    assertEquals(5, storage.numColumns(new byte[] { 0, 1 }));
+    final String rule = new String(storage.getColumn(new byte[] { 0, 1 }, 
+        "tree_rule:0:0".getBytes(MockBase.ASCII())), MockBase.ASCII());
+    assertTrue(rule.contains("\"type\":\"METRIC\""));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRulesPOSTTreeMissmatch() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+      "/api/tree/rules", "[{\"treeId\":2,\"level\":0,\"order\":0,\"type\":" +
+      "\"METRIC\"},{\"treeId\":1,\"level\":0,\"order\":1,\"type\":\"tagk\"," +
+      "\"field\":\"fqdn\"},{\"treeId\":1,\"level\":1,\"order\":0,\"type\":" +
+      "\"tagk\",\"field\":\"host\"}]");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleRulesDeleteQS() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+      "/api/tree/rules?treeid=1&method=delete");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NO_CONTENT, query.response().getStatus());
+    assertEquals(2, storage.numColumns(new byte[] { 0, 1 }));
+  }
+  
+  @Test
+  public void handleRulesDelete() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.deleteQuery(tsdb, 
+      "/api/tree/rules?treeid=1", "");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.NO_CONTENT, query.response().getStatus());
+    assertEquals(2, storage.numColumns(new byte[] { 0, 1 }));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleRulesDeleteTreeNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.deleteQuery(tsdb, 
+      "/api/tree/rules?treeid=5", "");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleTestQS() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/test?treeid=1&tsuids=000001000001000001000002000002");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("Adding leaf"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("000001000001000001000002000002"));
+  }
+  
+  @Test
+  public void handleTestQSMulti() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/test?treeid=1&tsuids=000001000001000001000002000002," +
+        "000001000001000001000002000003");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("Adding leaf"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("000001000001000001000002000002"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("000001000001000001000002000003"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("Unable to locate TSUID meta data"));
+  }
+  
+  @Test
+  public void handleTestPOST() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+        "/api/tree/test", "{\"treeId\":1,\"tsuids\":[" + 
+        "\"000001000001000001000002000002\"]}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("Adding leaf"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("000001000001000001000002000002"));
+  }
+  
+  @Test
+  public void handleTestPUT() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    HttpQuery query = NettyMocks.putQuery(tsdb, 
+        "/api/tree/test", "{\"treeId\":1,\"tsuids\":[" + 
+        "\"000001000001000001000002000002\"]}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("Adding leaf"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("000001000001000001000002000002"));
+  }
+  
+  @Test
+  public void handleTestPOSTMulti() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+        "/api/tree/test", "{\"treeId\":1,\"tsuids\":[" + 
+        "\"000001000001000001000002000002\"," +
+        "\"000001000001000001000002000003\"]}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("Adding leaf"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("000001000001000001000002000002"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("000001000001000001000002000003"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("Unable to locate TSUID meta data"));
+  }
+  
+  @Test
+  public void handleTestTSUIDNotFound() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/test?treeid=1&tsuids=000001000001000001000002000003");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("Unable to locate TSUID meta data"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("000001000001000001000002000003"));
+  }
+  
+  @Test
+  public void handleTestNSU() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    storage.flushRow(new byte[] { 0, 0, 2 });
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/test?treeid=1&tsuids=000001000001000001000002000002");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("TSUID was missing a UID name"));
+    assertTrue(query.response().getContent().toString(MockBase.ASCII())
+        .contains("000001000001000001000002000002"));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTestTreeNotFound() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/test?treeid=3&tsuids=000001000001000001000002000002");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTestMissingTreeId() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/test?tsuids=000001000001000001000002000002");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTestQSMissingTSUIDs() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/test?treeid=1");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTestPOSTMissingTSUIDs() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+        "/api/tree/test", "{\"treeId\":1}");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleTestBadMethod() throws Exception {
+    final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
+        HttpMethod.TRACE, "/api/tree/test");
+    final HttpQuery query = new HttpQuery(tsdb, req, NettyMocks.fakeChannel());
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test
+  public void handleCollissionsQS() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/collisions?treeid=1");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals("{\"010101\":\"AAAAAA\",\"020202\":\"BBBBBB\"}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test
+  public void handleCollissionsQSSingleTSUID() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/collisions?treeid=1&tsuids=010101");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals("{\"010101\":\"AAAAAA\"}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test
+  public void handleCollissionsQSTSUIDs() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/collisions?treeid=1&tsuids=010101,020202");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals("{\"010101\":\"AAAAAA\",\"020202\":\"BBBBBB\"}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test
+  public void handleCollissionsQSTSUIDNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/collisions?treeid=1&tsuids=030101");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals("{}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test
+  public void handleCollissionsPOST() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+        "/api/tree/collisions", "{\"treeId\":1}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals("{\"010101\":\"AAAAAA\",\"020202\":\"BBBBBB\"}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test
+  public void handleCollissionsPOSTSingleTSUID() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+        "/api/tree/collisions", "{\"treeId\":1,\"tsuids\":[\"020202\"]}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals("{\"020202\":\"BBBBBB\"}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test
+  public void handleCollissionsPOSTTSUIDs() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+        "/api/tree/collisions", "{\"treeId\":1,\"tsuids\":" +
+        "[\"010101\",\"020202\"]}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals("{\"010101\":\"AAAAAA\",\"020202\":\"BBBBBB\"}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleCollissionsTreeNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/collisions?treeid=5");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleCollissionsMissingTreeId() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/collisions");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleCollissionsBadMethod() throws Exception {
+    final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
+        HttpMethod.TRACE, "/api/tree/collisions");
+    final HttpQuery query = new HttpQuery(tsdb, req, NettyMocks.fakeChannel());
+    rpc.execute(tsdb, query);
+  }
+  
+  public void handleNotMatchedQS() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/notmatched?treeid=1");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals(
+        "{\"010101\":\"Failed rule 0:0\",\"020202\":\"Failed rule 1:1\"}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test
+  public void handleNotMatchedQSSingleTSUID() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/notmatched?treeid=1&tsuids=010101");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals("{\"010101\":\"Failed rule 0:0\"}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test
+  public void handleNotMatchedQSTSUIDs() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/notmatched?treeid=1&tsuids=010101,020202");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals(
+        "{\"010101\":\"Failed rule 0:0\",\"020202\":\"Failed rule 1:1\"}",
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test
+  public void handleNotMatchedQSTSUIDNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/notmatched?treeid=1&tsuids=030101");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals("{}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test
+  public void handleNotMatchedPOST() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+        "/api/tree/notmatched", "{\"treeId\":1}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals(
+        "{\"010101\":\"Failed rule 0:0\",\"020202\":\"Failed rule 1:1\"}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test
+  public void handleNotMatchedPOSTSingleTSUID() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+        "/api/tree/notmatched", "{\"treeId\":1,\"tsuids\":[\"020202\"]}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals("{\"020202\":\"Failed rule 1:1\"}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test
+  public void handleNotMatchedPOSTTSUIDs() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.postQuery(tsdb, 
+        "/api/tree/notmatched", "{\"treeId\":1,\"tsuids\":" +
+        "[\"010101\",\"020202\"]}");
+    rpc.execute(tsdb, query);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
+    assertEquals(
+        "{\"010101\":\"Failed rule 0:0\",\"020202\":\"Failed rule 1:1\"}", 
+        query.response().getContent().toString(MockBase.ASCII()));
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleNotMatchedNotFound() throws Exception {
+    setupStorage();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/notmatched?treeid=5");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleNotMatchedMissingTreeId() throws Exception {
+    setupStorage();
+    setupBranch();
+    setupTSMeta();
+    HttpQuery query = NettyMocks.getQuery(tsdb, 
+        "/api/tree/notmatched");
+    rpc.execute(tsdb, query);
+  }
+  
+  @Test (expected = BadRequestException.class)
+  public void handleNotMatchedBadMethod() throws Exception {
+    final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
+        HttpMethod.TRACE, "/api/tree/notmatched");
+    final HttpQuery query = new HttpQuery(tsdb, req, NettyMocks.fakeChannel());
+    rpc.execute(tsdb, query);
+  }
+  
+  /**
+   * Setups objects in MockBase including two trees, rule sets, root branch,
+   * child branch, leaves and some collisions and no matches. These are used for
+   * most of the tests so they're all here.
+   */
+  private void setupStorage() throws Exception {         
+    Tree tree = TestTree.buildTestTree();
+ 
     // store root
     TreeMap<Integer, String> root_path = new TreeMap<Integer, String>();
     Branch root = new Branch(tree.getTreeId());
@@ -138,15 +1137,16 @@ public final class TestTreeRpc {
     root.prependParentPath(root_path);
     storage.addColumn(root.compileBranchId(), 
         "branch".getBytes(MockBase.ASCII()), 
-        (byte[])toStorageJson.invoke(root));
+        (byte[])branchToStorageJson.invoke(root));
     
+    // store the first tree
     byte[] key = new byte[] { 0, 1 };
-    // set pre-test values
     storage.addColumn(key, "tree".getBytes(MockBase.ASCII()), 
         (byte[])TreetoStorageJson.invoke(TestTree.buildTestTree()));
     
     TreeRule rule = new TreeRule(1);
     rule.setField("host");
+    rule.setDescription("Hostname rule");
     rule.setType(TreeRuleType.TAGK);
     storage.addColumn(key, "tree_rule:0:0".getBytes(MockBase.ASCII()), 
         JSON.serializeToBytes(rule));
@@ -154,6 +1154,7 @@ public final class TestTreeRpc {
     rule = new TreeRule(1);
     rule.setField("");
     rule.setLevel(1);
+    rule.setNotes("Metric rule");
     rule.setType(TreeRuleType.METRIC);
     storage.addColumn(key, "tree_rule:1:0".getBytes(MockBase.ASCII()), 
         JSON.serializeToBytes(rule));
@@ -163,11 +1164,8 @@ public final class TestTreeRpc {
     root_path = new TreeMap<Integer, String>();
     root_path.put(0, "ROOT");
     root.prependParentPath(root_path);
-    // TODO - static
-    Method branch_json = Branch.class.getDeclaredMethod("toStorageJson");
-    branch_json.setAccessible(true);
     storage.addColumn(key, "branch".getBytes(MockBase.ASCII()), 
-        (byte[])branch_json.invoke(root));
+        (byte[])branchToStorageJson.invoke(root));
     
     // tree 2
     key = new byte[] { 0, 2 };
@@ -198,7 +1196,7 @@ public final class TestTreeRpc {
     root_path.put(0, "ROOT");
     root.prependParentPath(root_path);
     storage.addColumn(key, "branch".getBytes(MockBase.ASCII()), 
-        (byte[])branch_json.invoke(root));
+        (byte[])branchToStorageJson.invoke(root));
     
     // sprinkle in some collisions and no matches for fun
     // collisions
@@ -208,7 +1206,7 @@ public final class TestTreeRpc {
                                       (tsuid.length() / 2)];
     System.arraycopy(Tree.COLLISION_PREFIX(), 0, qualifier, 0, 
         Tree.COLLISION_PREFIX().length);
-    tsuid_bytes = UniqueId.stringToUid(tsuid);
+    byte[] tsuid_bytes = UniqueId.stringToUid(tsuid);
     System.arraycopy(tsuid_bytes, 0, qualifier, Tree.COLLISION_PREFIX().length, 
         tsuid_bytes.length);
     storage.addColumn(key, qualifier, "AAAAAA".getBytes(MockBase.ASCII()));
@@ -245,70 +1243,102 @@ public final class TestTreeRpc {
     tsuid_bytes.length);
     storage.addColumn(key, qualifier, "Failed rule 1:1".getBytes(MockBase.ASCII()));
     
+    // drop some branches in for tree 1
+    Branch branch = new Branch(1);
+    TreeMap<Integer, String> path = new TreeMap<Integer, String>();
+    path.put(0, "ROOT");
+    path.put(1, "sys");
+    path.put(2, "cpu");
+    branch.prependParentPath(path);
+    branch.setDisplayName("cpu");
+    storage.addColumn(branch.compileBranchId(), 
+        "branch".getBytes(MockBase.ASCII()), 
+        (byte[])branchToStorageJson.invoke(branch));
+    
+    Leaf leaf = new Leaf("user", "000001000001000001");
+    qualifier = leaf.columnQualifier();
+    storage.addColumn(branch.compileBranchId(), 
+        qualifier, (byte[])LeaftoStorageJson.invoke(leaf));
+    
+    leaf = new Leaf("nice", "000002000002000002");
+    qualifier = leaf.columnQualifier();
+    storage.addColumn(branch.compileBranchId(), 
+        qualifier, (byte[])LeaftoStorageJson.invoke(leaf));
+    
+    // child branch
+    branch = new Branch(1);
+    path.put(3, "mboard");
+    branch.prependParentPath(path);
+    branch.setDisplayName("mboard");
+    storage.addColumn(branch.compileBranchId(), 
+        "branch".getBytes(MockBase.ASCII()), 
+        (byte[])branchToStorageJson.invoke(branch));
+    
+    leaf = new Leaf("Asus", "000003000003000003");
+    qualifier = leaf.columnQualifier();
+    storage.addColumn(branch.compileBranchId(), 
+        qualifier, (byte[])LeaftoStorageJson.invoke(leaf));
   }
   
-  @Test
-  public void handleTreeAll() throws Exception {
-    HttpQuery query = NettyMocks.getQuery(tsdb, 
-      "/api/tree");
-    this.rpc.execute(tsdb, query);
-    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
-    assertTrue(query.response().getContent().toString(MockBase.ASCII())
-        .contains("\"name\":\"Test Tree\""));
-    assertTrue(query.response().getContent().toString(MockBase.ASCII())
-        .contains("\"name\":\"2nd Tree\""));
+  /**
+   * Sets up some UID name maps in storage for use when loading leaves from a 
+   * branch. Without these, the unit tests will fail since the leaves couldn't 
+   * find their name maps.
+   */
+  private void setupBranch() {
+    storage.addColumn(new byte[] { 0, 0, 1 }, 
+        "metrics".getBytes(MockBase.ASCII()),
+        "sys.cpu.0".getBytes(MockBase.ASCII()));
+    storage.addColumn(new byte[] { 0, 0, 1 }, 
+        "tagk".getBytes(MockBase.ASCII()),
+        "host".getBytes(MockBase.ASCII()));
+    storage.addColumn(new byte[] { 0, 0, 1 }, 
+        "tagv".getBytes(MockBase.ASCII()),
+        "web01".getBytes(MockBase.ASCII()));
   }
   
-  @Test
-  public void handleTreeSingle() throws Exception {
-    HttpQuery query = NettyMocks.getQuery(tsdb, 
-      "/api/tree?tree=2");
-    this.rpc.execute(tsdb, query);
-    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
-    assertTrue(query.response().getContent().toString(MockBase.ASCII())
-        .contains("\"name\":\"Test Tree\""));
-    assertFalse(query.response().getContent().toString(MockBase.ASCII())
-        .contains("\"name\":\"2nd Tree\""));
-  }
-  
-  @Test (expected = BadRequestException.class)
-  public void handleTreeNotFound() throws Exception {
-    HttpQuery query = NettyMocks.getQuery(tsdb, 
-      "/api/tree?tree=3");
-    this.rpc.execute(tsdb, query);
-  }
-  
-  @Test
-  public void handleTreeQSCreate() throws Exception {
-    HttpQuery query = NettyMocks.getQuery(tsdb, 
-      "/api/tree?name=NewTree&method=post");
-    this.rpc.execute(tsdb, query);
-    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
-    assertEquals(1, storage.numColumns(new byte[] { 0, 3 }));
-  }
-  
-  @Test (expected = BadRequestException.class)
-  public void handleTreeQSCreateNoName() throws Exception {
-    HttpQuery query = NettyMocks.getQuery(tsdb, 
-      "/api/tree?method=post");
-    this.rpc.execute(tsdb, query);
-  }
-  
-  @Test (expected = BadRequestException.class)
-  public void handleTreeQSCreateOutOfIDs() throws Exception {
-    storage.addColumn(new byte[] { (byte) 0xFF, (byte) 0xFF }, 
-        "tree".getBytes(MockBase.ASCII()), "{}".getBytes(MockBase.ASCII()));
-    HttpQuery query = NettyMocks.getQuery(tsdb, 
-      "/api/tree?method=post");
-    this.rpc.execute(tsdb, query);
-  }
-  
-  @Test
-  public void handleTreePOSTCreate() throws Exception {
-    HttpQuery query = NettyMocks.postQuery(tsdb, 
-      "/api/tree", "{\"name\":\"New Tree\"}");
-    this.rpc.execute(tsdb, query);
-    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
-    assertEquals(1, storage.numColumns(new byte[] { 0, 3 }));
+  /**
+   * Sets up a TSMeta object and associated UIDMeta objects in storage for 
+   * testing the "test" call. These are necessary as the TSMeta is loaded when
+   * parsed through the tree.
+   */
+  private void setupTSMeta() throws Exception {
+    final TSMeta meta = new TSMeta("000001000001000001000002000002");
+    storage.addColumn(UniqueId.stringToUid("000001000001000001000002000002"), 
+        "ts_meta".getBytes(MockBase.ASCII()), 
+        (byte[])TSMetagetStorageJSON.invoke(meta));
+    
+    final UIDMeta metric = new UIDMeta(UniqueIdType.METRIC, new byte[] { 0, 0, 1 }, 
+        "sys.cpu.0");
+    storage.addColumn(new byte[] { 0, 0, 1 }, 
+        "metric_meta".getBytes(MockBase.ASCII()), 
+        (byte[])UIDMetagetStorageJSON.invoke(metric));
+    final UIDMeta tagk1 = new UIDMeta(UniqueIdType.TAGK, new byte[] { 0, 0, 1 }, 
+        "host");
+    storage.addColumn(new byte[] { 0, 0, 1 }, 
+        "tagk_meta".getBytes(MockBase.ASCII()), 
+        (byte[])UIDMetagetStorageJSON.invoke(tagk1));
+    final UIDMeta tagv1 = new UIDMeta(UniqueIdType.TAGV, new byte[] { 0, 0, 1 }, 
+        "web-01.lga.mysite.com");
+    storage.addColumn(new byte[] { 0, 0, 1 }, 
+        "tagv_meta".getBytes(MockBase.ASCII()), 
+        (byte[])UIDMetagetStorageJSON.invoke(tagv1));
+    final UIDMeta tagk2 = new UIDMeta(UniqueIdType.TAGK, new byte[] { 0, 0, 2 }, 
+        "type");
+    storage.addColumn(new byte[] { 0, 0, 2 }, 
+        "tagk_meta".getBytes(MockBase.ASCII()), 
+        (byte[])UIDMetagetStorageJSON.invoke(tagk2));
+    final UIDMeta tagv2 = new UIDMeta(UniqueIdType.TAGV, new byte[] { 0, 0, 2 }, 
+        "user");
+    storage.addColumn(new byte[] { 0, 0, 2 }, 
+        "tagv_meta".getBytes(MockBase.ASCII()), 
+        (byte[])UIDMetagetStorageJSON.invoke(tagv2));
+    
+    storage.addColumn(new byte[] { 0, 0, 2 }, 
+        "tagk".getBytes(MockBase.ASCII()),
+        "type".getBytes(MockBase.ASCII()));
+    storage.addColumn(new byte[] { 0, 0, 2 }, 
+        "tagv".getBytes(MockBase.ASCII()),
+        "user".getBytes(MockBase.ASCII()));
   }
 }
