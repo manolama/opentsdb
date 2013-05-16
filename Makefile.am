@@ -148,6 +148,7 @@ test_SRC := \
 	test/tsd/TestPutRpc.java	\
 	test/tsd/TestQueryRpc.java	\
 	test/tsd/TestSuggestRpc.java	\
+	test/tsd/TestTreeRpc.java	\
 	test/tsd/TestUniqueIdRpc.java	\
 	test/uid/TestNoSuchUniqueId.java	\
 	test/uid/TestUniqueId.java \
