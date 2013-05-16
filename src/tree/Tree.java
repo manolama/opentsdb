@@ -333,8 +333,9 @@ public final class Tree {
       }
       
       // initiate the sync by attempting to fetch an existing tree from storage
-      storage_results.add(fetchTree(tsdb, tree_id)
-          .addCallbackDeferring(new StoreTreeCB(this)));
+      final Deferred<Boolean> process_tree = fetchTree(tsdb, tree_id)
+        .addCallbackDeferring(new StoreTreeCB(this));
+      storage_results.add(process_tree);
     }
     
     // if there were any collisions or not-matched entries found, flush them
