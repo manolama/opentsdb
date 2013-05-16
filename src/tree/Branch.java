@@ -29,18 +29,17 @@ import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
-import org.hbase.async.RowLock;
 import org.hbase.async.Scanner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
+import com.stumbleupon.async.DeferredGroupException;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.uid.NoSuchUniqueId;
@@ -49,19 +48,45 @@ import net.opentsdb.utils.JSON;
 import net.opentsdb.utils.JSONException;
 
 /**
- * 
- * IDS = Hex encoded byte arrays composed of the tree ID + hash of each previous
- * branch. Tree ID is encoded on 2 bytes, each hash is then 4 bytes. So the root
- * for tree # 1 is just {@code 0001}. A child branch could be 
- * {@code 00001A3B190C2} and so on
- * 
- * branch object in storage:
- *  
- * 
+ * Represents a branch of a meta data tree, used to organize timeseries into 
+ * a hierarchy for easy navigation. Each branch is composed of itself and
+ * potential child branches and/or child leaves. 
+ * <p>
+ * Branch IDs are hex encoded byte arrays composed of the tree ID + hash of 
+ * the display name for each previous branch. The tree ID is encoded on 
+ * {@link Tree.TREE_ID_WIDTH()} bytes, each hash is then {@code INT_WIDTH} 
+ * bytes. So the if the tree ID width is 2 bytes and Java Integers are 4 bytes, 
+ * the root for tree # 1 is just {@code 0001}. A child of the root could be 
+ * {@code 00001A3B190C2} and so on. These IDs are used as the row key in storage.
+ * <p>
+ * Branch definitions are JSON objects stored in the "branch" column of the 
+ * branch ID row. Only the tree ID, path and display name are stored in the
+ * definition column to keep space down. Leaves are stored in separate columns
+ * and child branch definitions are stored in separate rows. Note that the root
+ * branch definition for a tree will be stored in the same row as the tree 
+ * definition since they share the same row key.
+ * <p>
+ * When fetching a branch with children and leaves, a scanner is
+ * configured with a row key regex to scan any rows that match the branch ID 
+ * plus an additional {@code INT_WIDTH} so that when we scan, we can pick up all
+ * of the rows with child branch definitions. See {@link #setupScanner} for
+ * details on the scanner. Also, when loading a full branch, any leaves for the 
+ * request branch can load the associated UID names from storage, so this can 
+ * get expensive. Leaves for a child branch will not be loaded, only leaves that
+ * belong directly to the local will. Also, children branches of children will
+ * not be loaded. We only return one branch at a time since the tree could be
+ * HUGE!
+ * <p>
+ * Storing a branch will only write the definition column for the local branch
+ * object. Child branches will not be written to storage. If you've loaded
+ * and modified children in this branch, you need to loop through the children
+ * and store them individually. Leaves belonging to this branch will be stored
+ * and collisions recorded to the given Tree object.
+ * @since 2.0
  */
 @JsonIgnoreProperties(ignoreUnknown = true) 
 @JsonAutoDetect(fieldVisibility = Visibility.PUBLIC_ONLY)
-public class Branch implements Comparable<Branch> {
+public final class Branch implements Comparable<Branch> {
   private static final Logger LOG = LoggerFactory.getLogger(Branch.class);
   
   /** Charset used to convert Strings to byte arrays and back. */
@@ -98,13 +123,12 @@ public class Branch implements Comparable<Branch> {
   /**
    * Constructor that sets the tree ID
    * @param tree_id ID of the tree this branch is associated with
-   * @throws IllegalArgumentException if the parent path is null
    */
   public Branch(final int tree_id) {
     this.tree_id = tree_id;
   }
   
-  /** @return Returns the {@code display_name}'s hash code */
+  /** @return Returns the {@code display_name}'s hash code or 0 if it's not set */
   @Override
   public int hashCode() {
     if (display_name == null || display_name.isEmpty()) {
@@ -114,7 +138,7 @@ public class Branch implements Comparable<Branch> {
   }
   
   /**
-   * Just compares the branch ID
+   * Just compares the branch display name
    * @param obj The object to compare this to
    * @return True if the branch IDs are the same or the incoming object is 
    * this one
@@ -136,25 +160,29 @@ public class Branch implements Comparable<Branch> {
   }
   
   /**
-   * Comparator based on the "display_name" to sort branches when displaying
+   * Comparator based on the {@code display_name} to sort branches when 
+   * returning to an RPC calls
    */
   @Override
   public int compareTo(Branch branch) {
     return this.display_name.compareToIgnoreCase(branch.display_name);
   }
   
-  /** @return Information about this branch including ID, name and display name */
+  /** @return Information about this branch including ID and display name */
   @Override
   public String toString() {
-    return "ID: [" + hashCode() + "] name: [" + display_name + "]";
+    if (path == null) {
+      return "Name: [" + display_name + "]";
+    } else {
+      return "ID: [" + getBranchId() + "] Name: [" + display_name + "]";
+    }
   }
   
   /**
-   * Adds a child branch to the local object, merging if the branch already
-   * exists. Also checks for leaf collisions.
+   * Adds a child branch to the local branch set if it doesn't exist. Also
+   * initializes the set if it hasn't been initialized yet
    * @param branch The branch to add
-   * @return True if there were changes, false if the child and all of it's 
-   * leaves and branches already existed
+   * @return True if the branch did not exist in the set previously
    * @throws IllegalArgumentException if the incoming branch is null
    */
   public boolean addChild(final Branch branch) {
@@ -178,8 +206,8 @@ public class Branch implements Comparable<Branch> {
    * Adds a leaf to the local branch, looking for collisions
    * @param leaf The leaf to add
    * @param tree The tree to report to with collisions
-   * @return True if there were changes, false if the leaf already 
-   * exists or would cause a collision
+   * @return True if the leaf was new, false if the leaf already exists or 
+   * would cause a collision
    * @throws IllegalArgumentException if the incoming leaf is null
    */
   public boolean addLeaf(final Leaf leaf, final Tree tree) {
@@ -203,7 +231,7 @@ public class Branch implements Comparable<Branch> {
         
         // log at info or lower since it's not a system error, rather it's
         // a user issue with the rules or naming schema
-        LOG.info("Incoming TSUID [" + leaf.getTsuid() + 
+        LOG.warn("Incoming TSUID [" + leaf.getTsuid() + 
             "] collided with existing TSUID [" + collision.getTsuid() + 
             "] on display name [" + collision.getDisplayName() + "]");
       }
@@ -215,195 +243,13 @@ public class Branch implements Comparable<Branch> {
   }
   
   /**
-   * Attempts to write the branch to storage with a lock on the row
-   * @param tsdb The TSDB to use for access
-   * @param lock An optional row lock
-   * @throws HBaseException if there was an issue fetching
-   * @throws IllegalArgumentException if parsing failed
-   * @throws JSONException if the object could not be serialized
-   */
-  public Deferred<ArrayList<Object>> storeBranch(final TSDB tsdb, final Tree tree, 
-      final boolean store_leaves) {  
-    if (tree_id < 1 || tree_id > 65535) {
-      throw new IllegalArgumentException("Missing or invalid tree ID");
-    }
-
-    final ArrayList<Deferred<Boolean>> storage_results = 
-      new ArrayList<Deferred<Boolean>>(leaves != null ? leaves.size() + 1 : 1);
-    
-    // compile the row key by making sure the display_name is in the path set
-    // row ID = <treeID>[<parent.display_name.hashCode()>...]
-    final byte[] row = this.compileBranchId(); 
-    
-    // compile the object for storage, this will toss exceptions if we are
-    // missing anything important
-    final byte[] storage_data = toStorageJson();
-
-    final PutRequest put = new PutRequest(tsdb.uidTable(), row, NAME_FAMILY, 
-        BRANCH_QUALIFIER, storage_data);
-    put.setBufferable(true);
-    storage_results.add(tsdb.getClient().compareAndSet(put, new byte[0]));
-    
-    class StoreLeaves implements Callback<Deferred<ArrayList<Object>>, Branch> {
-
-      @Override
-      public Deferred<ArrayList<Object>> call(final Branch branch) throws Exception {
-        System.out.println("In leaf callback");
-        if (branch == null) {
-          LOG.error("Couldn't find branch " + getBranchId() + " in storage");
-          return Deferred.group(storage_results);
-        }
-        System.out.println("Gonna dump leaves: " + leaves.size());
-        for (Leaf leaf : leaves.values()) {
-          System.out.println("Processing Leaf: " + leaf);
-          if (branch.leaves != null && !branch.leaves.isEmpty()) {
-            final Leaf existing_leaf = branch.leaves.get(leaf.hashCode());
-            System.out.println("Existing Leaf: " + existing_leaf);
-            if (existing_leaf != null) {
-              tree.addCollision(leaf.getTsuid(), existing_leaf.getTsuid());
-              LOG.warn("Leaf collision with [" + leaf.getTsuid() + 
-                  "] on existing leaf [" + existing_leaf.getTsuid() + 
-                  "] named [" + leaf.getDisplayName() + "]");
-              System.out.println("Skipping existing: " + leaf);
-              continue;
-            }
-          }
-          System.out.println("Writing leaf to storage: " + leaf);
-          storage_results.add(leaf.storeLeaf(tsdb, row));
-        }
-        
-        return Deferred.group(storage_results);
-      }
-      
-    }
-    
-    // store leaves
-    if (store_leaves && leaves != null && !leaves.isEmpty()) {
-      System.out.println("Fetching branch to then write the leaves");
-      // to handle collisions on namespaces we need to fetch the branch w leaves
-      return fetchBranch(tsdb, row, false).addCallbackDeferring(new StoreLeaves());
-    }
-    
-    return Deferred.group(storage_results);
-  }
-  
-  public static Deferred<Branch> fetchBranch(final TSDB tsdb, 
-      final byte[] branch_id, final boolean load_tsuids) {   
-    final byte[] id = branch_id;
-    final Scanner scanner = setupScanner(tsdb, id);
-    final Branch branch = new Branch();
-    
-    class FetchBranchCB implements Callback<Deferred<Branch>, 
-      ArrayList<ArrayList<KeyValue>>> {
-  
-      public Deferred<Branch> fetchBranch() {
-        return scanner.nextRows().addCallbackDeferring(this);
-      }
-      
-      @Override
-      public Deferred<Branch> call(ArrayList<ArrayList<KeyValue>> rows)
-          throws Exception {
-        if (rows == null) {
-          if (branch.tree_id < 1 || branch.path == null) {
-            return Deferred.fromResult(null);
-          }
-          return Deferred.fromResult(branch);
-        }
-        
-        for (final ArrayList<KeyValue> row : rows) {
-          System.out.println("Columns: " + row.size());
-          for (KeyValue column : row) {
-            System.out.println("Qual: " + new String(column.qualifier()));
-            if (Bytes.equals(BRANCH_QUALIFIER, column.qualifier())) {
-              if (Bytes.equals(branch_id, column.key())) {
-                // it's *this* branch. We deserialize to a new object and copy
-                // since the columns could be in any order and we may get a 
-                // leaf before the branch
-                final Branch local_branch = JSON.parseToObject(column.value(), 
-                    Branch.class);
-                branch.path = local_branch.path;
-                branch.display_name = local_branch.display_name;
-                branch.tree_id = Tree.bytesToId(column.key());
-                System.out.println("Found local branch: " + branch);
-              } else {
-                // it's a child branch
-                if (branch.branches == null) {
-                  branch.branches = new TreeSet<Branch>();
-                }
-                
-                final Branch child = JSON.parseToObject(column.value(), 
-                    Branch.class);
-                child.tree_id = Tree.bytesToId(column.key());
-                branch.branches.add(child);
-                System.out.println("Found child branch: " + child);
-              }
-            } else if (Bytes.memcmp(Leaf.LEAF_PREFIX(), column.qualifier(), 0, 
-                Leaf.LEAF_PREFIX().length) == 0) {
-              if (Bytes.equals(id, column.key())) {
-                // process a leaf and skip if the UIDs for the TSUID can't be 
-                // found
-                System.out.println("Found child leaf");
-                try {
-                  if (branch.leaves == null) {
-                    branch.leaves = new HashMap<Integer, Leaf>();
-                  }
-                  final Leaf leaf = Leaf.parseFromStorage(tsdb, column, 
-                      load_tsuids);
-                  branch.leaves.put(leaf.hashCode(), leaf); 
-                  System.out.println("Adding leaf: " + leaf);
-                } catch (NoSuchUniqueId nsu) {
-                  System.out.println("NSU!!!!!!!");
-                  LOG.debug("Invalid UID for in branch: " + branch_id, nsu);
-                }
-              } else {
-                System.out.println("Found someone else's leaf leaf");
-              }
-            } else {
-              System.out.println("Unrecognized column: " + new String(column.qualifier(), CHARSET));
-            }
-          }
-        }
-        return fetchBranch();
-      }      
-    }
-    
-    return new FetchBranchCB().fetchBranch();
-  }
-  
-  /**
-   * Converts a branch ID hash to a hex encoded, upper case string with padding
-   * @param branch_id The ID to convert
-   * @return the branch ID as a character hex string
-   */
-  public static String idToString(final byte[] branch_id) {
-    return DatatypeConverter.printHexBinary(branch_id);
-  }
-  
-  /**
-   * Converts a hex string to a branch ID byte array (row key)
-   * @param branch_id The branch ID to convert
+   * Attempts to compile the branch ID for this branch. In order to successfully
+   * compile, the {@code tree_id}, {@code path} and {@code display_name} must
+   * be set. The path may be empty, which indicates this is a root branch, but
+   * it must be a valid Map object.
    * @return The branch ID as a byte array
-   * @throws NullPointerException if the branch ID was null
-   * @throws IllegalArgumentException if the string is not valid hex
+   * @throws IllegalArgumentException if any required parameters are missing
    */
-  public static byte[] stringToId(final String branch_id) {
-    if (branch_id == null || branch_id.isEmpty()) {
-      throw new IllegalArgumentException("Branch ID was empty");
-    }
-    if (branch_id.length() < 4) {
-      throw new IllegalArgumentException("Branch ID was too short");
-    }
-    String id = branch_id;
-    if (id.length() % 2 != 0) {
-      id = "0" + id;
-    }
-    return DatatypeConverter.parseHexBinary(id);
-  }
-
-  public static byte[] BRANCH_QUALIFIER() {
-    return BRANCH_QUALIFIER;
-  }
-  
   public byte[] compileBranchId() {
     if (tree_id < 1 || tree_id > 65535) {
       throw new IllegalArgumentException("Missing or invalid tree ID");
@@ -415,6 +261,7 @@ public class Branch implements Comparable<Branch> {
     if (display_name == null || display_name.isEmpty()) {
       throw new IllegalArgumentException("Missing display name");
     }
+    
     // first, make sure the display name is at the tip of the tree set
     if (path.isEmpty()) {
       path.put(0, display_name);
@@ -444,6 +291,14 @@ public class Branch implements Comparable<Branch> {
     return branch_id;
   }
   
+  /**
+   * Sets the path for this branch based off the path of the parent. This map
+   * may be empty, in which case the branch is considered a root.
+   * <b>Warning:</b> If the path has already been set, this will create a new
+   * path, clearing out any existing entries
+   * @param parent_path The map to store as the path
+   * @throws IllegalArgumentException if the parent path is null
+   */
   public void prependParentPath(final Map<Integer, String> parent_path) {
     if (parent_path == null) {
       throw new IllegalArgumentException("Parent path was null");
@@ -453,7 +308,308 @@ public class Branch implements Comparable<Branch> {
   }
   
   /**
-   * Returns serialized data for the branch to put in storage
+   * Attempts to write the branch definition and optionally child leaves to
+   * storage via CompareAndSets.
+   * Each returned deferred will be a boolean regarding whether the CAS call 
+   * was successful or not. This will be a mix of the branch call and leaves.
+   * Some of these may be false, which is OK, because if the branch
+   * definition already exists, we don't need to re-write it. Leaves will
+   * return false if there was a collision.
+   * @param tsdb The TSDB to use for access
+   * @param tree The tree to record collisions to
+   * @param store_leaves Whether or not child leaves should be written to
+   * storage
+   * @return A list of deferreds to wait on for completion.
+   * @throws HBaseException if there was an issue
+   * @throws IllegalArgumentException if the tree ID was missing or data was 
+   * missing
+   */
+  public Deferred<ArrayList<Object>> storeBranch(final TSDB tsdb, 
+      final Tree tree, final boolean store_leaves) {  
+    if (tree_id < 1 || tree_id > 65535) {
+      throw new IllegalArgumentException("Missing or invalid tree ID");
+    }
+
+    final ArrayList<Deferred<Boolean>> storage_results = 
+      new ArrayList<Deferred<Boolean>>(leaves != null ? leaves.size() + 1 : 1);
+    
+    // compile the row key by making sure the display_name is in the path set
+    // row ID = <treeID>[<parent.display_name.hashCode()>...]
+    final byte[] row = this.compileBranchId(); 
+    
+    // compile the object for storage, this will toss exceptions if we are
+    // missing anything important
+    final byte[] storage_data = toStorageJson();
+
+    final PutRequest put = new PutRequest(tsdb.uidTable(), row, NAME_FAMILY, 
+        BRANCH_QUALIFIER, storage_data);
+    put.setBufferable(true);
+    storage_results.add(tsdb.getClient().compareAndSet(put, new byte[0]));
+    
+    // store leaves if told to and put the storage calls in our deferred group
+    if (store_leaves && leaves != null && !leaves.isEmpty()) {
+      for (final Leaf leaf : leaves.values()) {
+        storage_results.add(leaf.storeLeaf(tsdb, row, tree));
+      } 
+    }
+    
+    return Deferred.group(storage_results);
+  }
+  
+  /**
+   * Attempts to fetch only the branch definition object from storage. This is
+   * much faster than scanning many rows for child branches as per the 
+   * {@link #fetchBranch} call. Useful when building trees, particularly to
+   * fetch the root branch.
+   * @param tsdb The TSDB to use for access
+   * @param branch_id ID of the branch to retrieve
+   * @return A branch if found, null if it did not exist
+   * @throws JSONException if the object could not be deserialized
+   */
+  public static Deferred<Branch> fetchBranchOnly(final TSDB tsdb, 
+      final byte[] branch_id) {
+    
+    final GetRequest get = new GetRequest(tsdb.uidTable(), branch_id);
+    get.family(NAME_FAMILY);
+    get.qualifier(BRANCH_QUALIFIER);
+    
+    /**
+     * Called after the get returns with or without data. If we have data, we'll
+     * parse the branch and return it.
+     */
+    final class GetCB implements Callback<Deferred<Branch>, ArrayList<KeyValue>> {
+
+      @Override
+      public Deferred<Branch> call(ArrayList<KeyValue> row) throws Exception {
+        if (row == null || row.isEmpty()) {
+          return Deferred.fromResult(null);
+        }
+        
+        final Branch branch = JSON.parseToObject(row.get(0).value(), 
+            Branch.class);
+        
+        // WARNING: Since the json doesn't store the tree ID, to cut down on
+        // space, we have to load it from the row key.
+        branch.tree_id = Tree.bytesToId(row.get(0).key());
+        return Deferred.fromResult(branch);
+      }
+      
+    }
+    
+    return tsdb.getClient().get(get).addCallbackDeferring(new GetCB());
+  }
+  
+  /**
+   * Attempts to fetch the branch, it's leaves and all child branches.
+   * The UID names for each leaf may also be loaded if configured.
+   * @param tsdb The TSDB to use for storage access
+   * @param branch_id ID of the branch to retrieve
+   * @param load_leaf_uids Whether or not to load UID names for each leaf
+   * @return A branch if found, null if it did not exist
+   * @throws JSONException if the object could not be deserialized
+   */
+  public static Deferred<Branch> fetchBranch(final TSDB tsdb, 
+      final byte[] branch_id, final boolean load_leaf_uids) {
+    
+    final Scanner scanner = setupBranchScanner(tsdb, branch_id);
+    
+    // This is the branch that will be loaded with data from the scanner and
+    // returned at the end of the process.
+    final Branch branch = new Branch();
+    
+    // A list of deferreds to wait on for child leaf processing
+    final ArrayList<Deferred<Object>> leaf_group = 
+      new ArrayList<Deferred<Object>>();
+    
+    /**
+     * Exception handler to catch leaves with an invalid UID name due to a 
+     * possible deletion. This will allow the scanner to keep loading valid
+     * leaves and ignore problems. The fsck tool can be used to clean up
+     * orphaned leaves. If we catch something other than an NSU, it will
+     * re-throw the exception
+     */
+    final class LeafErrBack implements Callback<Object, Exception> {
+
+      final byte[] qualifier;
+      
+      public LeafErrBack(final byte[] qualifier) {
+        this.qualifier = qualifier;
+      }
+      
+      @Override
+      public Object call(final Exception e) throws Exception {
+        Throwable ex = e;
+        while (ex.getClass().equals(DeferredGroupException.class)) {
+          ex = ex.getCause();
+        }
+        if (ex.getClass().equals(NoSuchUniqueId.class)) {
+          LOG.debug("Invalid UID for leaf: " + idToString(qualifier) + 
+              " in branch: " + idToString(branch_id), ex);
+        } else {
+          throw (Exception)ex;
+        }
+        return null;
+      }
+      
+    }
+    
+    /**
+     * Called after a leaf has been loaded successfully and adds the leaf
+     * to the branch's leaf set. Also lazily initializes the leaf set if it 
+     * hasn't been.
+     */
+    final class LeafCB implements Callback<Object, Leaf> {
+
+      @Override
+      public Object call(final Leaf leaf) throws Exception {
+        if (leaf != null) {
+          if (branch.leaves == null) {
+            branch.leaves = new HashMap<Integer, Leaf>();
+          }
+          branch.leaves.put(leaf.hashCode(), leaf); 
+        }
+        return null;
+      }
+      
+    }
+    
+    /**
+     * Final callback that waits on all of the leaves to finish loading before 
+     * returning the branch object.
+     */
+    final class FinalCB implements Callback<Deferred<Branch>, 
+      ArrayList<Object>> {
+
+      @Override
+      public Deferred<Branch> call(final ArrayList<Object> calls) 
+        throws Exception {
+        return Deferred.fromResult(branch);
+      }
+      
+    }
+    
+    /**
+     * Scanner callback executed recursively each time we get a set of data
+     * from storage. This is responsible for determining what columns are 
+     * returned and issuing requests to load leaf objects.
+     * When the scanner returns a null set of rows, the method initiates the
+     * final callback.
+     */
+    final class FetchBranchCB implements Callback<Deferred<Branch>, 
+      ArrayList<ArrayList<KeyValue>>> {
+  
+      /**
+       * Starts the scanner and is called recursively to fetch the next set of
+       * rows from the scanner.
+       * @return The branch if loaded successfully, null if the branch was not
+       * found.
+       */
+      public Deferred<Branch> fetchBranch() {
+        return scanner.nextRows().addCallbackDeferring(this);
+      }
+      
+      /**
+       * Loops through each row of the scanner results and parses out branch
+       * definitions and child leaves.
+       * @return The final branch callback if the scanner returns a null set
+       */
+      @Override
+      public Deferred<Branch> call(final ArrayList<ArrayList<KeyValue>> rows)
+          throws Exception {
+        if (rows == null) {
+          if (branch.tree_id < 1 || branch.path == null) {
+            return Deferred.fromResult(null);
+          }
+          return Deferred.group(leaf_group).addCallbackDeferring(new FinalCB());
+        }
+        
+        for (final ArrayList<KeyValue> row : rows) {
+          for (KeyValue column : row) {
+
+            // matched a branch column
+            if (Bytes.equals(BRANCH_QUALIFIER, column.qualifier())) {
+              if (Bytes.equals(branch_id, column.key())) {
+                
+                // it's *this* branch. We deserialize to a new object and copy
+                // since the columns could be in any order and we may get a 
+                // leaf before the branch
+                final Branch local_branch = JSON.parseToObject(column.value(), 
+                    Branch.class);
+                branch.path = local_branch.path;
+                branch.display_name = local_branch.display_name;
+                branch.tree_id = Tree.bytesToId(column.key());
+
+              } else {
+                // it's a child branch
+                final Branch child = JSON.parseToObject(column.value(), 
+                    Branch.class);
+                child.tree_id = Tree.bytesToId(column.key());
+                branch.addChild(child);
+              }
+            // parse out a leaf
+            } else if (Bytes.memcmp(Leaf.LEAF_PREFIX(), column.qualifier(), 0, 
+                Leaf.LEAF_PREFIX().length) == 0) {
+              if (Bytes.equals(branch_id, column.key())) {
+                // process a leaf and skip if the UIDs for the TSUID can't be 
+                // found. Add an errback to catch NoSuchUniqueId exceptions
+                leaf_group.add(Leaf.parseFromStorage(tsdb, column, 
+                    load_leaf_uids)
+                    .addCallbacks(new LeafCB(), 
+                        new LeafErrBack(column.qualifier())));
+              } else {
+                // TODO - figure out an efficient way to increment a counter in 
+                // the child branch with the # of leaves it has
+              }
+            }
+          }
+        }
+        
+        // recursively call ourself to fetch more results from the scanner
+        return fetchBranch();
+      }      
+    }
+    
+    // start scanning
+    return new FetchBranchCB().fetchBranch();
+  }
+  
+  /**
+   * Converts a branch ID hash to a hex encoded, upper case string with padding
+   * @param branch_id The ID to convert
+   * @return the branch ID as a character hex string
+   */
+  public static String idToString(final byte[] branch_id) {
+    return DatatypeConverter.printHexBinary(branch_id);
+  }
+  
+  /**
+   * Converts a hex string to a branch ID byte array (row key)
+   * @param branch_id The branch ID to convert
+   * @return The branch ID as a byte array
+   * @throws IllegalArgumentException if the string is not valid hex
+   */
+  public static byte[] stringToId(final String branch_id) {
+    if (branch_id == null || branch_id.isEmpty()) {
+      throw new IllegalArgumentException("Branch ID was empty");
+    }
+    if (branch_id.length() < 4) {
+      throw new IllegalArgumentException("Branch ID was too short");
+    }
+    String id = branch_id;
+    if (id.length() % 2 != 0) {
+      id = "0" + id;
+    }
+    return DatatypeConverter.parseHexBinary(id);
+  }
+
+  /** @return The branch column qualifier name */
+  public static byte[] BRANCH_QUALIFIER() {
+    return BRANCH_QUALIFIER;
+  }
+ 
+  /**
+   * Returns serialized data for the branch to put in storage. This is necessary
+   * to reduce storage space and for proper CAS calls
    * @return A byte array for storage
    */
   private byte[] toStorageJson() {
@@ -479,7 +635,17 @@ public class Branch implements Comparable<Branch> {
     }
   }
 
-  private static Scanner setupScanner(final TSDB tsdb, final byte[] branch_id) {
+  /**
+   * Configures an HBase scanner to fetch the requested branch and all child
+   * branches. It uses a row key regex filter to match any rows starting with
+   * the given branch and another INT_WIDTH bytes deep. Deeper branches are
+   * ignored.
+   * @param tsdb The TSDB to use for storage access
+   * @param branch_id ID of the branch to fetch
+   * @return An HBase scanner ready for scanning
+   */
+  private static Scanner setupBranchScanner(final TSDB tsdb, 
+      final byte[] branch_id) {
     final byte[] start = branch_id;
     final byte[] end = Arrays.copyOf(branch_id, branch_id.length);
     final Scanner scanner = tsdb.getClient().newScanner(tsdb.uidTable());
@@ -497,9 +663,11 @@ public class Branch implements Comparable<Branch> {
     }
     scanner.setStopKey(end);
     scanner.setFamily(NAME_FAMILY);
+
+    // TODO - use the column filter to fetch only branches and leaves, ignore
+    // collisions, no matches and other meta
     
     // set the regex filter
-    
     // we want one branch below the current ID so we want something like:
     // {0, 1, 1, 2, 3, 4 }  where { 0, 1 } is the tree ID, { 1, 2, 3, 4 } is the 
     // branch
@@ -514,7 +682,6 @@ public class Branch implements Comparable<Branch> {
     buf.append("\\E(?:.{").append(INT_WIDTH).append("})?$");
     
     scanner.setKeyRegexp(buf.toString(), CHARSET);
-    LOG.debug("Scanner Regex: " + buf.toString());
     return scanner;
   }
   
