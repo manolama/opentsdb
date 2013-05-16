@@ -405,6 +405,14 @@ public final class UIDMeta {
             }
             final UIDMeta meta = JSON.parseToObject(row.get(0).value(), 
                 UIDMeta.class);
+            
+            // fix missing types
+            if (meta.type == null) {
+              final String qualifier = 
+                new String(row.get(0).qualifier(), CHARSET);
+              meta.type = UniqueId.stringToUniqueIdType(qualifier.substring(0, 
+                  qualifier.indexOf("_meta")));
+            }
             meta.initializeChangedMap();
             return Deferred.fromResult(meta);
           }
