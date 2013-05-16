@@ -43,10 +43,14 @@ import org.jboss.netty.util.CharsetUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 @RunWith(PowerMockRunner.class)
+@PowerMockIgnore({"javax.management.*", "javax.xml.*",
+                  "ch.qos.*", "org.slf4j.*",
+                  "com.sum.*", "org.xml.*"})
 @PrepareForTest({TSDB.class, Config.class, HttpQuery.class})
 public final class TestHttpQuery {
   private TSDB tsdb = null;
