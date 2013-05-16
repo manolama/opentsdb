@@ -303,14 +303,14 @@ public final class TestTree {
     assertEquals(1, storage.numColumns(new byte[] { 0, 1 }));
   }
   
-  @Test (expected = IllegalStateException.class)
+  @Test (expected = IllegalArgumentException.class)
   public void createNewTreeNoChanges() throws Exception {
     setupStorage(true, true);
     final Tree tree = new Tree();
     tree.createNewTree(storage.getTSDB()).joinUninterruptibly();
   }
   
-  @Test (expected = IllegalStateException.class)
+  @Test (expected = IllegalArgumentException.class)
   public void createNewTreeOutOfIDs() throws Exception {
     setupStorage(true, true);
 
