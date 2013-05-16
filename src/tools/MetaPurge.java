@@ -72,6 +72,7 @@ final class MetaPurge {
     // completed
     final ArrayList<Deferred<Object>> delete_calls = 
       new ArrayList<Deferred<Object>>();
+    final Deferred<Long> result = new Deferred<Long>();
     
     /**
      * Scanner callback that will recursively call itself and loop through the
@@ -100,23 +101,8 @@ final class MetaPurge {
       public Deferred<Long> call(ArrayList<ArrayList<KeyValue>> rows)
           throws Exception {
         if (rows == null) {
-          
-          /**
-           * Final callback used to wait on any outstanding delete requests
-           */
-          final class FinalCB implements Callback<Deferred<Long>, 
-            ArrayList<Object>> {
-
-            @Override
-            public Deferred<Long> call(ArrayList<Object> deletes)
-                throws Exception {
-              return Deferred.fromResult(columns);
-            }
-            
-          }
-          
-          return Deferred.group(delete_calls)
-            .addCallbackDeferring(new FinalCB());
+          result.callback(columns);
+          return null;
         }
         
         for (final ArrayList<KeyValue> row : rows) {
@@ -163,7 +149,7 @@ final class MetaPurge {
           public Deferred<Long> call(ArrayList<Object> deletes)
               throws Exception {
             LOG.debug("Processed [" + deletes.size() 
-                + "] delete calls, continuing");
+                + "] delete calls");
             delete_calls.clear();
             return scan();
           }
@@ -172,14 +158,15 @@ final class MetaPurge {
         
         // fetch the next set of rows after waiting for current set of delete
         // requests to complete
-        return Deferred.group(delete_calls)
-          .addCallbackDeferring(new ContinueCB());
+        Deferred.group(delete_calls).addCallbackDeferring(new ContinueCB());
+        return null;
       }
       
     }
     
     // start the scan
-    return new MetaScanner().scan();
+    new MetaScanner().scan();
+    return result;
   }
   
   /**
