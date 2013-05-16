@@ -336,7 +336,7 @@ final class MetaSync extends Thread {
             ArrayList<Object>> {
 
             @Override
-            public Deferred<Object> call(ArrayList<Object> storage_calls)
+            public Deferred<Object> call(final ArrayList<Object> calls)
                 throws Exception {
               return null;
             }
@@ -389,8 +389,9 @@ final class MetaSync extends Thread {
             // entry
             final UidCB cb = new UidCB(UniqueIdType.METRIC, 
                 metric_uid_bytes, timestamp);
-            storage_calls.add(UIDMeta.getUIDMeta(tsdb, UniqueIdType.METRIC, 
-                metric_uid_bytes).addCallbackDeferring(cb));
+            final Deferred<Boolean> process_uid = UIDMeta.getUIDMeta(tsdb, 
+                UniqueIdType.METRIC, metric_uid_bytes).addCallbackDeferring(cb);
+            storage_calls.add(process_uid);
             metric_uids.put(metric_uid, timestamp);
           }
           
@@ -419,7 +420,9 @@ final class MetaSync extends Thread {
             // exist, so we can just call sync on this to create a missing
             // entry
             final UidCB cb = new UidCB(type, tag, timestamp);
-            storage_calls.add(UIDMeta.getUIDMeta(tsdb, type, tag).addCallbackDeferring(cb));
+            final Deferred<Boolean> process_uid = UIDMeta.getUIDMeta(tsdb, type, tag)
+              .addCallbackDeferring(cb);
+            storage_calls.add(process_uid);
             if (type == UniqueIdType.TAGK) {
               tagk_uids.put(uid, timestamp);
             } else {
@@ -468,9 +471,11 @@ final class MetaSync extends Thread {
           
           // handle the timeseries meta last so we don't record it if one
           // or more of the UIDs had an issue
-          storage_calls.add(TSMeta.getTSMeta(tsdb, tsuid_string)
-              .addCallbackDeferring(new TSMetaCB(tsuid, timestamp))
-              .addErrback(new ErrBack()));
+          final Deferred<Boolean> process_tsmeta = 
+            TSMeta.getTSMeta(tsdb, tsuid_string)
+              .addCallbackDeferring(new TSMetaCB(tsuid, timestamp));
+          process_tsmeta.addErrback(new ErrBack());
+          storage_calls.add(process_tsmeta);
         }
         
         /**
