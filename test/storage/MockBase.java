@@ -43,6 +43,7 @@ import org.hbase.async.HBaseClient;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
 import org.hbase.async.Scanner;
+import org.junit.Ignore;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
@@ -73,6 +74,7 @@ import com.stumbleupon.async.Deferred;
  * <li>Scanner</li>
  * <li>DeleteRequest</li></ul>
  */
+@Ignore
 public final class MockBase {
   private static final Charset ASCII = Charset.forName("ISO-8859-1");
   private TSDB tsdb;
