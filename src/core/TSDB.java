@@ -196,18 +196,18 @@ public final class TSDB {
    * @throws NoSuchUniqueId if the UID was not found
    * @since 2.0
    */
-  public String getUidName(final UniqueIdType type, final byte[] uid) {
+  public Deferred<String> getUidName(final UniqueIdType type, final byte[] uid) {
     if (uid == null) {
       throw new IllegalArgumentException("Missing UID");
     }
 
     switch (type) {
       case METRIC:
-        return this.metrics.getName(uid);
+        return this.metrics.getNameAsync(uid);
       case TAGK:
-        return this.tag_names.getName(uid);
+        return this.tag_names.getNameAsync(uid);
       case TAGV:
-        return this.tag_values.getName(uid);
+        return this.tag_values.getNameAsync(uid);
       default:
         throw new IllegalArgumentException("Unrecognized UID type");
     }
@@ -787,7 +787,7 @@ public final class TSDB {
    */
   public Deferred<Boolean> processTSMetaThroughTrees(final TSMeta meta) {
     if (config.enable_tree_processing()) {
-      return TreeBuilder.processTSMeta(this, meta);
+      return TreeBuilder.processAllTrees(this, meta);
     }
     return Deferred.fromResult(false);
   }
