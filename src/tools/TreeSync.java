@@ -258,8 +258,11 @@ final class TreeSync {
           // matched a TSMeta column, so request a parsing and loading of
           // associated UIDMeta objects, then pass it off to callbacks for 
           // parsing through the trees.
-          tree_calls.add(TSMeta.parseFromColumn(tsdb, row.get(0), true)
-              .addCallbackDeferring(new ParseCB()).addErrback(new ErrBack()));
+          final Deferred<Boolean> process_tsmeta = 
+            TSMeta.parseFromColumn(tsdb, row.get(0), true)
+              .addCallbackDeferring(new ParseCB());
+          process_tsmeta.addErrback(new ErrBack());
+          tree_calls.add(process_tsmeta);
         }
         
         /**
