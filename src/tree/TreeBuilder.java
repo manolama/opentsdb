@@ -998,8 +998,12 @@ public final class TreeBuilder {
     rule = null;
     not_matched = null;
     if (root != null) {
-      root.getBranches().clear();
-      root.getLeaves().clear();
+      if (root.getBranches() != null) {
+        root.getBranches().clear();
+      }
+      if (root.getLeaves() != null) {
+        root.getLeaves().clear();
+      }
     }
     test_messages = new ArrayList<String>();
   }
