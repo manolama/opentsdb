@@ -34,7 +34,6 @@ import org.hbase.async.Scanner;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
@@ -126,7 +125,6 @@ public final class TestTreeRule {
   public void serialize() {
     rule.setField("host");
     final String json = JSON.serializeToString(rule);
-    System.out.println(json);
     assertNotNull(json);
     assertTrue(json.contains("\"field\":\"host\""));
   }
@@ -207,7 +205,7 @@ public final class TestTreeRule {
     rule.setOrder(0);
     rule.setType(TreeRuleType.METRIC);
     rule.setNotes("Just some notes");
-    assertTrue(rule.storeRule(storage.getTSDB(), false).joinUninterruptibly());
+    assertTrue(rule.syncToStorage(storage.getTSDB(), false).joinUninterruptibly());
     assertEquals(3, storage.numColumns(new byte[] { 0, 1 }));
   }
   
@@ -218,7 +216,7 @@ public final class TestTreeRule {
     rule.setLevel(2);
     rule.setOrder(1);
     rule.setNotes("Just some notes");
-    assertTrue(rule.storeRule(storage.getTSDB(), false).joinUninterruptibly());
+    assertTrue(rule.syncToStorage(storage.getTSDB(), false).joinUninterruptibly());
     assertEquals(2, storage.numColumns(new byte[] { 0, 1 }));
     final TreeRule stored = JSON.parseToObject(
         storage.getColumn(new byte[] { 0, 1 }, 
@@ -231,14 +229,14 @@ public final class TestTreeRule {
   public void storeRuleBadID0() throws Exception {
     setupStorage();
     final TreeRule rule = new TreeRule(0);
-    rule.storeRule(storage.getTSDB(), false);
+    rule.syncToStorage(storage.getTSDB(), false);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void storeRuleBadID65536() throws Exception {
     setupStorage();
     final TreeRule rule = new TreeRule(65536);
-    rule.storeRule(storage.getTSDB(), false);
+    rule.syncToStorage(storage.getTSDB(), false);
   }
   
   @Test (expected = IllegalStateException.class)
@@ -246,7 +244,7 @@ public final class TestTreeRule {
     setupStorage();
     final TreeRule rule = TreeRule.fetchRule(storage.getTSDB(), 1, 2, 1)
       .joinUninterruptibly();
-    rule.storeRule(storage.getTSDB(), false);
+    rule.syncToStorage(storage.getTSDB(), false);
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -256,7 +254,7 @@ public final class TestTreeRule {
     rule.setLevel(1);
     rule.setOrder(0);
     rule.setNotes("Just some notes");
-    rule.storeRule(storage.getTSDB(), false).joinUninterruptibly();
+    rule.syncToStorage(storage.getTSDB(), false).joinUninterruptibly();
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -267,7 +265,7 @@ public final class TestTreeRule {
     rule.setOrder(0);
     rule.setType(TreeRuleType.TAGK);
     rule.setNotes("Just some notes");
-    rule.storeRule(storage.getTSDB(), false).joinUninterruptibly();
+    rule.syncToStorage(storage.getTSDB(), false).joinUninterruptibly();
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -278,7 +276,7 @@ public final class TestTreeRule {
     rule.setOrder(0);
     rule.setType(TreeRuleType.TAGK_CUSTOM);
     rule.setNotes("Just some notes");
-    rule.storeRule(storage.getTSDB(), false).joinUninterruptibly();
+    rule.syncToStorage(storage.getTSDB(), false).joinUninterruptibly();
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -289,7 +287,7 @@ public final class TestTreeRule {
     rule.setOrder(0);
     rule.setType(TreeRuleType.TAGV_CUSTOM);
     rule.setNotes("Just some notes");
-    rule.storeRule(storage.getTSDB(), false).joinUninterruptibly();
+    rule.syncToStorage(storage.getTSDB(), false).joinUninterruptibly();
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -300,7 +298,7 @@ public final class TestTreeRule {
     rule.setOrder(0);
     rule.setType(TreeRuleType.METRIC_CUSTOM);
     rule.setNotes("Just some notes");
-    rule.storeRule(storage.getTSDB(), false).joinUninterruptibly();
+    rule.syncToStorage(storage.getTSDB(), false).joinUninterruptibly();
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -312,7 +310,7 @@ public final class TestTreeRule {
     rule.setType(TreeRuleType.TAGK_CUSTOM);
     rule.setNotes("Just some notes");
     rule.setField("foo");
-    rule.storeRule(storage.getTSDB(), false).joinUninterruptibly();
+    rule.syncToStorage(storage.getTSDB(), false).joinUninterruptibly();
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -324,7 +322,7 @@ public final class TestTreeRule {
     rule.setType(TreeRuleType.TAGV_CUSTOM);
     rule.setNotes("Just some notes");
     rule.setField("foo");
-    rule.storeRule(storage.getTSDB(), false).joinUninterruptibly();
+    rule.syncToStorage(storage.getTSDB(), false).joinUninterruptibly();
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -336,7 +334,7 @@ public final class TestTreeRule {
     rule.setType(TreeRuleType.METRIC_CUSTOM);
     rule.setNotes("Just some notes");
     rule.setField("foo");
-    rule.storeRule(storage.getTSDB(), false).joinUninterruptibly();
+    rule.syncToStorage(storage.getTSDB(), false).joinUninterruptibly();
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -348,7 +346,7 @@ public final class TestTreeRule {
     rule.setType(TreeRuleType.TAGK);
     rule.setRegex("^.*$");
     rule.setRegexGroupIdx(-1);
-    rule.storeRule(storage.getTSDB(), false).joinUninterruptibly();
+    rule.syncToStorage(storage.getTSDB(), false).joinUninterruptibly();
   }
   
   @Test
@@ -365,6 +363,18 @@ public final class TestTreeRule {
     assertEquals(1, storage.numColumns(new byte[] { 0, 1 }));
   }
 
+  @Test
+  public void RULE_PREFIX() throws Exception {
+    assertEquals("tree_rule:", 
+        new String(TreeRule.RULE_PREFIX(), MockBase.ASCII()));
+  }
+  
+  @Test
+  public void getQualifier() throws Exception {
+    assertEquals("tree_rule:1:2", 
+        new String(TreeRule.getQualifier(1, 2), MockBase.ASCII()));
+  }
+  
   /**
    * Mocks classes for testing the storage calls
    */
