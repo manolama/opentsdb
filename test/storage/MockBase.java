@@ -18,6 +18,8 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
+import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,7 +33,9 @@ import javax.xml.bind.DatatypeConverter;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.tree.Branch;
+import net.opentsdb.utils.Config;
 
+import org.hbase.async.AtomicIncrementRequest;
 import org.hbase.async.Bytes;
 import org.hbase.async.DeleteRequest;
 import org.hbase.async.GetRequest;
@@ -71,8 +75,7 @@ import com.stumbleupon.async.Deferred;
  */
 public final class MockBase {
   private static final Charset ASCII = Charset.forName("ISO-8859-1");
-  private TSDB tsdb = mock(TSDB.class);
-  private HBaseClient client = mock(HBaseClient.class);
+  private TSDB tsdb;
   private TreeMap<String, HashMap<String, byte[]>> storage = 
     new TreeMap<String, HashMap<String, byte[]>>();
   private HashSet<Integer> used_scanners = new HashSet<Integer>(2);
@@ -90,15 +93,30 @@ public final class MockBase {
    * @return
    */
   public MockBase(
+      final TSDB tsdb, final HBaseClient client,
       final boolean default_get, 
       final boolean default_put,
       final boolean default_delete,
       final boolean default_scan) {
-    
-    when(tsdb.getClient()).thenReturn(client);
-    when(tsdb.uidTable()).thenReturn("tsdb-uid".getBytes(ASCII));
-    when(tsdb.dataTable()).thenReturn("tsdb".getBytes(ASCII));
-  
+    this.tsdb = tsdb;
+ 
+    // replace the "real" field objects with mocks
+    Field cl;
+    try {
+      cl = tsdb.getClass().getDeclaredField("client");
+      cl.setAccessible(true);
+      cl.set(tsdb, client);
+      cl.setAccessible(false);
+    } catch (SecurityException e) {
+      e.printStackTrace();
+    } catch (NoSuchFieldException e) {
+      e.printStackTrace();
+    } catch (IllegalArgumentException e) {
+      e.printStackTrace();
+    } catch (IllegalAccessException e) {
+      e.printStackTrace();
+    }
+
     // Default get answer will return one or more columns from the requested row
     if (default_get) {
       when(client.get((GetRequest)any())).thenAnswer(new MockGet());
@@ -119,7 +137,7 @@ public final class MockBase {
       current_scanner = mock(Scanner.class);
       local_scanner = new MockScanner(current_scanner);
 
-      // to faciliate unit tests where more than one scanner is used (i.e. in a
+      // to facilitate unit tests where more than one scanner is used (i.e. in a
       // callback chain) we have to provide a new mock scanner for each new
       // scanner request. That's the way the mock scanner method knows when a
       // second call has been issued and it should return a null.
@@ -138,8 +156,22 @@ public final class MockBase {
       });      
 
     }
+    
+    when(client.atomicIncrement((AtomicIncrementRequest)any()))
+      .then(new MockAtomicIncrement());
+    when(client.bufferAtomicIncrement((AtomicIncrementRequest)any()))
+    .then(new MockAtomicIncrement());
   }
 
+  public MockBase(
+      final boolean default_get, 
+      final boolean default_put,
+      final boolean default_delete,
+      final boolean default_scan) throws IOException {
+    this(new TSDB(new Config(false)), mock(HBaseClient.class), 
+        default_get, default_put, default_delete, default_scan);
+  }
+  
   /**
    * Add a column to the hash table. The proper row will be created if it doesn't
    * exist. If the column already exists, the original value will be overwritten 
@@ -274,7 +306,7 @@ public final class MockBase {
       final GetRequest get = (GetRequest)args[0];
       final String key = Branch.idToString(get.key());
       final HashMap<String, byte[]> row = storage.get(key);
-      
+
       if (row == null) {
         return Deferred.fromResult((ArrayList<KeyValue>)null);
       } if (get.qualifiers() == null || get.qualifiers().length == 0) { 
@@ -583,5 +615,35 @@ public final class MockBase {
       }
       return Deferred.fromResult(results);
     }
+  }
+  
+  private class MockAtomicIncrement implements
+    Answer<Deferred<Long>> {
+
+    @Override
+    public Deferred<Long> answer(InvocationOnMock invocation) throws Throwable {
+      final Object[] args = invocation.getArguments();
+      final AtomicIncrementRequest air = (AtomicIncrementRequest)args[0];
+      final String key = bytesToString(air.key());
+      final long amount = air.getAmount();
+      final String qualifier = bytesToString(air.qualifier());
+      
+      HashMap<String, byte[]> column = storage.get(key);
+      if (column == null) {
+        column = new HashMap<String, byte[]>(1);
+        storage.put(key, column);
+      }
+      
+      if (!column.containsKey(qualifier)) {
+        column.put(qualifier, Bytes.fromLong(amount));
+        return Deferred.fromResult(amount);
+      }
+      
+      long incremented_value = Bytes.getLong(column.get(qualifier));
+      incremented_value += amount;
+      column.put(qualifier, Bytes.fromLong(incremented_value));
+      return Deferred.fromResult(incremented_value);
+    }
+    
   }
 }
