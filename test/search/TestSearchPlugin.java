@@ -27,12 +27,16 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import com.stumbleupon.async.Callback;
 
 @RunWith(PowerMockRunner.class)
+@PowerMockIgnore({"javax.management.*", "javax.xml.*",
+                  "ch.qos.*", "org.slf4j.*",
+                  "com.sum.*", "org.xml.*"})
 @PrepareForTest({TSDB.class, Config.class})
 public final class TestSearchPlugin {
   private TSDB tsdb= mock(TSDB.class);
