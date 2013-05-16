@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
@@ -339,8 +338,8 @@ public final class TestUniqueId {
     final byte[] id = { 0, 0, 5 };
     final byte[] byte_name = { 'f', 'o', 'o' };
 
-    @SuppressWarnings("unchecked")
-    final Deferred<ArrayList<KeyValue>> d1 = PowerMockito.spy(new Deferred<ArrayList<KeyValue>>());
+    final Deferred<ArrayList<KeyValue>> d1 = 
+      PowerMockito.spy(new Deferred<ArrayList<KeyValue>>());
     final Deferred<ArrayList<KeyValue>> d2;
     {
       final ArrayList<KeyValue> kvs = new ArrayList<KeyValue>(1);
@@ -352,7 +351,8 @@ public final class TestUniqueId {
       .thenReturn(d2);    // For A's second attempt.
 
     final Answer<byte[]> the_race = new Answer<byte[]>() {
-      public byte[] answer(final InvocationOnMock unused_invocation) throws Exception {
+      public byte[] answer(final InvocationOnMock unused_invocation) 
+      throws Exception {
         // While answering A's first Get, B doest a full getOrCreateId.
         assertArrayEquals(id, uid_b.getOrCreateId("foo"));
         d1.callback(null);
