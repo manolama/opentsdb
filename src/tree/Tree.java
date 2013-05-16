@@ -512,12 +512,14 @@ public final class Tree {
    */
   public static Deferred<List<Tree>> fetchAllTrees(final TSDB tsdb) {
     
+    final Deferred<List<Tree>> result = new Deferred<List<Tree>>();
+    
     /**
      * Scanner callback that recursively calls itself to load the next set of
      * rows from storage. When the scanner returns a null, the callback will
      * return with the list of trees discovered.
      */
-    final class AllTreeScanner implements Callback<Deferred<List<Tree>>, 
+    final class AllTreeScanner implements Callback<Object, 
       ArrayList<ArrayList<KeyValue>>> {
   
       private final List<Tree> trees = new ArrayList<Tree>();
@@ -532,15 +534,16 @@ public final class Tree {
        * as a callback.
        * @return A list of trees if the scanner has reached the end
        */
-      public Deferred<List<Tree>> fetchTrees() {
-        return scanner.nextRows().addCallbackDeferring(this);
+      public Object fetchTrees() {
+        return scanner.nextRows().addCallback(this);
       }
       
       @Override
-      public Deferred<List<Tree>> call(ArrayList<ArrayList<KeyValue>> rows)
+      public Object call(ArrayList<ArrayList<KeyValue>> rows)
           throws Exception {
         if (rows == null) {
-          return Deferred.fromResult(trees);
+          result.callback(trees);
+          return null;
         }
         
         for (ArrayList<KeyValue> row : rows) {
@@ -585,7 +588,8 @@ public final class Tree {
     }
     
     // start the scanning process
-    return new AllTreeScanner().fetchTrees();
+    new AllTreeScanner().fetchTrees();
+    return result;
   }
   
   /**
@@ -784,6 +788,8 @@ public final class Tree {
     scanner.setStopKey(end);   
     scanner.setFamily(NAME_FAMILY);
     
+    final Deferred<Boolean> completed = new Deferred<Boolean>();
+    
     /**
      * Scanner callback that loops through all rows between tree id and 
      * tree id++ searching for tree related columns to delete.
@@ -808,24 +814,8 @@ public final class Tree {
       public Deferred<Boolean> call(ArrayList<ArrayList<KeyValue>> rows)
           throws Exception {
         if (rows == null) {
-          
-          /**
-           * Simple callback used to wait on the delete request list until 
-           * they've all completed
-           */
-          final class FinalCB implements Callback<Deferred<Boolean>, 
-            ArrayList<Object>> {
-            
-            public Deferred<Boolean> call(ArrayList<Object> objects) {
-              delete_deferreds.clear();
-              return Deferred.fromResult(true);
-            }
-            
-          }
-          
-          // wait on the delete requests to complete before we return
-          return Deferred.group(delete_deferreds)
-            .addCallbackDeferring(new FinalCB());
+          completed.callback(true);
+          return null;
         }
         
         for (final ArrayList<KeyValue> row : rows) {
@@ -909,13 +899,14 @@ public final class Tree {
         
         // call ourself again after waiting for the existing delete requests 
         // to complete
-        return Deferred.group(delete_deferreds)
-          .addCallbackDeferring(new ContinueCB());
+        Deferred.group(delete_deferreds).addCallbackDeferring(new ContinueCB());
+        return null;
       }    
     }
     
     // start the scanner
-    return new DeleteTreeScanner().deleteTree();
+    new DeleteTreeScanner().deleteTree();
+    return completed;
   }
   
   /**
