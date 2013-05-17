@@ -571,6 +571,7 @@ final class TsdbQuery implements Query {
    * This will compile a list of the tagk/v pairs for the TSUIDs to prevent
    * storage from returning irrelevant rows.
    * @param scanner The scanner on which to add the filter.
+   * @since 2.0
    */
   private void createAndSetTSUIDFilter(final Scanner scanner) {
     Collections.sort(tsuids);
