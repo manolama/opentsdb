@@ -408,6 +408,9 @@ public final class TreeBuilder {
         processed_trees = 
           new ArrayList<Deferred<ArrayList<Object>>>(trees.size());
         for (Tree tree : trees) {
+          if (!tree.getEnabled()) {
+            continue;
+          }
           final TreeBuilder builder = new TreeBuilder(tsdb, tree);
           processed_trees.add(builder.processTimeseriesMeta(meta, false));
         }
