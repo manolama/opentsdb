@@ -393,7 +393,7 @@ public final class TestTreeRpc {
     assertTrue(query.response().getContent().toString(MockBase.ASCII())
         .contains("\"displayName\":\"ROOT\""));
     assertTrue(query.response().getContent().toString(MockBase.ASCII())
-        .contains("\"numBranches\":3"));
+        .contains("\"branches\":["));
   }
   
   @Test
@@ -407,7 +407,7 @@ public final class TestTreeRpc {
     assertTrue(query.response().getContent().toString(MockBase.ASCII())
         .contains("\"metric\":\"sys.cpu.0\""));
     assertTrue(query.response().getContent().toString(MockBase.ASCII())
-        .contains("\"numBranches\":2"));
+        .contains("\"branches\":["));
   }
   
   @Test (expected = BadRequestException.class)
@@ -678,6 +678,7 @@ public final class TestTreeRpc {
     final String rule = new String(storage.getColumn(new byte[] { 0, 1 }, 
         "tree_rule:0:0".getBytes(MockBase.ASCII())), MockBase.ASCII());
     assertTrue(rule.contains("\"type\":\"METRIC\""));
+    assertTrue(rule.contains("description\":\"Host Name\""));
   }
   
   @Test (expected = BadRequestException.class)
@@ -702,6 +703,7 @@ public final class TestTreeRpc {
     final String rule = new String(storage.getColumn(new byte[] { 0, 1 }, 
         "tree_rule:0:0".getBytes(MockBase.ASCII())), MockBase.ASCII());
     assertTrue(rule.contains("\"type\":\"METRIC\""));
+    assertFalse(rule.contains("\"description\":\"Host Name\""));
   }
   
   @Test (expected = BadRequestException.class)
@@ -844,6 +846,7 @@ public final class TestTreeRpc {
         .contains("Unable to locate TSUID meta data"));
     assertTrue(query.response().getContent().toString(MockBase.ASCII())
         .contains("000001000001000001000002000003"));
+    
   }
   
   @Test
@@ -1014,6 +1017,7 @@ public final class TestTreeRpc {
     rpc.execute(tsdb, query);
   }
   
+  @Test
   public void handleNotMatchedQS() throws Exception {
     setupStorage();
     HttpQuery query = NettyMocks.getQuery(tsdb, 
@@ -1148,6 +1152,7 @@ public final class TestTreeRpc {
     rule.setField("host");
     rule.setDescription("Hostname rule");
     rule.setType(TreeRuleType.TAGK);
+    rule.setDescription("Host Name");
     storage.addColumn(key, "tree_rule:0:0".getBytes(MockBase.ASCII()), 
         JSON.serializeToBytes(rule));
 
