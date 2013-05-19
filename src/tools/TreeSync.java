@@ -105,6 +105,9 @@ final class TreeSync {
         final ArrayList<TreeBuilder> tree_builders = 
           new ArrayList<TreeBuilder>(trees.size());
         for (Tree tree : trees) {
+          if (!tree.getEnabled()) {
+            continue;
+          }
           final TreeBuilder builder = new TreeBuilder(tsdb, tree);
           tree_builders.add(builder);
         }
@@ -120,7 +123,7 @@ final class TreeSync {
       .joinUninterruptibly();
     
     if (tree_builders == null) {
-      LOG.warn("No trees were defined in the system");
+      LOG.warn("No enabled trees were found in the system");
       return -1;
     } else {
       LOG.info("Found [" + tree_builders.size() + "] trees");
