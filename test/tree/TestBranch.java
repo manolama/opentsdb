@@ -144,8 +144,8 @@ public final class TestBranch {
     final Branch branch = buildTestBranch(tree);
     final Branch child = new Branch(tree.getTreeId());
     assertTrue(branch.addChild(child));
-    assertEquals(3, branch.getNumBranches());
-    assertEquals(2, branch.getNumLeaves());
+    assertEquals(3, branch.getBranches().size());
+    assertEquals(2, branch.getLeaves().size());
   }
   
   @Test
@@ -157,8 +157,8 @@ public final class TestBranch {
     branches.set(branch, null);
     branches.setAccessible(false);
     assertTrue(branch.addChild(child));
-    assertEquals(1, branch.getNumBranches());
-    assertEquals(2, branch.getNumLeaves());
+    assertEquals(1, branch.getBranches().size());
+    assertEquals(2, branch.getLeaves().size());
   }
   
   @Test
@@ -167,8 +167,8 @@ public final class TestBranch {
     final Branch child = new Branch(tree.getTreeId());
     assertTrue(branch.addChild(child));
     assertFalse(branch.addChild(child));
-    assertEquals(3, branch.getNumBranches());
-    assertEquals(2, branch.getNumLeaves());
+    assertEquals(3, branch.getBranches().size());
+    assertEquals(2, branch.getLeaves().size());
   }
   
   @Test
@@ -181,8 +181,8 @@ public final class TestBranch {
     leaf.setTsuid("ABCD");
 
     assertFalse(branch.addLeaf(leaf, tree));
-    assertEquals(2, branch.getNumBranches());
-    assertEquals(2, branch.getNumLeaves());
+    assertEquals(2, branch.getBranches().size());
+    assertEquals(2, branch.getLeaves().size());
     assertNull(tree.getCollisions());
   }
   
@@ -196,8 +196,8 @@ public final class TestBranch {
     leaf.setTsuid("0001");
 
     assertFalse(branch.addLeaf(leaf, tree));
-    assertEquals(2, branch.getNumBranches());
-    assertEquals(2, branch.getNumLeaves());
+    assertEquals(2, branch.getBranches().size());
+    assertEquals(2, branch.getLeaves().size());
     assertEquals(1, tree.getCollisions().size());
   }
 
