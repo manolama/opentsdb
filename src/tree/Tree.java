@@ -105,6 +105,9 @@ public final class Tree {
   /** Whether or not strict matching is enabled */
   private boolean strict_match;
   
+  /** Whether or not the tree should process meta data or not */
+  private boolean enabled;
+  
   /** Sorted, two dimensional map of the tree's rules */
   private TreeMap<Integer, TreeMap<Integer, TreeRule>> rules;
 
@@ -994,6 +997,7 @@ public final class Tree {
       json.writeStringField("notes", notes);
       json.writeBooleanField("strictMatch", strict_match);
       json.writeNumberField("created", created);
+      json.writeBooleanField("enabled", enabled);
       
       json.writeEndObject();
       json.close();
@@ -1167,6 +1171,11 @@ public final class Tree {
     return strict_match;
   }
 
+  /** @return Whether or not the tree should process TSMeta objects */
+  public boolean getEnabled() { 
+    return enabled;
+  }
+  
   /** @return The tree's rule set */
   public Map<Integer, TreeMap<Integer, TreeRule>> getRules() {
     return rules;
@@ -1222,6 +1231,11 @@ public final class Tree {
     }
   }
 
+  /** @param enabled Whether or not this tree should process TSMeta objects */
+  public void setEnabled(boolean enabled) {
+    this.enabled = enabled;
+  }
+  
   /** @param treeId ID of the tree, users cannot modify this */
   public void setTreeId(int treeId) {
     this.tree_id = treeId;
