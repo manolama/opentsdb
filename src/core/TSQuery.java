@@ -181,7 +181,7 @@ public final class TSQuery {
   }
   
   /** @return whether or not to load global annotations for the time range */
-  public boolean getWithGlobalAnnotations() {
+  public boolean getGlobalAnnotations() {
     return with_global_annotations;
   }
   
@@ -230,7 +230,7 @@ public final class TSQuery {
   }
   
   /** @param with_global whethe ror not to load global annotations */
-  public void setWithGlobalAnnotations(boolean with_global) {
+  public void setGlobalAnnotations(boolean with_global) {
     with_global_annotations = with_global;
   }
   
