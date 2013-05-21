@@ -361,6 +361,9 @@ public final class Annotation implements Comparable<Annotation> {
                 column.qualifier()[0] == PREFIX()) {
               Annotation note = JSON.parseToObject(row.get(0).value(), 
                   Annotation.class);
+              if (note.start_time < start_time || note.end_time > end_time) {
+                continue;
+              }
               annotations.add(note);
             }
           }
