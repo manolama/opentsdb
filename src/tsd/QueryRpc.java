@@ -103,7 +103,7 @@ final class QueryRpc implements HttpRpc {
     
     // if the user wants global annotations, we need to scan and fetch
     List<Annotation> globals = null;
-    if (!data_query.getNoAnnotations() && data_query.getWithGlobalAnnotations()) {
+    if (!data_query.getNoAnnotations() && data_query.getGlobalAnnotations()) {
       try {
         globals = Annotation.getGlobalAnnotations(tsdb, 
             data_query.startTime() / 1000, data_query.endTime() / 1000)
@@ -149,7 +149,7 @@ final class QueryRpc implements HttpRpc {
     }
     
     if (query.hasQueryStringParam("global_annotations")) {
-      data_query.setWithGlobalAnnotations(true);
+      data_query.setGlobalAnnotations(true);
     }
     
     // handle tsuid queries first
