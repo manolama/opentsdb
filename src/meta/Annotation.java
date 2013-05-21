@@ -18,6 +18,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.hbase.async.Bytes;
@@ -26,6 +27,7 @@ import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
+import org.hbase.async.Scanner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -284,6 +286,92 @@ public final class Annotation implements Comparable<Annotation> {
     get.family(FAMILY);
     get.qualifier(getQualifier(start_time));
     return tsdb.getClient().get(get).addCallbackDeferring(new GetCB());    
+  }
+  
+  /**
+   * Scans through the global annotation storage rows and returns a list of 
+   * parsed annotation objects. If no annotations were found for the given
+   * timespan, the resulting list will be empty.
+   * @param tsdb The TSDB to use for storage access
+   * @param start_time Start time to scan from. May be 0
+   * @param end_time End time to scan to. Must be greater than 0
+   * @return A list with detected annotations. May be empty.
+   * @throws IllegalArgumentException if the end timestamp has not been set or 
+   * the end time is less than the start time
+   */
+  public static Deferred<List<Annotation>> getGlobalAnnotations(final TSDB tsdb, 
+      final long start_time, final long end_time) {
+    if (end_time < 1) {
+      throw new IllegalArgumentException("The end timestamp has not been set");
+    }
+    if (end_time < start_time) {
+      throw new IllegalArgumentException(
+          "The end timestamp cannot be less than the start timestamp");
+    }
+    
+    /**
+     * Scanner that loops through the [0, 0, 0, timestamp] rows looking for
+     * global annotations. Returns a list of parsed annotation objects.
+     * The list may be empty.
+     */
+    final class ScannerCB implements Callback<Deferred<List<Annotation>>, 
+      ArrayList<ArrayList<KeyValue>>> {
+      final Scanner scanner;
+      final ArrayList<Annotation> annotations = new ArrayList<Annotation>();
+      
+      /**
+       * Initializes the scanner
+       */
+      public ScannerCB() {
+        final byte[] start = new byte[TSDB.metrics_width() + 
+                                      Const.TIMESTAMP_BYTES];
+        final byte[] end = new byte[TSDB.metrics_width() + 
+                                    Const.TIMESTAMP_BYTES];
+        Arrays.fill(start, (byte)0);
+        Arrays.fill(end, (byte)0);
+        
+        final long normalized_start = (start_time - 
+            (start_time % Const.MAX_TIMESPAN));
+        final long normalized_end = (end_time - 
+            (end_time % Const.MAX_TIMESPAN));
+        
+        Bytes.setInt(start, (int) normalized_start, TSDB.metrics_width());
+        Bytes.setInt(end, (int) normalized_end, TSDB.metrics_width());
+
+        scanner = tsdb.getClient().newScanner(tsdb.dataTable());
+        scanner.setStartKey(start);
+        scanner.setStopKey(end);
+        scanner.setFamily(FAMILY);
+      }
+      
+      public Deferred<List<Annotation>> scan() {
+        return scanner.nextRows().addCallbackDeferring(this);
+      }
+      
+      @Override
+      public Deferred<List<Annotation>> call (
+          final ArrayList<ArrayList<KeyValue>> rows) throws Exception {
+        if (rows == null || rows.isEmpty()) {
+          return Deferred.fromResult((List<Annotation>)annotations);
+        }
+        
+        for (final ArrayList<KeyValue> row : rows) {
+          for (KeyValue column : row) {
+            if (column.qualifier().length == 3 && 
+                column.qualifier()[0] == PREFIX()) {
+              Annotation note = JSON.parseToObject(row.get(0).value(), 
+                  Annotation.class);
+              annotations.add(note);
+            }
+          }
+        }
+        
+        return scan();
+      }
+      
+    }
+
+    return new ScannerCB().scan();
   }
   
   /** @return The prefix byte for annotation objects */

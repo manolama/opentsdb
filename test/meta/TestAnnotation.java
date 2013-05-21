@@ -18,6 +18,8 @@ import static org.junit.Assert.assertNull;
 import static org.mockito.Matchers.anyString;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
+import java.util.List;
+
 import net.opentsdb.core.TSDB;
 import net.opentsdb.storage.MockBase;
 import net.opentsdb.uid.UniqueId;
@@ -137,6 +139,32 @@ public final class TestAnnotation {
   public void getAnnotationNoStartTime() throws Exception {
     Annotation.getAnnotation(tsdb, "000001000001000001", 0L)
       .joinUninterruptibly();  
+  }
+  
+  @Test
+  public void getGlobalAnnotations() throws Exception {
+    List<Annotation> notes = Annotation.getGlobalAnnotations(tsdb, 1328140000, 
+        1328141000).joinUninterruptibly();
+    assertNotNull(notes);
+    assertEquals(1, notes.size());
+  }
+  
+  @Test
+  public void getGlobalAnnotationsEmpty() throws Exception {
+    List<Annotation> notes = Annotation.getGlobalAnnotations(tsdb, 1328150000, 
+        1328160000).joinUninterruptibly();
+    assertNotNull(notes);
+    assertEquals(0, notes.size());
+  }
+  
+  @Test (expected = IllegalArgumentException.class)
+  public void getGlobalAnnotationsZeroEndtime() throws Exception {
+    Annotation.getGlobalAnnotations(tsdb, 0, 0).joinUninterruptibly();
+  }
+  
+  @Test (expected = IllegalArgumentException.class)
+  public void getGlobalAnnotationsEndLessThanStart() throws Exception {
+    Annotation.getGlobalAnnotations(tsdb, 1328150000, 1328140000).joinUninterruptibly();
   }
   
   @Test
