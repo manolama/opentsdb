@@ -58,7 +58,7 @@ final class AnnotationRpc implements HttpRpc {
           throw new BadRequestException(HttpResponseStatus.NOT_FOUND, 
               "Unable to locate annotation in storage");
         }
-        query.sendReply(query.serializer().formatAnnotationV1(note));
+        query.sendReply(query.serializer().formatAnnotationV1(stored_annotation));
       } catch (BadRequestException e) {
         throw e;
       } catch (Exception e) {
