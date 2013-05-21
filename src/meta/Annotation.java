@@ -275,6 +275,11 @@ public final class Annotation {
     return tsdb.getClient().get(get).addCallbackDeferring(new GetCB());    
   }
   
+  /** @return The prefix byte for annotation objects */
+  public static byte PREFIX() {
+    return PREFIX;
+  }
+  
   /**
    * Serializes the object in a uniform matter for storage. Needed for 
    * successful CAS calls
@@ -309,6 +314,49 @@ public final class Annotation {
     } catch (IOException e) {
       throw new RuntimeException("Unable to serialize Annotation", e);
     }
+  }
+  
+  /**
+   * Syncs the local object with the stored object for atomic writes, 
+   * overwriting the stored data if the user issued a PUT request
+   * <b>Note:</b> This method also resets the {@code changed} map to false
+   * for every field
+   * @param meta The stored object to sync from
+   * @param overwrite Whether or not all user mutable data in storage should be
+   * replaced by the local object
+   */
+  private void syncNote(final Annotation note, final boolean overwrite) {
+    if (note.start_time > 0 && (note.start_time < start_time || start_time == 0)) {
+      start_time = note.start_time;
+    }
+    
+    // handle user-accessible stuff
+    if (!overwrite && !changed.get("end_time")) {
+      end_time = note.end_time;
+    }
+    if (!overwrite && !changed.get("description")) {
+      description = note.description;
+    }
+    if (!overwrite && !changed.get("notes")) {
+      notes = note.notes;
+    }
+    if (!overwrite && !changed.get("custom")) {
+      custom = note.custom;
+    }
+    
+    // reset changed flags
+    initializeChangedMap();
+  }
+  
+  /**
+   * Sets or resets the changed map flags
+   */
+  private void initializeChangedMap() {
+    // set changed flags
+    changed.put("end_time", false);
+    changed.put("description", false);
+    changed.put("notes", false);
+    changed.put("custom", false);
   }
   
   /**
@@ -364,49 +412,6 @@ public final class Annotation {
     System.arraycopy(tsuid, TSDB.metrics_width(), row, TSDB.metrics_width() + 
         Const.TIMESTAMP_BYTES, (tsuid.length - TSDB.metrics_width()));
     return row;
-  }
-  
-  /**
-   * Syncs the local object with the stored object for atomic writes, 
-   * overwriting the stored data if the user issued a PUT request
-   * <b>Note:</b> This method also resets the {@code changed} map to false
-   * for every field
-   * @param meta The stored object to sync from
-   * @param overwrite Whether or not all user mutable data in storage should be
-   * replaced by the local object
-   */
-  private void syncNote(final Annotation note, final boolean overwrite) {
-    if (note.start_time > 0 && (note.start_time < start_time || start_time == 0)) {
-      start_time = note.start_time;
-    }
-    
-    // handle user-accessible stuff
-    if (!overwrite && !changed.get("end_time")) {
-      end_time = note.end_time;
-    }
-    if (!overwrite && !changed.get("description")) {
-      description = note.description;
-    }
-    if (!overwrite && !changed.get("notes")) {
-      notes = note.notes;
-    }
-    if (!overwrite && !changed.get("custom")) {
-      custom = note.custom;
-    }
-    
-    // reset changed flags
-    initializeChangedMap();
-  }
-  
-  /**
-   * Sets or resets the changed map flags
-   */
-  private void initializeChangedMap() {
-    // set changed flags
-    changed.put("end_time", false);
-    changed.put("description", false);
-    changed.put("notes", false);
-    changed.put("custom", false);
   }
   
 // Getters and Setters --------------  
