@@ -70,7 +70,7 @@ import com.stumbleupon.async.Deferred;
 @JsonAutoDetect(fieldVisibility = Visibility.PUBLIC_ONLY)
 @JsonInclude(Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
-public final class Annotation {
+public final class Annotation implements Comparable<Annotation> {
   private static final Logger LOG = LoggerFactory.getLogger(Annotation.class);
   
   /** Charset used to convert Strings to byte arrays and back. */
@@ -116,6 +116,17 @@ public final class Annotation {
   public String toString() {
     return "TSUID: " + tsuid + " Start: " + start_time + "  Description: " + 
       description;
+  }
+  
+  /**
+   * Compares the {@code #start_time} of this annotation to the given note
+   * @return 1 if the local start time is greater, -1 if it's less or 0 if
+   * equal
+   */
+  @Override
+  public int compareTo(Annotation note) {
+    return start_time > note.start_time ? 1 : 
+      start_time < note.start_time ? -1 : 0;
   }
   
   /**
