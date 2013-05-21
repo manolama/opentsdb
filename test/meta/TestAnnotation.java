@@ -70,6 +70,12 @@ public final class TestAnnotation {
             "\"Description\",\"notes\":\"Notes\",\"custom\":{\"owner\":" + 
             "\"ops\"}}").getBytes(MockBase.ASCII()));
     
+    storage.addColumn(
+        new byte[] { 0, 0, 0, (byte) 0x4F, (byte) 0x29, (byte) 0xD2, 0 }, 
+        new byte[] { 1, 0, 1 }, 
+        ("{\"startTime\":1328140801,\"endTime\":1328140803,\"description\":" + 
+            "\"Global 2\",\"notes\":\"Nothing\"}").getBytes(MockBase.ASCII()));
+    
     // add a local
     storage.addColumn(
         new byte[] { 0, 0, 1, (byte) 0x52, (byte) 0xC2, (byte) 0x09, 0, 0, 0, 
@@ -146,7 +152,7 @@ public final class TestAnnotation {
     List<Annotation> notes = Annotation.getGlobalAnnotations(tsdb, 1328140000, 
         1328141000).joinUninterruptibly();
     assertNotNull(notes);
-    assertEquals(1, notes.size());
+    assertEquals(2, notes.size());
   }
   
   @Test
