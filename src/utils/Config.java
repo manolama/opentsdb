@@ -61,11 +61,17 @@ public class Config {
   /** tsd.storage.enable_compaction */
   private boolean enable_compactions = true;
   
+  /** tsd.core.meta.enable_tracking */
+  private boolean enable_meta_tracking = false;
+  
   /** tsd.http.request.enable_chunked */
   private boolean enable_chunked_requests = false;
   
   /** tsd.http.request.max_chunk */
   private int max_chunked_requests = 4096; 
+  
+  /** tsd.core.tree.enable_processing */
+  private boolean enable_tree_processing = false;
   
   /**
    * The list of properties configured to their defaults or modified by users
@@ -130,6 +136,11 @@ public class Config {
     return this.enable_compactions;
   }
   
+  /** @return whether or not to track meta data as new UID/TS are created */
+  public boolean enable_meta_tracking() { 
+    return enable_meta_tracking;
+  }
+  
   /** @return whether or not chunked requests are supported */
   public boolean enable_chunked_requests() {
     return this.enable_chunked_requests;
@@ -138,6 +149,11 @@ public class Config {
   /** @return max incoming chunk size in bytes */
   public int max_chunked_requests() {
     return this.max_chunked_requests;
+  }
+  
+  /** @return whether or not to process new or updated TSMetas through trees */
+  public boolean enable_tree_processing() {
+    return enable_tree_processing;
   }
   
   /**
@@ -288,7 +304,9 @@ public class Config {
     default_map.put("tsd.network.keep_alive", "true");
     default_map.put("tsd.network.reuse_address", "true");
     default_map.put("tsd.core.auto_create_metrics", "false");
+    default_map.put("tsd.core.meta.enable_tracking", "false");
     default_map.put("tsd.core.plugin_path", "");
+    default_map.put("tsd.core.tree.enable_processing", "false");
     default_map.put("tsd.search.enable", "false");
     default_map.put("tsd.search.plugin", "");
     default_map.put("tsd.storage.flush_interval", "1000");
@@ -310,9 +328,11 @@ public class Config {
     auto_metric = this.getBoolean("tsd.core.auto_create_metrics");
     enable_compactions = this.getBoolean("tsd.storage.enable_compaction");
     enable_chunked_requests = this.getBoolean("tsd.http.request.enable_chunked");
+    enable_meta_tracking = this.getBoolean("tsd.core.meta.enable_tracking");
     if (this.hasProperty("tsd.http.request.max_chunk")) {
       max_chunked_requests = this.getInt("tsd.http.request.max_chunk");
     }
+    enable_tree_processing = this.getBoolean("tsd.core.tree.enable_processing");
   }
 
   /**

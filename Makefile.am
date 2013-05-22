@@ -64,9 +64,18 @@ tsdb_SRC := \
 	src/tools/CliQuery.java	\
 	src/tools/DumpSeries.java	\
 	src/tools/Fsck.java	\
+	src/tools/MetaPurge.java	\
+	src/tools/MetaSync.java	\
 	src/tools/TSDMain.java	\
 	src/tools/TextImporter.java	\
+	src/tools/TreeSync.java	\
 	src/tools/UidManager.java	\
+	src/tree/Branch.java	\
+	src/tree/Leaf.java	\
+	src/tree/Tree.java	\
+	src/tree/TreeBuilder.java	\
+	src/tree/TreeRule.java	\
+	src/tsd/AnnotationRpc.java	\
 	src/tsd/BadRequestException.java	\
 	src/tsd/ConnectionManager.java	\
 	src/tsd/GnuplotException.java	\
@@ -84,6 +93,7 @@ tsdb_SRC := \
 	src/tsd/StaticFileRpc.java	\
 	src/tsd/SuggestRpc.java	\
 	src/tsd/TelnetRpc.java	\
+	src/tsd/TreeRpc.java	\
 	src/tsd/UniqueIdRpc.java	\
 	src/tsd/WordSplitter.java	\
 	src/uid/NoSuchUniqueId.java	\
@@ -126,13 +136,21 @@ test_SRC := \
 	test/meta/TestUIDMeta.java	\
 	test/search/TestSearchPlugin.java	\
 	test/stats/TestHistogram.java	\
+	test/storage/MockBase.java	\
+	test/tree/TestBranch.java	\
+	test/tree/TestLeaf.java	\
+	test/tree/TestTree.java	\
+	test/tree/TestTreeBuilder.java	\
+	test/tree/TestTreeRule.java	\
 	test/tsd/NettyMocks.java	\
+	test/tsd/TestAnnotationRpc.java	\
 	test/tsd/TestGraphHandler.java	\
 	test/tsd/TestHttpJsonSerializer.java	\
 	test/tsd/TestHttpQuery.java	\
 	test/tsd/TestPutRpc.java	\
 	test/tsd/TestQueryRpc.java	\
 	test/tsd/TestSuggestRpc.java	\
+	test/tsd/TestTreeRpc.java	\
 	test/tsd/TestUniqueIdRpc.java	\
 	test/uid/TestNoSuchUniqueId.java	\
 	test/uid/TestUniqueId.java \

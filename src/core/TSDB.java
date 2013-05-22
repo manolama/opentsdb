@@ -35,12 +35,14 @@ import org.hbase.async.PutRequest;
 import org.hbase.async.RowLock;
 import org.hbase.async.RowLockRequest;
 
+import net.opentsdb.tree.TreeBuilder;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
 import net.opentsdb.utils.Config;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.PluginLoader;
+import net.opentsdb.meta.Annotation;
 import net.opentsdb.meta.TSMeta;
 import net.opentsdb.meta.UIDMeta;
 import net.opentsdb.search.SearchPlugin;
@@ -116,6 +118,13 @@ public final class TSDB {
     if (config.hasProperty("tsd.core.timezone")) {
       DateTime.setDefaultTimezone(config.getString("tsd.core.timezone"));
     }
+    if (config.enable_meta_tracking()) {
+      // this is cleaner than another constructor and defaults to null. UIDs 
+      // will be refactored with DAL code anyways
+      metrics.setTSDB(this);
+      tag_names.setTSDB(this);
+      tag_values.setTSDB(this);
+    }
     LOG.debug(config.dumpConfiguration());
   }
   
@@ -132,7 +141,6 @@ public final class TSDB {
     final String plugin_path = config.getString("tsd.core.plugin_path");
     if (plugin_path != null && !plugin_path.isEmpty()) {
       try {
-        System.out.println("Attempting to load plugins");
         PluginLoader.loadJARs(plugin_path);
       } catch (Exception e) {
         LOG.error("Error loading plugins from plugin path: " + plugin_path, e);
@@ -189,17 +197,18 @@ public final class TSDB {
    * @throws NoSuchUniqueId if the UID was not found
    * @since 2.0
    */
-  public String getUidName(final UniqueIdType type, final byte[] uid) {
+  public Deferred<String> getUidName(final UniqueIdType type, final byte[] uid) {
     if (uid == null) {
       throw new IllegalArgumentException("Missing UID");
     }
+
     switch (type) {
       case METRIC:
-        return this.metrics.getName(uid);
+        return this.metrics.getNameAsync(uid);
       case TAGK:
-        return this.tag_names.getName(uid);
+        return this.tag_names.getNameAsync(uid);
       case TAGV:
-        return this.tag_values.getName(uid);
+        return this.tag_values.getNameAsync(uid);
       default:
         throw new IllegalArgumentException("Unrecognized UID type");
     }
@@ -446,6 +455,11 @@ public final class TSDB {
 
     IncomingDataPoints.checkMetricAndTags(metric, tags);
     final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);
+    if (config.enable_meta_tracking()) {
+      final byte[] tsuid = UniqueId.getTSUIDFromKey(row, METRICS_WIDTH, 
+          Const.TIMESTAMP_BYTES);
+      TSMeta.incrementAndGetCounter(this, tsuid);
+    }
     final long base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
     Bytes.setInt(row, (int) base_time, metrics.width());
     scheduleForCompaction(row, (int) base_time);
@@ -768,12 +782,44 @@ public final class TSDB {
     }
   }
   
+  /**
+   * Index the given Annotation object via the configured search plugin
+   * @param note The annotation object to index
+   */
+  public void indexAnnotation(final Annotation note) {
+    if (search != null) {
+      search.indexAnnotation(note);
+    }
+  }
+  
+  /**
+   * Delete the annotation object from the search index
+   * @param note The annotation object to delete
+   */
+  public void deleteAnnotation(final Annotation note) {
+    if (search != null) {
+      search.deleteAnnotation(note);
+    }
+  }
+  
+  /**
+   * Processes the TSMeta through all of the trees if configured to do so
+   * @param meta The meta data to process
+   */
+  public Deferred<Boolean> processTSMetaThroughTrees(final TSMeta meta) {
+    if (config.enable_tree_processing()) {
+      return TreeBuilder.processAllTrees(this, meta);
+    }
+    return Deferred.fromResult(false);
+  }
+  
   // ------------------ //
   // Compaction helpers //
   // ------------------ //
 
-  final KeyValue compact(final ArrayList<KeyValue> row) {
-    return compactionq.compact(row);
+  final KeyValue compact(final ArrayList<KeyValue> row, 
+      List<Annotation> annotations) {
+    return compactionq.compact(row, annotations);
   }
 
   /**

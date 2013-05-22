@@ -19,6 +19,9 @@ import java.util.List;
 
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.core.TSDB;
+import net.opentsdb.utils.Config;
+
 import org.hbase.async.AtomicIncrementRequest;
 import org.hbase.async.Bytes;
 import org.hbase.async.GetRequest;
@@ -64,15 +67,15 @@ import static org.powermock.api.mockito.PowerMockito.mock;
 @PowerMockIgnore({"javax.management.*", "javax.xml.*",
                   "ch.qos.*", "org.slf4j.*",
                   "com.sum.*", "org.xml.*"})
-@PrepareForTest({ HBaseClient.class, RowLock.class })
+@PrepareForTest({ HBaseClient.class, RowLock.class, TSDB.class, Config.class })
 public final class TestUniqueId {
 
   private HBaseClient client = mock(HBaseClient.class);
   private static final byte[] table = { 't', 'a', 'b', 'l', 'e' };
   private static final byte[] ID = { 'i', 'd' };
   private UniqueId uid;
-  private static final String kind = "kind";
-  private static final byte[] kind_array = { 'k', 'i', 'n', 'd' };
+  private static final String kind = "metric";
+  private static final byte[] kind_array = { 'm', 'e', 't', 'r', 'i', 'c' };
 
   @Test(expected=IllegalArgumentException.class)
   public void testCtorZeroWidth() {
@@ -255,7 +258,12 @@ public final class TestUniqueId {
   public void getOrCreateIdAssignIdWithSuccess() {
     uid = new UniqueId(client, table, kind, 3);
     final byte[] id = { 0, 0, 5 };
-
+    final Config config = mock(Config.class);
+    when(config.enable_meta_tracking()).thenReturn(false);
+    final TSDB tsdb = mock(TSDB.class);
+    when(tsdb.getConfig()).thenReturn(config);
+    uid.setTSDB(tsdb);
+    
     RowLock fake_lock = mock(RowLock.class);
     when(client.lockRow(anyRowLockRequest()))
       .thenReturn(Deferred.fromResult(fake_lock));
@@ -307,7 +315,8 @@ public final class TestUniqueId {
   }
 
   @Test  // Test the creation of an ID with a race condition.
-  @PrepareForTest({HBaseClient.class, RowLock.class, Deferred.class})
+  @PrepareForTest({HBaseClient.class, RowLock.class, Deferred.class, 
+    TSDB.class, Config.class })
   public void getOrCreateIdAssignIdWithRaceCondition() {
     // Simulate a race between client A and client B.
     // A does a Get and sees that there's no ID for this name.
@@ -317,31 +326,45 @@ public final class TestUniqueId {
     // ID has already been assigned.
 
     uid = new UniqueId(client, table, kind, 3);  // Used by client A.
+    final TSDB tsdb = mock(TSDB.class);
     HBaseClient client_b = mock(HBaseClient.class);
     final UniqueId uid_b = new UniqueId(client_b, table, kind, 3);  // for client B.
-
+    final Config config = mock(Config.class);
+    when(config.enable_meta_tracking()).thenReturn(false);
+    when(tsdb.getConfig()).thenReturn(config);
+    uid.setTSDB(tsdb);
+    uid_b.setTSDB(tsdb);
+    
     final byte[] id = { 0, 0, 5 };
     final byte[] byte_name = { 'f', 'o', 'o' };
 
-    @SuppressWarnings("unchecked")
-    final Deferred<ArrayList<KeyValue>> d = mock(Deferred.class);
+    final Deferred<ArrayList<KeyValue>> d1 = 
+      PowerMockito.spy(new Deferred<ArrayList<KeyValue>>());
+    final Deferred<ArrayList<KeyValue>> d2;
+    {
+      final ArrayList<KeyValue> kvs = new ArrayList<KeyValue>(1);
+      kvs.add(new KeyValue(byte_name, ID, kind_array, id));
+      d2 = Deferred.fromResult(kvs);
+    }
     when(client.get(anyGet()))
-      .thenReturn(d);
+      .thenReturn(d1)  // For A's the first attempt.
+      .thenReturn(d2);    // For A's second attempt.
 
     final Answer<byte[]> the_race = new Answer<byte[]>() {
-      public byte[] answer(final InvocationOnMock unused_invocation) {
+      public byte[] answer(
+          final InvocationOnMock unused_invocation) throws Exception {
         // While answering A's first Get, B doest a full getOrCreateId.
         assertArrayEquals(id, uid_b.getOrCreateId("foo"));
+        d1.callback(null);
+        Object result = d1.join();  // Throws.
+        fail("Should never be here: " + result);
         return null;
       }
     };
 
+    // Start the race when answering A's first Get.
     try {
-      ArrayList<KeyValue> kvs = new ArrayList<KeyValue>(1);
-      kvs.add(new KeyValue(byte_name, ID, kind_array, id));
-      when(d.joinUninterruptibly())
-        .thenAnswer(the_race)  // Start the race when answering A's first Get.
-        .thenReturn(kvs);      // The 2nd Get succeeds because B created the ID.
+      PowerMockito.doAnswer(the_race).when(d1).joinUninterruptibly();
     } catch (Exception e) {
       fail("Should never happen: " + e);
     }
@@ -420,7 +443,12 @@ public final class TestUniqueId {
   @Test  // ICV throws an exception, we can't get an ID.
   public void getOrCreateIdWithICVFailure() {
     uid = new UniqueId(client, table, kind, 3);
-
+    final Config config = mock(Config.class);
+    when(config.enable_meta_tracking()).thenReturn(false);
+    final TSDB tsdb = mock(TSDB.class);
+    when(tsdb.getConfig()).thenReturn(config);
+    uid.setTSDB(tsdb);
+    
     RowLock fake_lock = mock(RowLock.class);
     when(client.lockRow(anyRowLockRequest()))
       .thenReturn(Deferred.fromResult(fake_lock));
@@ -453,7 +481,12 @@ public final class TestUniqueId {
   @Test  // Test that the reverse mapping is created before the forward one.
   public void getOrCreateIdPutsReverseMappingFirst() {
     uid = new UniqueId(client, table, kind, 3);
-
+    final Config config = mock(Config.class);
+    when(config.enable_meta_tracking()).thenReturn(false);
+    final TSDB tsdb = mock(TSDB.class);
+    when(tsdb.getConfig()).thenReturn(config);
+    uid.setTSDB(tsdb);
+    
     RowLock fake_lock = mock(RowLock.class);
     when(client.lockRow(anyRowLockRequest()))
       .thenReturn(Deferred.fromResult(fake_lock));
@@ -608,7 +641,7 @@ public final class TestUniqueId {
         UniqueId.stringToUid("0", (short)3));
   }
   
-  @Test (expected = NullPointerException.class)
+  @Test (expected = IllegalArgumentException.class)
   public void stringToUidNull() {
     UniqueId.stringToUid(null);
   }
@@ -627,7 +660,23 @@ public final class TestUniqueId {
   public void stringToUidNotHex2() {
     UniqueId.stringToUid(" ");
   }
-   
+  
+  @Test
+  public void getTSUIDFromKey() {
+    final byte[] tsuid = UniqueId.getTSUIDFromKey(new byte[] 
+      { 0, 0, 1, 1, 1, 1, 1, 0, 0, 2, 0, 0, 3 }, (short)3, (short)4);
+    assertArrayEquals(new byte[] { 0, 0, 1, 0, 0, 2, 0, 0, 3 }, 
+        tsuid);
+  }
+  
+  @Test
+  public void getTSUIDFromKeyMissingTags() {
+    final byte[] tsuid = UniqueId.getTSUIDFromKey(new byte[] 
+      { 0, 0, 1, 1, 1, 1, 1 }, (short)3, (short)4);
+    assertArrayEquals(new byte[] { 0, 0, 1 }, 
+        tsuid);
+  }
+  
   @Test
   public void getTagPairsFromTSUID() {
     List<byte[]> tags = UniqueId.getTagPairsFromTSUID(
