@@ -45,10 +45,9 @@ public final class StatsRpc implements TelnetRpc, HttpRpc {
    */
   public Deferred<Object> execute(final TSDB tsdb, final Channel chan,
       final String[] cmd) {
-    final boolean canonical = tsdb.getConfig().getBoolean("tsd.stats.canonical");
     final StringBuilder buf = new StringBuilder(1024);
     final ASCIICollector collector = new ASCIICollector("tsd", buf, null);
-    doCollectStats(tsdb, collector, canonical);
+    doCollectStats(tsdb, collector);
     chan.write(buf.toString());
     return Deferred.fromResult(null);
   }
@@ -66,15 +65,13 @@ public final class StatsRpc implements TelnetRpc, HttpRpc {
           "] is not permitted for this endpoint");
     }
     
-    final boolean canonical = tsdb.getConfig().getBoolean("tsd.stats.canonical");
-    
     // if we don't have an API request we need to respond with the 1.x version
     if (query.apiVersion() < 1) {
       final boolean json = query.hasQueryStringParam("json");
       final StringBuilder buf = json ? null : new StringBuilder(2048);
       final ArrayList<String> stats = json ? new ArrayList<String>(64) : null;
       final ASCIICollector collector = new ASCIICollector("tsd", buf, stats);
-      doCollectStats(tsdb, collector, canonical);
+      doCollectStats(tsdb, collector);
       if (json) {
         query.sendReply(JSON.serializeToBytes(stats));
       } else {
@@ -85,8 +82,7 @@ public final class StatsRpc implements TelnetRpc, HttpRpc {
     
     // we have an API version, so go newschool
     final List<IncomingDataPoint> dps = new ArrayList<IncomingDataPoint>(64);
-    final SerializerCollector collector = new SerializerCollector("tsd", dps, 
-        canonical);
+    final SerializerCollector collector = new SerializerCollector("tsd", dps);
     ConnectionManager.collectStats(collector);
     RpcHandler.collectStats(collector);
     tsdb.collectStats(collector);
@@ -98,9 +94,8 @@ public final class StatsRpc implements TelnetRpc, HttpRpc {
    * @param tsdb The TSDB to use for fetching stats
    * @param collector The collector class to call for emitting stats
    */
-  private void doCollectStats(final TSDB tsdb, final StatsCollector collector, 
-      final boolean canonical) {
-    collector.addHostTag(canonical);
+  private void doCollectStats(final TSDB tsdb, final StatsCollector collector) {
+    collector.addHostTag();
     ConnectionManager.collectStats(collector);
     RpcHandler.collectStats(collector);
     tsdb.collectStats(collector);
@@ -148,7 +143,6 @@ public final class StatsRpc implements TelnetRpc, HttpRpc {
    */
   final class SerializerCollector extends StatsCollector {
     
-    final boolean canonical;
     final List<IncomingDataPoint> dps;
     
     /**
@@ -157,10 +151,9 @@ public final class StatsRpc implements TelnetRpc, HttpRpc {
      * @param dps The array to store objects in
      */
     public SerializerCollector(final String prefix, 
-        final List<IncomingDataPoint> dps, final boolean canonical) {
+        final List<IncomingDataPoint> dps) {
       super(prefix);
       this.dps = dps;
-      this.canonical = canonical;
     }
 
     /**
@@ -191,11 +184,11 @@ public final class StatsRpc implements TelnetRpc, HttpRpc {
         final String[] pair = xtratag.split("=");
         if (extratags == null) {
           extratags = new HashMap<String, String>(1);
+          extratags.put(pair[0], pair[1]);
         }
-        extratags.put(pair[0], pair[1]);
       }
       
-      addHostTag(canonical);
+      addHostTag();
      
       final HashMap<String, String> tags = 
         new HashMap<String, String>(extratags);
