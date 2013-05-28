@@ -51,7 +51,7 @@ public class SearchQuery {
   private String query;
   
   /** Limit the number of responses so we don't overload the TSD or client */
-  private int limit;
+  private int limit = 25;
   
   /** Used for paging through a result set */
   private int start_index;
