@@ -194,10 +194,16 @@ public abstract class StatsCollector {
    * is used instead.
    * @param canonical Whether or not we should try to get the FQDN of the host.
    * If set to true, the tag changes to "fqdn" instead of "host"
+   * @param canonical Whether or not we should try to get the FQDN of the host.
+   * If set to true, the tag changes to "fqdn" instead of "host" 
    */
-  public final void addHostTag() {
+  public final void addHostTag(final boolean canonical) {
     try {
-      addExtraTag("host", InetAddress.getLocalHost().getHostName());
+      if (canonical) {
+        addExtraTag("fqdn", InetAddress.getLocalHost().getCanonicalHostName());
+      } else {
+        addExtraTag("host", InetAddress.getLocalHost().getHostName());
+      }
     } catch (UnknownHostException x) {
       LOG.error("WTF?  Can't find hostname for localhost!", x);
       addExtraTag("host", "(unknown)");
