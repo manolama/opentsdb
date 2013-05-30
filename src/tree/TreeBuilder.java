@@ -261,9 +261,9 @@ public final class TreeBuilder {
                 }
                 
               }
-              
-              storage_calls.add(cb.storeBranch(tsdb, tree, true)
-                  .addCallbackDeferring(new BranchCB()));
+              final Deferred<Boolean> deferred = cb.storeBranch(tsdb, tree, true)
+                .addCallbackDeferring(new BranchCB());
+              storage_calls.add(deferred);
               processed_branches.put(cb.getBranchId(), true);
             }
             
