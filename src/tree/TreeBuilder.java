@@ -166,8 +166,8 @@ public final class TreeBuilder {
     
     // setup a list of deferreds to return to the caller so they can wait for
     // storage calls to complete
-    final ArrayList<Deferred<ArrayList<Object>>> storage_calls = 
-      new ArrayList<Deferred<ArrayList<Object>>>();
+    final ArrayList<Deferred<Boolean>> storage_calls = 
+      new ArrayList<Deferred<Boolean>>();
     
     /**
      * Runs the local TSMeta object through the tree's rule set after the root
@@ -203,7 +203,7 @@ public final class TreeBuilder {
           if (!is_testing && tree.getNotMatched() != null && 
               !tree.getNotMatched().isEmpty()) {
             tree.addNotMatched(meta.getTSUID(), not_matched);
-            storage_calls.add(tree.storeTree(tsdb, false));
+            storage_calls.add(tree.flushNotMatched(tsdb));
           }
           
         } else if (current_branch == null) {
@@ -225,7 +225,34 @@ public final class TreeBuilder {
             if (cb.getLeaves() != null || 
                 !processed_branches.containsKey(cb.getBranchId())) {
               LOG.debug("Flushing branch to storage: " + cb);
-              storage_calls.add(cb.storeBranch(tsdb, tree, true));
+
+              /**
+               * Since we need to return a deferred group and we can't just
+               * group the branch storage deferreds with the not-matched and 
+               * collisions, we need to implement a callback that will wait for
+               * the results of the branch stores and group that with the rest.
+               * This CB will return false if ANY of the branches failed to 
+               * be written.
+               */
+              final class BranchCB implements Callback<Deferred<Boolean>, 
+                ArrayList<Object>> {
+
+                @Override
+                public Deferred<Boolean> call(final ArrayList<Object> deferreds)
+                    throws Exception {
+                  
+                  for (Object success : deferreds) {
+                    if (!(Boolean)success) {
+                      return Deferred.fromResult(false);
+                    }
+                  }
+                  return Deferred.fromResult(true);
+                }
+                
+              }
+              
+              storage_calls.add(cb.storeBranch(tsdb, tree, true)
+                  .addCallbackDeferring(new BranchCB()));
               processed_branches.put(cb.getBranchId(), true);
             }
             
@@ -243,7 +270,7 @@ public final class TreeBuilder {
           
           // if we have collisions, flush em
           if (tree.getCollisions() != null && !tree.getCollisions().isEmpty()) {
-            storage_calls.add(tree.storeTree(tsdb, false));
+            storage_calls.add(tree.flushCollisions(tsdb));
           }
           
         } else {
