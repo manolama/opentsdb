@@ -31,8 +31,10 @@ import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.IncomingDataPoint;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSQuery;
+import net.opentsdb.meta.Annotation;
 import net.opentsdb.meta.TSMeta;
 import net.opentsdb.meta.UIDMeta;
+import net.opentsdb.search.SearchQuery;
 import net.opentsdb.tree.Branch;
 import net.opentsdb.tree.Tree;
 import net.opentsdb.tree.TreeRule;
@@ -193,6 +195,18 @@ public abstract class HttpSerializer {
   }
   
   /**
+   * Parses a SearchQuery request
+   * @return The parsed search query
+   * @throws BadRequestException if the plugin has not implemented this method
+   */
+  public SearchQuery parseSearchQueryV1() {
+    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+        "The requested API endpoint has not been implemented", 
+        this.getClass().getCanonicalName() + 
+        " has not implemented parseSearchQueryV1");
+  }
+  
+  /**
    * Parses a timeseries data query
    * @return A TSQuery with data ready to validate
    * @throws BadRequestException if the plugin has not implemented this method
@@ -276,6 +290,18 @@ public abstract class HttpSerializer {
         "The requested API endpoint has not been implemented", 
         this.getClass().getCanonicalName() + 
         " has not implemented parseTreeCollisionNotMatchedV1");
+  }
+  
+  /**
+   * Parses an annotation object
+   * @return An annotation object
+   * @throws BadRequestException if the plugin has not implemented this method
+   */
+  public Annotation parseAnnotationV1() {
+    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+        "The requested API endpoint has not been implemented", 
+        this.getClass().getCanonicalName() + 
+        " has not implemented parseAnnotationV1");
   }
   
   /**
@@ -381,11 +407,12 @@ public abstract class HttpSerializer {
    * Format the results from a timeseries data query
    * @param query The TSQuery object used to fetch the results
    * @param results The data fetched from storage
+   * @param globals An optional list of global annotation objects
    * @return A ChannelBuffer object to pass on to the caller
    * @throws BadRequestException if the plugin has not implemented this method
    */
   public ChannelBuffer formatQueryV1(final TSQuery query, 
-      final List<DataPoints[]> results) {
+      final List<DataPoints[]> results, final List<Annotation> globals) {
     throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
         "The requested API endpoint has not been implemented", 
         this.getClass().getCanonicalName() + 
@@ -504,6 +531,45 @@ public abstract class HttpSerializer {
         "The requested API endpoint has not been implemented", 
         this.getClass().getCanonicalName() + 
         " has not implemented formatTreeTestV1");
+  }
+  
+  /**
+   * Format an annotation object
+   * @param note The annotation object to format
+   * @return A ChannelBuffer object to pass on to the caller
+   * @throws BadRequestException if the plugin has not implemented this method
+   */
+  public ChannelBuffer formatAnnotationV1(final Annotation note) {
+    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+        "The requested API endpoint has not been implemented", 
+        this.getClass().getCanonicalName() + 
+        " has not implemented formatAnnotationV1");
+  }
+  
+  /**
+   * Format a list of statistics
+   * @param note The statistics list to format
+   * @return A ChannelBuffer object to pass on to the caller
+   * @throws BadRequestException if the plugin has not implemented this method
+   */
+  public ChannelBuffer formatStatsV1(final List<IncomingDataPoint> stats) {
+    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+        "The requested API endpoint has not been implemented", 
+        this.getClass().getCanonicalName() + 
+        " has not implemented formatStatsV1");
+  }
+  
+  /**
+   * Format the response from a search query
+   * @param note The query (hopefully filled with results) to serialize
+   * @return A ChannelBuffer object to pass on to the caller
+   * @throws BadRequestException if the plugin has not implemented this method
+   */
+  public ChannelBuffer formatSearchResultsV1(final SearchQuery results) {
+    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
+        "The requested API endpoint has not been implemented", 
+        this.getClass().getCanonicalName() + 
+        " has not implemented formatSearchResultsV1");
   }
   
   /**

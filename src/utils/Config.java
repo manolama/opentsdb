@@ -131,6 +131,11 @@ public class Config {
     return this.auto_metric;
   }
   
+  /** @param set whether or not to auto create metrics */
+  public void setAutoMetric(boolean auto_metric) {
+    this.auto_metric = auto_metric;
+  }
+  
   /** @return the enable_compaction value */
   public boolean enable_compactions() {
     return this.enable_compactions;
@@ -309,6 +314,7 @@ public class Config {
     default_map.put("tsd.core.tree.enable_processing", "false");
     default_map.put("tsd.search.enable", "false");
     default_map.put("tsd.search.plugin", "");
+    default_map.put("tsd.stats.canonical", "false");
     default_map.put("tsd.storage.flush_interval", "1000");
     default_map.put("tsd.storage.hbase.data_table", "tsdb");
     default_map.put("tsd.storage.hbase.uid_table", "tsdb-uid");

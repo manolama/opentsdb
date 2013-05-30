@@ -362,9 +362,12 @@ final class TreeRpc implements HttpRpc {
           }
         }
         
-        TreeRule.deleteAllRules(tsdb, tree_id);
+        // purge the existing tree rules if we're told to PUT
+        if (method == HttpMethod.PUT) {
+          TreeRule.deleteAllRules(tsdb, tree_id);
+        }
         for (TreeRule rule : rules) {
-          rule.syncToStorage(tsdb, true);
+          rule.syncToStorage(tsdb, method == HttpMethod.PUT);
         }
         query.sendStatusOnly(HttpResponseStatus.NO_CONTENT);
   
@@ -440,7 +443,7 @@ final class TreeRpc implements HttpRpc {
             // if the meta doesn't exist, we can't process, so just log a 
             // message to the results and move on to the next TSUID
             if (meta == null) {
-              tsuid_results.put("treeid", null);
+              tsuid_results.put("branch", null);
               tsuid_results.put("meta", null);
               final ArrayList<String> messages = new ArrayList<String>(1);
               messages.add("Unable to locate TSUID meta data");
@@ -450,7 +453,7 @@ final class TreeRpc implements HttpRpc {
             }
             
             builder.processTimeseriesMeta(meta, true).joinUninterruptibly();
-            tsuid_results.put("treeid", builder.getRootBranch());
+            tsuid_results.put("branch", builder.getRootBranch());
             tsuid_results.put("meta", meta);
             tsuid_results.put("messages", builder.getTestMessage());
             
@@ -464,7 +467,7 @@ final class TreeRpc implements HttpRpc {
             }
             
             if (ex.getClass().equals(NoSuchUniqueId.class)) {
-              tsuid_results.put("treeid", null);
+              tsuid_results.put("branch", null);
               tsuid_results.put("meta", null);
               final ArrayList<String> messages = new ArrayList<String>(1);
               messages.add("TSUID was missing a UID name: " + ex.getMessage());
@@ -570,6 +573,14 @@ final class TreeRpc implements HttpRpc {
         tree.setStrictMatch(true);
       } else {
         tree.setStrictMatch(false);
+      }
+    }
+    if (query.hasQueryStringParam("enabled")) {
+      final String enabled = query.getQueryStringParam("enabled");
+      if (enabled.toLowerCase().equals("true")) {
+        tree.setEnabled(true);
+      } else {
+        tree.setEnabled(false);
       }
     }
     return tree;

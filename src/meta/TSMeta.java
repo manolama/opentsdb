@@ -562,7 +562,8 @@ public final class TSMeta {
             tsdb.indexTSMeta(stored_meta);
             
             // pass through the trees
-            return tsdb.processTSMetaThroughTrees(stored_meta).addCallbackDeferring(new TreeCB());
+            return tsdb.processTSMetaThroughTrees(stored_meta)
+              .addCallbackDeferring(new TreeCB());
           }
           
         }
@@ -773,7 +774,7 @@ public final class TSMeta {
       if (custom == null) {
         json.writeNullField("custom");
       } else {
-        json.writeStartObject();
+        json.writeObjectFieldStart("custom");
         for (Map.Entry<String, String> entry : custom.entrySet()) {
           json.writeStringField(entry.getKey(), entry.getValue());
         }

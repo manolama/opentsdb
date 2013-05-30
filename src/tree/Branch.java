@@ -701,16 +701,6 @@ public final class Branch implements Comparable<Branch> {
     return path.lastKey();
   }
 
-  /** @return Number of leaves in this branch */
-  public int getNumLeaves() {
-    return leaves == null ? 0 : leaves.size();
-  }
-
-  /** @return Total number of child branches */
-  public int getNumBranches() {
-    return branches == null ? 0 : branches.size();
-  }
-
   /** @return Name to display to the public */
   public String getDisplayName() {
     return display_name;

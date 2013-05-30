@@ -42,9 +42,11 @@ import net.opentsdb.uid.UniqueId.UniqueIdType;
 import net.opentsdb.utils.Config;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.PluginLoader;
+import net.opentsdb.meta.Annotation;
 import net.opentsdb.meta.TSMeta;
 import net.opentsdb.meta.UIDMeta;
 import net.opentsdb.search.SearchPlugin;
+import net.opentsdb.search.SearchQuery;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.StatsCollector;
 
@@ -744,6 +746,7 @@ public final class TSDB {
   /**
    * Index the given timeseries meta object via the configured search plugin
    * @param meta The meta data object to index
+   * @since 2.0
    */
   public void indexTSMeta(final TSMeta meta) {
     if (search != null) {
@@ -754,6 +757,7 @@ public final class TSDB {
   /**
    * Delete the timeseries meta object from the search index
    * @param tsuid The TSUID to delete
+   * @since 2.0
    */
   public void deleteTSMeta(final String tsuid) {
     if (search != null) {
@@ -764,6 +768,7 @@ public final class TSDB {
   /**
    * Index the given UID meta object via the configured search plugin
    * @param meta The meta data object to index
+   * @since 2.0
    */
   public void indexUIDMeta(final UIDMeta meta) {
     if (search != null) {
@@ -774,6 +779,7 @@ public final class TSDB {
   /**
    * Delete the UID meta object from the search index
    * @param meta The UID meta object to delete
+   * @since 2.0
    */
   public void deleteUIDMeta(final UIDMeta meta) {
     if (search != null) {
@@ -782,8 +788,31 @@ public final class TSDB {
   }
   
   /**
+   * Index the given Annotation object via the configured search plugin
+   * @param note The annotation object to index
+   * @since 2.0
+   */
+  public void indexAnnotation(final Annotation note) {
+    if (search != null) {
+      search.indexAnnotation(note);
+    }
+  }
+  
+  /**
+   * Delete the annotation object from the search index
+   * @param note The annotation object to delete
+   * @since 2.0
+   */
+  public void deleteAnnotation(final Annotation note) {
+    if (search != null) {
+      search.deleteAnnotation(note);
+    }
+  }
+  
+  /**
    * Processes the TSMeta through all of the trees if configured to do so
    * @param meta The meta data to process
+   * @since 2.0
    */
   public Deferred<Boolean> processTSMetaThroughTrees(final TSMeta meta) {
     if (config.enable_tree_processing()) {
@@ -792,12 +821,30 @@ public final class TSDB {
     return Deferred.fromResult(false);
   }
   
+  /**
+   * Executes a search query using the search plugin
+   * @param query The query to execute
+   * @return A deferred object to wait on for the results to be fetched
+   * @throws IllegalStateException if the search plugin has not been enabled or
+   * configured
+   * @since 2.0
+   */
+  public Deferred<SearchQuery> executeSearch(final SearchQuery query) {
+    if (search == null) {
+      throw new IllegalStateException(
+          "Searching has not been enabled on this TSD");
+    }
+    
+    return search.executeQuery(query);
+  }
+  
   // ------------------ //
   // Compaction helpers //
   // ------------------ //
 
-  final KeyValue compact(final ArrayList<KeyValue> row) {
-    return compactionq.compact(row);
+  final KeyValue compact(final ArrayList<KeyValue> row, 
+      List<Annotation> annotations) {
+    return compactionq.compact(row, annotations);
   }
 
   /**

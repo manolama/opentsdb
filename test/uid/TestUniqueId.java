@@ -351,8 +351,8 @@ public final class TestUniqueId {
       .thenReturn(d2);    // For A's second attempt.
 
     final Answer<byte[]> the_race = new Answer<byte[]>() {
-      public byte[] answer(final InvocationOnMock unused_invocation) 
-      throws Exception {
+      public byte[] answer(
+          final InvocationOnMock unused_invocation) throws Exception {
         // While answering A's first Get, B doest a full getOrCreateId.
         assertArrayEquals(id, uid_b.getOrCreateId("foo"));
         d1.callback(null);

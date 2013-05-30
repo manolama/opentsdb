@@ -57,6 +57,7 @@ tsdb_SRC := \
 	src/meta/TSMeta.java	\
 	src/meta/UIDMeta.java	\
 	src/search/SearchPlugin.java	\
+	src/search/SearchQuery.java	\
 	src/stats/Histogram.java	\
 	src/stats/StatsCollector.java	\
 	src/tools/ArgP.java	\
@@ -65,7 +66,7 @@ tsdb_SRC := \
 	src/tools/DumpSeries.java	\
 	src/tools/Fsck.java	\
 	src/tools/MetaPurge.java	\
-  src/tools/MetaSync.java	\
+	src/tools/MetaSync.java	\
 	src/tools/TSDMain.java	\
 	src/tools/TextImporter.java	\
 	src/tools/TreeSync.java	\
@@ -75,6 +76,7 @@ tsdb_SRC := \
 	src/tree/Tree.java	\
 	src/tree/TreeBuilder.java	\
 	src/tree/TreeRule.java	\
+	src/tsd/AnnotationRpc.java	\
 	src/tsd/BadRequestException.java	\
 	src/tsd/ConnectionManager.java	\
 	src/tsd/GnuplotException.java	\
@@ -89,7 +91,9 @@ tsdb_SRC := \
 	src/tsd/PutDataPointRpc.java	\
 	src/tsd/QueryRpc.java	\
 	src/tsd/RpcHandler.java	\
+	src/tsd/SearchRpc.java	\
 	src/tsd/StaticFileRpc.java	\
+	src/tsd/StatsRpc.java	\
 	src/tsd/SuggestRpc.java	\
 	src/tsd/TelnetRpc.java	\
 	src/tsd/TreeRpc.java	\
@@ -134,6 +138,7 @@ test_SRC := \
 	test/meta/TestTSMeta.java	\
 	test/meta/TestUIDMeta.java	\
 	test/search/TestSearchPlugin.java	\
+	test/search/TestSearchQuery.java	\
 	test/stats/TestHistogram.java	\
 	test/storage/MockBase.java	\
 	test/tree/TestBranch.java	\
@@ -142,11 +147,13 @@ test_SRC := \
 	test/tree/TestTreeBuilder.java	\
 	test/tree/TestTreeRule.java	\
 	test/tsd/NettyMocks.java	\
+	test/tsd/TestAnnotationRpc.java	\
 	test/tsd/TestGraphHandler.java	\
 	test/tsd/TestHttpJsonSerializer.java	\
 	test/tsd/TestHttpQuery.java	\
 	test/tsd/TestPutRpc.java	\
 	test/tsd/TestQueryRpc.java	\
+	test/tsd/TestSearchRpc.java	\
 	test/tsd/TestSuggestRpc.java	\
 	test/tsd/TestTreeRpc.java	\
 	test/tsd/TestUniqueIdRpc.java	\

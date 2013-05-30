@@ -32,7 +32,6 @@ import java.util.regex.PatternSyntaxException;
 import javax.xml.bind.DatatypeConverter;
 
 import net.opentsdb.core.TSDB;
-import net.opentsdb.tree.Branch;
 import net.opentsdb.utils.Config;
 
 import org.hbase.async.AtomicIncrementRequest;
@@ -72,7 +71,9 @@ import com.stumbleupon.async.Deferred;
  * <li>PutRequest</li>
  * <li>KeyValue</li>
  * <li>Scanner</li>
- * <li>DeleteRequest</li></ul>
+ * <li>DeleteRequest</li>
+ * <li>AtomicIncrementRequest</li></ul>
+ * @since 2.0
  */
 @Ignore
 public final class MockBase {
@@ -306,7 +307,7 @@ public final class MockBase {
         throws Throwable {
       final Object[] args = invocation.getArguments();
       final GetRequest get = (GetRequest)args[0];
-      final String key = Branch.idToString(get.key());
+      final String key = bytesToString(get.key());
       final HashMap<String, byte[]> row = storage.get(key);
 
       if (row == null) {
@@ -360,7 +361,7 @@ public final class MockBase {
       throws Throwable {
       final Object[] args = invocation.getArguments();
       final PutRequest put = (PutRequest)args[0];
-      final String key = Branch.idToString(put.key());
+      final String key = bytesToString(put.key());
       
       HashMap<String, byte[]> column = storage.get(key);
       if (column == null) {
@@ -393,7 +394,7 @@ public final class MockBase {
       final Object[] args = invocation.getArguments();
       final PutRequest put = (PutRequest)args[0];
       final byte[] expected = (byte[])args[1];
-      final String key = Branch.idToString(put.key());
+      final String key = bytesToString(put.key());
       
       HashMap<String, byte[]> column = storage.get(key);
       if (column == null) {
@@ -437,7 +438,7 @@ public final class MockBase {
         throws Throwable {
       final Object[] args = invocation.getArguments();
       final DeleteRequest delete = (DeleteRequest)args[0];
-      final String key = Branch.idToString(delete.key());
+      final String key = bytesToString(delete.key());
       
       if (!storage.containsKey(key)) {
         return Deferred.fromResult(null);
@@ -619,6 +620,10 @@ public final class MockBase {
     }
   }
   
+  /**
+   * Creates or increments (possibly decremnts) a Long in the hash table at the
+   * given location.
+   */
   private class MockAtomicIncrement implements
     Answer<Deferred<Long>> {
 

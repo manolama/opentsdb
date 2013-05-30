@@ -15,6 +15,7 @@ package net.opentsdb.tsd;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,8 +38,10 @@ import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.IncomingDataPoint;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSQuery;
+import net.opentsdb.meta.Annotation;
 import net.opentsdb.meta.TSMeta;
 import net.opentsdb.meta.UIDMeta;
+import net.opentsdb.search.SearchQuery;
 import net.opentsdb.tree.Branch;
 import net.opentsdb.tree.Tree;
 import net.opentsdb.tree.TreeRule;
@@ -345,6 +348,40 @@ class HttpJsonSerializer extends HttpSerializer {
   }
   
   /**
+   * Parses an annotation object
+   * @return An annotation object
+   * @throws JSONException if parsing failed
+   * @throws BadRequestException if the content was missing or parsing failed
+   */
+  public Annotation parseAnnotationV1() {
+    final String json = query.getContent();
+    if (json == null || json.isEmpty()) {
+      throw new BadRequestException(HttpResponseStatus.BAD_REQUEST,
+          "Missing message content",
+          "Supply valid JSON formatted data in the body of your request");
+    }
+    
+    return JSON.parseToObject(json, Annotation.class);
+  }
+  
+  /**
+   * Parses a SearchQuery request
+   * @return The parsed search query
+   * @throws JSONException if parsing failed
+   * @throws BadRequestException if the content was missing or parsing failed
+   */
+  public SearchQuery parseSearchQueryV1() {
+    final String json = query.getContent();
+    if (json == null || json.isEmpty()) {
+      throw new BadRequestException(HttpResponseStatus.BAD_REQUEST,
+          "Missing message content",
+          "Supply valid JSON formatted data in the body of your request");
+    }
+    
+    return JSON.parseToObject(json, SearchQuery.class);
+  }
+  
+  /**
    * Formats the results of an HTTP data point storage request
    * @param results A map of results. The map will consist of:
    * <ul><li>success - (long) the number of successfully parsed datapoints</li>
@@ -427,10 +464,11 @@ class HttpJsonSerializer extends HttpSerializer {
    * Format the results from a timeseries data query
    * @param data_query The TSQuery object used to fetch the results
    * @param results The data fetched from storage
+   * @param globals An optional list of global annotation objects
    * @return A ChannelBuffer object to pass on to the caller
    */
   public ChannelBuffer formatQueryV1(final TSQuery data_query, 
-      final List<DataPoints[]> results) {
+      final List<DataPoints[]> results, final List<Annotation> globals) {
     
     final boolean as_arrays = this.query.hasQueryStringParam("arrays");
     final String jsonp = this.query.getQueryStringParam("jsonp");
@@ -461,7 +499,7 @@ class HttpJsonSerializer extends HttpSerializer {
           }
           json.writeEndObject();
           
-          json.writeFieldName("aggregated_tags");
+          json.writeFieldName("aggregateTags");
           json.writeStartArray();
           if (dps.getAggregatedTags() != null) {
             for (String atag : dps.getAggregatedTags()) {
@@ -470,6 +508,27 @@ class HttpJsonSerializer extends HttpSerializer {
           }
           json.writeEndArray();
           
+          if (!data_query.getNoAnnotations()) {
+            final List<Annotation> annotations = dps.getAnnotations();
+            if (annotations != null) {
+              Collections.sort(annotations);
+              json.writeArrayFieldStart("annotations");
+              for (Annotation note : annotations) {
+                json.writeObject(note);
+              }
+              json.writeEndArray();
+            }
+            
+            if (globals != null && !globals.isEmpty()) {
+              Collections.sort(globals);
+              json.writeArrayFieldStart("globalAnnotations");
+              for (Annotation note : globals) {
+                json.writeObject(note);
+              }
+              json.writeEndArray();
+            }
+          }
+          
           // now the fun stuff, dump the data
           json.writeFieldName("dps");
           
@@ -477,6 +536,10 @@ class HttpJsonSerializer extends HttpSerializer {
           if (as_arrays) {
             json.writeStartArray();
             for (final DataPoint dp : dps) {
+              if (dp.timestamp() < (data_query.startTime() / 1000) || 
+                  dp.timestamp() > (data_query.endTime() / 1000)) {
+                continue;
+              }
               json.writeStartArray();
               json.writeNumber(dp.timestamp());
               json.writeNumber(
@@ -487,6 +550,10 @@ class HttpJsonSerializer extends HttpSerializer {
           } else {
             json.writeStartObject();
             for (final DataPoint dp : dps) {
+              if (dp.timestamp() < (data_query.startTime() / 1000) || 
+                  dp.timestamp() > (data_query.endTime() / 1000)) {
+                continue;
+              }
               json.writeNumberField(Long.toString(dp.timestamp()), 
                   dp.isInteger() ? dp.longValue() : dp.doubleValue());
             }
@@ -599,6 +666,36 @@ class HttpJsonSerializer extends HttpSerializer {
    */
   public ChannelBuffer formatTreeTestV1(final 
       HashMap<String, HashMap<String, Object>> results) {
+    return serializeJSON(results);
+  }
+  
+  /**
+   * Format an annotation object
+   * @param note The annotation object to format
+   * @return A ChannelBuffer object to pass on to the caller
+   * @throws JSONException if serialization failed
+   */
+  public ChannelBuffer formatAnnotationV1(final Annotation note) {
+    return serializeJSON(note);
+  }
+  
+  /**
+   * Format a list of statistics
+   * @param note The statistics list to format
+   * @return A ChannelBuffer object to pass on to the caller
+   * @throws JSONException if serialization failed
+   */
+  public ChannelBuffer formatStatsV1(final List<IncomingDataPoint> stats) {
+    return serializeJSON(stats);
+  }
+  
+  /**
+   * Format the response from a search query
+   * @param note The query (hopefully filled with results) to serialize
+   * @return A ChannelBuffer object to pass on to the caller
+   * @throws JSONException if serialization failed
+   */
+  public ChannelBuffer formatSearchResultsV1(final SearchQuery results) {
     return serializeJSON(results);
   }
   
