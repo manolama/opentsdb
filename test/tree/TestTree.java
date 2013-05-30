@@ -66,6 +66,25 @@ public final class TestTree {
   }
   
   @Test
+  public void copyConstructor() {
+    final Tree tree = buildTestTree();
+    tree.setStrictMatch(true);
+    final Tree copy = new Tree(tree);
+    
+    assertEquals(1, copy.getTreeId());
+    assertEquals(1356998400L, copy.getCreated());
+    assertEquals("My Description", copy.getDescription());
+    assertEquals("Test Tree", copy.getName());
+    assertEquals("Details", copy.getNotes());
+    assertTrue(copy.getStrictMatch());
+    assertTrue(copy.getEnabled());
+    assertNull(copy.getCollisions());
+    assertNull(copy.getNotMatched());
+    assertNotNull(copy.getRules());
+    assertTrue(copy.getRules() != tree.getRules());
+  }
+  
+  @Test
   public void copyChanges() throws Exception {
     final Tree tree = buildTestTree();
     final Tree tree2 = buildTestTree();

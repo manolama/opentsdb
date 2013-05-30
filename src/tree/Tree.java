@@ -142,6 +142,42 @@ public final class Tree {
     initializeChangedMap();
   }
   
+  /**
+   * Copy constructor that creates a completely independent copy of the original
+   * object.
+   * @throws PatternSyntaxException if one of the rule's regex is invalid
+   */
+  public Tree(final Tree original) {
+    created = original.created;
+    description = original.description;
+    enabled = original.enabled;
+    name = original.name;
+    notes = original.notes;
+    strict_match = original.strict_match;
+    tree_id = original.tree_id;
+    
+    // deep copy rules
+    rules = new TreeMap<Integer, TreeMap<Integer, TreeRule>>();
+    for (Map.Entry<Integer, TreeMap<Integer, TreeRule>> level : 
+      original.rules.entrySet()) {
+      
+      final TreeMap<Integer, TreeRule> orders = new TreeMap<Integer, TreeRule>();
+      for (final TreeRule rule : level.getValue().values()) {
+        orders.put(rule.getOrder(), new TreeRule(rule));
+      }
+      
+      rules.put(level.getKey(), orders);
+    }
+    
+    // copy collisions and not matched
+    if (original.collisions != null) {
+      collisions = new HashMap<String, String>(original.collisions);
+    }
+    if (original.not_matched != null) {
+      not_matched = new HashMap<String, String>(original.not_matched);
+    }
+  }
+  
   /** @return Information about the tree */
   @Override
   public String toString() {
