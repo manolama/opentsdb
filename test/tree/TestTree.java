@@ -233,44 +233,44 @@ public final class TestTree {
   }
   
   @Test
-  public void storeTreeWCollisions() throws Exception {
+  public void flushCollisions() throws Exception {
     setupStorage(true, true);
     final Tree tree = buildTestTree();
     tree.addCollision("010203", "AABBCCDD");
-    assertNotNull(tree.storeTree(storage.getTSDB(), false)
+    assertNotNull(tree.flushCollisions(storage.getTSDB())
         .joinUninterruptibly());
     assertEquals(4, storage.numRows());
     assertEquals(3, storage.numColumns(new byte[] { 0, 1, 1 }));
   }
   
   @Test
-  public void storeTreeWCollisionExisting() throws Exception {
+  public void flushCollisionsWCollisionExisting() throws Exception {
     setupStorage(true, true);
     final Tree tree = buildTestTree();
     tree.addCollision("010101", "AAAAAA");
-    assertNotNull(tree.storeTree(storage.getTSDB(), false)
+    assertNotNull(tree.flushCollisions(storage.getTSDB())
         .joinUninterruptibly());
     assertEquals(4, storage.numRows());
     assertEquals(2, storage.numColumns(new byte[] { 0, 1, 1 }));
   }
   
   @Test
-  public void storeTreeWNotMatched() throws Exception {
+  public void flushNotMatched() throws Exception {
     setupStorage(true, true);
     final Tree tree = buildTestTree();
     tree.addNotMatched("010203", "Failed rule 2:2");
-    assertNotNull(tree.storeTree(storage.getTSDB(), false)
+    assertNotNull(tree.flushNotMatched(storage.getTSDB())
         .joinUninterruptibly());
     assertEquals(4, storage.numRows());
     assertEquals(3, storage.numColumns(new byte[] { 0, 1, 2 }));
   }
   
   @Test
-  public void storeTreeWNotMatchedExisting() throws Exception {
+  public void flushNotMatchedWNotMatchedExisting() throws Exception {
     setupStorage(true, true);
     final Tree tree = buildTestTree();
     tree.addNotMatched("010101", "Failed rule 4:4");
-    assertNotNull(tree.storeTree(storage.getTSDB(), false)
+    assertNotNull(tree.flushNotMatched(storage.getTSDB())
         .joinUninterruptibly());
     assertEquals(4, storage.numRows());
     assertEquals(2, storage.numColumns(new byte[] { 0, 1, 2 }));
