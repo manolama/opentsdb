@@ -17,6 +17,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 
 import net.opentsdb.core.TSDB;
@@ -58,6 +60,15 @@ import com.stumbleupon.async.Deferred;
  */
 public final class TreeBuilder {
   private static final Logger LOG = LoggerFactory.getLogger(TreeBuilder.class);
+  
+  /** List of trees to use when processing real-time TSMeta  entries */
+  private static final List<Tree> trees = new ArrayList<Tree>();
+  
+  /** Timestamp when we last reloaded all of the trees */
+  private static long last_tree_load;
+  
+  /** Lock used to synchronize loading of the tree list */
+  private static final Lock trees_lock = new ReentrantLock();
   
   /** The TSDB to use for fetching/writing data */
   private final TSDB tsdb;
@@ -414,8 +425,8 @@ public final class TreeBuilder {
     }
 
     /**
-     * Callback after loading all of the trees and then processes the TSMeta
-     * object through each tree
+     * Callback that loops through the local list of trees, processing the
+     * TSMeta through each
      */
     final class ProcessTreesCB implements Callback<Deferred<Boolean>, 
       List<Tree>> {
@@ -438,7 +449,7 @@ public final class TreeBuilder {
           if (!tree.getEnabled()) {
             continue;
           }
-          final TreeBuilder builder = new TreeBuilder(tsdb, tree);
+          final TreeBuilder builder = new TreeBuilder(tsdb, new Tree(tree));
           processed_trees.add(builder.processTimeseriesMeta(meta, false));
         }
         
@@ -448,8 +459,79 @@ public final class TreeBuilder {
       
     }
     
-    LOG.debug("Processing TSMeta through all trees: " + meta);
-    return Tree.fetchAllTrees(tsdb).addCallbackDeferring(new ProcessTreesCB());
+    /**
+     * Callback used when loading or re-loading the cached list of trees
+     */
+    final class FetchedTreesCB implements Callback<List<Tree>, List<Tree>> {
+
+      @Override
+      public List<Tree> call(final List<Tree> loaded_trees) 
+        throws Exception {
+        
+        final List<Tree> local_trees;
+        synchronized(trees) {
+          trees.clear();
+          for (final Tree tree : loaded_trees) {
+            if (tree.getEnabled()) {
+              trees.add(tree);
+            }
+          }
+          
+          local_trees = new ArrayList<Tree>(trees.size());
+          local_trees.addAll(trees);
+        }
+        
+        return local_trees;
+      }
+      
+    }
+
+    /**
+     * Since we can't use a try/catch/finally to release the lock we need to 
+     * setup an ErrBack to catch any exception thrown by the loader and
+     * release the lock before returning
+     */
+    final class ErrorCB implements Callback<Object, Exception> {
+
+      @Override
+      public Object call(final Exception e) throws Exception {
+        trees_lock.unlock();
+        throw e;
+      }
+      
+    }
+    
+    // lock to load or 
+    trees_lock.lock();
+    
+    // if we haven't loaded our trees in a while or we've just started, load
+    if (((System.currentTimeMillis() / 1000) - last_tree_load) > 300) {
+      final Deferred<List<Tree>> load_deferred = Tree.fetchAllTrees(tsdb)
+        .addCallback(new FetchedTreesCB()).addErrback(new ErrorCB());
+      last_tree_load = (System.currentTimeMillis() / 1000);
+      return load_deferred.addCallbackDeferring(new ProcessTreesCB());
+    }
+    
+    // copy the tree list so we don't hold up the other threads while we're
+    // processing
+    final List<Tree> local_trees;
+    if (trees.isEmpty()) {
+      LOG.debug("No trees were found to process the meta through");
+      return Deferred.fromResult(true);
+    }
+    
+    local_trees = new ArrayList<Tree>(trees.size());
+    local_trees.addAll(trees);
+    
+    // unlock so the next thread can get a copy of the trees and start
+    // processing
+    trees_lock.unlock();
+    
+    try {
+      return new ProcessTreesCB().call(local_trees);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to process trees", e);
+    }
   }
 
   /**
