@@ -145,6 +145,7 @@ public final class Tree {
   /**
    * Copy constructor that creates a completely independent copy of the original
    * object.
+   * @param original The original tree to copy from
    * @throws PatternSyntaxException if one of the rule's regex is invalid
    */
   public Tree(final Tree original) {
