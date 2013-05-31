@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
@@ -63,6 +64,10 @@ public final class TreeBuilder {
   
   /** List of trees to use when processing real-time TSMeta  entries */
   private static final List<Tree> trees = new ArrayList<Tree>();
+  
+  /** List of roots so we don't have to fetch them every time we process a ts */
+  private static final ConcurrentHashMap<Integer, Branch> tree_roots = 
+    new ConcurrentHashMap<Integer, Branch>();
   
   /** Timestamp when we last reloaded all of the trees */
   private static long last_tree_load;
@@ -310,12 +315,17 @@ public final class TreeBuilder {
     
     }
 
+    /**
+     * Called after loading or initializing the root and continues the chain
+     * by passing the root onto the ProcessCB
+     */
     final class LoadRootCB implements Callback<Deferred<ArrayList<Object>>, 
-      Boolean> {
+      Branch> {
 
       @Override
-      public Deferred<ArrayList<Object>> call(final Boolean success) 
+      public Deferred<ArrayList<Object>> call(final Branch root) 
         throws Exception {
+        TreeBuilder.this.root = root;
         return new ProcessCB().call(root);
       }
       
@@ -326,7 +336,8 @@ public final class TreeBuilder {
       // if this is a new object or the root has been reset, we need to fetch
       // it from storage or initialize it
       LOG.debug("Fetching root branch for tree: " + tree.getTreeId());
-      return loadRoot(is_testing).addCallbackDeferring(new LoadRootCB());
+      return loadOrInitializeRoot(tsdb, tree.getTreeId(), is_testing)
+        .addCallbackDeferring(new LoadRootCB());
     } else {
       // the root has been set, so just reuse it
       try {
@@ -342,24 +353,37 @@ public final class TreeBuilder {
    * If the is_testing flag is false, the root will be saved if it has to be
    * created. The new or existing root branch will be stored to the local root
    * object.
+   * <b>Note:</b> This will also cache the root in the local store since we 
+   * don't want to keep loading on every TSMeta during real-time processing
+   * @param tsdb The tsdb to use for storage calls
+   * @param tree_id ID of the tree the root should be fetched/initialized for
+   * @param is_testing Whether or not the root should be written to storage if
+   * initialized.
    * @return True if loading or initialization was successful.
    */
-  public Deferred<Boolean> loadRoot(final boolean is_testing) {
-    if (tree == null || tree.getTreeId() < 1) {
-      throw new IllegalStateException("Tree has not been set or is invalid");
-    }
-    
-    /**
-     * Final callback executed after the storage put completed
-     */
-    final class NewRootCB implements Callback<Deferred<Boolean>, 
-      ArrayList<Object>> {
+  public static Deferred<Branch> loadOrInitializeRoot(final TSDB tsdb, 
+      final int tree_id, final boolean is_testing) {
 
+    /**
+     * Final callback executed after the storage put completed. It also caches
+     * the root branch so we don't keep calling and re-calling it, returning a
+     * copy for the local TreeBuilder to use
+     */
+    final class NewRootCB implements Callback<Deferred<Branch>, 
+    ArrayList<Object>> {
+
+      final Branch root;
+      
+      public NewRootCB(final Branch root) {
+        this.root = root;
+      }
+      
       @Override
-      public Deferred<Boolean> call(final ArrayList<Object> storage_call) 
+      public Deferred<Branch> call(final ArrayList<Object> storage_call) 
         throws Exception {
-        LOG.info("Initialized root branch for tree: " + tree.getTreeId());
-        return Deferred.fromResult(true);
+        LOG.info("Initialized root branch for tree: " + tree_id);
+        tree_roots.put(tree_id, root);
+        return Deferred.fromResult(new Branch(root));
       }
       
     }
@@ -368,32 +392,40 @@ public final class TreeBuilder {
      * Called after attempting to fetch the branch. If the branch didn't exist
      * then we'll create a new one and save it if told to
      */
-    final class RootCB implements Callback<Deferred<Boolean>, Branch> {
+    final class RootCB implements Callback<Deferred<Branch>, Branch> {
 
       @Override
-      public Deferred<Boolean> call(final Branch branch) throws Exception {
+      public Deferred<Branch> call(final Branch branch) throws Exception {
         if (branch == null) {
           LOG.info("Couldn't find the root branch, initializing");
-          root = new Branch(tree.getTreeId());
+          final Branch root = new Branch(tree_id);
           root.setDisplayName("ROOT");
-          final TreeMap<Integer, String> root_path = new TreeMap<Integer, String>();
+          final TreeMap<Integer, String> root_path = 
+            new TreeMap<Integer, String>();
           root_path.put(0, "ROOT");
           root.prependParentPath(root_path);
           if (is_testing) {
-            return Deferred.fromResult(true);
+            return Deferred.fromResult(root);
           } else {
-            return root.storeBranch(tsdb, tree, true).addCallbackDeferring(new NewRootCB());
+            return root.storeBranch(tsdb, null, true).addCallbackDeferring(
+                new NewRootCB(root));
           }
         } else {
-          root = branch;
-          return Deferred.fromResult(true);
+          return Deferred.fromResult(branch);
         }
       }
       
     }
     
-    LOG.debug("Loading or initializing root for tree: " + tree.getTreeId());
-    return Branch.fetchBranchOnly(tsdb, Tree.idToBytes(tree.getTreeId()))
+    // if the root is already in cache, return it
+    final Branch cached = tree_roots.get(tree_id);
+    if (cached != null) {
+      LOG.debug("Loaded cached root for tree: " + tree_id);
+      return Deferred.fromResult(new Branch(cached));
+    }
+    
+    LOG.debug("Loading or initializing root for tree: " + tree_id);
+    return Branch.fetchBranchOnly(tsdb, Tree.idToBytes(tree_id))
       .addCallbackDeferring(new RootCB());
   }
   
