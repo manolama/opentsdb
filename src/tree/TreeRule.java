@@ -135,6 +135,7 @@ public final class TreeRule {
   /**
    * Copy constructor that creates a completely independent copy of the original
    * object
+   * @param original The original object to copy from
    * @throws PatternSyntaxException if the regex is invalid
    */
   public TreeRule(final TreeRule original) {
