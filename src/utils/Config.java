@@ -58,6 +58,9 @@ public class Config {
   /** tsd.core.auto_create_metrics */
   private boolean auto_metric = false;
 
+  /** tsd.core.enable_milliseconds */
+  private boolean enable_milliseconds = false;
+  
   /** tsd.storage.enable_compaction */
   private boolean enable_compactions = true;
   
@@ -134,6 +137,11 @@ public class Config {
   /** @param set whether or not to auto create metrics */
   public void setAutoMetric(boolean auto_metric) {
     this.auto_metric = auto_metric;
+  }
+  
+  /** @param whether or not to record millisecond timestamps for data points */
+  public boolean enable_milliseconds() {
+    return enable_milliseconds;
   }
   
   /** @return the enable_compaction value */
@@ -309,6 +317,7 @@ public class Config {
     default_map.put("tsd.network.keep_alive", "true");
     default_map.put("tsd.network.reuse_address", "true");
     default_map.put("tsd.core.auto_create_metrics", "false");
+    default_map.put("tsd.core.enable_milliseconds", "false");
     default_map.put("tsd.core.meta.enable_tracking", "false");
     default_map.put("tsd.core.plugin_path", "");
     default_map.put("tsd.core.tree.enable_processing", "false");
@@ -332,6 +341,7 @@ public class Config {
 
     // set statics
     auto_metric = this.getBoolean("tsd.core.auto_create_metrics");
+    enable_milliseconds = this.getBoolean("tsd.core.enable_milliseconds");
     enable_compactions = this.getBoolean("tsd.storage.enable_compaction");
     enable_chunked_requests = this.getBoolean("tsd.http.request.enable_chunked");
     enable_meta_tracking = this.getBoolean("tsd.core.meta.enable_tracking");
