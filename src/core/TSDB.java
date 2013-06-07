@@ -503,7 +503,22 @@ public final class TSDB {
       TSMeta.incrementAndGetCounter(this, tsuid);
     }
     if (rt_publisher != null) {
-      rt_publisher.sinkDataPoint(metric, timestamp, value, tags, tsuid, flags);
+      
+      /**
+       * Simply logs real time publisher errors when they're thrown. Without
+       * this, exceptions will just disappear (unless logged by the plugin) 
+       * since we don't wait for a result.
+       */
+      final class RTError implements Callback<Object, Exception> {
+        @Override
+        public Object call(final Exception e) throws Exception {
+          LOG.error("Exception from Real Time Publisher", e);
+          return null;
+        }
+      }
+      
+      rt_publisher.sinkDataPoint(metric, timestamp, value, tags, tsuid, flags)
+        .addErrback(new RTError());
     }
     return result;
   }
