@@ -80,9 +80,7 @@ public final class MockBase {
   private TSDB tsdb;
   private TreeMap<String, TreeMap<String, byte[]>> storage = 
     new TreeMap<String, TreeMap<String, byte[]>>();
-  private HashSet<Integer> used_scanners = new HashSet<Integer>(2);
-  private MockScanner local_scanner;
-  private Scanner current_scanner;
+  private HashSet<MockScanner> scanners = new HashSet<MockScanner>(2);
   private byte[] family;
   
   /**
@@ -140,9 +138,6 @@ public final class MockBase {
     }
     
     if (default_scan) {
-      current_scanner = mock(Scanner.class);
-      local_scanner = new MockScanner(current_scanner);
-
       // to facilitate unit tests where more than one scanner is used (i.e. in a
       // callback chain) we have to provide a new mock scanner for each new
       // scanner request. That's the way the mock scanner method knows when a
@@ -151,12 +146,9 @@ public final class MockBase {
 
         @Override
         public Scanner answer(InvocationOnMock arg0) throws Throwable {
-          if (used_scanners.contains(current_scanner.hashCode())) {            
-            current_scanner = mock(Scanner.class);
-            local_scanner = new MockScanner(current_scanner);
-          }
-          when(current_scanner.nextRows()).thenAnswer(local_scanner);
-          return current_scanner;
+          final Scanner scanner = mock(Scanner.class);
+          scanners.add(new MockScanner(scanner));
+          return scanner;
         }
         
       });      
@@ -271,7 +263,7 @@ public final class MockBase {
    */
   public void dumpToSystemOut(final boolean qualifier_ascii) {
     if (storage.isEmpty()) {
-      System.out.println("Empty");
+      System.out.println("Storage is Empty");
       return;
     }
     
@@ -513,6 +505,7 @@ public final class MockBase {
     private String stop = null;
     private HashSet<String> scnr_qualifiers = null;
     private String regex = null;
+    private boolean called;
     
     public MockScanner(final Scanner mock_scanner) {
 
@@ -522,10 +515,18 @@ public final class MockBase {
         public Object answer(InvocationOnMock invocation) throws Throwable {
           final Object[] args = invocation.getArguments();
           regex = (String)args[0];
-          System.out.println("Caught regex: " + regex);
           return null;
         }
       }).when(mock_scanner).setKeyRegexp(anyString());
+      
+      doAnswer(new Answer<Object>() {
+        @Override
+        public Object answer(InvocationOnMock invocation) throws Throwable {
+          final Object[] args = invocation.getArguments();
+          regex = (String)args[0];
+          return null;
+        }
+      }).when(mock_scanner).setKeyRegexp(anyString(), (Charset)any());
       
       doAnswer(new Answer<Object>() {
         @Override
@@ -568,6 +569,8 @@ public final class MockBase {
         }      
       }).when(mock_scanner).setQualifiers((byte[][])any());
       
+      when(mock_scanner.nextRows()).thenAnswer(this);
+      
     }
     
     @Override
@@ -577,20 +580,20 @@ public final class MockBase {
       // It's critical to see if this scanner has been processed before, 
       // otherwise the code under test will likely wind up in an infinite loop.
       // If the scanner has been seen before, we return null.
-      if (used_scanners.contains(current_scanner.hashCode())) {
+      if (called) {
         return Deferred.fromResult(null);
       }
-      used_scanners.add(current_scanner.hashCode());
+      called = true;
       
       Pattern pattern = null;
       if (regex != null && !regex.isEmpty()) {
         try {
-          Pattern.compile(regex);
+          pattern = Pattern.compile(regex);
         } catch (PatternSyntaxException e) {
           e.printStackTrace();
         }
       }
-      System.out.println("Regex: " + regex);
+      
       
       // return all matches
       ArrayList<ArrayList<KeyValue>> results = 
@@ -605,8 +608,12 @@ public final class MockBase {
         if (stop != null && row.getKey().compareTo(stop) > 0) {
           continue;
         }
-        if (pattern != null && !pattern.matcher(row.getKey()).find()) {
-          continue;
+        if (pattern != null) {
+          final String from_bytes = new String(stringToBytes(row.getKey()), 
+              MockBase.ASCII);
+          if (!pattern.matcher(from_bytes).find()) {
+            continue;
+          }
         }
         
         // loop on the columns
