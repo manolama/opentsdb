@@ -511,6 +511,7 @@ $(RPM): opentsdb.spec
 	if test -d noarch; then rmdir noarch; fi
 
 debian: dist staticroot
+	$(mkdir_p) $(distdir)/debian
 	$(mkdir_p) $(distdir)/debian/DEBIAN
 	$(mkdir_p) $(distdir)/debian/etc/init.d
 	$(mkdir_p) $(distdir)/debian/etc/opentsdb
