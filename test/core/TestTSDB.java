@@ -351,6 +351,23 @@ public final class TestTSDB {
   }
   
   @Test
+  public void addPointLongMany() throws Exception {
+    setupAddPointStorage();
+    HashMap<String, String> tags = new HashMap<String, String>(1);
+    tags.put("host", "web01");
+    long timestamp = 1356998400;
+    for (int i = 1; i <= 50; i++) {
+      tsdb.addPoint("sys.cpu.user", timestamp++, i, tags).joinUninterruptibly();
+    }
+    final byte[] row = new byte[] { 0, 0, 1, 0x50, (byte) 0xE2, 0x27, 0, 
+        0, 0, 1, 0, 0, 1};
+    final byte[] value = storage.getColumn(row, new byte[] { 0, 7 });
+    assertNotNull(value);
+    assertEquals(1, Bytes.getLong(value));
+    assertEquals(50, storage.numColumns(row));
+  }
+  
+  @Test
   public void addPointLongEndOfRow() throws Exception {
     setupAddPointStorage();
     HashMap<String, String> tags = new HashMap<String, String>(1);
