@@ -5,7 +5,7 @@
 # Thank you to the Elastic Search authors
 #
 ### BEGIN INIT INFO
-# Provides:          opentsdb-tsd
+# Provides:          opentsdb
 # Required-Start:    $network $named
 # Required-Stop:     $network $named
 # Default-Start:     2 3 4 5
@@ -15,7 +15,7 @@
 ### END INIT INFO
 
 PATH=/bin:/usr/bin:/sbin:/usr/sbin
-NAME=opentsdb-tsd
+NAME=opentsdb
 TSD_USER=opentsdb
 TSD_GROUP=opentsdb
 
@@ -119,7 +119,7 @@ restart|force-reload)
 	$0 start
 	;;
 *)
-	echo "Usage: /etc/init.d/opentsdb-tsd {start|stop|restart}"
+	echo "Usage: /etc/init.d/opentsdb {start|stop|restart}"
 	exit 1
 	;;
 esac

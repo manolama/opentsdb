@@ -519,6 +519,7 @@ deb-tsd: dist staticroot
 	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/lib
 	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/plugins
 	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/static
+	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/tools
 	cp $(top_srcdir)/build-aux/deb/logback.xml $(distdir)/debian/etc/opentsdb
 	cp $(top_srcdir)/build-aux/deb/opentsdb.conf $(distdir)/debian/etc/opentsdb
 	cp $(srcdir)/src/mygnuplot.sh $(distdir)/debian/usr/share/opentsdb/bin
@@ -532,12 +533,13 @@ deb-tsd: dist staticroot
 	     $(distdir)/debian/DEBIAN/control >$(distdir)/debian/DEBIAN/control.tmp
 	mv $(distdir)/debian/DEBIAN/control.tmp $(distdir)/debian/DEBIAN/control
 	chmod 755 $(distdir)/debian/DEBIAN/*
-	cp $(top_srcdir)/build-aux/deb/init.d/opentsdb-tsd $(distdir)/debian/etc/init.d
+	cp $(top_srcdir)/build-aux/deb/init.d/opentsdb $(distdir)/debian/etc/init.d
 	cp $(jar) $(distdir)/debian/usr/share/opentsdb/lib
 	cp -r staticroot/* $(distdir)/debian/usr/share/opentsdb/static
 	`for dep_jar in $(tsdb_DEPS); do cp $$dep_jar \ 
 	     $(distdir)/debian/usr/share/opentsdb/lib; done;`
-	dpkg -b $(distdir)/debian $(distdir)/optsdb-tsd-$(PACKAGE_VERSION)_all.deb
+	cp $(top_srcdir)/tools/* $(distdir)/debian/usr/share/opentsdb/tools
+	dpkg -b $(distdir)/debian $(distdir)/optsdb-$(PACKAGE_VERSION)_all.deb
 
 .PHONY: jar doc check gwtc gwtdev printdeps staticroot gwttsd rpm
 include third_party/include.mk

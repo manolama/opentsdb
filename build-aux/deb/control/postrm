@@ -12,7 +12,7 @@ case "$1" in
 
     purge)
     	# Remove service
-        update-rc.d opentsdb-tsd remove >/dev/null || true
+        update-rc.d opentsdb remove >/dev/null || true
     
         # Remove logs and data
         rm -rf /var/log/opentsdb /tmp/opentsdb

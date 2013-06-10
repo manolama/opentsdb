@@ -27,13 +27,15 @@ case "$1" in
 esac
 
 
-if [ -e "/etc/init.d/opentsdb-tsd" ]; then
-  chmod 755 /etc/init.d/opentsdb-tsd
-	update-rc.d opentsdb-tsd defaults 95 10 >/dev/null
-	if [ -e "`which invoke-rc.d 2>/dev/null`" ]; then
-		invoke-rc.d opentsdb-tsd start || true
-	else
-		/etc/init.d/opentsdb-tsd start || true
-	fi
+if [ -e "/etc/init.d/opentsdb" ]; then
+  chmod 755 /etc/init.d/opentsdb
+	update-rc.d opentsdb defaults 95 10 >/dev/null
+	
+# don't start automatically, the user will almost always need to tweak their config
+#	if [ -e "`which invoke-rc.d 2>/dev/null`" ]; then
+#		invoke-rc.d opentsdb start || true
+#	else
+#		/etc/init.d/opentsdb start || true
+#	fi
 fi
 
