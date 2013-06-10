@@ -510,7 +510,7 @@ $(RPM): opentsdb.spec
 	done
 	if test -d noarch; then rmdir noarch; fi
 
-deb-tsd: dist staticroot
+debian: dist staticroot
 	#$(mkdir_p) $(distdir)/debian
 	$(mkdir_p) $(distdir)/debian/DEBIAN
 	$(mkdir_p) $(distdir)/debian/etc/init.d
