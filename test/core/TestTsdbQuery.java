@@ -928,6 +928,42 @@ public final class TestTsdbQuery {
   } 
   
   @Test
+  public void runWithOnlyAnnotation() throws Exception {
+    storeLongTimeSeries();
+    
+    // verifies that we can pickup an annotation stored all bye it's lonesome
+    // in a row without any data
+    storage.flushRow(MockBase.stringToBytes("00000150E23510000001000001"));
+    final Annotation note = new Annotation();
+    note.setTSUID("000001000001000001");
+    note.setStartTime(1357002090);
+    note.setDescription("Hello World!");
+    note.syncToStorage(tsdb, false).joinUninterruptibly();
+    
+    HashMap<String, String> tags = new HashMap<String, String>(1);
+    tags.put("host", "web01");
+    query.setStartTime(1356998400);
+    query.setEndTime(1357041600);
+    query.setTimeSeries("sys.cpu.user", tags, Aggregators.SUM, false);
+
+    final DataPoints[] dps = query.run();
+    assertNotNull(dps);
+    assertEquals(1, dps[0].getAnnotations().size());
+    assertEquals("Hello World!", dps[0].getAnnotations().get(0).getDescription());
+    
+    int value = 1;
+    for (DataPoint dp : dps[0]) {
+      assertEquals(value, dp.longValue());
+      value++;
+      // account for the jump
+      if (value == 120) {
+        value = 240;
+      }
+    }
+    assertEquals(180, dps[0].size());
+  }
+  
+  @Test
   public void runTSUIDQuery() throws Exception {
     storeLongTimeSeries();
     query.setStartTime(1356998400);
@@ -994,6 +1030,7 @@ public final class TestTsdbQuery {
     query.setEndTime(1357041600);
     final List<String> tsuids = new ArrayList<String>(1);
     tsuids.add("000001000001000005");
+    query.setTimeSeries(tsuids, Aggregators.SUM, false);
     final DataPoints[] dps = query.run();
     assertNotNull(dps);
     assertEquals(0, dps.length);
@@ -1013,6 +1050,9 @@ public final class TestTsdbQuery {
     assertNotNull(dps);
     dps[0].metricName();
   }
+  
+  // TODO - other UTs
+  // - fix floating points (CompactionQueue:L267
   
   // ----------------- //
   // Helper functions. //
