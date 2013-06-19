@@ -70,7 +70,7 @@ final class ConnectionManager extends SimpleChannelHandler {
   public void handleUpstream(final ChannelHandlerContext ctx,
                              final ChannelEvent e) throws Exception {
     if (e instanceof ChannelStateEvent) {
-      LOG.info(e.toString());
+      LOG.debug(e.toString());
     }
     super.handleUpstream(ctx, e);
   }
