@@ -270,7 +270,7 @@ public final class MockBase {
       for (Map.Entry<byte[], byte[]> column : row.getValue().entrySet()) {
         System.out.println("  Qualifier: " + (qualifier_ascii ?
             "\"" + new String(column.getKey(), ASCII) + "\""
-            : column.getKey()));
+            : bytesToString(column.getKey())));
         System.out.println("    Value: " + new String(column.getValue(), ASCII));
       }
     }
