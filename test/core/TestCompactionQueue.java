@@ -297,7 +297,7 @@ final class TestCompactionQueue {
     final byte[] val2 = Bytes.fromInt(4);
     kvs.add(makekv(qual2, val2));
 
-    final KeyValue kv = compactionq.compact(kvs, annotations);
+    compactionq.compact(kvs, annotations);
   }
 
   @Test
