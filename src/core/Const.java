@@ -34,6 +34,9 @@ public final class Const {
   /** Mask to select the size of a value from the qualifier.  */
   static final short LENGTH_MASK = 0x7;
 
+  /** Mask for the millisecond qualifier flag */
+  static final short MS_FLAG = 0xF0;
+  
   /** Mask to select all the FLAG_BITS.  */
   static final short FLAGS_MASK = FLAG_FLOAT | LENGTH_MASK;
 
