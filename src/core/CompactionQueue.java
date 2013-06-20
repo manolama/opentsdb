@@ -34,6 +34,7 @@ import org.hbase.async.PleaseThrottleException;
 
 import net.opentsdb.meta.Annotation;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.uid.UniqueId;
 import net.opentsdb.utils.JSON;
 
 /**
@@ -285,9 +286,11 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     final KeyValue compact;
     {
       boolean trivial = true;  // Are we doing a trivial compaction?
+      boolean ms_in_row = false;
+      boolean s_in_row = false;
       int qual_len = 0;  // Pre-compute the size of the qualifier we'll need.
       int val_len = 1;   // Reserve an extra byte for meta-data.
-      short last_delta = -1;  // Time delta, extracted from the qualifier.
+      //int last_delta = -1;  // Time delta, extracted from the qualifier.
       KeyValue longest = row.get(0);  // KV with the longest qualifier.
       int longest_idx = 0;            // Index of `longest'.
       int nkvs = row.size();
@@ -298,7 +301,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
         // been compacted, potentially partially, so we need to merge the
         // partially compacted set of cells, with the rest.
         final int len = qual.length;
-        if (len != 2) {
+        if (len != 2 && len != 4) {
           // Datapoints and compacted columns should have qualifiers with an
           // even number of bytes. If we find one with an odd number, or an
           // empty qualifier (which is possible), we need to remove it from the
@@ -324,21 +327,21 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
             longest_idx = i;
           }
         } else {
-          // In the trivial case, do some sanity checking here.
-          // For non-trivial cases, the sanity checking logic is more
-          // complicated and is thus pushed down to `complexCompact'.
-          final short delta = (short) ((Bytes.getShort(qual) & 0xFFFF)
-                                       >>> Const.FLAG_BITS);
-          // This data point has a time delta that's less than or equal to
-          // the previous one.  This typically means we have 2 data points
-          // at the same timestamp but they have different flags.  We're
-          // going to abort here because someone needs to fsck the table.
-          if (delta <= last_delta) {
-            throw new IllegalDataException("Found out of order or duplicate"
-              + " data: last_delta=" + last_delta + ", delta=" + delta
-              + ", offending KV=" + kv + ", row=" + row + " -- run an fsck.");
+          if ((qual[0] & Const.MS_FLAG) == Const.MS_FLAG) {
+            ms_in_row = true;
+          } else {
+            s_in_row = true;
           }
-          last_delta = delta;
+          
+          // there may be a situation where two second columns are concatenated
+          // into 4 bytes. If so, we need to perform a complex compaction
+          if (len == 4 && (qual[0] & Const.MS_FLAG) != Const.MS_FLAG) {
+            trivial = false;
+            if (len > longest.qualifier().length) {
+              longest = kv;
+              longest_idx = i;
+            }
+          }
           // We don't need it below for complex compactions, so we update it
           // only here in the `else' branch.
           final byte[] v = kv.value();
@@ -361,10 +364,10 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
         return compact(row, compacted, annotations);
       } else if (trivial) {
         trivial_compactions.incrementAndGet();
-        compact = trivialCompact(row, qual_len, val_len);
+        compact = trivialCompact(row, qual_len, val_len, (ms_in_row && s_in_row));
       } else {
         complex_compactions.incrementAndGet();
-        compact = complexCompact(row, qual_len / 2);
+        compact = complexCompact(row, qual_len / 2, (ms_in_row && s_in_row));
         // Now it's vital that we check whether the compact KV has the same
         // qualifier as one of the qualifiers that were already in the row.
         // Otherwise we might do a `put' in this cell, followed by a delete.
@@ -457,25 +460,51 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
    * @param row The row to compact.  Assumed to have 2 elements or more.
    * @param qual_len Exact number of bytes to hold the compacted qualifiers.
    * @param val_len Exact number of bytes to hold the compacted values.
+   * @param sort Whether or not we have a mix of ms and s qualifiers and need
+   * to manually sort
    * @return a {@link KeyValue} containing the result of the merge of all the
    * {@code KeyValue}s given in argument.
    */
   private static KeyValue trivialCompact(final ArrayList<KeyValue> row,
                                          final int qual_len,
-                                         final int val_len) {
+                                         final int val_len,
+                                         final boolean sort) {
     // Now let's simply concatenate all the qualifiers and values together.
     final byte[] qualifier = new byte[qual_len];
     final byte[] value = new byte[val_len];
     // Now populate the arrays by copying qualifiers/values over.
     int qual_idx = 0;
     int val_idx = 0;
+    int last_delta = -1;  // Time delta, extracted from the qualifier.
+    
+    if (sort) {
+      Collections.sort(row, new MixedComparator());
+    }
+    
     for (final KeyValue kv : row) {
       final byte[] q = kv.qualifier();
       // We shouldn't get into this function if this isn't true.
-      assert q.length == 2: "Qualifier length must be 2: " + kv;
+      assert q.length == 2 || q.length == 4: 
+        "Qualifier length must be 2 or 4: " + kv;
+      
+      // check to make sure that the row was already sorted, or if there was a 
+      // mixture of second and ms timestamps, that we sorted successfully
+      final int delta = offsetInMilliseconds(q);
+      if (delta <= last_delta) {
+        throw new IllegalDataException("Found out of order or duplicate"
+          + " data: last_delta=" + last_delta + ", delta=" + delta
+          + ", offending KV=" + kv + ", row=" + row + " -- run an fsck.");
+      }
+      last_delta = delta;
+      
       final byte[] v = fixFloatingPointValue(q[1], kv.value());
-      qualifier[qual_idx++] = q[0];
-      qualifier[qual_idx++] = fixQualifierFlags(q[1], v.length);
+      if (q.length == 2) {
+        qualifier[qual_idx++] = q[0];
+        qualifier[qual_idx++] = fixQualifierFlags(q[1], v.length);
+      } else {
+        System.arraycopy(q, 0, qualifier, qual_idx, q.length);
+        qual_idx += q.length;
+      }
       System.arraycopy(v, 0, value, val_idx, v.length);
       val_idx += v.length;
     }
@@ -556,6 +585,14 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     return value;
   }
 
+  private static int offsetInMilliseconds(final byte[] qualifier) {
+    if ((qualifier[0] & Const.MS_FLAG) == Const.MS_FLAG) {
+      return (Bytes.getInt(qualifier) & 0x0FFFFFC0) >>> Const.FLAG_BITS;
+    } else {
+      return ((Bytes.getShort(qualifier) & 0xFFFF) >>> Const.FLAG_BITS) * 1000;
+    }
+  }
+  
   /**
    * Helper class for complex compaction cases.
    * <p>
@@ -569,6 +606,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
 
     final byte[] qualifier;
     final byte[] value;
+    final MixedComparator comparator = new MixedComparator();
 
     Cell(final byte[] qualifier, final byte[] value) {
       this.qualifier = qualifier;
@@ -576,7 +614,8 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     }
 
     public int compareTo(final Cell other) {
-      return Bytes.memcmp(qualifier, other.qualifier);
+      //return Bytes.memcmp(qualifier, other.qualifier);
+      return comparator.compare(qualifier, other.qualifier);
     }
 
     public boolean equals(final Object o) {
@@ -605,13 +644,16 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
    * @param estimated_nvalues Estimate of the number of values to compact.
    * Used to pre-allocate a collection of the right size, so it's better to
    * overshoot a bit to avoid re-allocations.
+   * @param sort Whether or not we have a mix of ms and s qualifiers and need
+   * to manually sort
    * @return a {@link KeyValue} containing the result of the merge of all the
    * {@code KeyValue}s given in argument.
    * @throws IllegalDataException if one of the cells cannot be read because
    * it's corrupted or in a format we don't understand.
    */
   static KeyValue complexCompact(final ArrayList<KeyValue> row,
-                                 final int estimated_nvalues) {
+                                 final int estimated_nvalues, 
+                                 final boolean sort) {
     // We know at least one of the cells contains multiple values, and we need
     // to merge all the cells together in a sorted fashion.  We use a simple
     // strategy: split all the cells into individual objects, sort them,
@@ -619,17 +661,21 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     final ArrayList<Cell> cells = breakDownValues(row, estimated_nvalues);
     Collections.sort(cells);
 
-    // Now let's done one pass first to compute the length of the compacted
+    if (sort) {
+      Collections.sort(row, new MixedComparator());
+    }
+    
+    // Now let's do one pass first to compute the length of the compacted
     // value and to find if we have any bad duplicates (same qualifier,
     // different value).
-    int nvalues = 0;
+    int qual_len = 0;
     int val_len = 1;  // Reserve an extra byte for meta-data.
-    short last_delta = -1;  // Time delta, extracted from the qualifier.
+    int last_delta = -1;  // Time delta, extracted from the qualifier.
     int ncells = cells.size();
     for (int i = 0; i < ncells; i++) {
       final Cell cell = cells.get(i);
-      final short delta = (short) ((Bytes.getShort(cell.qualifier) & 0xFFFF)
-                                   >>> Const.FLAG_BITS);
+      final int delta = offsetInMilliseconds(cell.qualifier);
+      
       // Because we sorted `cells' by qualifier, and because the time delta
       // occupies the most significant bits, this should never trigger.
       assert delta >= last_delta: ("WTF? It's supposed to be sorted: " + cells
@@ -662,11 +708,11 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
         continue;
       }
       last_delta = delta;
-      nvalues++;
+      qual_len += cell.qualifier.length;
       val_len += cell.value.length;
     }
 
-    final byte[] qualifier = new byte[nvalues * 2];
+    final byte[] qualifier = new byte[qual_len];
     final byte[] value = new byte[val_len];
     // Now populate the arrays by copying qualifiers/values over.
     int qual_idx = 0;
@@ -720,6 +766,11 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
         final Cell cell = new Cell(actual_qual, actual_val);
         cells.add(cell);
         continue;
+      } else if (len == 4 && (qual[0] & Const.MS_FLAG) == Const.MS_FLAG) {
+        // since ms support is new, there's nothing to fix
+        final Cell cell = new Cell(qual, val);
+        cells.add(cell);
+        continue;
       }
       // else: we have a multi-value cell.  We need to break it down into
       // individual Cell objects.
@@ -735,8 +786,16 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       // Now break it down into Cells.
       int val_idx = 0;
       for (int i = 0; i < len; i += 2) {
-        final byte[] q = new byte[] { qual[i], qual[i + 1] };
-        final int vlen = (q[1] & Const.LENGTH_MASK) + 1;
+        final byte[] q;
+        final int vlen;
+        if ((qual[i] & Const.MS_FLAG) == Const.MS_FLAG) {
+          q = new byte[] { qual[i], qual[i + 1], qual[i + 2], qual[i + 3] };
+          i += 2;
+          vlen = (q[3] & Const.LENGTH_MASK) + 1;
+        } else {
+          q = new byte[] { qual[i], qual[i + 1] };
+          vlen = (q[1] & Const.LENGTH_MASK) + 1;
+        }
         final byte[] v = new byte[vlen];
         System.arraycopy(val, val_idx, v, 0, vlen);
         val_idx += vlen;
@@ -959,6 +1018,29 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       final int c = Bytes.memcmp(a, b, metric_width, Const.TIMESTAMP_BYTES);
       // If the timestamps are equal, sort according to the entire row key.
       return c != 0 ? c : Bytes.memcmp(a, b);
+    }
+  }
+  
+  /**
+   * Helper to sort a row with a mixture of millisecond and second data points.
+   * In such a case, we convert all of the seconds into millisecond timestamps,
+   * then perform the comparison.
+   * <b>Note:</b> You must filter out all but the second, millisecond and
+   * compacted rows
+   */
+  private static final class MixedComparator implements Comparator<KeyValue> {
+
+    public int compare(final KeyValue a, final KeyValue b) {
+      return compare(a.qualifier(), b.qualifier());
+    }
+    
+    public int compare(final byte[] a, final byte[] b) {
+      final int left = offsetInMilliseconds(a);
+      final int right = offsetInMilliseconds(b);
+      if (left == right) {
+        return 0;
+      }
+      return (left < right) ? -1 : 1;
     }
   }
 
