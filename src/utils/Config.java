@@ -70,6 +70,9 @@ public class Config {
   /** tsd.http.request.max_chunk */
   private int max_chunked_requests = 4096; 
   
+  /** tsd.core.tree.enable_processing */
+  private boolean enable_tree_processing = false;
+  
   /**
    * The list of properties configured to their defaults or modified by users
    */
@@ -128,6 +131,11 @@ public class Config {
     return this.auto_metric;
   }
   
+  /** @param set whether or not to auto create metrics */
+  public void setAutoMetric(boolean auto_metric) {
+    this.auto_metric = auto_metric;
+  }
+  
   /** @return the enable_compaction value */
   public boolean enable_compactions() {
     return this.enable_compactions;
@@ -146,6 +154,11 @@ public class Config {
   /** @return max incoming chunk size in bytes */
   public int max_chunked_requests() {
     return this.max_chunked_requests;
+  }
+  
+  /** @return whether or not to process new or updated TSMetas through trees */
+  public boolean enable_tree_processing() {
+    return enable_tree_processing;
   }
   
   /**
@@ -298,8 +311,12 @@ public class Config {
     default_map.put("tsd.core.auto_create_metrics", "false");
     default_map.put("tsd.core.meta.enable_tracking", "false");
     default_map.put("tsd.core.plugin_path", "");
+    default_map.put("tsd.core.tree.enable_processing", "false");
+    default_map.put("tsd.rtpublisher.enable", "false");
+    default_map.put("tsd.rtpublisher.plugin", "");
     default_map.put("tsd.search.enable", "false");
     default_map.put("tsd.search.plugin", "");
+    default_map.put("tsd.stats.canonical", "false");
     default_map.put("tsd.storage.flush_interval", "1000");
     default_map.put("tsd.storage.hbase.data_table", "tsdb");
     default_map.put("tsd.storage.hbase.uid_table", "tsdb-uid");
@@ -323,6 +340,7 @@ public class Config {
     if (this.hasProperty("tsd.http.request.max_chunk")) {
       max_chunked_requests = this.getInt("tsd.http.request.max_chunk");
     }
+    enable_tree_processing = this.getBoolean("tsd.core.tree.enable_processing");
   }
 
   /**

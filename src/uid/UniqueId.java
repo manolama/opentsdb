@@ -19,14 +19,18 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.stumbleupon.async.Callback;
+import com.stumbleupon.async.Deferred;
 import javax.xml.bind.DatatypeConverter;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.UIDMeta;
 
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.hbase.async.AtomicIncrementRequest;
 import org.hbase.async.Bytes;
 import org.hbase.async.DeleteRequest;
 import org.hbase.async.GetRequest;
@@ -34,8 +38,6 @@ import org.hbase.async.HBaseClient;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
-import org.hbase.async.RowLock;
-import org.hbase.async.RowLockRequest;
 import org.hbase.async.Scanner;
 
 /**
@@ -161,34 +163,77 @@ public final class UniqueId implements UniqueIdInterface {
     idCache.clear();
   }
 
+  /**
+   * Finds the name associated with a given ID.
+   * <p>
+   * <strong>This method is blocking.</strong>  Its use within OpenTSDB itself
+   * is discouraged, please use {@link #getNameAsync} instead.
+   * @param id The ID associated with that name.
+   * @see #getId(String)
+   * @see #getOrCreateId(String)
+   * @throws NoSuchUniqueId if the given ID is not assigned.
+   * @throws HBaseException if there is a problem communicating with HBase.
+   * @throws IllegalArgumentException if the ID given in argument is encoded
+   * on the wrong number of bytes.
+   */
   public String getName(final byte[] id) throws NoSuchUniqueId, HBaseException {
+    try {
+      return getNameAsync(id).joinUninterruptibly();
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException("Should never be here", e);
+    }
+  }
+
+  /**
+   * Finds the name associated with a given ID.
+   *
+   * @param id The ID associated with that name.
+   * @see #getId(String)
+   * @see #getOrCreateId(String)
+   * @throws NoSuchUniqueId if the given ID is not assigned.
+   * @throws HBaseException if there is a problem communicating with HBase.
+   * @throws IllegalArgumentException if the ID given in argument is encoded
+   * on the wrong number of bytes.
+   * @since 1.1
+   */
+  public Deferred<String> getNameAsync(final byte[] id) {
     if (id.length != idWidth) {
       throw new IllegalArgumentException("Wrong id.length = " + id.length
                                          + " which is != " + idWidth
                                          + " required for '" + kind() + '\'');
     }
-    String name = getNameFromCache(id);
+    final String name = getNameFromCache(id);
     if (name != null) {
       cacheHits++;
-    } else {
-      cacheMisses++;
-      name = getNameFromHBase(id);
-      if (name == null) {
-        throw new NoSuchUniqueId(kind(), id);
-      }
-      addNameToCache(id, name);
-      addIdToCache(name, id);
+      return Deferred.fromResult(name);
     }
-    return name;
+    cacheMisses++;
+    class GetNameCB implements Callback<String, String> {
+      public String call(final String name) {
+        if (name == null) {
+          throw new NoSuchUniqueId(kind(), id);
+        }
+        addNameToCache(id, name);
+        addIdToCache(name, id);        
+        return name;
+      }
+    }
+    return getNameFromHBase(id).addCallback(new GetNameCB());
   }
 
   private String getNameFromCache(final byte[] id) {
     return idCache.get(fromBytes(id));
   }
 
-  private String getNameFromHBase(final byte[] id) throws HBaseException {
-    final byte[] name = hbaseGet(id, NAME_FAMILY);
-    return name == null ? null : fromBytes(name);
+  private Deferred<String> getNameFromHBase(final byte[] id) {
+    class NameFromHBaseCB implements Callback<String, byte[]> {
+      public String call(final byte[] name) {
+        return name == null ? null : fromBytes(name);
+      }
+    }
+    return hbaseGet(id, NAME_FAMILY).addCallback(new NameFromHBaseCB());
   }
 
   private void addNameToCache(final byte[] id, final String name) {
@@ -204,31 +249,46 @@ public final class UniqueId implements UniqueIdInterface {
   }
 
   public byte[] getId(final String name) throws NoSuchUniqueName, HBaseException {
-    byte[] id = getIdFromCache(name);
+    try {
+      return getIdAsync(name).joinUninterruptibly();
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException("Should never be here", e);
+    }
+  }
+
+  public Deferred<byte[]> getIdAsync(final String name) {
+    final byte[] id = getIdFromCache(name);
     if (id != null) {
       cacheHits++;
-    } else {
-      cacheMisses++;
-      id = getIdFromHBase(name);
-      if (id == null) {
-        throw new NoSuchUniqueName(kind(), name);
-      }
-      if (id.length != idWidth) {
-        throw new IllegalStateException("Found id.length = " + id.length
-                                        + " which is != " + idWidth
-                                        + " required for '" + kind() + '\'');
-      }
-      addIdToCache(name, id);
-      addNameToCache(id, name);
+      return Deferred.fromResult(id);
     }
-    return id;
+    cacheMisses++;
+    class GetIdCB implements Callback<byte[], byte[]> {
+      public byte[] call(final byte[] id) {
+        if (id == null) {
+          throw new NoSuchUniqueName(kind(), name);
+        }
+        if (id.length != idWidth) {
+          throw new IllegalStateException("Found id.length = " + id.length
+                                          + " which is != " + idWidth
+                                          + " required for '" + kind() + '\'');
+        }
+        addIdToCache(name, id);
+        addNameToCache(id, name);
+        return id;
+      }
+    }
+    Deferred<byte[]> d = getIdFromHBase(name).addCallback(new GetIdCB());
+    return d;
   }
 
   private byte[] getIdFromCache(final String name) {
     return nameCache.get(name);
   }
 
-  private byte[] getIdFromHBase(final String name) throws HBaseException {
+  private Deferred<byte[]> getIdFromHBase(final String name) {
     return hbaseGet(toBytes(name), ID_FAMILY);
   }
 
@@ -260,142 +320,123 @@ public final class UniqueId implements UniqueIdInterface {
                  + "' name='" + name + '\'');
       }
 
-      // The dance to assign an ID.
-      RowLock lock;
+      // Assign an ID.
+      final long id;     // The ID.
+      byte row[];  // The same ID, as a byte array.
       try {
-        lock = getLock();
-      } catch (HBaseException e) {
-        try {
-          Thread.sleep(61000 / MAX_ATTEMPTS_ASSIGN_ID);
-        } catch (InterruptedException ie) {
-          break;  // We've been asked to stop here, let's bail out.
+        id = client.atomicIncrement(new AtomicIncrementRequest(table, MAXID_ROW,
+                                                               ID_FAMILY, kind))
+          .joinUninterruptibly();
+        row = Bytes.fromLong(id);
+        LOG.info("Got ID=" + id
+                 + " for kind='" + kind() + "' name='" + name + "'");
+        // row.length should actually be 8.
+        if (row.length < idWidth) {
+          throw new IllegalStateException("OMG, row.length = " + row.length
+                                          + " which is less than " + idWidth
+                                          + " for id=" + id
+                                          + " row=" + Arrays.toString(row));
         }
+        // Verify that we're going to drop bytes that are 0.
+        for (int i = 0; i < row.length - idWidth; i++) {
+          if (row[i] != 0) {
+            final String message = "All Unique IDs for " + kind()
+              + " on " + idWidth + " bytes are already assigned!";
+            LOG.error("OMG " + message);
+            throw new IllegalStateException(message);
+          }
+        }
+        // Shrink the ID on the requested number of bytes.
+        row = Arrays.copyOfRange(row, row.length - idWidth, row.length);
+      } catch (HBaseException e) {
+        LOG.error("Failed to assign an ID, atomic increment on row="
+                  + Arrays.toString(MAXID_ROW) + " column='" +
+                  fromBytes(ID_FAMILY) + ':' + kind() + '\'', e);
         hbe = e;
         continue;
-      }
-      if (lock == null) {  // Should not happen.
-        LOG.error("WTF, got a null pointer as a RowLock!");
+      } catch (IllegalStateException e) {
+        throw e;  // To avoid handling this exception in the next `catch'.
+      } catch (Exception e) {
+        LOG.error("WTF?  Unexpected exception type when assigning an ID,"
+                  + " ICV on row=" + Arrays.toString(MAXID_ROW) + " column='"
+                  + fromBytes(ID_FAMILY) + ':' + kind() + '\'', e);
         continue;
       }
-      // We now have hbase.regionserver.lease.period ms to complete the loop.
+      // If we die before the next PutRequest succeeds, we just waste an ID.
 
+      // Create the reverse mapping first, so that if we die before creating
+      // the forward mapping we don't run the risk of "publishing" a
+      // partially assigned ID.  The reverse mapping on its own is harmless
+      // but the forward mapping without reverse mapping is bad.
       try {
-        // Verify that the row still doesn't exist (to avoid re-creating it if
-        // it got created before we acquired the lock due to a race condition).
-        try {
-          final byte[] id = getId(name);
-          LOG.info("Race condition, found ID for kind='" + kind()
-                   + "' name='" + name + '\'');
-          return id;
-        } catch (NoSuchUniqueName e) {
-          // OK, the row still doesn't exist, let's create it now.
+        final PutRequest reverse_mapping = new PutRequest(
+          table, row, NAME_FAMILY, kind, toBytes(name));
+        // We are CAS'ing the KV into existence -- the second argument is how
+        // we tell HBase we want to atomically create the KV, so that if there
+        // is already a KV in this cell, we'll fail.  Technically we could do
+        // just a `put' here, as we have a freshly allocated UID, so there is
+        // not reason why a KV should already exist for this UID, but just to
+        // err on the safe side and catch really weird corruption cases, we do
+        // a CAS instead to create the KV.
+        if (!client.compareAndSet(reverse_mapping, HBaseClient.EMPTY_ARRAY)
+            .joinUninterruptibly()) {
+          LOG.error("WTF!  Failed to CAS reverse mapping: " + reverse_mapping
+                    + " -- run an fsck against the UID table!");
         }
-
-        // Assign an ID.
-        long id;     // The ID.
-        byte row[];  // The same ID, as a byte array.
-        try {
-          // We want to send an ICV with our explicit RowLock, but HBase's RPC
-          // interface doesn't expose this interface.  Since an ICV would
-          // attempt to lock the row again, and we already locked it, we can't
-          // use ICV here, we have to do it manually while we hold the RowLock.
-          // To be fixed by HBASE-2292.
-          { // HACK HACK HACK
-            {
-              final byte[] current_maxid = hbaseGet(MAXID_ROW, ID_FAMILY, lock);
-              if (current_maxid != null) {
-                if (current_maxid.length == 8) {
-                  id = Bytes.getLong(current_maxid) + 1;
-                } else {
-                  throw new IllegalStateException("invalid current_maxid="
-                      + Arrays.toString(current_maxid));
-                }
-              } else {
-                id = 1;
-              }
-              row = Bytes.fromLong(id);
-            }
-            final PutRequest update_maxid = new PutRequest(
-              table, MAXID_ROW, ID_FAMILY, kind, row, lock);
-            hbasePutWithRetry(update_maxid, MAX_ATTEMPTS_PUT,
-                              INITIAL_EXP_BACKOFF_DELAY);
-          } // end HACK HACK HACK.
-          LOG.info("Got ID=" + id
-                   + " for kind='" + kind() + "' name='" + name + "'");
-          // row.length should actually be 8.
-          if (row.length < idWidth) {
-            throw new IllegalStateException("OMG, row.length = " + row.length
-                                            + " which is less than " + idWidth
-                                            + " for id=" + id
-                                            + " row=" + Arrays.toString(row));
-          }
-          // Verify that we're going to drop bytes that are 0.
-          for (int i = 0; i < row.length - idWidth; i++) {
-            if (row[i] != 0) {
-              final String message = "All Unique IDs for " + kind()
-                + " on " + idWidth + " bytes are already assigned!";
-              LOG.error("OMG " + message);
-              throw new IllegalStateException(message);
-            }
-          }
-          // Shrink the ID on the requested number of bytes.
-          row = Arrays.copyOfRange(row, row.length - idWidth, row.length);
-        } catch (HBaseException e) {
-          LOG.error("Failed to assign an ID, ICV on row="
-                    + Arrays.toString(MAXID_ROW) + " column='" +
-                    fromBytes(ID_FAMILY) + ':' + kind() + '\'', e);
-          hbe = e;
-          continue;
-        } catch (IllegalStateException e) {
-          throw e;  // To avoid handling this exception in the next `catch'.
-        } catch (Exception e) {
-          LOG.error("WTF?  Unexpected exception type when assigning an ID,"
-                    + " ICV on row=" + Arrays.toString(MAXID_ROW) + " column='"
-                    + fromBytes(ID_FAMILY) + ':' + kind() + '\'', e);
-          continue;
-        }
-        // If we die before the next PutRequest succeeds, we just waste an ID.
-
-        // Create the reverse mapping first, so that if we die before creating
-        // the forward mapping we don't run the risk of "publishing" a
-        // partially assigned ID.  The reverse mapping on its own is harmless
-        // but the forward mapping without reverse mapping is bad.
-        try {
-          final PutRequest reverse_mapping = new PutRequest(
-            table, row, NAME_FAMILY, kind, toBytes(name));
-          hbasePutWithRetry(reverse_mapping, MAX_ATTEMPTS_PUT,
-                            INITIAL_EXP_BACKOFF_DELAY);
-        } catch (HBaseException e) {
-          LOG.error("Failed to Put reverse mapping!  ID leaked: " + id, e);
-          hbe = e;
-          continue;
-        }
-
-        // Now create the forward mapping.
-        try {
-          final PutRequest forward_mapping = new PutRequest(
-            table, toBytes(name), ID_FAMILY, kind, row);
-          hbasePutWithRetry(forward_mapping, MAX_ATTEMPTS_PUT,
-                            INITIAL_EXP_BACKOFF_DELAY);
-        } catch (HBaseException e) {
-          LOG.error("Failed to Put forward mapping!  ID leaked: " + id, e);
-          hbe = e;
-          continue;
-        }
-
-        addIdToCache(name, row);
-        addNameToCache(row, name);
-        
-        if (tsdb.getConfig().enable_meta_tracking()) {
-          final UIDMeta meta = new UIDMeta(type, row, name);
-          meta.storeNew(tsdb);
-          tsdb.indexUIDMeta(meta);
-        }
-        
-        return row;
-      } finally {
-        unlock(lock);
+      } catch (HBaseException e) {
+        LOG.error("Failed to CAS reverse mapping!  ID leaked: " + id
+                  + " of kind " + kind(), e);
+        hbe = e;
+        continue;
+      } catch (Exception e) {
+        LOG.error("WTF, should never be here!  ID leaked: " + id
+                  + " of kind " + kind(), e);
+        continue;
       }
+      // If die before the next PutRequest succeeds, we just have an
+      // "orphaned" reversed mapping, in other words a UID has been allocated
+      // but never used and is not reachable, so it's just a wasted UID.
+
+      // Now create the forward mapping.
+      try {
+        final PutRequest forward_mapping = new PutRequest(
+          table, toBytes(name), ID_FAMILY, kind, row);
+        // If two TSDs attempted to allocate a UID for the same name at the
+        // same time, they would both have allocated a UID, and created a
+        // reverse mapping, and upon getting here, only one of them would
+        // manage to CAS this KV into existence.  The one that loses the
+        // race will retry and discover the UID assigned by the winner TSD,
+        // and a UID will have been wasted in the process.  No big deal.
+        if (!client.compareAndSet(forward_mapping, HBaseClient.EMPTY_ARRAY)
+            .joinUninterruptibly()) {
+          LOG.warn("Race condition: tried to assign ID " + id + " to "
+                   + kind() + ":" + name + ", but CAS failed on "
+                   + forward_mapping + ", which indicates this UID must have"
+                   + " been allocated concurrently by another TSD. So ID "
+                   + id + " was leaked.");
+          continue;
+        }
+      } catch (HBaseException e) {
+        LOG.error("Failed to Put reverse mapping!  ID leaked: " + id
+                  + " of kind " + kind(), e);
+        hbe = e;
+        continue;
+      } catch (Exception e) {
+        LOG.error("WTF, should never be here!  ID leaked: " + id
+                  + " of kind " + kind(), e);
+        continue;
+      }
+
+      addIdToCache(name, row);
+      addNameToCache(row, name);
+      
+      if (tsdb != null && tsdb.getConfig().enable_meta_tracking()) {
+        final UIDMeta meta = new UIDMeta(type, row, name);
+        meta.storeNew(tsdb);
+        tsdb.indexUIDMeta(meta);
+      }
+      
+      return row;
     }
     if (hbe == null) {
       throw new IllegalStateException("Should never happen!");
@@ -407,6 +448,9 @@ public final class UniqueId implements UniqueIdInterface {
 
   /**
    * Attempts to find suggestions of names given a search term.
+   * <p>
+   * <strong>This method is blocking.</strong>  Its use within OpenTSDB itself
+   * is discouraged, please use {@link #suggestAsync} instead.
    * @param search The search term (possibly empty).
    * @param max_results The number of results to return. Must be 1 or greater
    * @return A list of known valid names that have UIDs that sort of match
@@ -436,44 +480,85 @@ public final class UniqueId implements UniqueIdInterface {
     if (max_results < 1) {
       throw new IllegalArgumentException("Count must be greater than 0");
     }
-    // TODO(tsuna): Add caching to try to avoid re-scanning the same thing.
-    final Scanner scanner = getSuggestScanner(search, max_results);
-    final LinkedList<String> suggestions = new LinkedList<String>();
     try {
-      ArrayList<ArrayList<KeyValue>> rows;
-      while ((short) suggestions.size() < max_results
-             && (rows = scanner.nextRows().joinUninterruptibly()) != null) {
-        for (final ArrayList<KeyValue> row : rows) {
-          if (row.size() != 1) {
-            LOG.error("WTF shouldn't happen!  Scanner " + scanner + " returned"
-                      + " a row that doesn't have exactly 1 KeyValue: " + row);
-            if (row.isEmpty()) {
-              continue;
-            }
-          }
-          final byte[] key = row.get(0).key();
-          final String name = fromBytes(key);
-          final byte[] id = row.get(0).value();
-          final byte[] cached_id = nameCache.get(name);
-          if (cached_id == null) {
-            addIdToCache(name, id);
-            addNameToCache(id, name);
-          } else if (!Arrays.equals(id, cached_id)) {
-            throw new IllegalStateException("WTF?  For kind=" + kind()
-              + " name=" + name + ", we have id=" + Arrays.toString(cached_id)
-              + " in cache, but just scanned id=" + Arrays.toString(id));
-          }
-          suggestions.add(name);
-        }
-      }
+      return suggestAsync(search, max_results).joinUninterruptibly();
     } catch (HBaseException e) {
       throw e;
-    } catch (Exception e) {
-      throw new RuntimeException("Should never be here", e);
-    } finally {
-      scanner.close();
+    } catch (Exception e) {  // Should never happen.
+      final String msg = "Unexpected exception caught by "
+        + this + ".suggest(" + search + ')';
+      LOG.error(msg, e);
+      throw new RuntimeException(msg, e);  // Should never happen.
     }
-    return suggestions;
+  }
+
+  /**
+   * Attempts to find suggestions of names given a search term.
+   * @param search The search term (possibly empty).
+   * @return A list of known valid names that have UIDs that sort of match
+   * the search term.  If the search term is empty, returns the first few
+   * terms.
+   * @throws HBaseException if there was a problem getting suggestions from
+   * HBase.
+   * @since 1.1
+   */
+  public Deferred<List<String>> suggestAsync(final String search, 
+      final int max_results) {
+    return new SuggestCB(search, max_results).search();
+  }
+
+  /**
+   * Helper callback to asynchronously scan HBase for suggestions.
+   */
+  private final class SuggestCB
+    implements Callback<Object, ArrayList<ArrayList<KeyValue>>> {
+    private final LinkedList<String> suggestions = new LinkedList<String>();
+    private final Scanner scanner;
+    private final int max_results;
+
+    SuggestCB(final String search, final int max_results) {
+      this.max_results = max_results;
+      this.scanner = getSuggestScanner(search, max_results);
+    }
+
+    @SuppressWarnings("unchecked")
+    Deferred<List<String>> search() {
+      return (Deferred) scanner.nextRows().addCallback(this);
+    }
+
+    public Object call(final ArrayList<ArrayList<KeyValue>> rows) {
+      if (rows == null) {  // We're done scanning.
+        return suggestions;
+      }
+      
+      for (final ArrayList<KeyValue> row : rows) {
+        if (row.size() != 1) {
+          LOG.error("WTF shouldn't happen!  Scanner " + scanner + " returned"
+                    + " a row that doesn't have exactly 1 KeyValue: " + row);
+          if (row.isEmpty()) {
+            continue;
+          }
+        }
+        final byte[] key = row.get(0).key();
+        final String name = fromBytes(key);
+        final byte[] id = row.get(0).value();
+        final byte[] cached_id = nameCache.get(name);
+        if (cached_id == null) {
+          addIdToCache(name, id);
+          addNameToCache(id, name);
+        } else if (!Arrays.equals(id, cached_id)) {
+          throw new IllegalStateException("WTF?  For kind=" + kind()
+            + " name=" + name + ", we have id=" + Arrays.toString(cached_id)
+            + " in cache, but just scanned id=" + Arrays.toString(id));
+        }
+        suggestions.add(name);
+        if ((short) suggestions.size() > max_results) {  // We have enough.
+          return suggestions;
+        }
+        row.clear();  // free()
+      }
+      return search();  // Get more suggestions.
+    }
   }
 
   /**
@@ -597,55 +682,19 @@ public final class UniqueId implements UniqueIdInterface {
     return scanner;
   }
 
-  /** Gets an exclusive lock for on the table using the MAXID_ROW.
-   * The lock expires after hbase.regionserver.lease.period ms
-   * (default = 60000)
-   * @throws HBaseException if the row lock couldn't be acquired.
-   */
-  private RowLock getLock() throws HBaseException {
-    try {
-      return client.lockRow(new RowLockRequest(table, MAXID_ROW)).joinUninterruptibly();
-    } catch (HBaseException e) {
-      LOG.warn("Failed to lock the `MAXID_ROW' row", e);
-      throw e;
-    } catch (Exception e) {
-      throw new RuntimeException("Should never be here", e);
-    }
-  }
-
-  /** Releases the lock passed in argument. */
-  private void unlock(final RowLock lock) {
-    try {
-      client.unlockRow(lock);
-    } catch (HBaseException e) {
-      LOG.error("Error while releasing the lock on row `MAXID_ROW'", e);
-    }
-  }
-
-  /** Returns the cell of the specified row, using family:kind. */
-  private byte[] hbaseGet(final byte[] row, final byte[] family) throws HBaseException {
-    return hbaseGet(row, family, null);
-  }
-
   /** Returns the cell of the specified row key, using family:kind. */
-  private byte[] hbaseGet(final byte[] key, final byte[] family,
-                          final RowLock lock) throws HBaseException {
+  private Deferred<byte[]> hbaseGet(final byte[] key, final byte[] family) {
     final GetRequest get = new GetRequest(table, key);
-    if (lock != null) {
-      get.withRowLock(lock);
-    }
     get.family(family).qualifier(kind);
-    try {
-      final ArrayList<KeyValue> row = client.get(get).joinUninterruptibly();
-      if (row == null || row.isEmpty()) {
-        return null;
+    class GetCB implements Callback<byte[], ArrayList<KeyValue>> {
+      public byte[] call(final ArrayList<KeyValue> row) {
+        if (row == null || row.isEmpty()) {
+          return null;
+        }
+        return row.get(0).value();
       }
-      return row.get(0).value();
-    } catch (HBaseException e) {
-      throw e;
-    } catch (Exception e) {
-      throw new RuntimeException("Should never be here", e);
     }
+    return client.get(get).addCallback(new GetCB());
   }
 
   /**
@@ -768,7 +817,7 @@ public final class UniqueId implements UniqueIdInterface {
    * @since 2.0
    */
   public static byte[] stringToUid(final String uid, final short uid_length) {
-    if (uid.isEmpty()) {
+    if (uid == null || uid.isEmpty()) {
       throw new IllegalArgumentException("UID was empty");
     }
     String id = uid;

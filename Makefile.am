@@ -57,6 +57,7 @@ tsdb_SRC := \
 	src/meta/TSMeta.java	\
 	src/meta/UIDMeta.java	\
 	src/search/SearchPlugin.java	\
+	src/search/SearchQuery.java	\
 	src/stats/Histogram.java	\
 	src/stats/StatsCollector.java	\
 	src/tools/ArgP.java	\
@@ -64,9 +65,18 @@ tsdb_SRC := \
 	src/tools/CliQuery.java	\
 	src/tools/DumpSeries.java	\
 	src/tools/Fsck.java	\
+	src/tools/MetaPurge.java	\
+	src/tools/MetaSync.java	\
 	src/tools/TSDMain.java	\
 	src/tools/TextImporter.java	\
+	src/tools/TreeSync.java	\
 	src/tools/UidManager.java	\
+	src/tree/Branch.java	\
+	src/tree/Leaf.java	\
+	src/tree/Tree.java	\
+	src/tree/TreeBuilder.java	\
+	src/tree/TreeRule.java	\
+	src/tsd/AnnotationRpc.java	\
 	src/tsd/BadRequestException.java	\
 	src/tsd/ConnectionManager.java	\
 	src/tsd/GnuplotException.java	\
@@ -81,16 +91,20 @@ tsdb_SRC := \
 	src/tsd/PutDataPointRpc.java	\
 	src/tsd/QueryRpc.java	\
 	src/tsd/RpcHandler.java	\
+	src/tsd/RTPublisher.java	\
+	src/tsd/SearchRpc.java	\
 	src/tsd/StaticFileRpc.java	\
+	src/tsd/StatsRpc.java	\
 	src/tsd/SuggestRpc.java	\
 	src/tsd/TelnetRpc.java	\
+	src/tsd/TreeRpc.java	\
 	src/tsd/UniqueIdRpc.java	\
 	src/tsd/WordSplitter.java	\
 	src/uid/NoSuchUniqueId.java	\
 	src/uid/NoSuchUniqueName.java	\
 	src/uid/UniqueId.java	\
 	src/uid/UniqueIdInterface.java \
-	src/utils/Config.java \ 
+	src/utils/Config.java \
 	src/utils/DateTime.java \
 	src/utils/JSON.java \
 	src/utils/JSONException.java	\
@@ -118,6 +132,7 @@ test_SRC := \
 	test/core/TestCompactionQueue.java	\
 	test/core/TestTags.java	\
 	test/core/TestTSDB.java	\
+	test/core/TestTsdbQuery.java	\
 	test/core/TestTSQuery.java	\
 	test/core/TestTSSubQuery.java	\
 	test/plugin/DummyPlugin.java \
@@ -125,19 +140,30 @@ test_SRC := \
 	test/meta/TestTSMeta.java	\
 	test/meta/TestUIDMeta.java	\
 	test/search/TestSearchPlugin.java	\
+	test/search/TestSearchQuery.java	\
 	test/stats/TestHistogram.java	\
+	test/storage/MockBase.java	\
+	test/tree/TestBranch.java	\
+	test/tree/TestLeaf.java	\
+	test/tree/TestTree.java	\
+	test/tree/TestTreeBuilder.java	\
+	test/tree/TestTreeRule.java	\
 	test/tsd/NettyMocks.java	\
+	test/tsd/TestAnnotationRpc.java	\
 	test/tsd/TestGraphHandler.java	\
 	test/tsd/TestHttpJsonSerializer.java	\
 	test/tsd/TestHttpQuery.java	\
 	test/tsd/TestPutRpc.java	\
 	test/tsd/TestQueryRpc.java	\
+	test/tsd/TestRTPublisher.java	\
+	test/tsd/TestSearchRpc.java	\
 	test/tsd/TestSuggestRpc.java	\
+	test/tsd/TestTreeRpc.java	\
 	test/tsd/TestUniqueIdRpc.java	\
 	test/uid/TestNoSuchUniqueId.java	\
 	test/uid/TestUniqueId.java \
-	test/utils/TestConfig.java \ 
-	test/utils/TestDateTime.java \ 
+	test/utils/TestConfig.java \
+	test/utils/TestDateTime.java \
 	test/utils/TestJSON.java \
 	test/utils/TestPluginLoader.java
 	
@@ -145,13 +171,15 @@ test_plugin_SRC := \
   test/plugin/DummyPluginA.java \
   test/plugin/DummyPluginB.java \
   test/search/DummySearchPlugin.java \
-  test/tsd/DummyHttpSerializer.java
+  test/tsd/DummyHttpSerializer.java \
+  test/tsd/DummyRTPublisher.java
 
 # Do NOT include the test dir path, just the META portion
 test_plugin_SVCS := \
   META-INF/services/net.opentsdb.plugin.DummyPlugin \
   META-INF/services/net.opentsdb.search.SearchPlugin \
-  META-INF/services/net.opentsdb.tsd.HttpSerializer
+  META-INF/services/net.opentsdb.tsd.HttpSerializer \
+  META-INF/services/net.opentsdb.tsd.RTPublisher
   
 test_plugin_MF := \
   test/META-INF/MANIFEST.MF
@@ -207,6 +235,7 @@ edit_tsdb_script := srcdir=''; test -f ./$$script.in || srcdir=$(srcdir)/; \
         sed -e "s:@pkgdatadir[@]:$$pkgdatadir:g" \
             -e "s:@abs_srcdir[@]:$$abs_srcdir:g" \
             -e "s:@abs_builddir[@]:$$abs_builddir:g" \
+            -e "s:@configdir[@]:$$configdir:g" \
             $${srcdir}$$script.in >$$script.tmp
 
 tsdb: $(srcdir)/tsdb.in
@@ -485,6 +514,38 @@ $(RPM): opentsdb.spec
 	  test -f "$$rpm" && mv "$$rpm" $@ && break; \
 	done
 	if test -d noarch; then rmdir noarch; fi
+
+debian: dist staticroot
+	$(mkdir_p) $(distdir)/debian
+	$(mkdir_p) $(distdir)/debian/DEBIAN
+	$(mkdir_p) $(distdir)/debian/etc/init.d
+	$(mkdir_p) $(distdir)/debian/etc/opentsdb
+	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/bin
+	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/lib
+	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/plugins
+	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/static
+	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/tools
+	cp $(top_srcdir)/build-aux/deb/logback.xml $(distdir)/debian/etc/opentsdb
+	cp $(top_srcdir)/build-aux/deb/opentsdb.conf $(distdir)/debian/etc/opentsdb
+	cp $(srcdir)/src/mygnuplot.sh $(distdir)/debian/usr/share/opentsdb/bin
+	script=tsdb; pkgdatadir='/usr/share/opentsdb'; configdir='/etc/opentsdb'; \
+       abs_srcdir=''; abs_builddir=''; $(edit_tsdb_script)
+	cat tsdb.tmp >"$(distdir)/debian/usr/share/opentsdb/bin/tsdb"
+	rm -f tsdb.tmp
+	chmod 755 $(distdir)/debian/usr/share/opentsdb/bin/tsdb
+	cp $(top_srcdir)/build-aux/deb/control/* $(distdir)/debian/DEBIAN
+	sed -e "s:@version[@]:$(PACKAGE_VERSION):g" \
+	     $(distdir)/debian/DEBIAN/control >$(distdir)/debian/DEBIAN/control.tmp
+	mv $(distdir)/debian/DEBIAN/control.tmp $(distdir)/debian/DEBIAN/control
+	chmod 755 $(distdir)/debian/DEBIAN/*
+	cp $(top_srcdir)/build-aux/deb/init.d/opentsdb $(distdir)/debian/etc/init.d
+	cp $(jar) $(distdir)/debian/usr/share/opentsdb/lib
+	cp -r staticroot/favicon.ico $(distdir)/debian/usr/share/opentsdb/static
+	cp -r gwt/queryui/* $(distdir)/debian/usr/share/opentsdb/static
+	`for dep_jar in $(tsdb_DEPS); do cp $$dep_jar \
+	     $(distdir)/debian/usr/share/opentsdb/lib; done;`
+	cp $(top_srcdir)/tools/* $(distdir)/debian/usr/share/opentsdb/tools
+	dpkg -b $(distdir)/debian $(distdir)/optsdb-$(PACKAGE_VERSION)_all.deb
 
 .PHONY: jar doc check gwtc gwtdev printdeps staticroot gwttsd rpm
 include third_party/include.mk

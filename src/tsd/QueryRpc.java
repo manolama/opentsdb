@@ -14,6 +14,7 @@ package net.opentsdb.tsd;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 
@@ -28,6 +29,7 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSQuery;
 import net.opentsdb.core.TSSubQuery;
 import net.opentsdb.core.Tags;
+import net.opentsdb.meta.Annotation;
 
 /**
  * Handles queries for timeseries datapoints. Each request is parsed into a
@@ -99,10 +101,24 @@ final class QueryRpc implements HttpRpc {
     }
     tsdbqueries = null;  // free()
     
+    // if the user wants global annotations, we need to scan and fetch
+    List<Annotation> globals = null;
+    if (!data_query.getNoAnnotations() && data_query.getGlobalAnnotations()) {
+      try {
+        globals = Annotation.getGlobalAnnotations(tsdb, 
+            data_query.startTime() / 1000, data_query.endTime() / 1000)
+            .joinUninterruptibly();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+      
+    }
+    
     switch (query.apiVersion()) {
     case 0:
     case 1:
-      query.sendReply(query.serializer().formatQueryV1(data_query, results));
+      query.sendReply(query.serializer().formatQueryV1(data_query, results, 
+          globals));
       break;
     default: 
       throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
@@ -126,6 +142,14 @@ final class QueryRpc implements HttpRpc {
     
     if (query.hasQueryStringParam("padding")) {
       data_query.setPadding(true);
+    }
+    
+    if (query.hasQueryStringParam("no_annotations")) {
+      data_query.setNoAnnotations(true);
+    }
+    
+    if (query.hasQueryStringParam("global_annotations")) {
+      data_query.setGlobalAnnotations(true);
     }
     
     // handle tsuid queries first
@@ -193,7 +217,7 @@ final class QueryRpc implements HttpRpc {
     }
     
     if (data_query.getQueries() == null) {
-      final ArrayList<TSSubQuery> subs = new ArrayList<TSSubQuery>();
+      final ArrayList<TSSubQuery> subs = new ArrayList<TSSubQuery>(1);
       data_query.setQueries(subs);
     }
     data_query.getQueries().add(sub_query);
@@ -210,8 +234,42 @@ final class QueryRpc implements HttpRpc {
    */
   private void parseTsuidTypeSubQuery(final String query_string, 
       TSQuery data_query) {
-    // TODO - implement
-    throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
-        "TSUID queries are not implemented at this time");
+    if (query_string == null || query_string.isEmpty()) {
+      throw new BadRequestException("The tsuid query string was empty");
+    }
+    
+    // tsuid queries are of the following forms:
+    // agg:[interval-agg:][rate:]tsuid[,s]
+    // where the parts in square brackets `[' .. `]' are optional.
+    final String[] parts = Tags.splitString(query_string, ':');
+    int i = parts.length;
+    if (i < 2 || i > 5) {
+      throw new BadRequestException("Invalid parameter m=" + query_string + " ("
+          + (i < 2 ? "not enough" : "too many") + " :-separated parts)");
+    }
+    
+    final TSSubQuery sub_query = new TSSubQuery();
+    
+    // the aggregator is first
+    sub_query.setAggregator(parts[0]);
+    
+    i--; // Move to the last part (the metric name).
+    final List<String> tsuid_array = Arrays.asList(parts[i].split(","));
+    sub_query.setTsuids(tsuid_array);
+    
+    // parse out the rate and downsampler 
+    for (int x = 1; x < parts.length - 1; x++) {
+      if (parts[x].toLowerCase().equals("rate")) {
+        sub_query.setRate(true);
+      } else if (Character.isDigit(parts[x].charAt(0))) {
+        sub_query.setDownsample(parts[1]);
+      }
+    }
+    
+    if (data_query.getQueries() == null) {
+      final ArrayList<TSSubQuery> subs = new ArrayList<TSSubQuery>(1);
+      data_query.setQueries(subs);
+    }
+    data_query.getQueries().add(sub_query);
   }
 }
