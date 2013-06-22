@@ -17,6 +17,10 @@ import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.TimeZone;
 
+import org.hbase.async.Bytes;
+
+import net.opentsdb.core.Const;
+import net.opentsdb.core.Internal;
 import net.opentsdb.core.Tags;
 
 /**
@@ -60,7 +64,8 @@ public class DateTime {
    * <li>"yyyy/MM/dd"</li></ul></li>
    * <li>Unix Timestamp in seconds or milliseconds: 
    * <ul><li>1355961600</li>
-   * <li>1355961600000</li></ul></li>
+   * <li>1355961600000</li>
+   * <li>1355961600.000</li></ul></li>
    * </ul>
    * @param datetime The string to parse a value for
    * @return A Unix epoch timestamp in milliseconds
@@ -73,7 +78,7 @@ public class DateTime {
       return -1;
     if (datetime.toLowerCase().endsWith("-ago")) {
       long interval = DateTime.parseDuration(
-        datetime.substring(0, datetime.length() - 4)) * 1000;
+        datetime.substring(0, datetime.length() - 4));
       return System.currentTimeMillis() - interval;
     }
     
@@ -119,8 +124,20 @@ public class DateTime {
       }
     } else {
       try {
-        // todo - maybe deal with sssss.mmm unix times?
-        long time = Tags.parseLong(datetime);   
+        long time;
+        if (datetime.contains(".")) {
+          if (datetime.length() != 14) {
+            throw new IllegalArgumentException("Invalid time: " + datetime  
+                + ".");
+          }
+          time = Tags.parseLong(datetime.replace(".", ""));   
+        } else {
+          if (datetime.length() != 10 && datetime.length() != 13) {
+            throw new IllegalArgumentException("Invalid time: " + datetime  
+                + ".");
+          }
+          time = Tags.parseLong(datetime);
+        }
         // this is a nasty hack to determine if the incoming request is
         // in seconds or milliseconds. This will work until November 2286
         if (datetime.length() <= 10)
@@ -137,6 +154,7 @@ public class DateTime {
    * Parses a human-readable duration (e.g, "10m", "3h", "14d") into seconds.
    * <p>
    * Formats supported:<ul>
+   * <li>{@code ms}: milliseconds</li>
    * <li>{@code s}: seconds</li>
    * <li>{@code m}: minutes</li>
    * <li>{@code h}: hours</li>
@@ -144,32 +162,36 @@ public class DateTime {
    * <li>{@code w}: weeks</li> 
    * <li>{@code n}: month (30 days)</li>
    * <li>{@code y}: years (365 days)</li></ul>
-   * Milliseconds are not supported since a relative request can't be submitted
-   * by a human that fast. If an application needs it, they could use an 
-   * absolute time.
    * @param duration The human-readable duration to parse.
-   * @return A strictly positive number of seconds.
+   * @return A strictly positive number of milliseconds.
    * @throws IllegalArgumentException if the interval was malformed.
    */
   public static final long parseDuration(final String duration) {
     int interval;
-    final int lastchar = duration.length() - 1;
+    int unit = 0;
+    while (Character.isDigit(duration.charAt(unit))) {
+      unit++;
+    }
     try {
-      interval = Integer.parseInt(duration.substring(0, lastchar));
+      interval = Integer.parseInt(duration.substring(0, unit));
     } catch (NumberFormatException e) {
       throw new IllegalArgumentException("Invalid duration (number): " + duration);
     }
     if (interval <= 0) {
       throw new IllegalArgumentException("Zero or negative duration: " + duration);
     }
-    switch (duration.toLowerCase().charAt(lastchar)) {
-      case 's': return interval;                    // seconds
-      case 'm': return interval * 60;               // minutes
-      case 'h': return interval * 3600;             // hours
-      case 'd': return interval * 3600 * 24;        // days
-      case 'w': return interval * 3600 * 24 * 7;    // weeks
-      case 'n': return interval * 3600 * 24 * 30;   // month (average)
-      case 'y': return interval * 3600 * 24 * 365;  // years (screw leap years)
+    switch (duration.toLowerCase().charAt(duration.length() - 1)) {
+      case 's': 
+        if (duration.toLowerCase().contains("ms")) {
+          return interval;
+        }
+        return interval * 1000;                    // seconds
+      case 'm': return (interval * 60) * 1000;               // minutes
+      case 'h': return (interval * 3600) * 1000;             // hours
+      case 'd': return (interval * 3600 * 24) * 1000;        // days
+      case 'w': return (interval * 3600 * 24 * 7) * 1000;    // weeks
+      case 'n': return ((long)interval * 3600 * 24 * 30) * 1000;   // month (average)
+      case 'y': return ((long)interval * 3600 * 24 * 365) * 1000;  // years (screw leap years)
     }
     throw new IllegalArgumentException("Invalid duration (suffix): " + duration);
   }
@@ -227,6 +249,131 @@ public class DateTime {
       TimeZone.setDefault(tz);
     } else {
       throw new IllegalArgumentException("Invalid timezone name: " + tzname);
+    }
+  }
+
+  // TODO - unit tests for all of thse
+  /**
+   * Returns the offset in milliseconds from the row base timestamp from a data
+   * point qualifier
+   * @param qualifier The qualifier to parse
+   * @return The offset in milliseconds from the base time
+   * @throws IllegalArgument if the qualifier is null
+   */
+  public static int getOffsetFromQualifier(final byte[] qualifier) {
+    return getOffsetFromQualifier(qualifier, 0);
+  }
+  
+  /**
+   * Returns the offset in milliseconds from the row base timestamp from a data
+   * point qualifier at the given offset (for compacted columns)
+   * @param qualifier The qualifier to parse
+   * @param offset An offset within the byte array
+   * @return The offset in milliseconds from the base time
+   * @throws IllegalArgument if the qualifier is null or the offset falls 
+   * outside of the qualifier array
+   */
+  public static int getOffsetFromQualifier(final byte[] qualifier, 
+      final int offset) {
+    if (qualifier == null || qualifier.length < 0) {
+      throw new IllegalArgumentException("Null or empty qualifier");
+    }
+    if (offset >= qualifier.length) {
+      throw new IllegalArgumentException("Offset of [" + offset + 
+          "] is greater than the qualifier length [" + qualifier.length + "]");
+    }
+    
+    if ((qualifier[offset + 0] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+      return (int)(Bytes.getUnsignedInt(qualifier, offset) & 0x0FFFFFC0) 
+        >>> (Const.FLAG_BITS + 2);        
+    } else {
+      final int seconds = (Bytes.getUnsignedShort(qualifier, offset) & 0xFFFF) 
+        >>> Const.FLAG_BITS;
+      return seconds * 1000;
+    }
+  }
+  
+  public static short getLengthFromQualifier(final byte[] qualifier) {
+    return getLengthFromQualifier(qualifier, 0);
+  }
+  
+  public static short getLengthFromQualifier(final byte[] qualifier, 
+      final int offset) {
+    if (qualifier == null || qualifier.length < 0) {
+      throw new IllegalArgumentException("Null or empty qualifier");
+    }
+    if (offset >= qualifier.length) {
+      throw new IllegalArgumentException("Offset of [" + offset + 
+          "] is greater than the qualifier length [" + qualifier.length + "]");
+    }
+    
+    short length;
+    if ((qualifier[offset + 0] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+      length = (short) (qualifier[offset + 3] & Internal.LENGTH_MASK); 
+    } else {
+      length = (short) (qualifier[offset + 1] & Internal.LENGTH_MASK);
+    }
+    return (short) (length + 1);
+  }
+
+  /**
+   * Returns the absolute timestamp of a data point qualifier in milliseconds
+   * @param qualifier The qualifier to parse
+   * @param base_time The base time, in seconds, from the row key
+   * @return The absolute timestamp in milliseconds
+   * @throws IllegalArgument if the qualifier is null
+   */
+  public static long getTimestampFromQualifier(final byte[] qualifier, 
+      final long base_time) {
+    return (base_time * 1000) + getOffsetFromQualifier(qualifier);
+  }
+  
+  /**
+   * Returns the absolute timestamp of a data point qualifier in milliseconds
+   * @param qualifier The qualifier to parse
+   * @param base_time The base time, in seconds, from the row key
+   * @param offset An offset within the byte array
+   * @return The absolute timestamp in milliseconds
+   * @throws IllegalArgument if the qualifier is null or the offset falls 
+   * outside of the qualifier array
+   */
+  public static long getTimestampFromQualifier(final byte[] qualifier, 
+      final long base_time, final int offset) {
+    return (base_time * 1000) + getOffsetFromQualifier(qualifier, offset);
+  }
+
+  public static short getFlagsFromQualifier(final byte[] qualifier) {
+    return getFlagsFromQualifier(qualifier, 0);
+  }
+  
+  public static short getFlagsFromQualifier(final byte[] qualifier, final int offset) {
+    if (qualifier == null || qualifier.length < 0) {
+      throw new IllegalArgumentException("Null or empty qualifier");
+    }
+    if (offset >= qualifier.length) {
+      throw new IllegalArgumentException("Offset of [" + offset + 
+          "] is greater than the qualifier length [" + qualifier.length + "]");
+    }
+    
+    if ((qualifier[offset + 0] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+      return (short) (qualifier[offset + 3] & Internal.FLAGS_MASK); 
+    } else {
+      return (short) (qualifier[offset + 1] & Internal.FLAGS_MASK);
+    }
+  }
+
+  public static byte[] buildQualifier(final long timestamp, final short flags) {
+    final long base_time;
+    if ((timestamp & Const.SECOND_MASK) != 0) {
+      // drop the ms timestamp to seconds to calculate the base timestamp
+      base_time = ((timestamp / 1000) - ((timestamp / 1000) % Const.MAX_TIMESPAN));
+      final int qual = (int) (((timestamp - (base_time * 1000) << (Const.FLAG_BITS + 2)) | flags) | Const.MS_FLAG);
+      return Bytes.fromInt(qual);
+    } else {
+      base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
+      final short qual = (short) ((timestamp - base_time) << Const.FLAG_BITS
+          | flags);
+      return Bytes.fromShort(qual);
     }
   }
 }
