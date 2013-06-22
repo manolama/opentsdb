@@ -118,7 +118,7 @@ final class QueryRpc implements HttpRpc {
     case 0:
     case 1:
       query.sendReply(query.serializer().formatQueryV1(data_query, results, 
-          globals));
+          globals, tsdb.getConfig().enable_milliseconds()));
       break;
     default: 
       throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
