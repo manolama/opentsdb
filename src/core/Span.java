@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 
 import net.opentsdb.meta.Annotation;
+import net.opentsdb.uid.UniqueId;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,7 +83,6 @@ final class Span implements DataPoints {
     return 0;
   }
 
-  
   public List<Annotation> getAnnotations() {
     return annotations;
   }
@@ -118,18 +118,20 @@ final class Span implements DataPoints {
             + " whereas the row key being added is " + Arrays.toString(key)
             + " and metric_width=" + metric_width);
       }
-      last_ts = last.timestamp(last.size() - 1);  // O(1)
+      last_ts = last.timestamp(last.size() - 1);  // O(n)
+System.out.println("Last TS: " + last_ts);
       // Optimization: check whether we can put all the data points of `row'
       // into the last RowSeq object we created, instead of making a new
       // RowSeq.  If the time delta between the timestamp encoded in the
       // row key of the last RowSeq we created and the timestamp of the
       // last data point in `row' is small enough, we can merge `row' into
       // the last RowSeq.
-      if (RowSeq.canTimeDeltaFit(lastTimestampInRow(metric_width, row)
-                                 - last.baseTime())) {
-        last.addRow(row);
-        return;
-      }
+//      if (RowSeq.canTimeDeltaFit(lastTimestampInRow(metric_width, row)
+//                                 - last.baseTime())) {
+//        last.addRow(row);
+//        return;
+//      }
+// TODO Cwl - disabled for now since it's really messy w ms/s mixed
     }
 
     final RowSeq rowseq = new RowSeq(tsdb);
@@ -139,6 +141,7 @@ final class Span implements DataPoints {
                 rows.get(rows.size() - 1) + ", new = " + rowseq);
       return;
     }
+System.out.println("Adding row seq: " + UniqueId.uidToString(row.key()));   
     rows.add(rowseq);
   }
 
@@ -146,13 +149,18 @@ final class Span implements DataPoints {
    * Package private helper to access the last timestamp in an HBase row.
    * @param metric_width The number of bytes on which metric IDs are stored.
    * @param row A compacted HBase row.
-   * @return A strictly positive 32-bit timestamp.
+   * @return A strictly positive 32-bit timestamp in seconds or ms.
    * @throws IllegalArgumentException if {@code row} doesn't contain any cell.
    */
   static long lastTimestampInRow(final short metric_width,
                                  final KeyValue row) {
     final long base_time = Bytes.getUnsignedInt(row.key(), metric_width);
     final byte[] qual = row.qualifier();
+    if (qual.length >= 4 && (qual[qual.length - 4] & Const.MS_BYTE_FLAG) == 
+      Const.MS_BYTE_FLAG) {
+      return (base_time * 1000) + ((Bytes.getUnsignedInt(qual, qual.length - 4) & 
+          0x0FFFFFC0) >>> (Const.FLAG_BITS + 2));
+    }
     final short last_delta = (short)
       (Bytes.getUnsignedShort(qual, qual.length - 2) >>> Const.FLAG_BITS);
     return base_time + last_delta;
@@ -398,7 +406,7 @@ final class Span implements DataPoints {
       final int saved_state = current_row.saveState();
       // Since we know hasNext() returned true, we have at least 1 point.
       moveToNext();
-      time = current_row.timestamp() + interval;  // end of this interval.
+      time = current_row.timestamp() + (interval * 1000);  // end of this interval.
       boolean integer = true;
       int npoints = 0;
       do {
