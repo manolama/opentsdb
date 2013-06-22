@@ -465,10 +465,13 @@ class HttpJsonSerializer extends HttpSerializer {
    * @param data_query The TSQuery object used to fetch the results
    * @param results The data fetched from storage
    * @param globals An optional list of global annotation objects
+   * @param milliseconds Whether or not to return the result timestamps in 
+   * milliseconds or seconds
    * @return A ChannelBuffer object to pass on to the caller
    */
   public ChannelBuffer formatQueryV1(final TSQuery data_query, 
-      final List<DataPoints[]> results, final List<Annotation> globals) {
+      final List<DataPoints[]> results, final List<Annotation> globals, 
+      final boolean milliseconds) {
     
     final boolean as_arrays = this.query.hasQueryStringParam("arrays");
     final String jsonp = this.query.getQueryStringParam("jsonp");
@@ -536,12 +539,13 @@ class HttpJsonSerializer extends HttpSerializer {
           if (as_arrays) {
             json.writeStartArray();
             for (final DataPoint dp : dps) {
-              if (dp.timestamp() < (data_query.startTime() / 1000) || 
-                  dp.timestamp() > (data_query.endTime() / 1000)) {
+              if (dp.timestamp() < data_query.startTime() || 
+                  dp.timestamp() > data_query.endTime()) {
                 continue;
               }
               json.writeStartArray();
-              json.writeNumber(dp.timestamp());
+              json.writeNumber(milliseconds ? dp.timestamp() : 
+                  dp.timestamp() / 1000);
               json.writeNumber(
                   dp.isInteger() ? dp.longValue() : dp.doubleValue());
               json.writeEndArray();
@@ -550,11 +554,12 @@ class HttpJsonSerializer extends HttpSerializer {
           } else {
             json.writeStartObject();
             for (final DataPoint dp : dps) {
-              if (dp.timestamp() < (data_query.startTime() / 1000) || 
-                  dp.timestamp() > (data_query.endTime() / 1000)) {
+              if (dp.timestamp() < (data_query.startTime()) || 
+                  dp.timestamp() > (data_query.endTime())) {
                 continue;
               }
-              json.writeNumberField(Long.toString(dp.timestamp()), 
+              json.writeNumberField(Long.toString(
+                  milliseconds ? dp.timestamp() : dp.timestamp() / 1000), 
                   dp.isInteger() ? dp.longValue() : dp.doubleValue());
             }
             json.writeEndObject();
