@@ -33,6 +33,7 @@ import net.opentsdb.core.Internal;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.utils.Config;
+import net.opentsdb.utils.DateTime;
 
 /**
  * Tool to look for and fix corrupted data in a TSDB.
@@ -156,79 +157,32 @@ final class Fsck {
               LOG.error("Invalid qualifier, must be on 2 bytes or more.\n\t"
                         + kv);
               continue;
-            } else if (qual.length > 2) {
-              if (qual.length % 2 != 0) {
-                errors++;
-                LOG.error("Invalid qualifier for a compacted row, length ("
-                          + qual.length + ") must be even.\n\t" + kv);
-              }
+            } else if (qual.length % 2 != 0) {
+              // likely an annotation or other object
+              continue;
+            } else if (qual.length >= 4 && (qual[0] & Const.MS_BYTE_FLAG) 
+                != Const.MS_BYTE_FLAG) {
+              // compacted row
               if (value[value.length - 1] != 0) {
                 errors++;
-                LOG.error("The last byte of the value should be 0.  Either"
+                LOG.error("The last byte of the a compacted should be 0.  Either"
                           + " this value is corrupted or it was written by a"
                           + " future version of OpenTSDB.\n\t" + kv);
                 continue;
-              }
-              // Check all the compacted values.
-              short last_delta = -1;
-              short val_idx = 0;  // Where are we in `value'?
-              boolean ooo = false;  // Did we find out of order data?
-              for (int i = 0; i < qual.length; i += 2) {
-                final short qualifier = Bytes.getShort(qual, i);
-                final short delta = (short) ((qualifier & 0xFFFF)
-                                             >>> Internal.FLAG_BITS);
-                if (delta <= last_delta) {
-                  ooo = true;
-                } else {
-                  last_delta = delta;
-                }
-                val_idx += (qualifier & Internal.LENGTH_MASK) + 1;
-              }
-              prev.setTimestamp(base_time + last_delta);
-              prev.kv = kv;
-              // Check we consumed all the bytes of the value.  The last byte
-              // is metadata, so it's normal that we didn't consume it.
-              if (val_idx != value.length - 1) {
-                errors++;
-                LOG.error("Corrupted value: consumed " + val_idx
-                          + " bytes, but was expecting to consume "
-                          + (value.length - 1) + "\n\t" + kv);
-              } else if (ooo) {
-                final KeyValue ordered;
-                try {
-                  ordered = Internal.complexCompact(kv);
-                } catch (IllegalDataException e) {
-                  errors++;
-                  LOG.error("Two or more values in a compacted cell have the"
-                            + " same time delta but different values.  "
-                            + e.getMessage() + "\n\t" + kv);
-                  continue;
-                }
-                errors++;
-                correctable++;
-                if (fix) {
-                  client.put(new PutRequest(table, ordered.key(),
-                                            ordered.family(),
-                                            ordered.qualifier(),
-                                            ordered.value()))
-                    .addCallbackDeferring(new DeleteOutOfOrder(kv));
-                } else {
-                  LOG.error("Two or more values in a compacted cell are"
-                            + " out of order within that cell.\n\t" + kv);
-                }
-              }
-              continue;  // We done checking a compacted value.
-            } // else: qualifier is on 2 bytes, it's an individual value.
-            final short qualifier = Bytes.getShort(qual);
-            final short delta = (short) ((qualifier & 0xFFFF) >>> Internal.FLAG_BITS);
-            final long timestamp = base_time + delta;
+              }          
+            } // else: qualifier is on 2 or 4 bytes, it's an individual value.
+//            final short qualifier = Bytes.getShort(qual);
+//            final short delta = (short) ((qualifier & 0xFFFF) >>> Internal.FLAG_BITS);
+//            final long timestamp = base_time + delta;
+            final long timestamp = DateTime.getTimestampFromQualifier(qual, base_time);
             if (value.length > 8) {
               errors++;
               LOG.error("Value more than 8 byte long with a 2-byte"
                         + " qualifier.\n\t" + kv);
             }
             // TODO(tsuna): Don't hardcode 0x8 / 0x3 here.
-            if ((qualifier & (0x8 | 0x3)) == (0x8 | 0x3)) {  // float | 4 bytes
+            if (qual.length == 2 && 
+                DateTime.getFlagsFromQualifier(qual) == (0x8 | 0x3)) {  // float | 4 bytes
               // The qualifier says the value is on 4 bytes, and the value is
               // on 8 bytes, then the 4 MSBs must be 0s.  Old versions of the
               // code were doing this.  It's kinda sad.  Some versions had a
@@ -269,12 +223,13 @@ final class Fsck {
                 // Fix the timestamp in the row key.
                 final long new_base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
                 Bytes.setInt(newkey, (int) new_base_time, metric_width);
-                final short newqual = (short) ((timestamp - new_base_time) << Internal.FLAG_BITS
-                                               | (qualifier & Internal.FLAGS_MASK));
+//                final short newqual = (short) ((timestamp - new_base_time) << Internal.FLAG_BITS
+//                                               | (qualifier & Internal.FLAGS_MASK));
+                final byte[] newqual = DateTime.buildQualifier(timestamp, DateTime.getFlagsFromQualifier(qual));
                 final DeleteOutOfOrder delooo = new DeleteOutOfOrder(kv);
                 if (timestamp < prev.timestamp()) {
                   client.put(new PutRequest(table, newkey, kv.family(),
-                                            Bytes.fromShort(newqual), value))
+                                           newqual, value))
                     // Only delete the offending KV once we're sure that the new
                     // KV has been persisted in HBase.
                     .addCallbackDeferring(delooo);
