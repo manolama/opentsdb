@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 
 import net.opentsdb.meta.Annotation;
+import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.DateTime;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -120,23 +122,40 @@ final class RowSeq implements DataPoints {
       setRow(row);
       return;
     }
-
+System.out.println("Attempting to merge [" + base_time + "] int row [" + baseTime() + "]");
     final byte[] qual = row.qualifier();
     final int len = qual.length;
-    int last_delta = Bytes.getUnsignedShort(qualifiers, qualifiers.length - 2);
-    last_delta >>= Const.FLAG_BITS;
+    int last_delta;
+    if (qual.length >= 4 && (qual[qual.length - 4] & Const.MS_BYTE_FLAG) == 
+      Const.MS_BYTE_FLAG) {
+      last_delta = (int) ((Bytes.getUnsignedInt(qual, qual.length - 4) & 
+          0x0FFFFFC0) >>> (Const.FLAG_BITS + 2));
+System.out.println("Got an ms delta: " + last_delta);
+    } else {
+      last_delta = (Bytes.getUnsignedShort(qual, qual.length - 2) 
+          >>> Const.FLAG_BITS);
+System.out.println("Got a second delta: " + last_delta);
+    }
 
     final int old_qual_len = qualifiers.length;
     final byte[] newquals = new byte[old_qual_len + len];
     System.arraycopy(qualifiers, 0, newquals, 0, old_qual_len);
     // Adjust the delta in all the qualifiers.
     for (int i = 0; i < len; i += 2) {
-      short qualifier = Bytes.getShort(qual, i);
-      final int time_delta = time_adj + ((qualifier & 0xFFFF) >>> Const.FLAG_BITS);
+      int time_delta;
+System.out.println("Adjustment: " + time_adj);
+      if ((qual[i]& Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+        time_delta =  ((time_adj * 1000) + (int)(Bytes.getUnsignedInt(qual, qual.length - 4) & 
+            0x0FFFFFC0) >>> (Const.FLAG_BITS + 2));
+      } else {
+        time_delta = time_adj + (Bytes.getUnsignedShort(qual, qual.length - 2) 
+            >>> Const.FLAG_BITS);
+      }
+System.out.println("Adjusted to: " + time_delta);
       if (!canTimeDeltaFit(time_delta)) {
          throw new IllegalDataException("time_delta at index " + i
            + " is too large: " + time_delta
-           + " (qualifier=0x" + Integer.toHexString(qualifier & 0xFFFF)
+           + " (qualifier=" + time_delta
            + " baseTime()=" + baseTime() + ", base_time=" + base_time
            + ", time_adj=" + time_adj
            + ") for " + row + " to be added to " + this);
@@ -148,9 +167,20 @@ final class RowSeq implements DataPoints {
                   + " in addRow with row=" + row + " in this=" + this);
         return;  // Ignore this row, it came out of order.
       }
-      qualifier = (short) ((time_delta << Const.FLAG_BITS)
-                           | (qualifier & Const.FLAGS_MASK));
-      Bytes.setShort(newquals, qualifier, old_qual_len + i);
+
+      // have to increment the index 'after' we have finished with it
+      if ((qual[i]& Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+        time_delta = (time_delta << Const.FLAG_BITS + 2 );
+        time_delta = time_delta | 0xF0000000;
+        Bytes.setInt(newquals, time_delta, old_qual_len + i);
+        System.out.println("MS: " + UniqueId.uidToString(Bytes.fromInt((int)time_delta)));
+        i += 2;
+      } else {
+        time_delta = (short) ((time_delta << Const.FLAG_BITS)
+              | (time_delta & Const.FLAGS_MASK));
+        Bytes.setShort(newquals, (short) time_delta, old_qual_len + i);
+        System.out.println("Short: " + UniqueId.uidToString(Bytes.fromShort((short)time_delta)));
+      }
     }
     this.qualifiers = newquals;
 
@@ -175,6 +205,9 @@ final class RowSeq implements DataPoints {
 
   /**
    * Checks whether a time delta is short enough for a {@link RowSeq}.
+   * So with a qualifier offset encoded on 2 bytes, with 4 bits reserved for the
+   * flag, we can have a total of 4095 data points in the row.
+   * But w ms support, we can have 3599999 data points
    * @param time_delta A time delta in seconds.
    * @return {@code true} if the delta is small enough that two data points
    * separated by the time delta can fit together in the same {@link RowSeq},
@@ -182,7 +215,9 @@ final class RowSeq implements DataPoints {
    * different {@link RowSeq} instances.
    */
   static boolean canTimeDeltaFit(final long time_delta) {
-    return time_delta < 1 << (Short.SIZE - Const.FLAG_BITS);
+    //return time_delta < 1 << (Short.SIZE - Const.FLAG_BITS);
+    //return time_delta < 1 << (Integer.SIZE - Const.FLAG_BITS - 6);
+    return time_delta <= 3599999;
   }
 
   /**
@@ -247,7 +282,14 @@ final class RowSeq implements DataPoints {
   }
 
   public int size() {
-    return qualifiers.length / 2;
+    int size = 0;
+    for (int i = 0; i < qualifiers.length; i += 2) {
+      if ((qualifiers[i] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+        i += 2;
+      }
+      size++;
+    }
+    return size;
   }
 
   public int aggregatedSize() {
@@ -284,8 +326,29 @@ final class RowSeq implements DataPoints {
   public long timestamp(final int i) {
     checkIndex(i);
     // Important: Span.addRow assumes this method to work in O(1).
-    return baseTime()
-      + (Bytes.getUnsignedShort(qualifiers, i * 2) >>> Const.FLAG_BITS);
+    // ^^ Can't do that with mixed support as seconds are on 2 bytes and ms on 4
+    int index = 0;
+    for (int idx = 0; idx < qualifiers.length; idx += 2) {
+      if (i == index) {
+//        if ((qualifiers[idx] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+//          final long ms = (Bytes.getUnsignedInt(qualifiers, idx) & 0x0FFFFFC0) 
+//            >>> (Const.FLAG_BITS + 2);
+//          return (baseTime() * 1000) + ms;            
+//        } else {
+//          final long seconds = (Bytes.getUnsignedShort(qualifiers, idx) & 0xFFFF) 
+//            >>> Const.FLAG_BITS;
+//          return (baseTime() + seconds) * 1000;
+//        }
+        return DateTime.getTimestampFromQualifier(qualifiers, baseTime(), idx);
+      }
+      if ((qualifiers[idx] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+        idx += 2;
+      }      
+      index++;
+    }
+    
+    throw new RuntimeException(
+        "WTF timestamp for index: " + i + " on " + this);
   }
 
   public boolean isInteger(final int i) {
@@ -346,7 +409,7 @@ final class RowSeq implements DataPoints {
        .append(base_time > 0 ? new Date(base_time * 1000) : "no date")
        .append("), [");
     for (short i = 0; i < size; i++) {
-      final short qual = Bytes.getShort(qualifiers, i * 2);
+      final short qual = (short) Bytes.getUnsignedShort(qualifiers, i * 2);
       buf.append('+').append((qual & 0xFFFF) >>> Const.FLAG_BITS);
       if (isInteger(i)) {
         buf.append(":long(").append(longValue(i));
@@ -366,7 +429,7 @@ final class RowSeq implements DataPoints {
   final class Iterator implements SeekableView, DataPoint {
 
     /** Current qualifier.  */
-    private short qualifier;
+    private int qualifier;
 
     /** Next index in {@link #qualifiers}.  */
     private short qual_index;
@@ -392,8 +455,14 @@ final class RowSeq implements DataPoints {
       if (!hasNext()) {
         throw new NoSuchElementException("no more elements");
       }
-      qualifier = Bytes.getShort(qualifiers, qual_index);
-      qual_index += 2;
+      
+      if ((qualifiers[qual_index] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+        qualifier = (int) Bytes.getUnsignedInt(qualifiers, qual_index);
+        qual_index += 4;
+      } else {
+        qualifier = Bytes.getUnsignedShort(qualifiers, qual_index);
+        qual_index += 2;
+      }
       final byte flags = (byte) qualifier;
       value_index += (flags & Const.LENGTH_MASK) + 1;
       //LOG.debug("next -> now=" + toStringSummary());
@@ -409,7 +478,7 @@ final class RowSeq implements DataPoints {
     // ---------------------- //
 
     public void seek(final long timestamp) {
-      if ((timestamp & 0xFFFFFFFF00000000L) != 0) {  // negative or not 32 bits
+      if ((timestamp & Const.MILLISECOND_MASK) != 0) {  // negative or not 48 bits
         throw new IllegalArgumentException("invalid timestamp: " + timestamp);
       }
       qual_index = 0;
@@ -421,7 +490,7 @@ final class RowSeq implements DataPoints {
         value_index += (flags & Const.LENGTH_MASK) + 1;
       }
       if (qual_index > 0) {
-        qualifier = Bytes.getShort(qualifiers, qual_index - 2);
+        qualifier = Bytes.getUnsignedShort(qualifiers, qual_index - 2);
       }
       //LOG.debug("seek to " + timestamp + " -> now=" + toStringSummary());
     }
@@ -432,7 +501,13 @@ final class RowSeq implements DataPoints {
 
     public long timestamp() {
       assert qualifier != 0: "not initialized: " + this;
-      return base_time + ((qualifier & 0xFFFF) >>> Const.FLAG_BITS);
+      if ((qualifier & 0xF0000000) == 0xF0000000) {
+        final long ms = (qualifier & 0x0FFFFFC0) >>> (Const.FLAG_BITS + 2);
+        return (base_time * 1000) + ms;            
+      } else {
+        final long seconds = (qualifier & 0xFFFF) >>> Const.FLAG_BITS;
+        return (base_time + seconds) * 1000;
+      }
     }
 
     public boolean isInteger() {
@@ -486,8 +561,15 @@ final class RowSeq implements DataPoints {
      * @throws IndexOutOfBoundsException if we reached the end already.
      */
     long peekNextTimestamp() {
-      return base_time
-        + (Bytes.getUnsignedShort(qualifiers, qual_index) >>> Const.FLAG_BITS);
+      if ((qualifier & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+        final long ms = (Bytes.getUnsignedInt(qualifiers, qual_index) & 0x0FFFFFC0) 
+          >>> (Const.FLAG_BITS + 2);
+        return (baseTime() * 1000) + ms;            
+      } else {
+        final long seconds = (Bytes.getUnsignedShort(qualifiers, qual_index) & 0xFFFF) 
+          >>> Const.FLAG_BITS;
+        return (baseTime() + seconds) * 1000;
+      }
     }
 
     /** Only returns internal state for the iterator itself.  */
