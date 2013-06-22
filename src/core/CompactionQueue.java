@@ -35,6 +35,7 @@ import org.hbase.async.PleaseThrottleException;
 import net.opentsdb.meta.Annotation;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.uid.UniqueId;
+import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.JSON;
 
 /**
@@ -327,7 +328,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
             longest_idx = i;
           }
         } else {
-          if ((qual[0] & Const.MS_FLAG) == Const.MS_FLAG) {
+          if ((qual[0] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
             ms_in_row = true;
           } else {
             s_in_row = true;
@@ -335,7 +336,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
           
           // there may be a situation where two second columns are concatenated
           // into 4 bytes. If so, we need to perform a complex compaction
-          if (len == 4 && (qual[0] & Const.MS_FLAG) != Const.MS_FLAG) {
+          if (len == 4 && (qual[0] & Const.MS_BYTE_FLAG) != Const.MS_BYTE_FLAG) {
             trivial = false;
             if (len > longest.qualifier().length) {
               longest = kv;
@@ -489,7 +490,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       
       // check to make sure that the row was already sorted, or if there was a 
       // mixture of second and ms timestamps, that we sorted successfully
-      final int delta = offsetInMilliseconds(q);
+      final int delta = DateTime.getOffsetFromQualifier(q);
       if (delta <= last_delta) {
         throw new IllegalDataException("Found out of order or duplicate"
           + " data: last_delta=" + last_delta + ", delta=" + delta
@@ -585,14 +586,6 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     return value;
   }
 
-  private static int offsetInMilliseconds(final byte[] qualifier) {
-    if ((qualifier[0] & Const.MS_FLAG) == Const.MS_FLAG) {
-      return (Bytes.getInt(qualifier) & 0x0FFFFFC0) >>> Const.FLAG_BITS;
-    } else {
-      return ((Bytes.getShort(qualifier) & 0xFFFF) >>> Const.FLAG_BITS) * 1000;
-    }
-  }
-  
   /**
    * Helper class for complex compaction cases.
    * <p>
@@ -674,7 +667,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     int ncells = cells.size();
     for (int i = 0; i < ncells; i++) {
       final Cell cell = cells.get(i);
-      final int delta = offsetInMilliseconds(cell.qualifier);
+      final int delta = DateTime.getOffsetFromQualifier(cell.qualifier);
       
       // Because we sorted `cells' by qualifier, and because the time delta
       // occupies the most significant bits, this should never trigger.
@@ -766,7 +759,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
         final Cell cell = new Cell(actual_qual, actual_val);
         cells.add(cell);
         continue;
-      } else if (len == 4 && (qual[0] & Const.MS_FLAG) == Const.MS_FLAG) {
+      } else if (len == 4 && (qual[0] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
         // since ms support is new, there's nothing to fix
         final Cell cell = new Cell(qual, val);
         cells.add(cell);
@@ -788,7 +781,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       for (int i = 0; i < len; i += 2) {
         final byte[] q;
         final int vlen;
-        if ((qual[i] & Const.MS_FLAG) == Const.MS_FLAG) {
+        if ((qual[i] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
           q = new byte[] { qual[i], qual[i + 1], qual[i + 2], qual[i + 3] };
           i += 2;
           vlen = (q[3] & Const.LENGTH_MASK) + 1;
@@ -1035,8 +1028,8 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     }
     
     public int compare(final byte[] a, final byte[] b) {
-      final int left = offsetInMilliseconds(a);
-      final int right = offsetInMilliseconds(b);
+      final long left = DateTime.getOffsetFromQualifier(a);
+      final long right = DateTime.getOffsetFromQualifier(b);
       if (left == right) {
         return 0;
       }

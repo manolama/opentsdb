@@ -20,6 +20,7 @@ import org.hbase.async.Bytes;
 import org.hbase.async.KeyValue;
 
 import net.opentsdb.meta.Annotation;
+import net.opentsdb.storage.MockBase;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.utils.Config;
 
@@ -136,10 +137,55 @@ final class TestCompactionQueue {
     compactionq.compact(kvs, annotations);
 
     // We had one row to compact, so one put to do.
-    verify(tsdb, times(1)).put(KEY, concat(qual1, qual2),
-                               concat(val1, val2, ZERO));
+    verify(tsdb, times(1)).put(KEY, MockBase.concatByteArrays(qual1, qual2),
+                               MockBase.concatByteArrays(val1, val2, ZERO));
     // And we had to delete individual cells.
     verify(tsdb, times(1)).delete(KEY, new byte[][] { qual1, qual2 });
+  }
+  
+  @Test
+  public void fullRowSeconds() throws Exception {
+    ArrayList<KeyValue> kvs = new ArrayList<KeyValue>(3600);
+    ArrayList<Annotation> annotations = new ArrayList<Annotation>(0);
+    
+    byte[] qualifiers = new byte[] {};
+    byte[] values = new byte[] {};
+    
+    for (int i = 0; i < 3600; i++) {
+      final short qualifier = (short) (i << Const.FLAG_BITS | 0x07);
+      kvs.add(makekv(Bytes.fromShort(qualifier), Bytes.fromLong(i)));
+      qualifiers = MockBase.concatByteArrays(qualifiers, Bytes.fromShort(qualifier));
+      values = MockBase.concatByteArrays(values, Bytes.fromLong(i));
+    }
+
+    compactionq.compact(kvs, annotations);
+
+    // We had one row to compact, so one put to do.
+    verify(tsdb, times(1)).put(KEY, qualifiers,
+                               MockBase.concatByteArrays(values, ZERO));
+    // And we had to delete individual cells.
+    verify(tsdb, times(1)).delete((byte[])any(), (byte[][])any());
+  }
+  
+  @Test
+  public void bigRowMs() throws Exception {
+    ArrayList<KeyValue> kvs = new ArrayList<KeyValue>(3599999);
+    ArrayList<Annotation> annotations = new ArrayList<Annotation>(0);
+
+    long start = System.currentTimeMillis();
+    for (int i = 0; i < 3599999; i++) {
+      final int qualifier = (int) (((i << Const.FLAG_BITS  + 2 ) | 0x07) | 0xF0000000);
+      kvs.add(makekv(Bytes.fromInt(qualifier), Bytes.fromLong(i)));
+      i += 100;
+    }
+System.out.println("Built row in [" + (System.currentTimeMillis() - start) + "] ms");
+    compactionq.compact(kvs, annotations);
+
+    // We had one row to compact, so one put to do.
+    verify(tsdb, times(1)).put((byte[])any(), (byte[])any(), (byte[])any());
+    // And we had to delete individual cells.
+    verify(tsdb, times(1)).delete((byte[])any(), (byte[][])any());
+System.out.println("Finished compaction in [" + (System.currentTimeMillis() - start) + "] ms");
   }
   
   @Test
@@ -156,8 +202,8 @@ final class TestCompactionQueue {
     compactionq.compact(kvs, annotations);
 
     // We had one row to compact, so one put to do.
-    verify(tsdb, times(1)).put(KEY, concat(qual1, qual2),
-                               concat(val1, val2, ZERO));
+    verify(tsdb, times(1)).put(KEY, MockBase.concatByteArrays(qual1, qual2),
+                               MockBase.concatByteArrays(val1, val2, ZERO));
     // And we had to delete individual cells.
     verify(tsdb, times(1)).delete(KEY, new byte[][] { qual1, qual2 });
   }
@@ -179,8 +225,8 @@ final class TestCompactionQueue {
     compactionq.compact(kvs, annotations);
 
     // We had one row to compact, so one put to do.
-    verify(tsdb, times(1)).put(KEY, concat(qual1, qual3, qual2),
-                               concat(val1, val3, val2, ZERO));
+    verify(tsdb, times(1)).put(KEY, MockBase.concatByteArrays(qual1, qual3, qual2),
+                               MockBase.concatByteArrays(val1, val3, val2, ZERO));
     // And we had to delete individual cells.
     verify(tsdb, times(1)).delete(KEY, new byte[][] { qual1, qual3, qual2 });
   }
@@ -217,8 +263,8 @@ final class TestCompactionQueue {
     compactionq.compact(kvs, annotations);
 
     // We had one row to compact, so one put to do.
-    verify(tsdb, times(1)).put(KEY, concat(qual1, qual2),
-                               concat(val1, val2, ZERO));
+    verify(tsdb, times(1)).put(KEY, MockBase.concatByteArrays(qual1, qual2),
+                               MockBase.concatByteArrays(val1, val2, ZERO));
     // And we had to delete individual cells.
     verify(tsdb, times(1)).delete(KEY, new byte[][] { qual1, qual2 });
   }
@@ -254,8 +300,8 @@ final class TestCompactionQueue {
     compactionq.compact(kvs, annotations);
 
     // We had one row to compact, so one put to do.
-    verify(tsdb, times(1)).put(KEY, concat(cqual1, qual2),
-                               concat(val1, val2, ZERO));
+    verify(tsdb, times(1)).put(KEY, MockBase.concatByteArrays(cqual1, qual2),
+                               MockBase.concatByteArrays(val1, val2, ZERO));
     // And we had to delete individual cells.
     verify(tsdb, times(1)).delete(KEY, new byte[][] { qual1, qual2 });
   }
@@ -279,8 +325,8 @@ final class TestCompactionQueue {
     compactionq.compact(kvs, annotations);
 
     // We had one row to compact, so one put to do.
-    verify(tsdb, times(1)).put(KEY, concat(qual1, qual2),
-                               concat(val1, cval2, ZERO));
+    verify(tsdb, times(1)).put(KEY, MockBase.concatByteArrays(qual1, qual2),
+                               MockBase.concatByteArrays(val1, cval2, ZERO));
     // And we had to delete individual cells.
     verify(tsdb, times(1)).delete(KEY, new byte[][] { qual1, qual2, });
   }
@@ -313,8 +359,8 @@ final class TestCompactionQueue {
     final byte[] qual2 = { 0x00, 0x17 };
     final byte[] val2 = Bytes.fromLong(5L);
     kvs.add(makekv(qual2, val2));
-    final byte[] qualcompact = concat(qual1, qual2);
-    final byte[] valcompact = concat(val1, val2, ZERO);
+    final byte[] qualcompact = MockBase.concatByteArrays(qual1, qual2);
+    final byte[] valcompact = MockBase.concatByteArrays(val1, val2, ZERO);
     kvs.add(makekv(qualcompact, valcompact));
 
     compactionq.compact(kvs, annotations);
@@ -336,8 +382,8 @@ final class TestCompactionQueue {
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { 0x00, 0x27 };
     final byte[] val2 = Bytes.fromLong(5L);
-    final byte[] qual12 = concat(qual1, qual2);
-    kvs.add(makekv(qual12, concat(val1, val2, ZERO)));
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    kvs.add(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
     // This data point came late.  Note that its time delta falls in between
     // that of the two data points above.
     final byte[] qual3 = { 0x00, 0x17 };
@@ -347,8 +393,8 @@ final class TestCompactionQueue {
     compactionq.compact(kvs, annotations);
 
     // We had one row to compact, so one put to do.
-    verify(tsdb, times(1)).put(KEY, concat(qual1, qual3, qual2),
-                               concat(val1, val3, val2, ZERO));
+    verify(tsdb, times(1)).put(KEY, MockBase.concatByteArrays(qual1, qual3, qual2),
+                               MockBase.concatByteArrays(val1, val3, val2, ZERO));
     // And we had to delete the individual cell + pre-existing compacted cell.
     verify(tsdb, times(1)).delete(KEY, new byte[][] { qual12, qual3 });
   }
@@ -364,8 +410,8 @@ final class TestCompactionQueue {
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
     final byte[] val2 = Bytes.fromLong(5L);
-    final byte[] qual12 = concat(qual1, qual2);
-    kvs.add(makekv(qual12, concat(val1, val2, ZERO)));
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    kvs.add(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
     // This data point came late.  Note that its time delta falls in between
     // that of the two data points above.
     final byte[] qual3 = { (byte) 0xF0, 0x00, 0x01, 0x07 };
@@ -375,8 +421,8 @@ final class TestCompactionQueue {
     compactionq.compact(kvs, annotations);
 
     // We had one row to compact, so one put to do.
-    verify(tsdb, times(1)).put(KEY, concat(qual1, qual3, qual2),
-                               concat(val1, val3, val2, ZERO));
+    verify(tsdb, times(1)).put(KEY, MockBase.concatByteArrays(qual1, qual3, qual2),
+                               MockBase.concatByteArrays(val1, val3, val2, ZERO));
     // And we had to delete the individual cell + pre-existing compacted cell.
     verify(tsdb, times(1)).delete(KEY, new byte[][] { qual12, qual3 });
   }
@@ -392,8 +438,8 @@ final class TestCompactionQueue {
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { (byte) 0xF0, 0x0A, 0x41, 0x07 };
     final byte[] val2 = Bytes.fromLong(5L);
-    final byte[] qual12 = concat(qual1, qual2);
-    kvs.add(makekv(qual12, concat(val1, val2, ZERO)));
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    kvs.add(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
     // This data point came late.  Note that its time delta falls in between
     // that of the two data points above.
     final byte[] qual3 = { 0x00, 0x57 };
@@ -403,8 +449,8 @@ final class TestCompactionQueue {
     compactionq.compact(kvs, annotations);
 
     // We had one row to compact, so one put to do.
-    verify(tsdb, times(1)).put(KEY, concat(qual1, qual3, qual2),
-                               concat(val1, val3, val2, ZERO));
+    verify(tsdb, times(1)).put(KEY, MockBase.concatByteArrays(qual1, qual3, qual2),
+                               MockBase.concatByteArrays(val1, val3, val2, ZERO));
     // And we had to delete the individual cell + pre-existing compacted cell.
     verify(tsdb, times(1)).delete(KEY, new byte[][] { qual12, qual3 });
   }
@@ -420,8 +466,8 @@ final class TestCompactionQueue {
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { (byte) 0xF0, 0x0A, 0x41, 0x07 };
     final byte[] val2 = Bytes.fromLong(5L);
-    final byte[] qual12 = concat(qual1, qual2);
-    kvs.add(makekv(qual12, concat(val1, val2, ZERO)));
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    kvs.add(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
     // This data point came late.  Note that its time delta falls in between
     // that of the two data points above.
     final byte[] qual3 = { (byte) 0xF0, 0x00, 0x01, 0x07 };
@@ -431,8 +477,8 @@ final class TestCompactionQueue {
     compactionq.compact(kvs, annotations);
 
     // We had one row to compact, so one put to do.
-    verify(tsdb, times(1)).put(KEY, concat(qual1, qual3, qual2),
-                               concat(val1, val3, val2, ZERO));
+    verify(tsdb, times(1)).put(KEY, MockBase.concatByteArrays(qual1, qual3, qual2),
+                               MockBase.concatByteArrays(val1, val3, val2, ZERO));
     // And we had to delete the individual cell + pre-existing compacted cell.
     verify(tsdb, times(1)).delete(KEY, new byte[][] { qual12, qual3 });
   }
@@ -448,8 +494,8 @@ final class TestCompactionQueue {
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { 0x00, 0x27 };
     final byte[] val2 = Bytes.fromLong(5L);
-    final byte[] qual12 = concat(qual1, qual2);
-    kvs.add(makekv(qual12, concat(val1, val2, ZERO)));
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    kvs.add(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
     // This data point came late.  Note that its time delta falls in between
     // that of the two data points above.
     final byte[] qual3 = { 0x00, 0x07 };
@@ -473,15 +519,15 @@ final class TestCompactionQueue {
     final byte[] qual2 = { 0x00, 0x27 };
     final byte[] val2 = Bytes.fromLong(5L);
     // Data points 1 + 2 compacted.
-    final byte[] qual12 = concat(qual1, qual2);
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
     // This data point came late.
     final byte[] qual3 = { 0x00, 0x17 };
     final byte[] val3 = Bytes.fromLong(6L);
     // Data points 1 + 3 + 2 compacted.
-    final byte[] qual132 = concat(qual1, qual3, qual2);
+    final byte[] qual132 = MockBase.concatByteArrays(qual1, qual3, qual2);
     kvs.add(makekv(qual1, val1));
-    kvs.add(makekv(qual132, concat(val1, val3, val2, ZERO)));
-    kvs.add(makekv(qual12, concat(val1, val2, ZERO)));
+    kvs.add(makekv(qual132, MockBase.concatByteArrays(val1, val3, val2, ZERO)));
+    kvs.add(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
     kvs.add(makekv(qual3, val3));
     kvs.add(makekv(qual2, val2));
 
@@ -508,22 +554,22 @@ final class TestCompactionQueue {
     // Data points 1 + 2 compacted.
     final byte[] qual2 = { 0x00, 0x27 };
     final byte[] val2 = Bytes.fromLong(5L);
-    final byte[] qual12 = concat(qual1, qual2);
-    kvs.add(makekv(qual12, concat(val1, val2, ZERO)));
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    kvs.add(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
     // This data point came late.
     final byte[] qual3 = { 0x00, 0x17 };
     final byte[] val3 = Bytes.fromLong(6L);
     // Data points 1 + 3 compacted.
-    final byte[] qual13 = concat(qual1, qual3);
-    kvs.add(makekv(qual13, concat(val1, val3, ZERO)));
+    final byte[] qual13 = MockBase.concatByteArrays(qual1, qual3);
+    kvs.add(makekv(qual13, MockBase.concatByteArrays(val1, val3, ZERO)));
     kvs.add(makekv(qual3, val3));
     kvs.add(makekv(qual2, val2));
 
     compactionq.compact(kvs, annotations);
 
     // We had one row to compact, so one put to do.
-    verify(tsdb, times(1)).put(KEY, concat(qual1, qual3, qual2),
-                               concat(val1, val3, val2, ZERO));
+    verify(tsdb, times(1)).put(KEY, MockBase.concatByteArrays(qual1, qual3, qual2),
+                               MockBase.concatByteArrays(val1, val3, val2, ZERO));
     // And we had to delete the 3 individual cells + 2 pre-existing
     // compacted cells.
     verify(tsdb, times(1)).delete(KEY, new byte[][] { qual1, qual12, qual13, qual3, qual2 });
@@ -536,21 +582,6 @@ final class TestCompactionQueue {
   /** Shorthand to create a {@link KeyValue}.  */
   private static KeyValue makekv(final byte[] qualifier, final byte[] value) {
     return new KeyValue(KEY, FAMILY, qualifier, value);
-  }
-
-  /** Concatenates byte arrays together.  */
-  private static byte[] concat(final byte[]... arrays) {
-    int len = 0;
-    for (final byte[] array : arrays) {
-      len += array.length;
-    }
-    final byte[] result = new byte[len];
-    len = 0;
-    for (final byte[] array : arrays) {
-      System.arraycopy(array, 0, result, len, array.length);
-      len += array.length;
-    }
-    return result;
   }
 
   private static byte[] anyBytes() {
