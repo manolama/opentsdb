@@ -155,7 +155,7 @@ public final class MockBase {
     when(client.atomicIncrement((AtomicIncrementRequest)any()))
       .then(new MockAtomicIncrement());
     when(client.bufferAtomicIncrement((AtomicIncrementRequest)any()))
-    .then(new MockAtomicIncrement());
+      .then(new MockAtomicIncrement());
   }
 
   /**
@@ -301,6 +301,25 @@ public final class MockBase {
   /** @return Returns the ASCII character set */
   public static Charset ASCII() {
     return ASCII;
+  }
+  
+  /**
+   * Concatenates byte arrays into one big array
+   * @param arrays Any number of arrays to concatenate
+   * @return The concatenated array
+   */
+  public static byte[] concatByteArrays(final byte[]... arrays) {
+    int len = 0;
+    for (final byte[] array : arrays) {
+      len += array.length;
+    }
+    final byte[] result = new byte[len];
+    len = 0;
+    for (final byte[] array : arrays) {
+      System.arraycopy(array, 0, result, len, array.length);
+      len += array.length;
+    }
+    return result;
   }
   
   /**
