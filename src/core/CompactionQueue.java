@@ -34,8 +34,6 @@ import org.hbase.async.PleaseThrottleException;
 
 import net.opentsdb.meta.Annotation;
 import net.opentsdb.stats.StatsCollector;
-import net.opentsdb.uid.UniqueId;
-import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.JSON;
 
 /**
@@ -490,7 +488,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       
       // check to make sure that the row was already sorted, or if there was a 
       // mixture of second and ms timestamps, that we sorted successfully
-      final int delta = DateTime.getOffsetFromQualifier(q);
+      final int delta = Internal.getOffsetFromQualifier(q);
       if (delta <= last_delta) {
         throw new IllegalDataException("Found out of order or duplicate"
           + " data: last_delta=" + last_delta + ", delta=" + delta
@@ -667,7 +665,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     int ncells = cells.size();
     for (int i = 0; i < ncells; i++) {
       final Cell cell = cells.get(i);
-      final int delta = DateTime.getOffsetFromQualifier(cell.qualifier);
+      final int delta = Internal.getOffsetFromQualifier(cell.qualifier);
       
       // Because we sorted `cells' by qualifier, and because the time delta
       // occupies the most significant bits, this should never trigger.
@@ -1028,8 +1026,8 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     }
     
     public int compare(final byte[] a, final byte[] b) {
-      final long left = DateTime.getOffsetFromQualifier(a);
-      final long right = DateTime.getOffsetFromQualifier(b);
+      final long left = Internal.getOffsetFromQualifier(a);
+      final long right = Internal.getOffsetFromQualifier(b);
       if (left == right) {
         return 0;
       }
