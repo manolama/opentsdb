@@ -21,7 +21,6 @@ import java.util.NoSuchElementException;
 
 import net.opentsdb.meta.Annotation;
 import net.opentsdb.uid.UniqueId;
-import net.opentsdb.utils.DateTime;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,6 +100,7 @@ final class RowSeq implements DataPoints {
     final byte[] key = row.key();
     final long base_time = Bytes.getUnsignedInt(key, tsdb.metrics.width());
     final int time_adj = (int) (base_time - baseTime());
+System.out.println("Adjustment: " + time_adj);
     if (time_adj <= 0) {
       // Corner case: if the time difference is 0 and the key is the same, it
       // means we've already added this row, possibly parts of it.  This
@@ -120,6 +120,7 @@ final class RowSeq implements DataPoints {
       this.qualifiers = null;  // Throw away our previous work.
       this.values = null;      // free();
       setRow(row);
+System.out.println("Replaced the row");
       return;
     }
 System.out.println("Attempting to merge [" + base_time + "] int row [" + baseTime() + "]");
@@ -128,12 +129,14 @@ System.out.println("Attempting to merge [" + base_time + "] int row [" + baseTim
     int last_delta;
     if (qual.length >= 4 && (qual[qual.length - 4] & Const.MS_BYTE_FLAG) == 
       Const.MS_BYTE_FLAG) {
-      last_delta = (int) ((Bytes.getUnsignedInt(qual, qual.length - 4) & 
-          0x0FFFFFC0) >>> (Const.FLAG_BITS + 2));
+      last_delta = Internal.getOffsetFromQualifier(qual, qual.length - 4);
+//      last_delta = (int) ((Bytes.getUnsignedInt(qual, qual.length - 4) & 
+//          0x0FFFFFC0) >>> (Const.FLAG_BITS + 2));
 System.out.println("Got an ms delta: " + last_delta);
     } else {
-      last_delta = (Bytes.getUnsignedShort(qual, qual.length - 2) 
-          >>> Const.FLAG_BITS);
+      last_delta = Internal.getOffsetFromQualifier(qual, qual.length - 2);
+//      last_delta = (Bytes.getUnsignedShort(qual, qual.length - 2) 
+//          >>> Const.FLAG_BITS);
 System.out.println("Got a second delta: " + last_delta);
     }
 
@@ -339,7 +342,7 @@ System.out.println("Adjusted to: " + time_delta);
 //            >>> Const.FLAG_BITS;
 //          return (baseTime() + seconds) * 1000;
 //        }
-        return DateTime.getTimestampFromQualifier(qualifiers, baseTime(), idx);
+        return Internal.getTimestampFromQualifier(qualifiers, baseTime(), idx);
       }
       if ((qualifiers[idx] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
         idx += 2;

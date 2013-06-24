@@ -356,9 +356,4 @@ public final class TestDateTime {
   public void setDefaultTimezoneNull() {
     DateTime.setDefaultTimezone(null);
   }
-
-  @Test
-  public void getLengthFromQualifier() {
-    assertEquals(8, DateTime.getLengthFromQualifier(new byte[] { 0, 7 }));
-  }
 }

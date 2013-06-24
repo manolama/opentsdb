@@ -174,7 +174,7 @@ final class Fsck {
 //            final short qualifier = Bytes.getShort(qual);
 //            final short delta = (short) ((qualifier & 0xFFFF) >>> Internal.FLAG_BITS);
 //            final long timestamp = base_time + delta;
-            final long timestamp = DateTime.getTimestampFromQualifier(qual, base_time);
+            final long timestamp = Internal.getTimestampFromQualifier(qual, base_time);
             if (value.length > 8) {
               errors++;
               LOG.error("Value more than 8 byte long with a 2-byte"
@@ -182,7 +182,7 @@ final class Fsck {
             }
             // TODO(tsuna): Don't hardcode 0x8 / 0x3 here.
             if (qual.length == 2 && 
-                DateTime.getFlagsFromQualifier(qual) == (0x8 | 0x3)) {  // float | 4 bytes
+                Internal.getFlagsFromQualifier(qual) == (0x8 | 0x3)) {  // float | 4 bytes
               // The qualifier says the value is on 4 bytes, and the value is
               // on 8 bytes, then the 4 MSBs must be 0s.  Old versions of the
               // code were doing this.  It's kinda sad.  Some versions had a
@@ -225,7 +225,7 @@ final class Fsck {
                 Bytes.setInt(newkey, (int) new_base_time, metric_width);
 //                final short newqual = (short) ((timestamp - new_base_time) << Internal.FLAG_BITS
 //                                               | (qualifier & Internal.FLAGS_MASK));
-                final byte[] newqual = DateTime.buildQualifier(timestamp, DateTime.getFlagsFromQualifier(qual));
+                final byte[] newqual = Internal.buildQualifier(timestamp, Internal.getFlagsFromQualifier(qual));
                 final DeleteOutOfOrder delooo = new DeleteOutOfOrder(kv);
                 if (timestamp < prev.timestamp()) {
                   client.put(new PutRequest(table, newkey, kv.family(),
