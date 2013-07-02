@@ -360,8 +360,7 @@ final class TsdbQuery implements Query {
     if (group_bys == null) {
       // We haven't been asked to find groups, so let's put all the spans
       // together in the same group.
-      final SpanGroup group = new SpanGroup(tsdb,
-                                            getScanStartTime(),
+      final SpanGroup group = new SpanGroup(getScanStartTime(),
                                             getScanEndTime(),
                                             spans.values(),
                                             rate,
@@ -407,7 +406,7 @@ final class TsdbQuery implements Query {
       //LOG.info("Span belongs to group " + Arrays.toString(group) + ": " + Arrays.toString(row));
       SpanGroup thegroup = groups.get(group);
       if (thegroup == null) {
-        thegroup = new SpanGroup(tsdb, getScanStartTime(), getScanEndTime(),
+        thegroup = new SpanGroup(getScanStartTime(), getScanEndTime(),
                                  null, rate, aggregator,
                                  sample_interval, downsampler);
         // Copy the array because we're going to keep `group' and overwrite
