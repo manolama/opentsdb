@@ -21,9 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import net.opentsdb.meta.Annotation;
 
 /**
@@ -49,11 +46,11 @@ import net.opentsdb.meta.Annotation;
  * iterator when using the {@link Span.DownsamplingIterator}.
  */
 final class SpanGroup implements DataPoints {
-  private static final Logger LOG = LoggerFactory.getLogger(SpanGroup.class);
-  /** Start time (UNIX timestamp in seconds) on 32 bits ("unsigned" int). */
+  
+  /** Start time (UNIX timestamp in seconds or ms) on 32 bits ("unsigned" int). */
   private final long start_time;
 
-  /** End time (UNIX timestamp in seconds) on 32 bits ("unsigned" int). */
+  /** End time (UNIX timestamp in seconds or ms) on 32 bits ("unsigned" int). */
   private final long end_time;
 
   /**
@@ -90,12 +87,6 @@ final class SpanGroup implements DataPoints {
   /** Minimum time interval (in seconds) wanted between each data point. */
   private final int sample_interval;
 
-  /** 
-   * Whether or not millisecond support is enabled. This is changes the
-   * definition of "rate"
-   */
-  private final boolean enable_milliseconds;
-  
   /**
    * Ctor.
    * @param tsdb The TSDB we belong to.
@@ -112,13 +103,11 @@ final class SpanGroup implements DataPoints {
    * @param downsampler Aggregation function to use to group data points
    * within an interval.
    */
-  SpanGroup(final TSDB tsdb,
-            final long start_time, final long end_time,
+  SpanGroup(final long start_time, final long end_time,
             final Iterable<Span> spans,
             final boolean rate,
             final Aggregator aggregator,
             final int interval, final Aggregator downsampler) {
-    enable_milliseconds = tsdb.getConfig().enable_milliseconds();
     this.start_time = (start_time & Const.SECOND_MASK) == 0 ? 
         start_time * 1000 : start_time;
     this.end_time = (end_time & Const.SECOND_MASK) == 0 ? 
@@ -148,8 +137,10 @@ final class SpanGroup implements DataPoints {
     }
     
     // normalize timestamps to milliseconds for proper comparison
-    final long start = (start_time & Const.SECOND_MASK) == 0 ? start_time * 1000 : start_time;
-    final long end = (end_time & Const.SECOND_MASK) == 0 ? end_time * 1000 : end_time;
+    final long start = (start_time & Const.SECOND_MASK) == 0 ? 
+        start_time * 1000 : start_time;
+    final long end = (end_time & Const.SECOND_MASK) == 0 ? 
+        end_time * 1000 : end_time;
     long first_dp = span.timestamp(0);
     if ((first_dp & Const.SECOND_MASK) == 0) {
       first_dp *= 1000;
@@ -163,9 +154,6 @@ final class SpanGroup implements DataPoints {
     }
     if (first_dp <= end && last_dp >= start) {
       this.spans.add(span);
-    } else {
-      System.out.println("Span is out of time: fdp [" + first_dp + "] : end [" 
-          + end + "] ldp [" + last_dp + "] st [" + start + "]");
     }
   }
 
@@ -500,14 +488,14 @@ final class SpanGroup implements DataPoints {
           throw new AssertionError("Span #" + i + " is empty! span="
                                    + spans.get(i));
         }
-        LOG.debug("Creating iterator #" + i);
+        //LOG.debug("Creating iterator #" + i);
         if (dp.timestamp() >= start_time) {
-          LOG.debug("First DP in range for #" + i + ": "
-                    + dp.timestamp() + " >= " + start_time);
+          //LOG.debug("First DP in range for #" + i + ": "
+          //          + dp.timestamp() + " >= " + start_time);
           putDataPoint(size + i, dp);
         } else {
-          LOG.debug("No DP in range for #" + i + ": "
-                    + dp.timestamp() + " < " + start_time);
+          //LOG.debug("No DP in range for #" + i + ": "
+          //          + dp.timestamp() + " < " + start_time);
           endReached(i);
           continue;
         }
@@ -526,7 +514,7 @@ final class SpanGroup implements DataPoints {
      * @param i The index in {@link #iterators} of the iterator.
      */
     private void endReached(final int i) {
-      LOG.debug("No more DP for #" + i);
+      //LOG.debug("No more DP for #" + i);
       timestamps[iterators.length + i] = TIME_MASK;
       iterators[i] = null;  // We won't use it anymore, so free() it.
     }
@@ -539,12 +527,12 @@ final class SpanGroup implements DataPoints {
     private void putDataPoint(final int i, final DataPoint dp) {
       timestamps[i] = dp.timestamp();
       if (dp.isInteger()) {
-        LOG.debug("Putting #" + i + " (long) " + dp.longValue()
-                  + " @ time " + dp.timestamp());
+        //LOG.debug("Putting #" + i + " (long) " + dp.longValue()
+        //          + " @ time " + dp.timestamp());
         values[i] = dp.longValue();
       } else {
-        LOG.debug("Putting #" + i + " (double) " + dp.doubleValue()
-                  + " @ time " + dp.timestamp());
+        //LOG.debug("Putting #" + i + " (double) " + dp.doubleValue()
+        //          + " @ time " + dp.timestamp());
         values[i] = Double.doubleToRawLongBits(dp.doubleValue());
         timestamps[i] |= FLAG_FLOAT;
       }
@@ -560,11 +548,11 @@ final class SpanGroup implements DataPoints {
         // As long as any of the iterators has a data point with a timestamp
         // that falls within our interval, we know we have at least one next.
         if ((timestamps[size + i] & TIME_MASK) <= end_time) {
-          LOG.debug("hasNext #" + (size + i));
+          //LOG.debug("hasNext #" + (size + i));
           return true;
         }
       }
-      LOG.debug("No hasNext (return false)");
+      //LOG.debug("No hasNext (return false)");
       return false;
     }
 
@@ -577,7 +565,7 @@ final class SpanGroup implements DataPoints {
       // be multiple Spans that reached their end at once, so check them all.
       for (int i = current; i < size; i++) {
         if (timestamps[i + size] == TIME_MASK) {
-          LOG.debug("Expiring last DP for #" + current);
+          //LOG.debug("Expiring last DP for #" + current);
           timestamps[i] = 0;
         }
       }
@@ -609,7 +597,7 @@ final class SpanGroup implements DataPoints {
       }
       moveToNext(current);
       if (multiple) {
-        LOG.debug("Moving multiple DPs at time " + min_ts);
+        //LOG.debug("Moving multiple DPs at time " + min_ts);
         // We know we saw at least one other data point with the same minimum
         // timestamp after `current', so let's move those ones too.
         for (int i = current + 1; i < size; i++) {
@@ -633,19 +621,19 @@ final class SpanGroup implements DataPoints {
       if (rate) {  // move "current" in "prev".
         timestamps[next + size] = timestamps[i];
         values[next + size] = values[i];
-        LOG.debug("Saving for rate #" + i + " -> #" + (next + size)
-                  + ((timestamps[i] & FLAG_FLOAT) == FLAG_FLOAT
-                     ? " float " + Double.longBitsToDouble(values[i])
-                     : " long " + values[i])
-                  + " @ time " + (timestamps[i] & TIME_MASK));
+       // LOG.debug("Saving for rate #" + i + " -> #" + (next + size)
+       //           + ((timestamps[i] & FLAG_FLOAT) == FLAG_FLOAT
+       //              ? " float " + Double.longBitsToDouble(values[i])
+       //              : " long " + values[i])
+       //           + " @ time " + (timestamps[i] & TIME_MASK));
       }
       timestamps[i] = timestamps[next];
       values[i] = values[next];
-      LOG.debug("Moving #" + next + " -> #" + i
-                + ((timestamps[i] & FLAG_FLOAT) == FLAG_FLOAT
-                   ? " float " + Double.longBitsToDouble(values[i])
-                   : " long " + values[i])
-                + " @ time " + (timestamps[i] & TIME_MASK));
+      //LOG.debug("Moving #" + next + " -> #" + i
+      //          + ((timestamps[i] & FLAG_FLOAT) == FLAG_FLOAT
+      //             ? " float " + Double.longBitsToDouble(values[i])
+      //             : " long " + values[i])
+      //          + " @ time " + (timestamps[i] & TIME_MASK));
       final SeekableView it = iterators[i];
       if (it.hasNext()) {
         putDataPoint(next, it.next());
@@ -703,7 +691,7 @@ final class SpanGroup implements DataPoints {
       if (!isInteger()) {
         pos = -1;
         final double value = aggregator.runDouble(this);
-        LOG.debug("aggregator returned " + value);
+        //LOG.debug("aggregator returned " + value);
         if (value != value || Double.isInfinite(value)) {
           throw new IllegalStateException("Got NaN or Infinity: "
              + value + " in this " + this);
@@ -735,14 +723,14 @@ final class SpanGroup implements DataPoints {
       final int size = iterators.length;
       for (int i = pos + 1; i < size; i++) {
         if (timestamps[i] != 0) {
-          LOG.debug("hasNextValue -> true #" + i);
+          //LOG.debug("hasNextValue -> true #" + i);
           if (update_pos) {
             pos = i;
           }
           return true;
         }
       }
-      LOG.debug("hasNextValue -> false (ran out)");
+      //LOG.debug("hasNextValue -> false (ran out)");
       return false;
     }
 
@@ -766,8 +754,8 @@ final class SpanGroup implements DataPoints {
           return y1;
         }
         final long r = y0 + (x - x0) * (y1 - y0) / (x1 - x0);
-        LOG.debug("Lerping to time " + x + ": " + y0 + " @ " + x0
-                  + " -> " + y1 + " @ " + x1 + " => " + r);
+        //LOG.debug("Lerping to time " + x + ": " + y0 + " @ " + x0
+        //          + " -> " + y1 + " @ " + x1 + " => " + r);
         if ((x1 & 0xFFFFFFFF00000000L) != 0) {
           throw new AssertionError("x1=" + x1 + " in " + this);
         }
@@ -795,19 +783,22 @@ final class SpanGroup implements DataPoints {
           assert x0 > x1: ("Next timestamp (" + x0 + ") is supposed to be "
             + " strictly greater than the previous one (" + x1 + "), but it's"
             + " not.  this=" + this);
-          final double r = (y0 - y1) / ((x0 - x1) / 1000); // back to seconds
-          LOG.debug("Rate for " + y1 + " @ " + x1
-                    + " -> " + y0 + " @ " + x0 + " => " + r);
+          // TODO - for backwards compatability we'll convert the ms to seconds
+          // but in the future we should add a ratems flag that will calculate
+          // the rate as is.
+          final double r = (y0 - y1) / ((x0 - x1) / 1000);
+          //LOG.debug("Rate for " + y1 + " @ " + x1
+          //          + " -> " + y0 + " @ " + x0 + " => " + r);
           return r;
         }
         if (current == pos) {
-          LOG.debug("Exact match, no lerp needed");
+          //LOG.debug("Exact match, no lerp needed");
           return y0;
         }
         final long x = timestamps[current] & TIME_MASK;
         final long x0 = timestamps[pos] & TIME_MASK;
         if (x == x0) {
-          LOG.debug("No lerp needed x == x0 (" + x + " == "+x0+") => " + y0);
+          //LOG.debug("No lerp needed x == x0 (" + x + " == "+x0+") => " + y0);
           return y0;
         }
         final int next = pos + iterators.length;
@@ -816,12 +807,12 @@ final class SpanGroup implements DataPoints {
                            : values[next]);
         final long x1 = timestamps[next] & TIME_MASK;
         if (x == x1) {
-          LOG.debug("No lerp needed x == x1 (" + x + " == "+x1+") => " + y1);
+          //LOG.debug("No lerp needed x == x1 (" + x + " == "+x1+") => " + y1);
           return y1;
         }
         final double r = y0 + (x - x0) * (y1 - y0) / (x1 - x0);
-        LOG.debug("Lerping to time " + x + ": " + y0 + " @ " + x0
-                  + " -> " + y1 + " @ " + x1 + " => " + r);
+        //LOG.debug("Lerping to time " + x + ": " + y0 + " @ " + x0
+        //          + " -> " + y1 + " @ " + x1 + " => " + r);
         if ((x1 & 0xFFFFFFFF00000000L) != 0) {
           throw new AssertionError("x1=" + x1 + " in " + this);
         }
