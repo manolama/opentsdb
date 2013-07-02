@@ -22,9 +22,6 @@ import java.util.NoSuchElementException;
 
 import net.opentsdb.meta.Annotation;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.hbase.async.Bytes;
 import org.hbase.async.KeyValue;
 
@@ -35,8 +32,6 @@ import org.hbase.async.KeyValue;
  * HBase rows for a given time series.
  */
 final class RowSeq implements DataPoints {
-
-  private static final Logger LOG = LoggerFactory.getLogger(RowSeq.class);
 
   /** The {@link TSDB} instance we belong to. */
   private final TSDB tsdb;
@@ -427,6 +422,7 @@ final class RowSeq implements DataPoints {
   /**
    * Used to compare two RowSeq objects when sorting a {@link Span}. Compares
    * on the {@code RowSeq#baseTime()}
+   * @since 2.0
    */
   public static final class RowSeqComparator implements Comparator<RowSeq> {
     public int compare(final RowSeq a, final RowSeq b) {
