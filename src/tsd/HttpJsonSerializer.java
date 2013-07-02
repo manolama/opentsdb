@@ -538,14 +538,21 @@ class HttpJsonSerializer extends HttpSerializer {
           // default is to write a map, otherwise write arrays
           if (as_arrays) {
             json.writeStartArray();
+            long last_timestamp = 0;
+            long timestamp = 0;
             for (final DataPoint dp : dps) {
               if (dp.timestamp() < data_query.startTime() || 
                   dp.timestamp() > data_query.endTime()) {
                 continue;
               }
+              timestamp = milliseconds ? dp.timestamp() : 
+                dp.timestamp() / 1000;
+              if (timestamp <= last_timestamp) {
+                continue;
+              }
+              last_timestamp = timestamp;
               json.writeStartArray();
-              json.writeNumber(milliseconds ? dp.timestamp() : 
-                  dp.timestamp() / 1000);
+              json.writeNumber(timestamp);
               json.writeNumber(
                   dp.isInteger() ? dp.longValue() : dp.doubleValue());
               json.writeEndArray();
@@ -553,13 +560,20 @@ class HttpJsonSerializer extends HttpSerializer {
             json.writeEndArray();
           } else {
             json.writeStartObject();
+            long last_timestamp = 0;
+            long timestamp = 0;
             for (final DataPoint dp : dps) {
               if (dp.timestamp() < (data_query.startTime()) || 
                   dp.timestamp() > (data_query.endTime())) {
                 continue;
               }
-              json.writeNumberField(Long.toString(
-                  milliseconds ? dp.timestamp() : dp.timestamp() / 1000), 
+              timestamp = milliseconds ? dp.timestamp() : 
+                dp.timestamp() / 1000;
+              if (timestamp <= last_timestamp) {
+                continue;
+              }
+              last_timestamp = timestamp;
+              json.writeNumberField(Long.toString(timestamp), 
                   dp.isInteger() ? dp.longValue() : dp.doubleValue());
             }
             json.writeEndObject();
