@@ -264,7 +264,7 @@ public final class Internal {
   /**
    * Parses the flag bits from the qualifier
    * @param qualifier The qualifier to parse
-   * @param offset
+   * @param offset An offset within the byte array
    * @return A short representing the last 4 bits of the qualifier
    * @throws IllegalArgument if the qualifier is null or the offset falls 
    * outside of the qualifier array
@@ -273,13 +273,40 @@ public final class Internal {
   public static short getFlagsFromQualifier(final byte[] qualifier, 
       final int offset) {
     validateQualifier(qualifier, offset);
-    if ((qualifier[offset + 0] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+    if ((qualifier[offset] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
       return (short) (qualifier[offset + 3] & Internal.FLAGS_MASK); 
     } else {
       return (short) (qualifier[offset + 1] & Internal.FLAGS_MASK);
     }
   }
 
+  /**
+   * Extracts the 2 or 4 byte qualifier from a compacted byte array
+   * @param qualifier The qualifier to parse
+   * @param offset An offset within the byte array
+   * @return A byte array with only the requested qualifier
+   * @throws IllegalArgument if the qualifier is null or the offset falls 
+   * outside of the qualifier array
+   * @since 2.0
+   */
+  public static byte[] extractQualifier(final byte[] qualifier, 
+      final int offset) {
+    validateQualifier(qualifier, offset);
+    if ((qualifier[offset] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+      final byte[] qual = new byte[4];
+      qual[0] = qualifier[offset];
+      qual[1] = qualifier[offset + 1];
+      qual[2] = qualifier[offset + 2];
+      qual[3] = qualifier[offset + 3];
+      return qual;
+    } else {
+      final byte[] qual = new byte[2];
+      qual[0] = qualifier[offset];
+      qual[1] = qualifier[offset + 1];
+      return qual;
+    }
+  }
+  
   /**
    * Returns a 2 or 4 byte qualifier based on the timestamp and the flags. If
    * the timestamp is in seconds, this returns a 2 byte qualifier. If it's in

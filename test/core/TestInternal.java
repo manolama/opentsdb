@@ -245,4 +245,20 @@ public final class TestInternal {
         (short) ( 3 | Const.FLAG_FLOAT));
     assertArrayEquals(new byte[] {(byte) 0xF0, 0x00, 0x02, 0x0B }, q);
   }
+
+  @Test
+  public void extractQualifierSeconds() {
+    final byte[] qual = { 0x00, 0x37, (byte) 0xF0, 0x00, 0x02, 0x07, 0x00, 
+        0x47 };
+    assertArrayEquals(new byte[] { 0, 0x47 }, 
+        Internal.extractQualifier(qual, 6));
+  }
+  
+  @Test
+  public void extractQualifierMilliSeconds() {
+    final byte[] qual = { 0x00, 0x37, (byte) 0xF0, 0x00, 0x02, 0x07, 0x00, 
+        0x47 };
+    assertArrayEquals(new byte[] { (byte) 0xF0, 0x00, 0x02, 0x07 }, 
+        Internal.extractQualifier(qual, 2));
+  }
 }
