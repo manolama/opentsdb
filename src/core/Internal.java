@@ -106,6 +106,7 @@ public final class Internal {
     return RowSeq.extractFloatingPointValue(values, value_idx, flags);
   }
 
+  /** @see TSDB#metrics_width() */
   public static short metricWidth(final TSDB tsdb) {
     return tsdb.metrics.width();
   }
@@ -117,14 +118,13 @@ public final class Internal {
     return CompactionQueue.complexCompact(kvs, kv.qualifier().length / 2, false);
   }
 
-
-  // TODO - unit tests for all of thse
   /**
    * Returns the offset in milliseconds from the row base timestamp from a data
    * point qualifier
    * @param qualifier The qualifier to parse
    * @return The offset in milliseconds from the base time
-   * @throws IllegalArgument if the qualifier is null
+   * @throws IllegalArgument if the qualifier is null or empty
+   * @since 2.0
    */
   public static int getOffsetFromQualifier(final byte[] qualifier) {
     return getOffsetFromQualifier(qualifier, 0);
@@ -138,17 +138,11 @@ public final class Internal {
    * @return The offset in milliseconds from the base time
    * @throws IllegalArgument if the qualifier is null or the offset falls 
    * outside of the qualifier array
+   * @since 2.0
    */
   public static int getOffsetFromQualifier(final byte[] qualifier, 
       final int offset) {
-    if (qualifier == null || qualifier.length < 0) {
-      throw new IllegalArgumentException("Null or empty qualifier");
-    }
-    if (offset >= qualifier.length) {
-      throw new IllegalArgumentException("Offset of [" + offset + 
-          "] is greater than the qualifier length [" + qualifier.length + "]");
-    }
-    
+    validateQualifier(qualifier, offset);
     if ((qualifier[offset + 0] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
       return (int)(Bytes.getUnsignedInt(qualifier, offset) & 0x0FFFFFC0) 
         >>> (Const.FLAG_BITS + 2);        
@@ -159,22 +153,31 @@ public final class Internal {
     }
   }
   
-  public static short getLengthFromQualifier(final byte[] qualifier) {
-    return getLengthFromQualifier(qualifier, 0);
+  /**
+   * Returns the length of the value, in bytes, parsed from the qualifier
+   * @param qualifier The qualifier to parse
+   * @return The length of the value in bytes, from 1 to 8.
+   * @throws IllegalArgument if the qualifier is null or empty
+   * @since 2.0
+   */
+  public static short getValueLengthFromQualifier(final byte[] qualifier) {
+    return getValueLengthFromQualifier(qualifier, 0);
   }
   
-  public static short getLengthFromQualifier(final byte[] qualifier, 
+  /**
+   * Returns the length of the value, in bytes, parsed from the qualifier
+   * @param qualifier The qualifier to parse
+   * @param offset An offset within the byte array
+   * @return The length of the value in bytes, from 1 to 8.
+   * @throws IllegalArgument if the qualifier is null or the offset falls 
+   * outside of the qualifier array
+   * @since 2.0
+   */
+  public static short getValueLengthFromQualifier(final byte[] qualifier, 
       final int offset) {
-    if (qualifier == null || qualifier.length < 0) {
-      throw new IllegalArgumentException("Null or empty qualifier");
-    }
-    if (offset >= qualifier.length) {
-      throw new IllegalArgumentException("Offset of [" + offset + 
-          "] is greater than the qualifier length [" + qualifier.length + "]");
-    }
-    
+    validateQualifier(qualifier, offset);    
     short length;
-    if ((qualifier[offset + 0] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+    if ((qualifier[offset] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
       length = (short) (qualifier[offset + 3] & Internal.LENGTH_MASK); 
     } else {
       length = (short) (qualifier[offset + 1] & Internal.LENGTH_MASK);
@@ -183,11 +186,49 @@ public final class Internal {
   }
 
   /**
+   * Returns the length, in bytes, of the qualifier: 2 or 4 bytes
+   * @param qualifier The qualifier to parse
+   * @return The length of the qualifier in bytes
+   * @throws IllegalArgument if the qualifier is null or empty
+   * @since 2.0
+   */
+  public static short getQualifierLength(final byte[] qualifier) {
+    return getQualifierLength(qualifier, 0);
+  }
+  
+  /**
+   * Returns the length, in bytes, of the qualifier: 2 or 4 bytes
+   * @param qualifier The qualifier to parse
+   * @param offset An offset within the byte array
+   * @return The length of the qualifier in bytes
+   * @throws IllegalArgument if the qualifier is null or the offset falls 
+   * outside of the qualifier array
+   * @since 2.0
+   */
+  public static short getQualifierLength(final byte[] qualifier, 
+      final int offset) {
+    validateQualifier(qualifier, offset);    
+    if ((qualifier[offset] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+      if ((offset + 4) > qualifier.length) {
+        throw new IllegalArgumentException(
+            "Detected a millisecond flag but qualifier length is too short");
+      }
+      return 4;
+    } else {
+      if ((offset + 2) > qualifier.length) {
+        throw new IllegalArgumentException("Qualifier length is too short");
+      }
+      return 2;
+    }
+  }
+  
+  /**
    * Returns the absolute timestamp of a data point qualifier in milliseconds
    * @param qualifier The qualifier to parse
    * @param base_time The base time, in seconds, from the row key
    * @return The absolute timestamp in milliseconds
-   * @throws IllegalArgument if the qualifier is null
+   * @throws IllegalArgument if the qualifier is null or empty
+   * @since 2.0
    */
   public static long getTimestampFromQualifier(final byte[] qualifier, 
       final long base_time) {
@@ -202,25 +243,36 @@ public final class Internal {
    * @return The absolute timestamp in milliseconds
    * @throws IllegalArgument if the qualifier is null or the offset falls 
    * outside of the qualifier array
+   * @since 2.0
    */
   public static long getTimestampFromQualifier(final byte[] qualifier, 
       final long base_time, final int offset) {
     return (base_time * 1000) + getOffsetFromQualifier(qualifier, offset);
   }
 
+  /**
+   * Parses the flag bits from the qualifier
+   * @param qualifier The qualifier to parse
+   * @return A short representing the last 4 bits of the qualifier
+   * @throws IllegalArgument if the qualifier is null or empty
+   * @since 2.0
+   */
   public static short getFlagsFromQualifier(final byte[] qualifier) {
     return getFlagsFromQualifier(qualifier, 0);
   }
   
-  public static short getFlagsFromQualifier(final byte[] qualifier, final int offset) {
-    if (qualifier == null || qualifier.length < 0) {
-      throw new IllegalArgumentException("Null or empty qualifier");
-    }
-    if (offset >= qualifier.length) {
-      throw new IllegalArgumentException("Offset of [" + offset + 
-          "] is greater than the qualifier length [" + qualifier.length + "]");
-    }
-    
+  /**
+   * Parses the flag bits from the qualifier
+   * @param qualifier The qualifier to parse
+   * @param offset
+   * @return A short representing the last 4 bits of the qualifier
+   * @throws IllegalArgument if the qualifier is null or the offset falls 
+   * outside of the qualifier array
+   * @since 2.0
+   */
+  public static short getFlagsFromQualifier(final byte[] qualifier, 
+      final int offset) {
+    validateQualifier(qualifier, offset);
     if ((qualifier[offset + 0] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
       return (short) (qualifier[offset + 3] & Internal.FLAGS_MASK); 
     } else {
@@ -228,12 +280,23 @@ public final class Internal {
     }
   }
 
+  /**
+   * Returns a 2 or 4 byte qualifier based on the timestamp and the flags. If
+   * the timestamp is in seconds, this returns a 2 byte qualifier. If it's in
+   * milliseconds, returns a 4 byte qualifier 
+   * @param timestamp A Unix epoch timestamp in seconds or milliseconds
+   * @param flags Flags to set on the qualifier (length &| float)
+   * @return A 2 or 4 byte qualifier for storage in column or compacted column
+   * @since 2.0
+   */
   public static byte[] buildQualifier(final long timestamp, final short flags) {
     final long base_time;
     if ((timestamp & Const.SECOND_MASK) != 0) {
       // drop the ms timestamp to seconds to calculate the base timestamp
-      base_time = ((timestamp / 1000) - ((timestamp / 1000) % Const.MAX_TIMESPAN));
-      final int qual = (int) (((timestamp - (base_time * 1000) << (Const.FLAG_BITS + 2)) | flags) | Const.MS_FLAG);
+      base_time = ((timestamp / 1000) - ((timestamp / 1000) 
+          % Const.MAX_TIMESPAN));
+      final int qual = (int) (((timestamp - (base_time * 1000) 
+          << (Const.FLAG_BITS + 2)) | flags) | Const.MS_FLAG);
       return Bytes.fromInt(qual);
     } else {
       base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
@@ -243,4 +306,23 @@ public final class Internal {
     }
   }
 
+  /**
+   * Checks the qualifier to verify that it has data and that the offset is
+   * within bounds
+   * @param qualifier The qualifier to validate
+   * @param offset An optional offset
+   * @throws IllegalArgument if the qualifier is null or the offset falls 
+   * outside of the qualifier array
+   * @since 2.0
+   */
+  private static void validateQualifier(final byte[] qualifier, 
+      final int offset) {
+    if (qualifier == null || qualifier.length < 0) {
+      throw new IllegalArgumentException("Null or empty qualifier");
+    }
+    if (offset < 0 || offset >= qualifier.length - 1) {
+      throw new IllegalArgumentException("Offset of [" + offset + 
+          "] is greater than the qualifier length [" + qualifier.length + "]");
+    }
+  }
 }

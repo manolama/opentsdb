@@ -130,6 +130,7 @@ pkgdata_DATA = $(tsdb_DEPS) $(jar)
 test_SRC := \
 	test/core/TestAggregators.java \
 	test/core/TestCompactionQueue.java	\
+	test/core/TestInternal.java	\
 	test/core/TestRowSeq.java	\
 	test/core/TestSpan.java	\
 	test/core/TestTags.java	\
