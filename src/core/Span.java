@@ -20,10 +20,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 
 import net.opentsdb.meta.Annotation;
-import net.opentsdb.uid.UniqueId;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.hbase.async.Bytes;
 import org.hbase.async.KeyValue;
@@ -34,8 +30,6 @@ import org.hbase.async.KeyValue;
  * This class stores a continuous sequence of {@link RowSeq}s in memory.
  */
 final class Span implements DataPoints {
-
-  private static final Logger LOG = LoggerFactory.getLogger(Span.class);
 
   /** The {@link TSDB} instance we belong to. */
   private final TSDB tsdb;
@@ -88,12 +82,13 @@ final class Span implements DataPoints {
   }
   
   /**
-   * Adds an HBase row to this span, using a row from a scanner.
-   * @param row The compacted HBase row to add to this span.
+   * Adds a compacted row to the span, merging with an existing RowSeq or 
+   * creating a new one if necessary. 
+   * <b>Warning: </b> Currently this method will sort the list of RowSeqs every
+   * time a new row is added.
+   * @param row The compacted row to add to this span.
    * @throws IllegalArgumentException if the argument and this span are for
    * two different time series.
-   * @throws IllegalArgumentException if the argument represents a row for
-   * data points that are older than those already added to this span.
    */
   void addRow(final KeyValue row) {
     long last_ts = 0;
@@ -119,30 +114,29 @@ final class Span implements DataPoints {
             + " and metric_width=" + metric_width);
       }
       last_ts = last.timestamp(last.size() - 1);  // O(n)
-System.out.println("Last TS: " + last_ts);
-      // Optimization: check whether we can put all the data points of `row'
-      // into the last RowSeq object we created, instead of making a new
-      // RowSeq.  If the time delta between the timestamp encoded in the
-      // row key of the last RowSeq we created and the timestamp of the
-      // last data point in `row' is small enough, we can merge `row' into
-      // the last RowSeq.
-//      if (RowSeq.canTimeDeltaFit(lastTimestampInRow(metric_width, row)
-//                                 - last.baseTime())) {
-//        last.addRow(row);
-//        return;
-//      }
-// TODO Cwl - disabled for now since it's really messy w ms/s mixed
     }
 
     final RowSeq rowseq = new RowSeq(tsdb);
     rowseq.setRow(row);
     if (last_ts >= rowseq.timestamp(0)) {
-      LOG.error("New RowSeq added out of order to this Span! Last = " +
-                rows.get(rows.size() - 1) + ", new = " + rowseq);
-      return;
+      // scan to see if we need to merge into an existing row
+      for (final RowSeq rs : rows) {
+        if (Bytes.memcmp(rs.key, row.key()) == 0) {
+          rs.addRow(row);
+          // already sorted
+          return;
+        }
+      }
     }
-System.out.println("Adding row seq: " + UniqueId.uidToString(row.key()));   
+    
     rows.add(rowseq);
+    if (rows.size() > 1) {
+      // TODO - it would be better to do this once but short of adding a .sort()
+      // method that must be called by the query completer, I'd rather sort on
+      // each row add than check a flag on each iterator call. addRow ~ dozens
+      // of calls vs iterator ~ hundreds to thousands of calls
+      Collections.sort(rows, new RowSeq.RowSeqComparator());
+    }
   }
 
   /**
@@ -406,7 +400,7 @@ System.out.println("Adding row seq: " + UniqueId.uidToString(row.key()));
       final int saved_state = current_row.saveState();
       // Since we know hasNext() returned true, we have at least 1 point.
       moveToNext();
-      time = current_row.timestamp() + (interval * 1000);  // end of this interval.
+      time = current_row.timestamp() + (interval * 1000);  // end of interval
       boolean integer = true;
       int npoints = 0;
       do {

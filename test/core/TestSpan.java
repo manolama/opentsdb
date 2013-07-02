@@ -155,7 +155,7 @@ public final class TestSpan {
         MockBase.concatByteArrays(val1, val2, ZERO)));
   }
   
-  @Test// (expected = IllegalDataException.class)
+  @Test
   public void addRowOutOfOrder() {
     final byte[] qual1 = { 0x00, 0x07 };
     final byte[] val1 = Bytes.fromLong(4L);
@@ -168,11 +168,18 @@ public final class TestSpan {
         MockBase.concatByteArrays(val1, val2, ZERO)));
     span.addRow(new KeyValue(HOUR1, FAMILY, qual12, 
         MockBase.concatByteArrays(val1, val2, ZERO)));
-    assertEquals(2, span.size());
+    assertEquals(4, span.size());
+    
+    assertEquals(1356998400000L, span.timestamp(0));
+    assertEquals(4, span.longValue(0));
+    assertEquals(1356998402000L, span.timestamp(1));
+    assertEquals(5, span.longValue(1));
+    assertEquals(1357002000000L, span.timestamp(2));
+    assertEquals(4, span.longValue(2));
+    assertEquals(1357002002000L, span.timestamp(3));
+    assertEquals(5, span.longValue(3));
   }
-  
-  // TODO - test canTimeDeltaFit
-  
+
   @Test
   public void timestampNormalized() throws Exception {
     final byte[] qual1 = { 0x00, 0x07 };
