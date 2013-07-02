@@ -14,13 +14,13 @@ package net.opentsdb.core;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
 import net.opentsdb.meta.Annotation;
-import net.opentsdb.uid.UniqueId;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,16 +81,15 @@ final class RowSeq implements DataPoints {
   }
 
   /**
-   * Merges another HBase row into this one.
-   * When two continuous rows in HBase have data points that are close enough
-   * together that they could be stored into the same row, it makes sense to
-   * merge them into the same {@link RowSeq} instance in memory in order to save
-   * RAM.
+   * Merges data points for the same HBase row into the local object.
+   * Since async queries can return data in any order, and a row may have more
+   * than scanner.max_kvs data points, we could be called on to merge two
+   * scanner results for the same row. This may ONLY be called after setRow()
+   * has initiated the rowseq.
    * @param row The compacted HBase row to merge into this instance.
    * @throws IllegalStateException if {@link #setRow} wasn't called first.
    * @throws IllegalArgumentException if the data points in the argument
-   * aren't close enough to those in this instance time-wise to be all merged
-   * together.
+   * do not belong to the same row as this RowSeq
    */
   void addRow(final KeyValue row) {
     if (this.key == null) {
@@ -98,129 +97,126 @@ final class RowSeq implements DataPoints {
     }
 
     final byte[] key = row.key();
-    final long base_time = Bytes.getUnsignedInt(key, tsdb.metrics.width());
-    final int time_adj = (int) (base_time - baseTime());
-System.out.println("Adjustment: " + time_adj);
-    if (time_adj <= 0) {
-      // Corner case: if the time difference is 0 and the key is the same, it
-      // means we've already added this row, possibly parts of it.  This
-      // doesn't normally happen but can happen if the scanner we're using
-      // timed out (its lease expired for whatever reason), in which case
-      // asynchbase will transparently re-open the scanner and start scanning
-      // from the row key we were on at the time the timeout happened.  In
-      // that case, the easiest thing to do is to discard everything we know
-      // about this row and start over, since we're going to get the full row
-      // again anyway.
-      if (time_adj != 0 || !Bytes.equals(this.key, key)) {
-        throw new IllegalDataException("Attempt to add a row with a base_time="
-          + base_time + " <= baseTime()=" + baseTime() + "; Row added=" + row
-          + ", this=" + this);
-      }
-      this.key = null;  // To keep setRow happy.
-      this.qualifiers = null;  // Throw away our previous work.
-      this.values = null;      // free();
-      setRow(row);
-System.out.println("Replaced the row");
-      return;
+    if (!Bytes.equals(this.key, key)) {
+      throw new IllegalDataException("Attempt to add a different row="
+          + row + ", this=" + this);
     }
-System.out.println("Attempting to merge [" + base_time + "] int row [" + baseTime() + "]");
-    final byte[] qual = row.qualifier();
-    final int len = qual.length;
-    int last_delta;
-    if (qual.length >= 4 && (qual[qual.length - 4] & Const.MS_BYTE_FLAG) == 
-      Const.MS_BYTE_FLAG) {
-      last_delta = Internal.getOffsetFromQualifier(qual, qual.length - 4);
-//      last_delta = (int) ((Bytes.getUnsignedInt(qual, qual.length - 4) & 
-//          0x0FFFFFC0) >>> (Const.FLAG_BITS + 2));
-System.out.println("Got an ms delta: " + last_delta);
+
+    final byte[] remote_qual = row.qualifier();
+    final byte[] remote_val = row.value();
+    final byte[] merged_qualifiers = new byte[qualifiers.length + remote_qual.length];
+    final byte[] merged_values = new byte[values.length + row.value().length]; 
+
+    int remote_q_index = 0;
+    int local_q_index = 0;
+    int merged_q_index = 0;
+    
+    int remote_v_index = 0;
+    int local_v_index = 0;
+    int merged_v_index = 0;
+    short v_length;
+    short q_length;
+    final CompactionQueue.MixedComparator cmp = 
+      new CompactionQueue.MixedComparator();
+    while (remote_q_index < remote_qual.length || 
+        local_q_index < qualifiers.length) {
+      // if the remote q has finished, we just need to handle left over locals
+      if (remote_q_index >= remote_qual.length) {
+        v_length = Internal.getValueLengthFromQualifier(qualifiers, 
+            local_q_index);
+        System.arraycopy(values, local_v_index, merged_values, 
+            merged_v_index, v_length);
+        local_v_index += v_length;
+        merged_v_index += v_length;
+        
+        q_length = Internal.getQualifierLength(qualifiers, 
+            local_q_index);
+        System.arraycopy(qualifiers, local_q_index, merged_qualifiers, 
+            merged_q_index, q_length);
+        local_q_index += q_length;
+        merged_q_index += q_length;
+        
+        continue;
+      }
+      
+      // if the local q has finished, we need to handle the left over remotes
+      if (local_q_index >= qualifiers.length) {
+        v_length = Internal.getValueLengthFromQualifier(remote_qual, 
+            remote_q_index);
+        System.arraycopy(remote_val, remote_v_index, merged_values, 
+            merged_v_index, v_length);
+        remote_v_index += v_length;
+        merged_v_index += v_length;
+        
+        q_length = Internal.getQualifierLength(remote_qual, 
+            remote_q_index);
+        System.arraycopy(remote_qual, remote_q_index, merged_qualifiers, 
+            merged_q_index, q_length);
+        remote_q_index += q_length;
+        merged_q_index += q_length;
+        
+        continue;
+      }
+      
+      // for dupes, we just need to skip and continue
+      final int sort = cmp.compare(remote_qual, remote_q_index, 
+          qualifiers, local_q_index);
+      if (sort == 0) {
+        //LOG.debug("Discarding duplicate timestamp: " + 
+        //    Internal.getOffsetFromQualifier(remote_qual, remote_q_index));
+        v_length = Internal.getValueLengthFromQualifier(remote_qual, 
+            remote_q_index);
+        remote_v_index += v_length;
+        q_length = Internal.getQualifierLength(remote_qual, 
+            remote_q_index);
+        remote_q_index += q_length;
+        continue;
+      }
+      
+      if (sort < 0) {
+        v_length = Internal.getValueLengthFromQualifier(remote_qual, 
+            remote_q_index);
+        System.arraycopy(remote_val, remote_v_index, merged_values, 
+            merged_v_index, v_length);
+        remote_v_index += v_length;
+        merged_v_index += v_length;
+        
+        q_length = Internal.getQualifierLength(remote_qual, 
+            remote_q_index);
+        System.arraycopy(remote_qual, remote_q_index, merged_qualifiers, 
+            merged_q_index, q_length);
+        remote_q_index += q_length;
+        merged_q_index += q_length;
+      } else {
+        v_length = Internal.getValueLengthFromQualifier(qualifiers, 
+            local_q_index);
+        System.arraycopy(values, local_v_index, merged_values, 
+            merged_v_index, v_length);
+        local_v_index += v_length;
+        merged_v_index += v_length;
+        
+        q_length = Internal.getQualifierLength(qualifiers, 
+            local_q_index);
+        System.arraycopy(qualifiers, local_q_index, merged_qualifiers, 
+            merged_q_index, q_length);
+        local_q_index += q_length;
+        merged_q_index += q_length;
+      }
+    }
+    
+    // we may have skipped some columns if we were given duplicates. Since we
+    // had allocated enough bytes to hold the incoming row, we need to shrink
+    // the final results
+    if (merged_q_index == merged_qualifiers.length) {
+      qualifiers = merged_qualifiers;
     } else {
-      last_delta = Internal.getOffsetFromQualifier(qual, qual.length - 2);
-//      last_delta = (Bytes.getUnsignedShort(qual, qual.length - 2) 
-//          >>> Const.FLAG_BITS);
-System.out.println("Got a second delta: " + last_delta);
+      qualifiers = Arrays.copyOfRange(merged_qualifiers, 0, merged_q_index);
     }
-
-    final int old_qual_len = qualifiers.length;
-    final byte[] newquals = new byte[old_qual_len + len];
-    System.arraycopy(qualifiers, 0, newquals, 0, old_qual_len);
-    // Adjust the delta in all the qualifiers.
-    for (int i = 0; i < len; i += 2) {
-      int time_delta;
-System.out.println("Adjustment: " + time_adj);
-      if ((qual[i]& Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
-        time_delta =  ((time_adj * 1000) + (int)(Bytes.getUnsignedInt(qual, qual.length - 4) & 
-            0x0FFFFFC0) >>> (Const.FLAG_BITS + 2));
-      } else {
-        time_delta = time_adj + (Bytes.getUnsignedShort(qual, qual.length - 2) 
-            >>> Const.FLAG_BITS);
-      }
-System.out.println("Adjusted to: " + time_delta);
-      if (!canTimeDeltaFit(time_delta)) {
-         throw new IllegalDataException("time_delta at index " + i
-           + " is too large: " + time_delta
-           + " (qualifier=" + time_delta
-           + " baseTime()=" + baseTime() + ", base_time=" + base_time
-           + ", time_adj=" + time_adj
-           + ") for " + row + " to be added to " + this);
-      }
-      if (last_delta >= time_delta) {
-        LOG.error("new timestamp = " + (baseTime() + time_delta)
-                  + " (index=" + i
-                  + ") is < previous=" + (baseTime() + last_delta)
-                  + " in addRow with row=" + row + " in this=" + this);
-        return;  // Ignore this row, it came out of order.
-      }
-
-      // have to increment the index 'after' we have finished with it
-      if ((qual[i]& Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
-        time_delta = (time_delta << Const.FLAG_BITS + 2 );
-        time_delta = time_delta | 0xF0000000;
-        Bytes.setInt(newquals, time_delta, old_qual_len + i);
-        System.out.println("MS: " + UniqueId.uidToString(Bytes.fromInt((int)time_delta)));
-        i += 2;
-      } else {
-        time_delta = (short) ((time_delta << Const.FLAG_BITS)
-              | (time_delta & Const.FLAGS_MASK));
-        Bytes.setShort(newquals, (short) time_delta, old_qual_len + i);
-        System.out.println("Short: " + UniqueId.uidToString(Bytes.fromShort((short)time_delta)));
-      }
-    }
-    this.qualifiers = newquals;
-
-    final byte[] val = row.value();
-    // If both the current `values' and the new `val' are single values, then
-    // we neither of them has a meta data byte so we need to add one to be
-    // consistent with what we expect from compacted values.  Otherwise, we
-    // need to subtract 1 from the value length.
-    final int old_val_len = values.length - (old_qual_len == 2 ? 0 : 1);
-    final byte[] newvals = new byte[old_val_len + val.length
-      // Only add a meta-data byte if the new values don't have it.
-      + (len == 2 ? 1 : 0)];
-    System.arraycopy(values, 0, newvals, 0, old_val_len);
-    System.arraycopy(val, 0, newvals, old_val_len, val.length);
-    assert newvals[newvals.length - 1] == 0:
-      "Incorrect meta data byte after merge of " + row
-      + " resulting qualifiers=" + Arrays.toString(qualifiers)
-      + ", values=" + Arrays.toString(newvals)
-      + ", old values=" + Arrays.toString(values);
-    this.values = newvals;
-  }
-
-  /**
-   * Checks whether a time delta is short enough for a {@link RowSeq}.
-   * So with a qualifier offset encoded on 2 bytes, with 4 bits reserved for the
-   * flag, we can have a total of 4095 data points in the row.
-   * But w ms support, we can have 3599999 data points
-   * @param time_delta A time delta in seconds.
-   * @return {@code true} if the delta is small enough that two data points
-   * separated by the time delta can fit together in the same {@link RowSeq},
-   * {@code false} if they're distant enough in time that they must go in
-   * different {@link RowSeq} instances.
-   */
-  static boolean canTimeDeltaFit(final long time_delta) {
-    //return time_delta < 1 << (Short.SIZE - Const.FLAG_BITS);
-    //return time_delta < 1 << (Integer.SIZE - Const.FLAG_BITS - 6);
-    return time_delta <= 3599999;
+    
+    // we need to leave a meta byte on the end of the values array, so no
+    // matter the index value, just increment it by one. The merged_values will
+    // have two meta bytes, we only want one.
+    values = Arrays.copyOfRange(merged_values, 0, merged_v_index + 1);
   }
 
   /**
@@ -428,6 +424,19 @@ System.out.println("Adjusted to: " + time_delta);
     return buf.toString();
   }
 
+  /**
+   * Used to compare two RowSeq objects when sorting a {@link Span}. Compares
+   * on the {@code RowSeq#baseTime()}
+   */
+  public static final class RowSeqComparator implements Comparator<RowSeq> {
+    public int compare(final RowSeq a, final RowSeq b) {
+      if (a.baseTime() == b.baseTime()) {
+        return 0;
+      }
+      return a.baseTime() < b.baseTime() ? -1 : 1;
+    }
+  }
+  
   /** Iterator for {@link RowSeq}s.  */
   final class Iterator implements SeekableView, DataPoint {
 

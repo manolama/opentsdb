@@ -93,7 +93,7 @@ public final class TestRowSeq {
   }
   
   @Test
-  public void addRowReplace() throws Exception {
+  public void addRowMergeLater() throws Exception {
     // this happens if the same row key is used for the addRow call
     final byte[] qual1 = { 0x00, 0x07 };
     final byte[] val1 = Bytes.fromLong(4L);
@@ -111,12 +111,150 @@ public final class TestRowSeq {
     final byte[] qual34 = MockBase.concatByteArrays(qual3, qual4);
     rs.addRow(makekv(qual34, MockBase.concatByteArrays(val3, val4, ZERO)));
     
-    assertEquals(2, rs.size());
-    assertEquals(1356998403000L, rs.timestamp(0));
-    assertEquals(1356998404000L, rs.timestamp(1));
+    assertEquals(4, rs.size());
+    assertEquals(1356998400000L, rs.timestamp(0));
+    assertEquals(4, rs.longValue(0));
+    assertEquals(1356998402000L, rs.timestamp(1));
+    assertEquals(5, rs.longValue(1));
+    assertEquals(1356998403000L, rs.timestamp(2));
+    assertEquals(6, rs.longValue(2));
+    assertEquals(1356998404000L, rs.timestamp(3));
+    assertEquals(7, rs.longValue(3));
   }
   
   @Test
+  public void addRowMergeEarlier() throws Exception {
+    // this happens if the same row key is used for the addRow call
+    final byte[] qual1 = { 0x00, 0x37 };
+    final byte[] val1 = Bytes.fromLong(6L);
+    final byte[] qual2 = { 0x00, 0x47 };
+    final byte[] val2 = Bytes.fromLong(7L);
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    final RowSeq rs = new RowSeq(tsdb);
+    rs.setRow(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
+    assertEquals(2, rs.size());
+    
+    final byte[] qual3 = { 0x00, 0x07 };
+    final byte[] val3 = Bytes.fromLong(4L);
+    final byte[] qual4 = { 0x00, 0x27 };
+    final byte[] val4 = Bytes.fromLong(5L);
+    final byte[] qual34 = MockBase.concatByteArrays(qual3, qual4);
+    rs.addRow(makekv(qual34, MockBase.concatByteArrays(val3, val4, ZERO)));
+    
+    assertEquals(4, rs.size());
+    assertEquals(1356998400000L, rs.timestamp(0));
+    assertEquals(4, rs.longValue(0));
+    assertEquals(1356998402000L, rs.timestamp(1));
+    assertEquals(5, rs.longValue(1));
+    assertEquals(1356998403000L, rs.timestamp(2));
+    assertEquals(6, rs.longValue(2));
+    assertEquals(1356998404000L, rs.timestamp(3));
+    assertEquals(7, rs.longValue(3));
+  }
+  
+  @Test
+  public void addRowMergeMiddle() throws Exception {
+    // this happens if the same row key is used for the addRow call
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    final RowSeq rs = new RowSeq(tsdb);
+    rs.setRow(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
+    assertEquals(2, rs.size());
+    
+    final byte[] qual3 = { 0x00, 0x57 };
+    final byte[] val3 = Bytes.fromLong(8L);
+    final byte[] qual4 = { 0x00, 0x67 };
+    final byte[] val4 = Bytes.fromLong(9L);
+    final byte[] qual34 = MockBase.concatByteArrays(qual3, qual4);
+    rs.addRow(makekv(qual34, MockBase.concatByteArrays(val3, val4, ZERO)));
+    assertEquals(4, rs.size());
+    
+    final byte[] qual5 = { 0x00, 0x37 };
+    final byte[] val5 = Bytes.fromLong(6L);
+    final byte[] qual6 = { 0x00, 0x47 };
+    final byte[] val6 = Bytes.fromLong(7L);
+    final byte[] qual56 = MockBase.concatByteArrays(qual5, qual6);
+    rs.addRow(makekv(qual56, MockBase.concatByteArrays(val5, val6, ZERO)));
+    
+    assertEquals(6, rs.size());
+    assertEquals(1356998400000L, rs.timestamp(0));
+    assertEquals(4, rs.longValue(0));
+    assertEquals(1356998402000L, rs.timestamp(1));
+    assertEquals(5, rs.longValue(1));
+    assertEquals(1356998403000L, rs.timestamp(2));
+    assertEquals(6, rs.longValue(2));
+    assertEquals(1356998404000L, rs.timestamp(3));
+    assertEquals(7, rs.longValue(3));
+    assertEquals(1356998405000L, rs.timestamp(4));
+    assertEquals(8, rs.longValue(4));
+    assertEquals(1356998406000L, rs.timestamp(5));
+    assertEquals(9, rs.longValue(5));
+  }
+  
+  @Test
+  public void addRowMergeDuplicateLater() throws Exception {
+    // this happens if the same row key is used for the addRow call
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual3 = { 0x00, 0x37 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2, qual3);
+    final RowSeq rs = new RowSeq(tsdb);
+    rs.setRow(makekv(qual12, MockBase.concatByteArrays(val1, val2, val3, ZERO)));
+    assertEquals(3, rs.size());
+    
+    final byte[] qual4 = { 0x00, 0x47 };
+    final byte[] val4 = Bytes.fromLong(7L);
+    final byte[] qual34 = MockBase.concatByteArrays(qual3, qual4);
+    rs.addRow(makekv(qual34, MockBase.concatByteArrays(val3, val4, ZERO)));
+    
+    assertEquals(4, rs.size());
+    assertEquals(1356998400000L, rs.timestamp(0));
+    assertEquals(4, rs.longValue(0));
+    assertEquals(1356998402000L, rs.timestamp(1));
+    assertEquals(5, rs.longValue(1));
+    assertEquals(1356998403000L, rs.timestamp(2));
+    assertEquals(6, rs.longValue(2));
+    assertEquals(1356998404000L, rs.timestamp(3));
+    assertEquals(7, rs.longValue(3));
+  }
+  
+  @Test
+  public void addRowMergeDuplicateEarlier() throws Exception {
+    // this happens if the same row key is used for the addRow call
+    final byte[] qual4 = { 0x00, 0x27 };
+    final byte[] val4 = Bytes.fromLong(5L);
+    final byte[] qual1 = { 0x00, 0x37 };
+    final byte[] val1 = Bytes.fromLong(6L);
+    final byte[] qual2 = { 0x00, 0x47 };
+    final byte[] val2 = Bytes.fromLong(7L);
+    final byte[] qual12 = MockBase.concatByteArrays(qual4, qual1, qual2);
+    final RowSeq rs = new RowSeq(tsdb);
+    rs.setRow(makekv(qual12, MockBase.concatByteArrays(val4, val1, val2, ZERO)));
+    assertEquals(3, rs.size());
+    
+    final byte[] qual3 = { 0x00, 0x07 };
+    final byte[] val3 = Bytes.fromLong(4L);
+    final byte[] qual34 = MockBase.concatByteArrays(qual3, qual4);
+    rs.addRow(makekv(qual34, MockBase.concatByteArrays(val3, val4, ZERO)));
+    
+    assertEquals(4, rs.size());
+    assertEquals(1356998400000L, rs.timestamp(0));
+    assertEquals(4, rs.longValue(0));
+    assertEquals(1356998402000L, rs.timestamp(1));
+    assertEquals(5, rs.longValue(1));
+    assertEquals(1356998403000L, rs.timestamp(2));
+    assertEquals(6, rs.longValue(2));
+    assertEquals(1356998404000L, rs.timestamp(3));
+    assertEquals(7, rs.longValue(3));
+  }
+  
+  @Test (expected = IllegalDataException.class)
   public void addRowDiffBaseTime() throws Exception {
     final byte[] qual1 = { 0x00, 0x07 };
     final byte[] val1 = Bytes.fromLong(4L);
@@ -135,12 +273,66 @@ public final class TestRowSeq {
     final byte[] row2 = { 0, 0, 1, 0x50, (byte)0xE2, 0x35, 0x10, 0, 0, 1, 0, 0, 2 };
     rs.addRow(new KeyValue(row2, FAMILY, qual34, 
         MockBase.concatByteArrays(val3, val4, ZERO)));
-    
+  }
+  
+  @Test
+  public void addRowMergeMs() throws Exception {
+    // this happens if the same row key is used for the addRow call
+    final byte[] qual1 = { (byte) 0xF0, 0x00, 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    final RowSeq rs = new RowSeq(tsdb);
+    rs.setRow(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
     assertEquals(2, rs.size());
+    
+    final byte[] qual3 = { (byte) 0xF0, 0x00, 0x07, 0x07 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    final byte[] qual4 = { (byte) 0xF0, 0x00, 0x09, 0x07 };
+    final byte[] val4 = Bytes.fromLong(7L);
+    final byte[] qual34 = MockBase.concatByteArrays(qual3, qual4);
+    rs.addRow(makekv(qual34, MockBase.concatByteArrays(val3, val4, ZERO)));
+    
+    assertEquals(4, rs.size());
     assertEquals(1356998400000L, rs.timestamp(0));
-    assertEquals(1356998402000L, rs.timestamp(1));
-//    assertEquals(1357002003000L, rs.timestamp(2));
-//    assertEquals(1357002004000L, rs.timestamp(3));
+    assertEquals(4, rs.longValue(0));
+    assertEquals(1356998400008L, rs.timestamp(1));
+    assertEquals(5, rs.longValue(1));
+    assertEquals(1356998400028L, rs.timestamp(2));
+    assertEquals(6, rs.longValue(2));
+    assertEquals(1356998400036L, rs.timestamp(3));
+    assertEquals(7, rs.longValue(3));
+  }
+  
+  @Test
+  public void addRowMergeSecAndMs() throws Exception {
+    // this happens if the same row key is used for the addRow call
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    final RowSeq rs = new RowSeq(tsdb);
+    rs.setRow(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
+    assertEquals(2, rs.size());
+    
+    final byte[] qual3 = { 0x00, 0x37 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    final byte[] qual4 = { (byte) 0xF0, 0x01, 0x09, 0x07 };
+    final byte[] val4 = Bytes.fromLong(7L);
+    final byte[] qual34 = MockBase.concatByteArrays(qual3, qual4);
+    rs.addRow(makekv(qual34, MockBase.concatByteArrays(val3, val4, ZERO)));
+    
+    assertEquals(4, rs.size());
+    assertEquals(1356998400000L, rs.timestamp(0));
+    assertEquals(4, rs.longValue(0));
+    assertEquals(1356998400008L, rs.timestamp(1));
+    assertEquals(5, rs.longValue(1));
+    assertEquals(1356998403000L, rs.timestamp(2));
+    assertEquals(6, rs.longValue(2));
+    assertEquals(1356998401060L, rs.timestamp(3));
+    assertEquals(7, rs.longValue(3));
   }
   
   @Test (expected = IllegalStateException.class)
