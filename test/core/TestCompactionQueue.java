@@ -172,20 +172,17 @@ final class TestCompactionQueue {
     ArrayList<KeyValue> kvs = new ArrayList<KeyValue>(3599999);
     ArrayList<Annotation> annotations = new ArrayList<Annotation>(0);
 
-    long start = System.currentTimeMillis();
     for (int i = 0; i < 3599999; i++) {
-      final int qualifier = (int) (((i << Const.FLAG_BITS  + 2 ) | 0x07) | 0xF0000000);
+      final int qualifier = (((i << Const.FLAG_BITS  + 2 ) | 0x07) | 0xF0000000);
       kvs.add(makekv(Bytes.fromInt(qualifier), Bytes.fromLong(i)));
       i += 100;
     }
-System.out.println("Built row in [" + (System.currentTimeMillis() - start) + "] ms");
     compactionq.compact(kvs, annotations);
 
     // We had one row to compact, so one put to do.
     verify(tsdb, times(1)).put((byte[])any(), (byte[])any(), (byte[])any());
     // And we had to delete individual cells.
     verify(tsdb, times(1)).delete((byte[])any(), (byte[][])any());
-System.out.println("Finished compaction in [" + (System.currentTimeMillis() - start) + "] ms");
   }
   
   @Test
