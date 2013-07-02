@@ -777,15 +777,10 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       // Now break it down into Cells.
       int val_idx = 0;
       for (int i = 0; i < len; i += 2) {
-        final byte[] q;
-        final int vlen;
+        final byte[] q = Internal.extractQualifier(qual, i);
+        final int vlen = Internal.getValueLengthFromQualifier(qual, i);
         if ((qual[i] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
-          q = new byte[] { qual[i], qual[i + 1], qual[i + 2], qual[i + 3] };
           i += 2;
-          vlen = (q[3] & Const.LENGTH_MASK) + 1;
-        } else {
-          q = new byte[] { qual[i], qual[i + 1] };
-          vlen = (q[1] & Const.LENGTH_MASK) + 1;
         }
         final byte[] v = new byte[vlen];
         System.arraycopy(val, val_idx, v, 0, vlen);
@@ -1019,7 +1014,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
    * <b>Note:</b> You must filter out all but the second, millisecond and
    * compacted rows
    */
-  private static final class MixedComparator implements Comparator<KeyValue> {
+  public static final class MixedComparator implements Comparator<KeyValue> {
 
     public int compare(final KeyValue a, final KeyValue b) {
       return compare(a.qualifier(), b.qualifier());
@@ -1028,6 +1023,16 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     public int compare(final byte[] a, final byte[] b) {
       final long left = Internal.getOffsetFromQualifier(a);
       final long right = Internal.getOffsetFromQualifier(b);
+      if (left == right) {
+        return 0;
+      }
+      return (left < right) ? -1 : 1;
+    }
+    
+    public int compare(final byte[] a, final int offset_a, final byte[] b, 
+        final int offset_b) {
+      final long left = Internal.getOffsetFromQualifier(a, offset_a);
+      final long right = Internal.getOffsetFromQualifier(b, offset_b);
       if (left == right) {
         return 0;
       }
