@@ -340,11 +340,14 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
               longest = kv;
               longest_idx = i;
             }
+          } else if (len == 4) {
+            val_len += kv.value().length;
+          } else {
+            // We don't need it below for complex compactions, so we update it
+            // only here in the `else' branch.
+            final byte[] v = kv.value();
+            val_len += floatingPointValueToFix(qual[1], v) ? 4 : v.length;
           }
-          // We don't need it below for complex compactions, so we update it
-          // only here in the `else' branch.
-          final byte[] v = kv.value();
-          val_len += floatingPointValueToFix(qual[1], v) ? 4 : v.length;
         }
         qual_len += len;
       }
@@ -496,11 +499,13 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       }
       last_delta = delta;
       
-      final byte[] v = fixFloatingPointValue(q[1], kv.value());
+      final byte[] v;
       if (q.length == 2) {
+        v = fixFloatingPointValue(q[1], kv.value());
         qualifier[qual_idx++] = q[0];
         qualifier[qual_idx++] = fixQualifierFlags(q[1], v.length);
       } else {
+        v = kv.value();
         System.arraycopy(q, 0, qualifier, qual_idx, q.length);
         qual_idx += q.length;
       }
@@ -605,7 +610,6 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     }
 
     public int compareTo(final Cell other) {
-      //return Bytes.memcmp(qualifier, other.qualifier);
       return comparator.compare(qualifier, other.qualifier);
     }
 
