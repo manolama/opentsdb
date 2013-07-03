@@ -99,7 +99,7 @@ final class SpanGroup implements DataPoints {
    * @param rate If {@code true}, the rate of the series will be used instead
    * of the actual values.
    * @param aggregator The aggregation function to use.
-   * @param interval Number of seconds wanted between each data point.
+   * @param interval Number of milliseconds wanted between each data point.
    * @param downsampler Aggregation function to use to group data points
    * within an interval.
    */
@@ -783,12 +783,12 @@ final class SpanGroup implements DataPoints {
           assert x0 > x1: ("Next timestamp (" + x0 + ") is supposed to be "
             + " strictly greater than the previous one (" + x1 + "), but it's"
             + " not.  this=" + this);
-          // TODO - for backwards compatability we'll convert the ms to seconds
+          // TODO - for backwards compatibility we'll convert the ms to seconds
           // but in the future we should add a ratems flag that will calculate
           // the rate as is.
-          final double r = (y0 - y1) / ((x0 - x1) / 1000);
-          //LOG.debug("Rate for " + y1 + " @ " + x1
-          //          + " -> " + y0 + " @ " + x0 + " => " + r);
+          final double r = (y0 - y1) / ((double)(x0 - x1) / (double)1000);
+//          LOG.debug("Rate for " + y1 + " @ " + x1
+//                    + " -> " + y0 + " @ " + x0 + " => " + r);
           return r;
         }
         if (current == pos) {
