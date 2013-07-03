@@ -118,7 +118,7 @@ final class QueryRpc implements HttpRpc {
     case 0:
     case 1:
       query.sendReply(query.serializer().formatQueryV1(data_query, results, 
-          globals, tsdb.getConfig().enable_milliseconds()));
+          globals));
       break;
     default: 
       throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
@@ -150,6 +150,10 @@ final class QueryRpc implements HttpRpc {
     
     if (query.hasQueryStringParam("global_annotations")) {
       data_query.setGlobalAnnotations(true);
+    }
+    
+    if (query.hasQueryStringParam("ms")) {
+      data_query.setMsResolution(true);
     }
     
     // handle tsuid queries first
