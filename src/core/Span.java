@@ -41,6 +41,12 @@ final class Span implements DataPoints {
    * have to pass a collection to the compaction queue */
   private ArrayList<Annotation> annotations = new ArrayList<Annotation>(0);
   
+  /** 
+   * Whether or not the rows have been sorted. This should be toggled by the
+   * first call to an iterator method
+   */
+  private boolean sorted;
+  
   Span(final TSDB tsdb) {
     this.tsdb = tsdb;
   }
@@ -84,8 +90,6 @@ final class Span implements DataPoints {
   /**
    * Adds a compacted row to the span, merging with an existing RowSeq or 
    * creating a new one if necessary. 
-   * <b>Warning: </b> Currently this method will sort the list of RowSeqs every
-   * time a new row is added.
    * @param row The compacted row to add to this span.
    * @throws IllegalArgumentException if the argument and this span are for
    * two different time series.
@@ -123,20 +127,12 @@ final class Span implements DataPoints {
       for (final RowSeq rs : rows) {
         if (Bytes.memcmp(rs.key, row.key()) == 0) {
           rs.addRow(row);
-          // already sorted
           return;
         }
       }
     }
     
     rows.add(rowseq);
-    if (rows.size() > 1) {
-      // TODO - it would be better to do this once but short of adding a .sort()
-      // method that must be called by the query completer, I'd rather sort on
-      // each row add than check a flag on each iterator call. addRow ~ dozens
-      // of calls vs iterator ~ hundreds to thousands of calls
-      Collections.sort(rows, new RowSeq.RowSeqComparator());
-    }
   }
 
   /**
@@ -161,6 +157,10 @@ final class Span implements DataPoints {
   }
 
   public SeekableView iterator() {
+    if (!sorted) {
+      Collections.sort(rows, new RowSeq.RowSeqComparator());
+      sorted = true;
+    }
     return spanIterator();
   }
 
@@ -171,6 +171,10 @@ final class Span implements DataPoints {
    * in {@code rows} and the second is offset in that {@link RowSeq} instance.
    */
   private long getIdxOffsetFor(final int i) {
+    if (!sorted) {
+      Collections.sort(rows, new RowSeq.RowSeqComparator());
+      sorted = true;
+    }
     int idx = 0;
     int offset = 0;
     for (final RowSeq row : rows) {
@@ -185,6 +189,10 @@ final class Span implements DataPoints {
   }
 
   public long timestamp(final int i) {
+    if (!sorted) {
+      Collections.sort(rows, new RowSeq.RowSeqComparator());
+      sorted = true;
+    }
     final long idxoffset = getIdxOffsetFor(i);
     final int idx = (int) (idxoffset >>> 32);
     final int offset = (int) (idxoffset & 0x00000000FFFFFFFF);
@@ -192,6 +200,10 @@ final class Span implements DataPoints {
   }
 
   public boolean isInteger(final int i) {
+    if (!sorted) {
+      Collections.sort(rows, new RowSeq.RowSeqComparator());
+      sorted = true;
+    }
     final long idxoffset = getIdxOffsetFor(i);
     final int idx = (int) (idxoffset >>> 32);
     final int offset = (int) (idxoffset & 0x00000000FFFFFFFF);
@@ -199,6 +211,10 @@ final class Span implements DataPoints {
   }
 
   public long longValue(final int i) {
+    if (!sorted) {
+      Collections.sort(rows, new RowSeq.RowSeqComparator());
+      sorted = true;
+    }
     final long idxoffset = getIdxOffsetFor(i);
     final int idx = (int) (idxoffset >>> 32);
     final int offset = (int) (idxoffset & 0x00000000FFFFFFFF);
@@ -206,6 +222,10 @@ final class Span implements DataPoints {
   }
 
   public double doubleValue(final int i) {
+    if (!sorted) {
+      Collections.sort(rows, new RowSeq.RowSeqComparator());
+      sorted = true;
+    }
     final long idxoffset = getIdxOffsetFor(i);
     final int idx = (int) (idxoffset >>> 32);
     final int offset = (int) (idxoffset & 0x00000000FFFFFFFF);
@@ -234,6 +254,10 @@ final class Span implements DataPoints {
    * @return A strictly positive index in the {@code rows} array.
    */
   private short seekRow(final long timestamp) {
+    if (!sorted) {
+      Collections.sort(rows, new RowSeq.RowSeqComparator());
+      sorted = true;
+    }
     short row_index = 0;
     RowSeq row = null;
     final int nrows = rows.size();
@@ -254,6 +278,10 @@ final class Span implements DataPoints {
 
   /** Package private iterator method to access it as a Span.Iterator. */
   Span.Iterator spanIterator() {
+    if (!sorted) {
+      Collections.sort(rows, new RowSeq.RowSeqComparator());
+      sorted = true;
+    }
     return new Span.Iterator();
   }
 
@@ -329,7 +357,7 @@ final class Span implements DataPoints {
     /** Mask to use in order to get rid of the flag above. */
     private static final long TIME_MASK  = 0x7FFFFFFFFFFFFFFFL;
 
-    /** The "sampling" interval, in seconds. */
+    /** The "sampling" interval, in milliseconds. */
     private final int interval;
 
     /** Function to use to for downsampling. */
@@ -400,7 +428,8 @@ final class Span implements DataPoints {
       final int saved_state = current_row.saveState();
       // Since we know hasNext() returned true, we have at least 1 point.
       moveToNext();
-      time = current_row.timestamp() + (interval * 1000);  // end of interval
+      time = current_row.timestamp() + interval;  // end of interval
+      //LOG.info("End of interval: " + time + " Interval: " + interval);
       boolean integer = true;
       int npoints = 0;
       do {
