@@ -152,11 +152,7 @@ final class TsdbQuery implements Query {
 
   public long getEndTime() {
     if (end_time == UNSET) {
-      if (tsdb.getConfig().enable_milliseconds()) {
-        setEndTime(System.currentTimeMillis());
-      } else {
-        setEndTime(System.currentTimeMillis() / 1000);
-      }
+      setEndTime(System.currentTimeMillis());
     }
     return end_time;
   }
