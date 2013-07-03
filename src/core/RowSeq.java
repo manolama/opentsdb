@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 
 import net.opentsdb.meta.Annotation;
+import net.opentsdb.uid.UniqueId;
 
 import org.hbase.async.Bytes;
 import org.hbase.async.KeyValue;
@@ -347,7 +348,8 @@ final class RowSeq implements DataPoints {
 
   public boolean isInteger(final int i) {
     checkIndex(i);
-    return (qualifiers[i * 2 + 1] & Const.FLAG_FLOAT) == 0x0;
+    return (Internal.getFlagsFromQualifier(qualifiers, i) & 
+        Const.FLAG_FLOAT) == 0x0;
   }
 
   public long longValue(int i) {
@@ -401,20 +403,28 @@ final class RowSeq implements DataPoints {
        .append(base_time)
        .append(" (")
        .append(base_time > 0 ? new Date(base_time * 1000) : "no date")
-       .append("), [");
-    for (short i = 0; i < size; i++) {
-      final short qual = (short) Bytes.getUnsignedShort(qualifiers, i * 2);
-      buf.append('+').append((qual & 0xFFFF) >>> Const.FLAG_BITS);
-      if (isInteger(i)) {
-        buf.append(":long(").append(longValue(i));
-      } else {
-        buf.append(":float(").append(doubleValue(i));
-      }
-      buf.append(')');
-      if (i != size - 1) {
-        buf.append(", ");
-      }
-    }
+       .append(")");    
+    // TODO - fix this so it doesn't cause infinite recursions. If longValue()
+    // throws an exception, the exception will call this method, trying to get
+    // longValue() again, which will throw another exception.... For now, just
+    // dump the raw data as hex
+    //for (short i = 0; i < size; i++) {
+    //  final short qual = (short) Bytes.getUnsignedShort(qualifiers, i * 2);
+    //  buf.append('+').append((qual & 0xFFFF) >>> Const.FLAG_BITS);
+    //  
+    //  if (isInteger(i)) {
+    //    buf.append(":long(").append(longValue(i));
+    //  } else {
+    //    buf.append(":float(").append(doubleValue(i));
+    //  }
+    //  buf.append(')');
+    //  if (i != size - 1) {
+    //    buf.append(", ");
+    //  }
+    //}
+    buf.append("(datapoints=").append(size);
+    buf.append("), (qualifier=[").append(UniqueId.uidToString(qualifiers));
+    buf.append("]), (values=[").append(UniqueId.uidToString(values));
     buf.append("])");
     return buf.toString();
   }
@@ -465,7 +475,7 @@ final class RowSeq implements DataPoints {
       }
       
       if ((qualifiers[qual_index] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
-        qualifier = (int) Bytes.getUnsignedInt(qualifiers, qual_index);
+        qualifier = Bytes.getInt(qualifiers, qual_index);
         qual_index += 4;
       } else {
         qualifier = Bytes.getUnsignedShort(qualifiers, qual_index);
@@ -492,13 +502,18 @@ final class RowSeq implements DataPoints {
       qual_index = 0;
       value_index = 0;
       final int len = qualifiers.length;
+      //LOG.debug("Peeking timestamp: " + (peekNextTimestamp() < timestamp));
       while (qual_index < len && peekNextTimestamp() < timestamp) {
-        qual_index += 2;
+        //LOG.debug("Moving to next timestamp: " + peekNextTimestamp());
+        if ((qualifiers[qual_index] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+          qualifier = Bytes.getInt(qualifiers, qual_index);
+          qual_index += 4;
+        } else {
+          qualifier = Bytes.getUnsignedShort(qualifiers, qual_index);
+          qual_index += 2;
+        }
         final byte flags = (byte) qualifier;
         value_index += (flags & Const.LENGTH_MASK) + 1;
-      }
-      if (qual_index > 0) {
-        qualifier = Bytes.getUnsignedShort(qualifiers, qual_index - 2);
       }
       //LOG.debug("seek to " + timestamp + " -> now=" + toStringSummary());
     }
@@ -509,7 +524,7 @@ final class RowSeq implements DataPoints {
 
     public long timestamp() {
       assert qualifier != 0: "not initialized: " + this;
-      if ((qualifier & 0xF0000000) == 0xF0000000) {
+      if ((qualifier & Const.MS_FLAG) == Const.MS_FLAG) {
         final long ms = (qualifier & 0x0FFFFFC0) >>> (Const.FLAG_BITS + 2);
         return (base_time * 1000) + ms;            
       } else {
@@ -525,8 +540,8 @@ final class RowSeq implements DataPoints {
 
     public long longValue() {
       if (!isInteger()) {
-        throw new ClassCastException("value #"
-          + ((qual_index - 2) / 2) + " is not a long in " + this);
+        throw new ClassCastException("value @"
+          + qual_index + " is not a long in " + this);
       }
       final byte flags = (byte) qualifier;
       final byte vlen = (byte) ((flags & Const.LENGTH_MASK) + 1);
@@ -535,8 +550,8 @@ final class RowSeq implements DataPoints {
 
     public double doubleValue() {
       if (isInteger()) {
-        throw new ClassCastException("value #"
-          + ((qual_index - 2) / 2) + " is not a float in " + this);
+        throw new ClassCastException("value @"
+          + qual_index + " is not a float in " + this);
       }
       final byte flags = (byte) qualifier;
       final byte vlen = (byte) ((flags & Const.LENGTH_MASK) + 1);
@@ -569,15 +584,7 @@ final class RowSeq implements DataPoints {
      * @throws IndexOutOfBoundsException if we reached the end already.
      */
     long peekNextTimestamp() {
-      if ((qualifier & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
-        final long ms = (Bytes.getUnsignedInt(qualifiers, qual_index) & 0x0FFFFFC0) 
-          >>> (Const.FLAG_BITS + 2);
-        return (baseTime() * 1000) + ms;            
-      } else {
-        final long seconds = (Bytes.getUnsignedShort(qualifiers, qual_index) & 0xFFFF) 
-          >>> Const.FLAG_BITS;
-        return (baseTime() + seconds) * 1000;
-      }
+      return Internal.getTimestampFromQualifier(qualifiers, base_time, qual_index);
     }
 
     /** Only returns internal state for the iterator itself.  */

@@ -14,8 +14,12 @@ package net.opentsdb.core;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mock;
+
+import java.util.NoSuchElementException;
+
 import net.opentsdb.storage.MockBase;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.utils.Config;
@@ -507,10 +511,102 @@ public final class TestRowSeq {
     
     assertFalse(it.hasNext());
   }
+
+  @Test
+  public void seekMs() throws Exception {
+    final RowSeq rs = new RowSeq(tsdb);
+    rs.setRow(getMs());
+
+    final SeekableView it = rs.iterator();
+    it.seek(1356998400008L);
+    DataPoint dp = it.next();
+    assertEquals(1356998400008L, dp.timestamp());
+    assertEquals(5, dp.longValue());
+    
+    assertTrue(it.hasNext());
+  }
+  
+  @Test
+  public void seekMsStart() throws Exception {
+    final RowSeq rs = new RowSeq(tsdb);
+    rs.setRow(getMs());
+
+    final SeekableView it = rs.iterator();
+    it.seek(1356998400000L);
+    DataPoint dp = it.next();
+    assertEquals(1356998400000L, dp.timestamp());
+    assertEquals(4, dp.longValue());
+    
+    assertTrue(it.hasNext());
+  }
+  
+  @Test
+  public void seekMsBetween() throws Exception {
+    final RowSeq rs = new RowSeq(tsdb);
+    rs.setRow(getMs());
+
+    final SeekableView it = rs.iterator();
+    it.seek(1356998400005L);
+    DataPoint dp = it.next();
+    assertEquals(1356998400008L, dp.timestamp());
+    assertEquals(5, dp.longValue());
+    
+    assertTrue(it.hasNext());
+  }
+  
+  @Test
+  public void seekMsEnd() throws Exception {
+    final RowSeq rs = new RowSeq(tsdb);
+    rs.setRow(getMs());
+
+    final SeekableView it = rs.iterator();
+    it.seek(1356998400016L);
+    DataPoint dp = it.next();
+    assertEquals(1356998400016L, dp.timestamp());
+    assertEquals(6, dp.longValue());
+    
+    assertFalse(it.hasNext());
+  }
+  
+  @Test
+  public void seekMsTooEarly() throws Exception {
+    final RowSeq rs = new RowSeq(tsdb);
+    rs.setRow(getMs());
+
+    final SeekableView it = rs.iterator();
+    it.seek(1356998300000L);
+    DataPoint dp = it.next();
+    assertEquals(1356998400000L, dp.timestamp());
+    assertEquals(4, dp.longValue());
+    
+    assertTrue(it.hasNext());
+  }
+  
+  @Test (expected = NoSuchElementException.class)
+  public void seekMsPastLastDp() throws Exception {
+    final RowSeq rs = new RowSeq(tsdb);
+    rs.setRow(getMs());
+
+    final SeekableView it = rs.iterator();
+    it.seek(1356998400032L);
+    it.next();
+  }
   
   /** Shorthand to create a {@link KeyValue}.  */
   private static KeyValue makekv(final byte[] qualifier, final byte[] value) {
     return new KeyValue(KEY, FAMILY, qualifier, value);
   }
   
+  private static KeyValue getMs() {
+    final byte[] qual1 = { (byte) 0xF0, 0x00, 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual3 = { (byte) 0xF0, 0x00, 0x04, 0x07 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    final byte[] qual123 = MockBase.concatByteArrays(qual1, qual2, qual3);
+    final KeyValue kv = makekv(qual123, 
+        MockBase.concatByteArrays(val1, val2, val3, ZERO));
+    return kv;
+  }
 }
