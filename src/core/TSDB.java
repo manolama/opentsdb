@@ -482,18 +482,14 @@ public final class TSDB {
     IncomingDataPoints.checkMetricAndTags(metric, tags);
     final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);  
     final long base_time;
-    final byte[] qualifier;
+    final byte[] qualifier = Internal.buildQualifier(timestamp, flags);
     
     if ((timestamp & Const.SECOND_MASK) != 0) {
       // drop the ms timestamp to seconds to calculate the base timestamp
-      base_time = ((timestamp / 1000) - ((timestamp / 1000) % Const.MAX_TIMESPAN));
-      final int qual = (int) (((timestamp - (base_time * 1000) << (Const.FLAG_BITS + 2)) | flags) | Const.MS_FLAG);
-      qualifier = Bytes.fromInt(qual);
+      base_time = ((timestamp / 1000) - 
+          ((timestamp / 1000) % Const.MAX_TIMESPAN));
     } else {
       base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
-      final short qual = (short) ((timestamp - base_time) << Const.FLAG_BITS
-          | flags);
-      qualifier = Bytes.fromShort(qual);
     }
     
     Bytes.setInt(row, (int) base_time, metrics.width());
