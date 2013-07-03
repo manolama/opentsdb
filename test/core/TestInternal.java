@@ -159,6 +159,11 @@ public final class TestInternal {
   }
   
   @Test
+  public void foo() {
+    Internal.buildQualifier(1356998411500L, (short) 7);
+  }
+  
+  @Test
   public void buildQualifierSecond8ByteLong() {
     final byte[] q = Internal.buildQualifier(1356998403, (short) 7);
     assertArrayEquals(new byte[] { 0x00, 0x37 }, q);
