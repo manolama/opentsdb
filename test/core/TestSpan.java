@@ -54,10 +54,8 @@ public final class TestSpan {
     // Inject the attributes we need into the "tsdb" object.
     Whitebox.setInternalState(tsdb, "metrics", metrics);
     Whitebox.setInternalState(tsdb, "table", TABLE);
-    Whitebox.setInternalState(config, "enable_milliseconds", true);
     Whitebox.setInternalState(tsdb, "config", config);
     when(tsdb.getConfig()).thenReturn(config);
-    when(config.enable_milliseconds()).thenReturn(true);
     when(tsdb.metrics.width()).thenReturn((short)3);
     when(RowKey.metricName(tsdb, HOUR1)).thenReturn("sys.cpu.user");
   }
