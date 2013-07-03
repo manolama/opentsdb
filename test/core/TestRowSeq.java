@@ -57,10 +57,8 @@ public final class TestRowSeq {
     // Inject the attributes we need into the "tsdb" object.
     Whitebox.setInternalState(tsdb, "metrics", metrics);
     Whitebox.setInternalState(tsdb, "table", TABLE);
-    Whitebox.setInternalState(config, "enable_milliseconds", true);
     Whitebox.setInternalState(tsdb, "config", config);
     when(tsdb.getConfig()).thenReturn(config);
-    when(config.enable_milliseconds()).thenReturn(true);
     when(tsdb.metrics.width()).thenReturn((short)3);
     when(RowKey.metricName(tsdb, KEY)).thenReturn("sys.cpu.user");
   }
@@ -355,7 +353,6 @@ public final class TestRowSeq {
   
   @Test
   public void timestamp() throws Exception {
-    when(config.enable_milliseconds()).thenReturn(false);
     final byte[] qual1 = { 0x00, 0x07 };
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { 0x00, 0x27 };
@@ -424,7 +421,6 @@ public final class TestRowSeq {
   
   @Test
   public void timestampMixedNonNormalized() throws Exception {
-    when(config.enable_milliseconds()).thenReturn(false);
     final byte[] qual1 = { 0x00, 0x07 };
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
