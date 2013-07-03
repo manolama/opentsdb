@@ -265,7 +265,7 @@ public final class MockBase {
     }
     
     for (Map.Entry<byte[], Bytes.ByteMap<byte[]>> row : storage.entrySet()) {
-      System.out.println("Row: " + row.getKey());
+      System.out.println("Row: " + bytesToString(row.getKey()));
       
       for (Map.Entry<byte[], byte[]> column : row.getValue().entrySet()) {
         System.out.println("  Qualifier: " + (qualifier_ascii ?
