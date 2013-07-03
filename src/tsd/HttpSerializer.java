@@ -408,14 +408,11 @@ public abstract class HttpSerializer {
    * @param query The TSQuery object used to fetch the results
    * @param results The data fetched from storage
    * @param globals An optional list of global annotation objects
-   * @param milliseconds Whether or not to return the result timestamps in 
-   * milliseconds or seconds
    * @return A ChannelBuffer object to pass on to the caller
    * @throws BadRequestException if the plugin has not implemented this method
    */
   public ChannelBuffer formatQueryV1(final TSQuery query, 
-      final List<DataPoints[]> results, final List<Annotation> globals, 
-      final boolean milliseconds) {
+      final List<DataPoints[]> results, final List<Annotation> globals) {
     throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 
         "The requested API endpoint has not been implemented", 
         this.getClass().getCanonicalName() + 

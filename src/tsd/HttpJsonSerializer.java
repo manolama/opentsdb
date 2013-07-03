@@ -470,8 +470,7 @@ class HttpJsonSerializer extends HttpSerializer {
    * @return A ChannelBuffer object to pass on to the caller
    */
   public ChannelBuffer formatQueryV1(final TSQuery data_query, 
-      final List<DataPoints[]> results, final List<Annotation> globals, 
-      final boolean milliseconds) {
+      final List<DataPoints[]> results, final List<Annotation> globals) {
     
     final boolean as_arrays = this.query.hasQueryStringParam("arrays");
     final String jsonp = this.query.getQueryStringParam("jsonp");
@@ -545,7 +544,7 @@ class HttpJsonSerializer extends HttpSerializer {
                   dp.timestamp() > data_query.endTime()) {
                 continue;
               }
-              timestamp = milliseconds ? dp.timestamp() : 
+              timestamp = data_query.getMsResolution() ? dp.timestamp() : 
                 dp.timestamp() / 1000;
               if (timestamp <= last_timestamp) {
                 continue;
@@ -567,7 +566,7 @@ class HttpJsonSerializer extends HttpSerializer {
                   dp.timestamp() > (data_query.endTime())) {
                 continue;
               }
-              timestamp = milliseconds ? dp.timestamp() : 
+              timestamp = data_query.getMsResolution() ? dp.timestamp() : 
                 dp.timestamp() / 1000;
               if (timestamp <= last_timestamp) {
                 continue;
