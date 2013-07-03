@@ -192,7 +192,7 @@ public final class TestTsdbQuery {
   public void getEndTimeNotSet() throws Exception {
     PowerMockito.mockStatic(System.class);
     when(System.currentTimeMillis()).thenReturn(1357300800000L);
-    assertEquals(1357300800L, query.getEndTime());
+    assertEquals(1357300800000L, query.getEndTime());
   }
   
   @Test
