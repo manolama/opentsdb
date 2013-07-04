@@ -1314,8 +1314,110 @@ public final class TestTsdbQuery {
     dps[0].metricName();
   }
   
-  // TODO - other UTs
-  // - fix floating points (CompactionQueue:L267
+  @Test
+  public void runMultiCompact() throws Exception {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(1L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(2L);
+
+    // 2nd compaction
+    final byte[] qual3 = { 0x00, 0x37 };
+    final byte[] val3 = Bytes.fromLong(3L);
+    final byte[] qual4 = { 0x00, 0x47 };
+    final byte[] val4 = Bytes.fromLong(4L);
+
+    // 3rd compaction
+    final byte[] qual5 = { 0x00, 0x57 };
+    final byte[] val5 = Bytes.fromLong(5L);
+    final byte[] qual6 = { 0x00, 0x67 };
+    final byte[] val6 = Bytes.fromLong(6L);
+
+    final byte[] KEY = { 0, 0, 1, 0x50, (byte) 0xE2, 0x27, 0x00, 0, 0, 1, 0, 0, 1 };
+    
+    setQueryStorage();
+    storage.addColumn(KEY, 
+        MockBase.concatByteArrays(qual1, qual2), 
+        MockBase.concatByteArrays(val1, val2, new byte[] { 0 }));
+    storage.addColumn(KEY, 
+        MockBase.concatByteArrays(qual3, qual4), 
+        MockBase.concatByteArrays(val3, val4, new byte[] { 0 }));
+    storage.addColumn(KEY, 
+        MockBase.concatByteArrays(qual5, qual6), 
+        MockBase.concatByteArrays(val5, val6, new byte[] { 0 }));
+    
+    HashMap<String, String> tags = new HashMap<String, String>(1);
+    tags.put("host", "web01");
+    query.setStartTime(1356998400);
+    query.setEndTime(1357041600);
+    query.setTimeSeries("sys.cpu.user", tags, Aggregators.SUM, false);
+
+    final DataPoints[] dps = query.run();
+    assertNotNull(dps);
+    assertEquals("sys.cpu.user", dps[0].metricName());
+    assertTrue(dps[0].getAggregatedTags().isEmpty());
+    assertNull(dps[0].getAnnotations());
+    assertEquals("web01", dps[0].getTags().get("host"));
+    
+    int value = 1;
+    for (DataPoint dp : dps[0]) {
+      assertEquals(value, dp.longValue());
+      value++;
+    }
+    assertEquals(6, dps[0].aggregatedSize());
+  }
+
+  @Test
+  public void runMultiCompactAndSingles() throws Exception {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(1L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(2L);
+
+    // 2nd compaction
+    final byte[] qual3 = { 0x00, 0x37 };
+    final byte[] val3 = Bytes.fromLong(3L);
+    final byte[] qual4 = { 0x00, 0x47 };
+    final byte[] val4 = Bytes.fromLong(4L);
+
+    // 3rd compaction
+    final byte[] qual5 = { 0x00, 0x57 };
+    final byte[] val5 = Bytes.fromLong(5L);
+    final byte[] qual6 = { 0x00, 0x67 };
+    final byte[] val6 = Bytes.fromLong(6L);
+
+    final byte[] KEY = { 0, 0, 1, 0x50, (byte) 0xE2, 0x27, 0x00, 0, 0, 1, 0, 0, 1 };
+    
+    setQueryStorage();
+    storage.addColumn(KEY, 
+        MockBase.concatByteArrays(qual1, qual2), 
+        MockBase.concatByteArrays(val1, val2, new byte[] { 0 }));
+    storage.addColumn(KEY, qual3, val3);
+    storage.addColumn(KEY, qual4, val4);
+    storage.addColumn(KEY, 
+        MockBase.concatByteArrays(qual5, qual6), 
+        MockBase.concatByteArrays(val5, val6, new byte[] { 0 }));
+    
+    HashMap<String, String> tags = new HashMap<String, String>(1);
+    tags.put("host", "web01");
+    query.setStartTime(1356998400);
+    query.setEndTime(1357041600);
+    query.setTimeSeries("sys.cpu.user", tags, Aggregators.SUM, false);
+
+    final DataPoints[] dps = query.run();
+    assertNotNull(dps);
+    assertEquals("sys.cpu.user", dps[0].metricName());
+    assertTrue(dps[0].getAggregatedTags().isEmpty());
+    assertNull(dps[0].getAnnotations());
+    assertEquals("web01", dps[0].getTags().get("host"));
+    
+    int value = 1;
+    for (DataPoint dp : dps[0]) {
+      assertEquals(value, dp.longValue());
+      value++;
+    }
+    assertEquals(6, dps[0].aggregatedSize());
+  }
   
   // ----------------- //
   // Helper functions. //
