@@ -13,6 +13,9 @@
 package net.opentsdb.core;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Map;
 
 import org.hbase.async.Bytes;
@@ -118,6 +121,328 @@ public final class Internal {
     return CompactionQueue.complexCompact(kvs, kv.qualifier().length / 2, false);
   }
 
+  public static Cell parseColumn(final KeyValue column) {
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(1);
+    row.add(column);
+    final ArrayList<Cell> cells = breakDownRow(row, 1);
+    if (cells.isEmpty()) {
+      return null;
+    }
+    return cells.get(0);
+  }
+  
+  public static ArrayList<Cell> breakDownRow(final KeyValue column) {
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(1);
+    row.add(column);
+    return breakDownRow(row, column.qualifier().length / 2);
+  }
+  
+  /**
+   * Breaks down all the values in a row into individual {@link Cell}s sorted on
+   * the qualifier. Columns with non data-point data will be discarded.
+   * <b>Note:</b> This method does not account for duplicate timestamps in
+   * qualifiers.
+   * @param row The row to compact.  Assumed to have 2 elements or more.
+   * @param estimated_nvalues Estimate of the number of values to compact.
+   * Used to pre-allocate a collection of the right size, so it's better to
+   * overshoot a bit to avoid re-allocations.
+   * @throws IllegalDataException if one of the cells cannot be read because
+   * it's corrupted or in a format we don't understand.
+   */
+  public static ArrayList<Cell> breakDownRow(final ArrayList<KeyValue> row,
+      final int estimated_nvalues) {
+    final ArrayList<Cell> cells = new ArrayList<Cell>(estimated_nvalues);
+    for (final KeyValue kv : row) {
+      final byte[] qual = kv.qualifier();
+      final int len = qual.length;
+      final byte[] val = kv.value();
+      
+      if (len %2 != 0) {
+        // skip a non data point column
+        continue;
+      } else if (len == 2) {  // Single-value cell.
+        // Maybe we need to fix the flags in the qualifier.
+        final byte[] actual_val = fixFloatingPointValue(qual[1], val);
+        final byte q = fixQualifierFlags(qual[1], actual_val.length);
+        final byte[] actual_qual;
+        
+        if (q != qual[1]) {  // We need to fix the qualifier.
+          actual_qual = new byte[] { qual[0], q };  // So make a copy.
+        } else {
+          actual_qual = qual;  // Otherwise use the one we already have.
+        }
+        
+        final Cell cell = new Cell(actual_qual, actual_val);
+        cells.add(cell);
+        continue;
+      } else if (len == 4 && inMilliseconds(qual[0])) {
+        // since ms support is new, there's nothing to fix
+        final Cell cell = new Cell(qual, val);
+        cells.add(cell);
+        continue;
+      }
+      
+      // Now break it down into Cells.
+      int val_idx = 0;
+      for (int i = 0; i < len; i += 2) {
+        final byte[] q = extractQualifier(qual, i);
+        final int vlen = getValueLengthFromQualifier(qual, i);
+        if (inMilliseconds(qual[i])) {
+          i += 2;
+        }
+        
+        final byte[] v = new byte[vlen];
+        System.arraycopy(val, val_idx, v, 0, vlen);
+        val_idx += vlen;
+        final Cell cell = new Cell(q, v);
+        cells.add(cell);
+      }
+      
+      // Check we consumed all the bytes of the value.  Remember the last byte
+      // is metadata, so it's normal that we didn't consume it.
+      if (val_idx != val.length - 1) {
+        throw new IllegalDataException("Corrupted value: couldn't break down"
+          + " into individual values (consumed " + val_idx + " bytes, but was"
+          + " expecting to consume " + (val.length - 1) + "): " + kv
+          + ", cells so far: " + cells);
+      }
+    }
+    
+    Collections.sort(cells);
+    return cells;
+  }
+  
+  /**
+   * Represents a single data point in a row. Compacted columns may not be
+   * stored in a cell.
+   * <p>
+   * This is simply a glorified pair of (qualifier, value) that's comparable.
+   * Only the qualifier is used to make comparisons.
+   */
+  public static final class Cell implements Comparable<Cell> {
+    /** Tombstone used as a helper during the complex compaction.  */
+    public static final Cell SKIP = new Cell(null, null);
+
+    final byte[] qualifier;
+    final byte[] value;
+
+    /**
+     * Constructor that sets the cell
+     * @param qualifier Qualifier to store
+     * @param value Value to store
+     */
+    public Cell(final byte[] qualifier, final byte[] value) {
+      this.qualifier = qualifier;
+      this.value = value;
+    }
+
+    /** Compares the qualifiers of two cells */
+    public int compareTo(final Cell other) {
+      return compareQualifiers(qualifier, 0, other.qualifier, 0);
+    }
+
+    /**
+     * Determines if the cells are equal based on their qualifier
+     */
+    @Override
+    public boolean equals(final Object o) {
+      return o != null && o instanceof Cell && compareTo((Cell) o) == 0;
+    }
+
+    /**
+     * Returns a hash code based on the qualifier bytes
+     */
+    public int hashCode() {
+      return Arrays.hashCode(qualifier);
+    }
+
+    /**
+     * Prints the raw data of the qualifier and value
+     */
+    public String toString() {
+      return "Cell(" + Arrays.toString(qualifier)
+        + ", " + Arrays.toString(value) + ')';
+    }
+  
+    public byte[] qualifier() {
+      return qualifier;
+    }
+    
+    public byte[] value() {
+      return value;
+    }
+    
+    /**
+     * Returns the value of the cell as a Number
+     * @return The numeric value of the cell
+     */
+    public Number parseValue() {
+      if (isInteger()) {
+        return extractIntegerValue(value, 0, 
+            (byte)Internal.getFlagsFromQualifier(qualifier));
+      } else {
+        return extractFloatingPointValue(value, 0, 
+            (byte)Internal.getFlagsFromQualifier(qualifier));
+      }      
+    }
+
+    public long timestamp(final long base_time) {
+      return getTimestampFromQualifier(qualifier, base_time);
+    }
+    
+    public long absoluteTimestamp(final long base_time) {
+      final long timestamp = getTimestampFromQualifier(qualifier, base_time);
+      if (inMilliseconds(qualifier)) {
+        return timestamp;
+      } else {
+        return timestamp / 1000;
+      }
+    }
+    
+    public boolean isInteger() {
+      return (Internal.getFlagsFromQualifier(qualifier) & 
+          Const.FLAG_FLOAT) == 0x0;
+    }
+  }
+  
+  /**
+   * Helper to sort a row with a mixture of millisecond and second data points.
+   * In such a case, we convert all of the seconds into millisecond timestamps,
+   * then perform the comparison.
+   * <b>Note:</b> You must filter out all but the second, millisecond and
+   * compacted rows
+   */
+  public static final class KeyValueComparator implements Comparator<KeyValue> {
+    /**
+     * Compares the qualifiers from two key values
+     * @param a The first kv
+     * @param b The second kv
+     * @return 0 if they have the same timestamp, -1 if a is less than b, 1 
+     * otherwise.
+     */
+    public int compare(final KeyValue a, final KeyValue b) {
+      return compareQualifiers(a.qualifier(), 0, b.qualifier(), 0);
+    }
+  }
+
+  /**
+   * Compares two byte arrays with offsets
+   * @param a The first byte array to compare
+   * @param offset_a An offset for a
+   * @param b The second byte array
+   * @param offset_b An offset for b
+   * @return 0 if they have the same timestamp, -1 if a is less than b, 1 
+   * otherwise.
+   */
+  public static int compareQualifiers(final byte[] a, final int offset_a, 
+      final byte[] b, final int offset_b) {
+    final long left = Internal.getOffsetFromQualifier(a, offset_a);
+    final long right = Internal.getOffsetFromQualifier(b, offset_b);
+    if (left == right) {
+      return 0;
+    }
+    return (left < right) ? -1 : 1;
+  }
+  
+  /**
+   * Fix the flags inside the last byte of a qualifier.
+   * <p>
+   * OpenTSDB used to not rely on the size recorded in the flags being
+   * correct, and so for a long time it was setting the wrong size for
+   * floating point values (pretending they were encoded on 8 bytes when
+   * in fact they were on 4).  So overwrite these bits here to make sure
+   * they're correct now, because once they're compacted it's going to
+   * be quite hard to tell if the flags are right or wrong, and we need
+   * them to be correct to easily decode the values.
+   * @param flags The least significant byte of a qualifier.
+   * @param val_len The number of bytes in the value of this qualifier.
+   * @return The least significant byte of the qualifier with correct flags.
+   */
+  public static byte fixQualifierFlags(byte flags, final int val_len) {
+    // Explanation:
+    //   (1) Take the last byte of the qualifier.
+    //   (2) Zero out all the flag bits but one.
+    //       The one we keep is the type (floating point vs integer value).
+    //   (3) Set the length properly based on the value we have.
+    return (byte) ((flags & ~(Const.FLAGS_MASK >>> 1)) | (val_len - 1));
+    //              ^^^^^   ^^^^^^^^^^^^^^^^^^^^^^^^^    ^^^^^^^^^^^^^
+    //               (1)               (2)                    (3)
+  }
+  
+  /**
+   * Returns whether or not this is a floating value that needs to be fixed.
+   * <p>
+   * OpenTSDB used to encode all floating point values as `float' (4 bytes)
+   * but actually store them on 8 bytes, with 4 leading 0 bytes, and flags
+   * correctly stating the value was on 4 bytes.
+   * @param flags The least significant byte of a qualifier.
+   * @param value The value that may need to be corrected.
+   */
+  public static boolean floatingPointValueToFix(final byte flags,
+                                                 final byte[] value) {
+    return (flags & Const.FLAG_FLOAT) != 0   // We need a floating point value.
+      && (flags & Const.LENGTH_MASK) == 0x3  // That pretends to be on 4 bytes.
+      && value.length == 8;                  // But is actually using 8 bytes.
+  }
+
+  /**
+   * Returns a corrected value if this is a floating point value to fix.
+   * <p>
+   * OpenTSDB used to encode all floating point values as `float' (4 bytes)
+   * but actually store them on 8 bytes, with 4 leading 0 bytes, and flags
+   * correctly stating the value was on 4 bytes.
+   * <p>
+   * This function detects such values and returns a corrected value, without
+   * the 4 leading zeros.  Otherwise it returns the value unchanged.
+   * @param flags The least significant byte of a qualifier.
+   * @param value The value that may need to be corrected.
+   * @throws IllegalDataException if the value is malformed.
+   */
+  public static byte[] fixFloatingPointValue(final byte flags,
+                                              final byte[] value) {
+    if (floatingPointValueToFix(flags, value)) {
+      // The first 4 bytes should really be zeros.
+      if (value[0] == 0 && value[1] == 0 && value[2] == 0 && value[3] == 0) {
+        // Just keep the last 4 bytes.
+        return new byte[] { value[4], value[5], value[6], value[7] };
+      } else {  // Very unlikely.
+        throw new IllegalDataException("Corrupted floating point value: "
+          + Arrays.toString(value) + " flags=0x" + Integer.toHexString(flags)
+          + " -- first 4 bytes are expected to be zeros.");
+      }
+    }
+    return value;
+  }
+  
+  /**
+   * Determines if the qualifier is in milliseconds or not
+   * @param qualifier The qualifier to parse
+   * @param offset An offset from the start of the byte array
+   * @return True if the qualifier is in milliseconds, false if not
+   */
+  public static boolean inMilliseconds(final byte[] qualifier, 
+      final byte offset) {
+    return inMilliseconds(qualifier[offset]);
+  }
+  
+  /**
+   * Determines if the qualifier is in milliseconds or not
+   * @param qualifier The qualifier to parse
+   * @return True if the qualifier is in milliseconds, false if not
+   */
+  public static boolean inMilliseconds(final byte[] qualifier) {
+    return inMilliseconds(qualifier[0]);
+  }
+  
+  /**
+   * Determines if the qualifier is in milliseconds or not
+   * @param qualifier The first byte of a qualifier
+   * @return True if the qualifier is in milliseconds, false if not
+   */
+  public static boolean inMilliseconds(final byte qualifier) {
+    return (qualifier & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG;
+  }
+  
   /**
    * Returns the offset in milliseconds from the row base timestamp from a data
    * point qualifier

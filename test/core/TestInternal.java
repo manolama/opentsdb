@@ -14,17 +14,418 @@ package net.opentsdb.core;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertArrayEquals;
-import net.opentsdb.utils.DateTime;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
+import java.util.ArrayList;
+
+import net.opentsdb.core.Internal.Cell;
+import net.opentsdb.storage.MockBase;
+
+import org.hbase.async.Bytes;
+import org.hbase.async.KeyValue;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({ DateTime.class })
+@PrepareForTest({ Internal.class })
 public final class TestInternal {
+  private static final byte[] KEY = 
+    { 0, 0, 1, 0x50, (byte)0xE2, 0x27, 0, 0, 0, 1, 0, 0, 2 };
+  private static final byte[] FAMILY = { 't' };
+  private static final byte[] ZERO = { 0 };
 
+  @Test
+  public void breakDownRowFixQualifierFlags() {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromInt(5);
+    final byte[] qual3 = { 0x00, 0x43 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(3);
+    row.add(makekv(qual1, val1));
+    row.add(makekv(qual2, val2));
+    row.add(makekv(qual3, val3));
+    
+    final ArrayList<Cell> cells = Internal.breakDownRow(row, 3);
+    assertEquals(3, cells.size());
+    assertArrayEquals(new byte[] { 0x00, 0x07 }, cells.get(0).qualifier);
+    assertArrayEquals(Bytes.fromLong(4L), cells.get(0).value);
+    assertArrayEquals(new byte[] { 0x00, 0x23 }, cells.get(1).qualifier);
+    assertArrayEquals(Bytes.fromInt(5), cells.get(1).value);
+    assertArrayEquals(new byte[] { 0x00, 0x47 }, cells.get(2).qualifier);
+    assertArrayEquals(Bytes.fromLong(6L), cells.get(2).value);
+  }
+  
+  @Test
+  public void breakDownRowFixFloatingPointValue() {
+    final byte[] qual1 = { 0x00, 0x0F };
+    final byte[] val1 = new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 };
+    final byte[] qual2 = { 0x00, 0x2B };
+    final byte[] val2 = new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 };
+    final byte[] qual3 = { 0x00, 0x4B };
+    final byte[] val3 = new byte[] { 0, 0, 0, 1 };
+    
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(3);
+    row.add(makekv(qual1, val1));
+    row.add(makekv(qual2, val2));
+    row.add(makekv(qual3, val3));
+    
+    final ArrayList<Cell> cells = Internal.breakDownRow(row, 3);
+    assertEquals(3, cells.size());
+    assertArrayEquals(new byte[] { 0x00, 0x0F }, cells.get(0).qualifier);
+    assertArrayEquals(new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 }, cells.get(0).value);
+    assertArrayEquals(new byte[] { 0x00, 0x2B }, cells.get(1).qualifier);
+    assertArrayEquals(new byte[] { 0, 0, 0, 1 }, cells.get(1).value);
+    assertArrayEquals(new byte[] { 0x00, 0x4B }, cells.get(2).qualifier);
+    assertArrayEquals(new byte[] { 0, 0, 0, 1 }, cells.get(2).value);
+  }
+  
+  @Test (expected = IllegalDataException.class)
+  public void breakDownRowFixFloatingPointValueCorrupt() {
+    final byte[] qual1 = { 0x00, 0x0F };
+    final byte[] val1 = new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 };
+    final byte[] qual2 = { 0x00, 0x2B };
+    final byte[] val2 = new byte[] { 0, 2, 0, 0, 0, 0, 0, 1 };
+    final byte[] qual3 = { 0x00, 0x4B };
+    final byte[] val3 = new byte[] { 0, 0, 0, 1 };
+    
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(3);
+    row.add(makekv(qual1, val1));
+    row.add(makekv(qual2, val2));
+    row.add(makekv(qual3, val3));
+    
+    Internal.breakDownRow(row, 3);
+  }
+  
+  @Test
+  public void breakDownRowMixSecondsMs() {
+    final byte[] qual1 = { 0x00, 0x27 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x01, 0x00, 0x02 };
+    final byte[] val2 = "Annotation".getBytes(MockBase.ASCII());
+    final byte[] qual3 = { 0x00, 0x47 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(3);
+    row.add(makekv(qual1, val1));
+    row.add(makekv(qual2, val2));
+    row.add(makekv(qual3, val3));
+    
+    final ArrayList<Cell> cells = Internal.breakDownRow(row, 3);
+    assertEquals(2, cells.size());
+    assertArrayEquals(new byte[] { 0x00, 0x27 }, cells.get(0).qualifier);
+    assertArrayEquals(new byte[] { 0x00, 0x47 }, cells.get(1).qualifier);
+  }
+  
+  @Test
+  public void breakDownRowWithNonDataColumns() {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual3 = { 0x00, 0x47 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(3);
+    row.add(makekv(qual1, val1));
+    row.add(makekv(qual2, val2));
+    row.add(makekv(qual3, val3));
+    
+    final ArrayList<Cell> cells = Internal.breakDownRow(row, 3);
+    assertEquals(3, cells.size());
+    assertArrayEquals(new byte[] { 0x00, 0x07 }, cells.get(0).qualifier);
+    assertArrayEquals(new byte[] { (byte) 0xF0, 0x00, 0x02, 0x07 }, cells.get(1).qualifier);
+    assertArrayEquals(new byte[] { 0x00, 0x47 }, cells.get(2).qualifier);
+  }
+
+  @Test
+  public void breakDownRowWithNonDataColumnsSort() {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual3 = { 0x00, 0x47 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(3);
+    row.add(makekv(qual3, val3));
+    row.add(makekv(qual2, val2));
+    row.add(makekv(qual1, val1));
+    
+    final ArrayList<Cell> cells = Internal.breakDownRow(row, 3);
+    assertEquals(3, cells.size());
+    assertArrayEquals(new byte[] { 0x00, 0x07 }, cells.get(0).qualifier);
+    assertArrayEquals(new byte[] { (byte) 0xF0, 0x00, 0x02, 0x07 }, cells.get(1).qualifier);
+    assertArrayEquals(new byte[] { 0x00, 0x47 }, cells.get(2).qualifier);
+  }
+  
+  @Test
+  public void breakDownRowCompactSeconds() {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual3 = { 0x00, 0x47 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    final byte[] qual123 = MockBase.concatByteArrays(qual1, qual2, qual3);
+    final byte[] val123 = MockBase.concatByteArrays(val1, val2, val3, ZERO);
+    
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(1);
+    row.add(makekv(qual123, val123));
+    
+    final ArrayList<Cell> cells = Internal.breakDownRow(row, 1);
+    assertEquals(3, cells.size());
+    assertArrayEquals(new byte[] { 0x00, 0x07 }, cells.get(0).qualifier);
+    assertArrayEquals(Bytes.fromLong(4L), cells.get(0).value);
+    assertArrayEquals(new byte[] { 0x00, 0x27 }, cells.get(1).qualifier);
+    assertArrayEquals(Bytes.fromLong(5L), cells.get(1).value);
+    assertArrayEquals(new byte[] { 0x00, 0x47 }, cells.get(2).qualifier);
+    assertArrayEquals(Bytes.fromLong(6L), cells.get(2).value);
+  }
+  
+  @Test
+  public void breakDownRowCompactSecondsSorting() {
+    final byte[] qual1 = { 0x00, 0x47 };
+    final byte[] val1 = Bytes.fromLong(6L);
+    final byte[] qual2 = { 0x00, 0x07 };
+    final byte[] val2 = Bytes.fromLong(4L);
+    final byte[] qual3 = { 0x00, 0x27 };
+    final byte[] val3 = Bytes.fromLong(5L);
+    final byte[] qual123 = MockBase.concatByteArrays(qual1, qual2, qual3);
+    final byte[] val123 = MockBase.concatByteArrays(val1, val2, val3, ZERO);
+    
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(1);
+    row.add(makekv(qual123, val123));
+    
+    final ArrayList<Cell> cells = Internal.breakDownRow(row, 1);
+    assertEquals(3, cells.size());
+    assertArrayEquals(new byte[] { 0x00, 0x07 }, cells.get(0).qualifier);
+    assertArrayEquals(Bytes.fromLong(4L), cells.get(0).value);
+    assertArrayEquals(new byte[] { 0x00, 0x27 }, cells.get(1).qualifier);
+    assertArrayEquals(Bytes.fromLong(5L), cells.get(1).value);
+    assertArrayEquals(new byte[] { 0x00, 0x47 }, cells.get(2).qualifier);
+    assertArrayEquals(Bytes.fromLong(6L), cells.get(2).value);
+  }
+  
+  @Test
+  public void breakDownRowCompactMs() {
+    final byte[] qual1 = { (byte) 0xF0, 0x00, 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual3 = { (byte) 0xF0, 0x00, 0x07, 0x07 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    final byte[] qual123 = MockBase.concatByteArrays(qual1, qual2, qual3);
+    final byte[] val123 = MockBase.concatByteArrays(val1, val2, val3, ZERO);
+    
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(1);
+    row.add(makekv(qual123, val123));
+    
+    final ArrayList<Cell> cells = Internal.breakDownRow(row, 1);
+    assertEquals(3, cells.size());
+    assertArrayEquals(new byte[] { (byte) 0xF0, 0x00, 0x00, 0x07 }, cells.get(0).qualifier);
+    assertArrayEquals(Bytes.fromLong(4L), cells.get(0).value);
+    assertArrayEquals(new byte[] { (byte) 0xF0, 0x00, 0x02, 0x07 }, cells.get(1).qualifier);
+    assertArrayEquals(Bytes.fromLong(5L), cells.get(1).value);
+    assertArrayEquals(new byte[] { (byte) 0xF0, 0x00, 0x07, 0x07 }, cells.get(2).qualifier);
+    assertArrayEquals(Bytes.fromLong(6L), cells.get(2).value);
+  }
+  
+  @Test
+  public void breakDownRowCompactSecAndMs() {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual3 = { 0x00, 0x47 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    final byte[] qual123 = MockBase.concatByteArrays(qual1, qual2, qual3);
+    final byte[] val123 = MockBase.concatByteArrays(val1, val2, val3, ZERO);
+    
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(1);
+    row.add(makekv(qual123, val123));
+    
+    final ArrayList<Cell> cells = Internal.breakDownRow(row, 1);
+    assertEquals(3, cells.size());
+    assertArrayEquals(new byte[] { 0x00, 0x07 }, cells.get(0).qualifier);
+    assertArrayEquals(Bytes.fromLong(4L), cells.get(0).value);
+    assertArrayEquals(new byte[] { (byte) 0xF0, 0x00, 0x02, 0x07 }, cells.get(1).qualifier);
+    assertArrayEquals(Bytes.fromLong(5L), cells.get(1).value);
+    assertArrayEquals(new byte[] { 0x00, 0x47 }, cells.get(2).qualifier);
+    assertArrayEquals(Bytes.fromLong(6L), cells.get(2).value);
+  }
+  
+  @Test (expected = IllegalDataException.class)
+  public void breakDownRowCompactCorrupt() {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual3 = { 0x00, 0x41 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    final byte[] qual123 = MockBase.concatByteArrays(qual1, qual2, qual3);
+    final byte[] val123 = MockBase.concatByteArrays(val1, val2, val3, ZERO);
+    
+    final ArrayList<KeyValue> row = new ArrayList<KeyValue>(1);
+    row.add(makekv(qual123, val123));
+    
+    Internal.breakDownRow(row, 1);
+  }
+  
+  @Test
+  public void compareQualifiersLTSecInt() {
+    assertEquals(-1, Internal.compareQualifiers(new byte[] {0x00, 0x27}, 0,
+        new byte[] {0x00, 0x37}, 0));
+  }
+  
+  @Test
+  public void compareQualifiersGTSecInt() {
+    assertEquals(1, Internal.compareQualifiers(new byte[] {0x00, 0x37}, 0,
+        new byte[] {0x00, 0x27}, 0));
+  }
+  
+  @Test
+  public void compareQualifiersEQSecInt() {
+    assertEquals(0, Internal.compareQualifiers(new byte[] {0x00, 0x27}, 0,
+        new byte[] {0x00, 0x27}, 0));
+  }
+
+  @Test
+  public void compareQualifiersLTSecIntAndFloat() {
+    assertEquals(-1, Internal.compareQualifiers(new byte[] {0x00, 0x27}, 0,
+        new byte[] {0x00, 0x3B}, 0));
+  }
+  
+  @Test
+  public void compareQualifiersGTSecIntAndFloat() {
+    assertEquals(1, Internal.compareQualifiers(new byte[] {0x00, 0x37}, 0,
+        new byte[] {0x00, 0x2B}, 0));
+  }
+  
+  @Test
+  public void compareQualifiersEQSecIntAndFloat() {
+    assertEquals(0, Internal.compareQualifiers(new byte[] {0x00, 0x27}, 0,
+        new byte[] {0x00, 0x2B}, 0));
+  }
+
+  public void compareQualifiersLTMsInt() {
+    assertEquals(-1, Internal.compareQualifiers(
+        new byte[] { (byte) 0xF0, 0x00, 0x02, 0x07 }, 0, 
+        new byte[] { (byte) 0xF0, 0x00, 0x07, 0x07 }, 0));
+  }
+  
+  @Test
+  public void compareQualifiersGTMsInt() {
+    assertEquals(1, Internal.compareQualifiers(
+        new byte[] { (byte) 0xF0, 0x00, 0x07, 0x07 }, 0,
+        new byte[] { (byte) 0xF0, 0x00, 0x02, 0x07 }, 0));
+  }
+  
+  @Test
+  public void compareQualifiersEQMsInt() {
+    assertEquals(0, Internal.compareQualifiers(
+        new byte[] { (byte) 0xF0, 0x00, 0x07, 0x07 }, 0, 
+        new byte[] { (byte) 0xF0, 0x00, 0x07, 0x07 }, 0));
+  }
+  
+  public void compareQualifiersLTMsIntAndFloat() {
+    assertEquals(-1, Internal.compareQualifiers(
+        new byte[] { (byte) 0xF0, 0x00, 0x02, 0x07 }, 0,
+        new byte[] { (byte) 0xF0, 0x00, 0x07, 0x0B }, 0));
+  }
+  
+  @Test
+  public void compareQualifiersGTMsIntAndFloat() {
+    assertEquals(1, Internal.compareQualifiers(
+        new byte[] { (byte) 0xF0, 0x00, 0x07, 0x07 }, 0,
+        new byte[] { (byte) 0xF0, 0x00, 0x02, 0x0B }, 0));
+  }
+  
+  @Test
+  public void compareQualifiersEQMsIntAndFloat() {
+    assertEquals(0, Internal.compareQualifiers(
+        new byte[] { (byte) 0xF0, 0x00, 0x07, 0x07 }, 0, 
+        new byte[] { (byte) 0xF0, 0x00, 0x07, 0x0B }, 0));
+  }
+  
+  @Test
+  public void compareQualifiersLTMsAndSecond() {
+    assertEquals(-1, Internal.compareQualifiers(
+        new byte[] { (byte) 0xF0, 0x00, 0x07, 0x0B }, 0, 
+        new byte[] { 0x00, 0x27}, 0));
+  }
+  
+  @Test
+  public void compareQualifiersGTMsAndSecond() {
+    assertEquals(1, Internal.compareQualifiers(new byte[] { 0x00, 0x27}, 0, 
+        new byte[] { (byte) 0xF0, 0x00, 0x07, 0x0B }, 0));
+  }
+  
+  @Test
+  public void compareQualifiersEQMsAndSecond() {
+    assertEquals(0, Internal.compareQualifiers(new byte[] { 0x00, 0x27}, 0, 
+        new byte[] { (byte) 0xF0, 0x01, (byte) 0xF4, 0x0B }, 0));
+  }
+  
+  @Test
+  public void fixQualifierFlags() {
+    assertEquals(0x0B, Internal.fixQualifierFlags((byte) 0x0F, 4));
+  }
+  
+  @Test
+  public void floatingPointValueToFix() {
+    assertTrue(Internal.floatingPointValueToFix((byte) 0x0B, 
+        new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 }));
+  }
+  
+  @Test
+  public void floatingPointValueToFixNot() {
+    assertFalse(Internal.floatingPointValueToFix((byte) 0x0B, 
+        new byte[] { 0, 0, 0, 1 }));
+  }
+  
+  @Test
+  public void fixFloatingPointValue() {
+    assertArrayEquals(new byte[] { 0, 0, 0, 1 }, 
+        Internal.fixFloatingPointValue((byte) 0x0B, 
+            new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 }));
+  }
+  
+  @Test
+  public void fixFloatingPointValueNot() {
+    assertArrayEquals(new byte[] { 0, 0, 0, 1 }, 
+        Internal.fixFloatingPointValue((byte) 0x0B, 
+            new byte[] { 0, 0, 0, 1 }));
+  }
+  
+  @Test
+  public void fixFloatingPointValueWasInt() {
+    assertArrayEquals(new byte[] { 0, 0, 0, 1 }, 
+        Internal.fixFloatingPointValue((byte) 0x03, 
+            new byte[] { 0, 0, 0, 1 }));
+  }
+  
+  @Test (expected = IllegalDataException.class)
+  public void fixFloatingPointValueCorrupt() {
+    Internal.fixFloatingPointValue((byte) 0x0B, 
+            new byte[] { 0, 2, 0, 0, 0, 0, 0, 1 });
+  }
+  
+  @Test
+  public void inMilliseconds() {
+    assertTrue(Internal.inMilliseconds((byte)0xFF));
+  }
+  
+  @Test
+  public void inMillisecondsNot() {
+    assertFalse(Internal.inMilliseconds((byte)0xEF));
+  }
+  
   @Test
   public void getValueLengthFromQualifierInt8() {
     assertEquals(8, Internal.getValueLengthFromQualifier(new byte[] { 0, 7 }));
@@ -157,12 +558,7 @@ public final class TestInternal {
   public void getFlagsFromQualifierFloat() {
     assertEquals(11, Internal.getFlagsFromQualifier(new byte[] { 0x00, 0x1B }));
   }
-  
-  @Test
-  public void foo() {
-    Internal.buildQualifier(1356998411500L, (short) 7);
-  }
-  
+    
   @Test
   public void buildQualifierSecond8ByteLong() {
     final byte[] q = Internal.buildQualifier(1356998403, (short) 7);
@@ -265,5 +661,10 @@ public final class TestInternal {
         0x47 };
     assertArrayEquals(new byte[] { (byte) 0xF0, 0x00, 0x02, 0x07 }, 
         Internal.extractQualifier(qual, 2));
+  }
+
+  /** Shorthand to create a {@link KeyValue}.  */
+  private static KeyValue makekv(final byte[] qualifier, final byte[] value) {
+    return new KeyValue(KEY, FAMILY, qualifier, value);
   }
 }
