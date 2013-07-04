@@ -148,14 +148,14 @@ public final class TestFsck {
   }
   
   @Test
-  public void noErrorsMixedMsAndSeconds() throws Exception {
+  public void noErrorsMixedMsAndSecondsAnnotations() throws Exception {
     HashMap<String, String> tags = new HashMap<String, String>(1);
     tags.put("host", "web01");
     long timestamp = 1356998400000L;
     for (float i = 1.25F; i <= 76; i += 0.25F) {
       long ts = timestamp += 500;
-      if (ts % 1000 == 0) {
-        ts /= 1000;
+      if ((ts % 1000) == 0) {
+        ts = ts / 1000;
       }
       if (i % 2 == 0) {
         tsdb.addPoint("sys.cpu.user", ts, (long)i, tags).joinUninterruptibly();
@@ -164,12 +164,12 @@ public final class TestFsck {
       }
     }
     
-    final Annotation note = new Annotation();
-    note.setTSUID("00000150E24320000001000001");
-    note.setDescription("woot");
-    note.setStartTime(1356998460);
-    note.syncToStorage(tsdb, true).joinUninterruptibly();
-    
+//    final Annotation note = new Annotation();
+//    note.setTSUID("00000150E24320000001000001");
+//    note.setDescription("woot");
+//    note.setStartTime(1356998460);
+//    note.syncToStorage(tsdb, true).joinUninterruptibly();
+//    
     int errors = (Integer)fsck.invoke(null, tsdb, client, 
         "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
         "1356998400", "1357002000", "sum", "sys.cpu.user" });
@@ -347,5 +347,39 @@ public final class TestFsck {
         "1356998400", "1357002000", "sum", "sys.cpu.user" });
     assertEquals(1, errors);
     assertEquals(1, storage.numColumns(ROW));
+  }
+
+  @Test
+  public void dumpSeries() throws Exception {
+    Method dump = DumpSeries.class.getDeclaredMethod("formatKeyValue",
+        StringBuilder.class,
+        TSDB.class,
+        boolean.class,
+        KeyValue.class,
+        long.class,
+        String.class);
+    dump.setAccessible(true);
+    
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual3 = { 0x00, 0x47 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    final byte[] qual123 = MockBase.concatByteArrays(qual1, qual2, qual3);
+    final byte[] val123 = MockBase.concatByteArrays(val1, val2, val3, new byte[] { 0 });
+    final KeyValue kv = new KeyValue(ROW, "t".getBytes(), qual123, val123);
+  
+    StringBuilder sb = new StringBuilder();
+    dump.invoke(null, sb, tsdb, false, kv, 1356998400, "sys.cpu.0");
+    System.out.println(sb.toString());
+    
+    final byte[] note = { 0x01, 0x00, 0x47 };
+    final byte[] note_val = "Annotation".getBytes();
+    final KeyValue kv2 = new KeyValue(ROW, "t".getBytes(), note, note_val);
+    
+    sb = new StringBuilder();
+    dump.invoke(null, sb, tsdb, false, kv2, 1356998400, "sys.cpu.0");
+    System.out.println(sb.toString());
   }
 }

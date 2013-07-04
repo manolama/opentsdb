@@ -13,6 +13,7 @@
 package net.opentsdb.tools;
 
 import java.util.ArrayList;
+import java.util.TreeMap;
 
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
@@ -30,6 +31,7 @@ import org.hbase.async.Scanner;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.IllegalDataException;
 import net.opentsdb.core.Internal;
+import net.opentsdb.core.Internal.Cell;
 import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.utils.Config;
@@ -109,6 +111,19 @@ final class Fsck {
         }
       }
 
+    final class DP {
+      
+      long stored_timestamp;
+      byte[] qualifier;
+      boolean compacted;
+      
+      DP(final long stored_timestamp, final byte[] qualifier, final boolean compacted) {
+        this.stored_timestamp = stored_timestamp;
+        this.qualifier = qualifier;
+        this.compacted = compacted;
+      }
+    }
+    
     int errors = 0;
     int correctable = 0;
 
@@ -129,6 +144,9 @@ final class Fsck {
       while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
         for (final ArrayList<KeyValue> row : rows) {
           rowcount++;
+          
+          final TreeMap<Long, ArrayList<DP>> previous = new TreeMap<Long, ArrayList<DP>>();
+          
           // Take a copy of the row-key because we're going to zero-out the
           // timestamp and use that as a key in our `seen' map.
           final byte[] key = row.get(0).key().clone();
@@ -161,21 +179,36 @@ final class Fsck {
               // likely an annotation or other object
               // TODO - validate annotations
               continue;
-            } else if (qual.length >= 4 && (qual[0] & Const.MS_BYTE_FLAG) 
-                != Const.MS_BYTE_FLAG) {
+            } else if (qual.length >= 4 && !Internal.inMilliseconds(qual[0])) {
               // compacted row
               if (value[value.length - 1] != 0) {
                 errors++;
                 LOG.error("The last byte of the a compacted should be 0.  Either"
                           + " this value is corrupted or it was written by a"
                           + " future version of OpenTSDB.\n\t" + kv);
+                
+                // add every cell in the compacted column to the previously seen
+                // data point tree so that we can scan for duplicate timestamps
+                final ArrayList<Cell> cells = Internal.breakDownRow(kv); 
+                for (Cell cell : cells) {
+                  final long ts = cell.timestamp(base_time);
+                  ArrayList<DP> dps = previous.get(ts);
+                  if (dps == null) {
+                    dps = new ArrayList<DP>(1);
+                  }
+                  dps.add(new DP(kv.timestamp(), kv.qualifier(), true));
+                }
                 continue;
-              }          
+              }
             } // else: qualifier is on 2 or 4 bytes, it's an individual value.
-//            final short qualifier = Bytes.getShort(qual);
-//            final short delta = (short) ((qualifier & 0xFFFF) >>> Internal.FLAG_BITS);
-//            final long timestamp = base_time + delta;
+
             final long timestamp = Internal.getTimestampFromQualifier(qual, base_time);
+            ArrayList<DP> dps = previous.get(timestamp);
+            if (dps == null) {
+              dps = new ArrayList<DP>(1);
+            }
+            dps.add(new DP(kv.timestamp(), kv.qualifier(), false));
+            
             if (value.length > 8) {
               errors++;
               LOG.error("Value more than 8 byte long with a 2-byte"
@@ -216,53 +249,53 @@ final class Fsck {
                           + " bytes.\n\t" + kv);
               }
             }
-            if (timestamp <= prev.timestamp()) {
-              errors++;
-              correctable++;
-              if (fix) {
-                final byte[] newkey = kv.key().clone();
-                // Fix the timestamp in the row key.
-                final long new_base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
-                Bytes.setInt(newkey, (int) new_base_time, metric_width);
-//                final short newqual = (short) ((timestamp - new_base_time) << Internal.FLAG_BITS
-//                                               | (qualifier & Internal.FLAGS_MASK));
-                final byte[] newqual = Internal.buildQualifier(timestamp, Internal.getFlagsFromQualifier(qual));
-                final DeleteOutOfOrder delooo = new DeleteOutOfOrder(kv);
-                if (timestamp < prev.timestamp()) {
-                  client.put(new PutRequest(table, newkey, kv.family(),
-                                           newqual, value))
-                    // Only delete the offending KV once we're sure that the new
-                    // KV has been persisted in HBase.
-                    .addCallbackDeferring(delooo);
-                } else {
-                  // We have two data points at exactly the same timestamp.
-                  // This can happen when only the flags differ.  This is
-                  // typically caused by one data point being an integer and
-                  // the other being a floating point value.  In this case
-                  // we just delete the duplicate data point and keep the
-                  // first one we saw.
-                  delooo.call(null);
-                }
-              } else {
-                buf.setLength(0);
-                buf.append(timestamp < prev.timestamp()
-                           ? "Out of order data.\n\t"
-                           : "Duplicate data point with different flags.\n\t")
-                  .append(timestamp)
-                  .append(" (").append(DumpSeries.date(timestamp))
-                  .append(") @ ").append(kv).append("\n\t");
-                DumpSeries.formatKeyValue(buf, tsdb, kv, base_time);
-                buf.append("\n\t  was found after\n\t").append(prev.timestamp)
-                  .append(" (").append(DumpSeries.date(prev.timestamp))
-                  .append(") @ ").append(prev.kv).append("\n\t");
-                DumpSeries.formatKeyValue(buf, tsdb, prev.kv,
-                                          Bytes.getUnsignedInt(prev.kv.key(), metric_width));
-                LOG.error(buf.toString());
-              }
-            } else {
-              prev.setTimestamp(timestamp);
-              prev.kv = kv;
-            }
+//            if (timestamp <= prev.timestamp()) {
+//              errors++;
+//              correctable++;
+//              if (fix) {
+//                final byte[] newkey = kv.key().clone();
+//                // Fix the timestamp in the row key.
+//                final long new_base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
+//                Bytes.setInt(newkey, (int) new_base_time, metric_width);
+////                final short newqual = (short) ((timestamp - new_base_time) << Internal.FLAG_BITS
+////                                               | (qualifier & Internal.FLAGS_MASK));
+//                final byte[] newqual = Internal.buildQualifier(timestamp, Internal.getFlagsFromQualifier(qual));
+//                final DeleteOutOfOrder delooo = new DeleteOutOfOrder(kv);
+//                if (timestamp < prev.timestamp()) {
+//                  client.put(new PutRequest(table, newkey, kv.family(),
+//                                           newqual, value))
+//                    // Only delete the offending KV once we're sure that the new
+//                    // KV has been persisted in HBase.
+//                    .addCallbackDeferring(delooo);
+//                } else {
+//                  // We have two data points at exactly the same timestamp.
+//                  // This can happen when only the flags differ.  This is
+//                  // typically caused by one data point being an integer and
+//                  // the other being a floating point value.  In this case
+//                  // we just delete the duplicate data point and keep the
+//                  // first one we saw.
+//                  delooo.call(null);
+//                }
+//              } else {
+//                buf.setLength(0);
+//                buf.append(timestamp < prev.timestamp()
+//                           ? "Out of order data.\n\t"
+//                           : "Duplicate data point with different flags.\n\t")
+//                  .append(timestamp)
+//                  .append(" (").append(DumpSeries.date(timestamp))
+//                  .append(") @ ").append(kv).append("\n\t");
+//                DumpSeries.formatKeyValue(buf, tsdb, kv, base_time);
+//                buf.append("\n\t  was found after\n\t").append(prev.timestamp)
+//                  .append(" (").append(DumpSeries.date(prev.timestamp))
+//                  .append(") @ ").append(prev.kv).append("\n\t");
+//                DumpSeries.formatKeyValue(buf, tsdb, prev.kv,
+//                                          Bytes.getUnsignedInt(prev.kv.key(), metric_width));
+//                LOG.error(buf.toString());
+//              }
+//            } else {
+//              prev.setTimestamp(timestamp);
+//              prev.kv = kv;
+//            }
           }
         }
       }
