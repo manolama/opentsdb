@@ -112,8 +112,6 @@ final class RowSeq implements DataPoints {
     int merged_v_index = 0;
     short v_length;
     short q_length;
-    final CompactionQueue.MixedComparator cmp = 
-      new CompactionQueue.MixedComparator();
     while (remote_q_index < remote_qual.length || 
         local_q_index < qualifiers.length) {
       // if the remote q has finished, we just need to handle left over locals
@@ -155,7 +153,7 @@ final class RowSeq implements DataPoints {
       }
       
       // for dupes, we just need to skip and continue
-      final int sort = cmp.compare(remote_qual, remote_q_index, 
+      final int sort = Internal.compareQualifiers(remote_qual, remote_q_index, 
           qualifiers, local_q_index);
       if (sort == 0) {
         //LOG.debug("Discarding duplicate timestamp: " + 
@@ -325,18 +323,9 @@ final class RowSeq implements DataPoints {
     int index = 0;
     for (int idx = 0; idx < qualifiers.length; idx += 2) {
       if (i == index) {
-//        if ((qualifiers[idx] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
-//          final long ms = (Bytes.getUnsignedInt(qualifiers, idx) & 0x0FFFFFC0) 
-//            >>> (Const.FLAG_BITS + 2);
-//          return (baseTime() * 1000) + ms;            
-//        } else {
-//          final long seconds = (Bytes.getUnsignedShort(qualifiers, idx) & 0xFFFF) 
-//            >>> Const.FLAG_BITS;
-//          return (baseTime() + seconds) * 1000;
-//        }
         return Internal.getTimestampFromQualifier(qualifiers, baseTime(), idx);
       }
-      if ((qualifiers[idx] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+      if (Internal.inMilliseconds(qualifiers[idx])) {
         idx += 2;
       }      
       index++;
