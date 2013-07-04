@@ -474,7 +474,6 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
                                          final int qual_len,
                                          final int val_len,
                                          final boolean sort) {
-    System.out.println("Trivial compaction");
     // Now let's simply concatenate all the qualifiers and values together.
     final byte[] qualifier = new byte[qual_len];
     final byte[] value = new byte[val_len];
@@ -545,7 +544,6 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
   static KeyValue complexCompact(final ArrayList<KeyValue> row,
                                  final int estimated_nvalues, 
                                  final boolean sort) {
-    System.out.println("Complex Compact");
     // We know at least one of the cells contains multiple values, and we need
     // to merge all the cells together in a sorted fashion.  We use a simple
     // strategy: split all the cells into individual objects, sort them,
