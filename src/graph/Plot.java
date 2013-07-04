@@ -198,13 +198,8 @@ public final class Plot {
       datafiles[i] = basepath + "_" + i + ".dat";
       final PrintWriter datafile = new PrintWriter(datafiles[i]);
       try {
-        long last_timestamp = 0;
         for (final DataPoint d : datapoints.get(i)) {
           final long ts = d.timestamp() / 1000;
-          if (ts <= last_timestamp) {
-            continue;
-          }
-          last_timestamp = ts;
           if (ts >= (start_time & UNSIGNED) && ts <= (end_time & UNSIGNED)) {
             npoints++;
           }
