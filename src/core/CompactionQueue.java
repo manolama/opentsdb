@@ -13,7 +13,6 @@
 package net.opentsdb.core;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -32,6 +31,7 @@ import org.hbase.async.HBaseRpc;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PleaseThrottleException;
 
+import net.opentsdb.core.Internal.Cell;
 import net.opentsdb.meta.Annotation;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.utils.JSON;
@@ -264,11 +264,11 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
           return null;
         }
         final byte[] val = kv.value();
-        if (qual.length == 2 && floatingPointValueToFix(qual[1], val)) {
+        if (qual.length == 2 && Internal.floatingPointValueToFix(qual[1], val)) {
           // Fix up old, incorrectly encoded floating point value.
-          final byte[] newval = fixFloatingPointValue(qual[1], val);
+          final byte[] newval = Internal.fixFloatingPointValue(qual[1], val);
           final byte[] newqual = new byte[] { qual[0],
-            fixQualifierFlags(qual[1], newval.length) };
+            Internal.fixQualifierFlags(qual[1], newval.length) };
           kv = new KeyValue(kv.key(), kv.family(), newqual, newval);
         }
         compacted[0] = kv;
@@ -326,27 +326,29 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
             longest_idx = i;
           }
         } else {
-          if ((qual[0] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
+          if (Internal.inMilliseconds(qual[0])) {
             ms_in_row = true;
           } else {
             s_in_row = true;
           }
           
+          if (len > longest.qualifier().length) {
+            longest = kv;
+            longest_idx = i;
+          }
+          
           // there may be a situation where two second columns are concatenated
           // into 4 bytes. If so, we need to perform a complex compaction
-          if (len == 4 && (qual[0] & Const.MS_BYTE_FLAG) != Const.MS_BYTE_FLAG) {
+          if (len == 4 && Internal.inMilliseconds(qual[0])) {
             trivial = false;
-            if (len > longest.qualifier().length) {
-              longest = kv;
-              longest_idx = i;
-            }
           } else if (len == 4) {
+            trivial = false;
             val_len += kv.value().length;
           } else {
             // We don't need it below for complex compactions, so we update it
             // only here in the `else' branch.
             final byte[] v = kv.value();
-            val_len += floatingPointValueToFix(qual[1], v) ? 4 : v.length;
+            val_len += Internal.floatingPointValueToFix(qual[1], v) ? 4 : v.length;
           }
         }
         qual_len += len;
@@ -441,6 +443,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       final byte[] qual = compact.qualifier();
       final byte[] value = compact.value();
       written_cells.incrementAndGet();
+
       return tsdb.put(key, qual, value)
         .addCallbacks(new DeleteCompactedCB(row), handle_write_error);
     } else {
@@ -471,6 +474,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
                                          final int qual_len,
                                          final int val_len,
                                          final boolean sort) {
+    System.out.println("Trivial compaction");
     // Now let's simply concatenate all the qualifiers and values together.
     final byte[] qualifier = new byte[qual_len];
     final byte[] value = new byte[val_len];
@@ -480,7 +484,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     int last_delta = -1;  // Time delta, extracted from the qualifier.
     
     if (sort) {
-      Collections.sort(row, new MixedComparator());
+      Collections.sort(row, new Internal.KeyValueComparator());
     }
     
     for (final KeyValue kv : row) {
@@ -501,9 +505,9 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       
       final byte[] v;
       if (q.length == 2) {
-        v = fixFloatingPointValue(q[1], kv.value());
+        v = Internal.fixFloatingPointValue(q[1], kv.value());
         qualifier[qual_idx++] = q[0];
-        qualifier[qual_idx++] = fixQualifierFlags(q[1], v.length);
+        qualifier[qual_idx++] = Internal.fixQualifierFlags(q[1], v.length);
       } else {
         v = kv.value();
         System.arraycopy(q, 0, qualifier, qual_idx, q.length);
@@ -517,114 +521,6 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
 
     final KeyValue first = row.get(0);
     return new KeyValue(first.key(), first.family(), qualifier, value);
-  }
-
-  /**
-   * Fix the flags inside the last byte of a qualifier.
-   * <p>
-   * OpenTSDB used to not rely on the size recorded in the flags being
-   * correct, and so for a long time it was setting the wrong size for
-   * floating point values (pretending they were encoded on 8 bytes when
-   * in fact they were on 4).  So overwrite these bits here to make sure
-   * they're correct now, because once they're compacted it's going to
-   * be quite hard to tell if the flags are right or wrong, and we need
-   * them to be correct to easily decode the values.
-   * @param flags The least significant byte of a qualifier.
-   * @param val_len The number of bytes in the value of this qualifier.
-   * @return The least significant byte of the qualifier with correct flags.
-   */
-  private static byte fixQualifierFlags(byte flags, final int val_len) {
-    // Explanation:
-    //   (1) Take the last byte of the qualifier.
-    //   (2) Zero out all the flag bits but one.
-    //       The one we keep is the type (floating point vs integer value).
-    //   (3) Set the length properly based on the value we have.
-    return (byte) ((flags & ~(Const.FLAGS_MASK >>> 1)) | (val_len - 1));
-    //              ^^^^^   ^^^^^^^^^^^^^^^^^^^^^^^^^    ^^^^^^^^^^^^^
-    //               (1)               (2)                    (3)
-  }
-
-  /**
-   * Returns whether or not this is a floating value that needs to be fixed.
-   * <p>
-   * OpenTSDB used to encode all floating point values as `float' (4 bytes)
-   * but actually store them on 8 bytes, with 4 leading 0 bytes, and flags
-   * correctly stating the value was on 4 bytes.
-   * @param flags The least significant byte of a qualifier.
-   * @param value The value that may need to be corrected.
-   */
-  private static boolean floatingPointValueToFix(final byte flags,
-                                                 final byte[] value) {
-    return (flags & Const.FLAG_FLOAT) != 0   // We need a floating point value.
-      && (flags & Const.LENGTH_MASK) == 0x3  // That pretends to be on 4 bytes.
-      && value.length == 8;                  // But is actually using 8 bytes.
-  }
-
-  /**
-   * Returns a corrected value if this is a floating point value to fix.
-   * <p>
-   * OpenTSDB used to encode all floating point values as `float' (4 bytes)
-   * but actually store them on 8 bytes, with 4 leading 0 bytes, and flags
-   * correctly stating the value was on 4 bytes.
-   * <p>
-   * This function detects such values and returns a corrected value, without
-   * the 4 leading zeros.  Otherwise it returns the value unchanged.
-   * @param flags The least significant byte of a qualifier.
-   * @param value The value that may need to be corrected.
-   * @throws IllegalDataException if the value is malformed.
-   */
-  private static byte[] fixFloatingPointValue(final byte flags,
-                                              final byte[] value) {
-    if (floatingPointValueToFix(flags, value)) {
-      // The first 4 bytes should really be zeros.
-      if (value[0] == 0 && value[1] == 0 && value[2] == 0 && value[3] == 0) {
-        // Just keep the last 4 bytes.
-        return new byte[] { value[4], value[5], value[6], value[7] };
-      } else {  // Very unlikely.
-        throw new IllegalDataException("Corrupted floating point value: "
-          + Arrays.toString(value) + " flags=0x" + Integer.toHexString(flags)
-          + " -- first 4 bytes are expected to be zeros.");
-      }
-    }
-    return value;
-  }
-
-  /**
-   * Helper class for complex compaction cases.
-   * <p>
-   * This is simply a glorified pair of (qualifier, value) that's comparable.
-   * Only the qualifier is used to make comparisons.
-   * @see #complexCompact
-   */
-  private static final class Cell implements Comparable<Cell> {
-    /** Tombstone used as a helper during the complex compaction.  */
-    static final Cell SKIP = new Cell(null, null);
-
-    final byte[] qualifier;
-    final byte[] value;
-    final MixedComparator comparator = new MixedComparator();
-
-    Cell(final byte[] qualifier, final byte[] value) {
-      this.qualifier = qualifier;
-      this.value = value;
-    }
-
-    public int compareTo(final Cell other) {
-      return comparator.compare(qualifier, other.qualifier);
-    }
-
-    public boolean equals(final Object o) {
-      return o != null && o instanceof Cell && compareTo((Cell) o) == 0;
-    }
-
-    public int hashCode() {
-      return Arrays.hashCode(qualifier);
-    }
-
-    public String toString() {
-      return "Cell(" + Arrays.toString(qualifier)
-        + ", " + Arrays.toString(value) + ')';
-    }
   }
 
   /**
@@ -649,15 +545,15 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
   static KeyValue complexCompact(final ArrayList<KeyValue> row,
                                  final int estimated_nvalues, 
                                  final boolean sort) {
+    System.out.println("Complex Compact");
     // We know at least one of the cells contains multiple values, and we need
     // to merge all the cells together in a sorted fashion.  We use a simple
     // strategy: split all the cells into individual objects, sort them,
     // merge the result while ignoring duplicates (same qualifier & value).
-    final ArrayList<Cell> cells = breakDownValues(row, estimated_nvalues);
-    Collections.sort(cells);
+    final ArrayList<Cell> cells = Internal.breakDownRow(row, estimated_nvalues);
 
     if (sort) {
-      Collections.sort(row, new MixedComparator());
+      Collections.sort(row, new Internal.KeyValueComparator());
     }
     
     // Now let's do one pass first to compute the length of the compacted
@@ -730,78 +626,6 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     final KeyValue kv = new KeyValue(first.key(), first.family(),
                                      qualifier, value);
     return kv;
-  }
-
-  /**
-   * Breaks down all the values in a row into individual {@link Cell}s.
-   * @param row The row to compact.  Assumed to have 2 elements or more.
-   * @param estimated_nvalues Estimate of the number of values to compact.
-   * Used to pre-allocate a collection of the right size, so it's better to
-   * overshoot a bit to avoid re-allocations.
-   * @throws IllegalDataException if one of the cells cannot be read because
-   * it's corrupted or in a format we don't understand.
-   */
-  private static ArrayList<Cell> breakDownValues(final ArrayList<KeyValue> row,
-                                                 final int estimated_nvalues) {
-    final ArrayList<Cell> cells = new ArrayList<Cell>(estimated_nvalues);
-    for (final KeyValue kv : row) {
-      final byte[] qual = kv.qualifier();
-      final int len = qual.length;
-      final byte[] val = kv.value();
-      if (len == 2) {  // Single-value cell.
-        // Maybe we need to fix the flags in the qualifier.
-        final byte[] actual_val = fixFloatingPointValue(qual[1], val);
-        final byte q = fixQualifierFlags(qual[1], actual_val.length);
-        final byte[] actual_qual;
-        if (q != qual[1]) {  // We need to fix the qualifier.
-          actual_qual = new byte[] { qual[0], q };  // So make a copy.
-        } else {
-          actual_qual = qual;  // Otherwise use the one we already have.
-        }
-        final Cell cell = new Cell(actual_qual, actual_val);
-        cells.add(cell);
-        continue;
-      } else if (len == 4 && (qual[0] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
-        // since ms support is new, there's nothing to fix
-        final Cell cell = new Cell(qual, val);
-        cells.add(cell);
-        continue;
-      }
-      // else: we have a multi-value cell.  We need to break it down into
-      // individual Cell objects.
-      // First check that the last byte is 0, otherwise it might mean that
-      // this compacted cell has been written by a future version of OpenTSDB
-      // and we don't know how to decode it, so we shouldn't touch it.
-      if (val[val.length - 1] != 0) {
-        throw new IllegalDataException("Don't know how to read this value:"
-          + Arrays.toString(val) + " found in " + kv
-          + " -- this compacted value might have been written by a future"
-          + " version of OpenTSDB, or could be corrupt.");
-      }
-      // Now break it down into Cells.
-      int val_idx = 0;
-      for (int i = 0; i < len; i += 2) {
-        final byte[] q = Internal.extractQualifier(qual, i);
-        final int vlen = Internal.getValueLengthFromQualifier(qual, i);
-        if ((qual[i] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
-          i += 2;
-        }
-        final byte[] v = new byte[vlen];
-        System.arraycopy(val, val_idx, v, 0, vlen);
-        val_idx += vlen;
-        final Cell cell = new Cell(q, v);
-        cells.add(cell);
-      }
-      // Check we consumed all the bytes of the value.  Remember the last byte
-      // is metadata, so it's normal that we didn't consume it.
-      if (val_idx != val.length - 1) {
-        throw new IllegalDataException("Corrupted value: couldn't break down"
-          + " into individual values (consumed " + val_idx + " bytes, but was"
-          + " expecting to consume " + (val.length - 1) + "): " + kv
-          + ", cells so far: " + cells);
-      }
-    }
-    return cells;
   }
 
   /**
@@ -1008,39 +832,6 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
       final int c = Bytes.memcmp(a, b, metric_width, Const.TIMESTAMP_BYTES);
       // If the timestamps are equal, sort according to the entire row key.
       return c != 0 ? c : Bytes.memcmp(a, b);
-    }
-  }
-  
-  /**
-   * Helper to sort a row with a mixture of millisecond and second data points.
-   * In such a case, we convert all of the seconds into millisecond timestamps,
-   * then perform the comparison.
-   * <b>Note:</b> You must filter out all but the second, millisecond and
-   * compacted rows
-   */
-  public static final class MixedComparator implements Comparator<KeyValue> {
-
-    public int compare(final KeyValue a, final KeyValue b) {
-      return compare(a.qualifier(), b.qualifier());
-    }
-    
-    public int compare(final byte[] a, final byte[] b) {
-      final long left = Internal.getOffsetFromQualifier(a);
-      final long right = Internal.getOffsetFromQualifier(b);
-      if (left == right) {
-        return 0;
-      }
-      return (left < right) ? -1 : 1;
-    }
-    
-    public int compare(final byte[] a, final int offset_a, final byte[] b, 
-        final int offset_b) {
-      final long left = Internal.getOffsetFromQualifier(a, offset_a);
-      final long right = Internal.getOffsetFromQualifier(b, offset_b);
-      if (left == right) {
-        return 0;
-      }
-      return (left < right) ? -1 : 1;
     }
   }
 
