@@ -159,6 +159,7 @@ final class Fsck {
               continue;
             } else if (qual.length % 2 != 0) {
               // likely an annotation or other object
+              // TODO - validate annotations
               continue;
             } else if (qual.length >= 4 && (qual[0] & Const.MS_BYTE_FLAG) 
                 != Const.MS_BYTE_FLAG) {
@@ -286,24 +287,24 @@ final class Fsck {
    * The last data point we've seen for a particular time series.
    */
   private static final class Seen {
-    /** A 32-bit unsigned integer that holds a UNIX timestamp in seconds.  */
-    private int timestamp;
+    /** A 32-bit unsigned integer that holds a UNIX timestamp in milliseconds.  */
+    private long timestamp;
     /** The raw data point (or points if the KV contains more than 1).  */
     KeyValue kv;
 
     private Seen(final long timestamp, final KeyValue kv) {
-      this.timestamp = (int) timestamp;
+      this.timestamp = timestamp;
       this.kv = kv;
     }
 
     /** Returns the UNIX timestamp (in seconds) as a 32-bit unsigned int.  */
     public long timestamp() {
-      return timestamp & 0x00000000FFFFFFFFL;
+      return timestamp;
     }
 
     /** Updates the UNIX timestamp (in seconds) with a 32-bit unsigned int.  */
     public void setTimestamp(final long timestamp) {
-      this.timestamp = (int) timestamp;
+      this.timestamp = timestamp;
     }
   }
 

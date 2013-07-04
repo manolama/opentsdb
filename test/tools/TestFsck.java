@@ -1,12 +1,13 @@
 package net.opentsdb.tools;
 
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.any;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.HashMap;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.meta.Annotation;
@@ -16,6 +17,7 @@ import net.opentsdb.uid.UniqueId;
 import net.opentsdb.utils.Config;
 
 import org.apache.zookeeper.proto.DeleteRequest;
+import org.hbase.async.Bytes;
 import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseClient;
 import org.hbase.async.KeyValue;
@@ -39,6 +41,8 @@ import com.stumbleupon.async.Deferred;
   GetRequest.class, PutRequest.class, KeyValue.class, Fsck.class,
   Scanner.class, DeleteRequest.class, Annotation.class })
 public final class TestFsck {
+  private final static byte[] ROW = 
+    MockBase.stringToBytes("00000150E22700000001000001");
   private Config config;
   private TSDB tsdb = null;
   private HBaseClient client = mock(HBaseClient.class);
@@ -109,8 +113,239 @@ public final class TestFsck {
   }
   
   @Test
-  public void fsk() throws Exception {
-    fsck.invoke(null, tsdb, client, "tsdb".getBytes(MockBase.ASCII()), false, 
-        new String[] { "1356998400", "1357002000", "sum", "sys.cpu.user" });
+  public void noData() throws Exception {
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(0, errors);
+  }
+  
+  @Test
+  public void noErrorsMixedSecondsAnnotations() throws Exception {
+    HashMap<String, String> tags = new HashMap<String, String>(1);
+    tags.put("host", "web01");
+    long timestamp = 1356998400;
+    for (float i = 1.25F; i <= 76; i += 0.25F) {
+      if (i % 2 == 0) {
+        tsdb.addPoint("sys.cpu.user", timestamp += 30, (long)i, tags)
+          .joinUninterruptibly();
+      } else {
+        tsdb.addPoint("sys.cpu.user", timestamp += 30, i, tags)
+          .joinUninterruptibly();
+      }
+    }
+
+    final Annotation note = new Annotation();
+    note.setTSUID("00000150E24320000001000001");
+    note.setDescription("woot");
+    note.setStartTime(1356998460);
+    note.syncToStorage(tsdb, true).joinUninterruptibly();
+    
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(0, errors);
+  }
+  
+  @Test
+  public void noErrorsMixedMsAndSeconds() throws Exception {
+    HashMap<String, String> tags = new HashMap<String, String>(1);
+    tags.put("host", "web01");
+    long timestamp = 1356998400000L;
+    for (float i = 1.25F; i <= 76; i += 0.25F) {
+      long ts = timestamp += 500;
+      if (ts % 1000 == 0) {
+        ts /= 1000;
+      }
+      if (i % 2 == 0) {
+        tsdb.addPoint("sys.cpu.user", ts, (long)i, tags).joinUninterruptibly();
+      } else {
+        tsdb.addPoint("sys.cpu.user", ts, i, tags).joinUninterruptibly();
+      }
+    }
+    
+    final Annotation note = new Annotation();
+    note.setTSUID("00000150E24320000001000001");
+    note.setDescription("woot");
+    note.setStartTime(1356998460);
+    note.syncToStorage(tsdb, true).joinUninterruptibly();
+    
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(0, errors);
+  }
+
+  @Test
+  public void lastCompactedByteNotZero() throws Exception {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    final byte[] val12 = MockBase.concatByteArrays(val1, val2);
+    storage.addColumn(ROW, qual12, val12);
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(1, errors);
+  }
+  
+  @Test
+  public void valueTooLong() throws Exception {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 5 };
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(1, errors);
+  }
+
+  @Test
+  public void singleByteQual() throws Exception {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x27 };
+    final byte[] val2 = Bytes.fromLong(5L);
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(1, errors);
+  }
+  
+  @Test
+  public void OLDfloat8byteVal4byteQualOK() throws Exception {
+    final byte[] qual1 = { 0x00, 0x0B };
+    final byte[] val1 = Bytes.fromLong(Float.floatToRawIntBits(4.2F));
+    final byte[] qual2 = { 0x00, 0x2B };
+    final byte[] val2 = Bytes.fromLong(Float.floatToRawIntBits(500.8F));
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(0, errors);
+  }
+  
+  @Test
+  public void OLDfloat8byteVal4byteQualSignExtensionBug() throws Exception {
+    final byte[] qual1 = { 0x00, 0x0B };
+    final byte[] val1 = Bytes.fromLong(Float.floatToRawIntBits(4.2F));
+    final byte[] qual2 = { 0x00, 0x2B };
+    final byte[] bug = { (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, MockBase.concatByteArrays(bug, val2));
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(1, errors);
+  }
+  
+  @Test
+  public void OLDfloat8byteVal4byteQualSignExtensionBugFix() throws Exception {
+    final byte[] qual1 = { 0x00, 0x0B };
+    final byte[] val1 = Bytes.fromLong(Float.floatToRawIntBits(4.2F));
+    final byte[] qual2 = { 0x00, 0x2B };
+    final byte[] bug = { (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, MockBase.concatByteArrays(bug, val2));
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), true, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(1, errors);
+    final byte[] fixed = storage.getColumn(ROW, qual2);
+    assertArrayEquals(MockBase.concatByteArrays(new byte[4], val2), fixed);
+  }
+  
+  @Test
+  public void OLDfloat8byteVal4byteQualMessedUp() throws Exception {
+    final byte[] qual1 = { 0x00, 0x0B };
+    final byte[] val1 = Bytes.fromLong(Float.floatToRawIntBits(4.2F));
+    final byte[] qual2 = { 0x00, 0x2B };
+    final byte[] bug = { (byte) 0xFB, (byte) 0x02, (byte) 0xF4, (byte) 0x0F };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, MockBase.concatByteArrays(bug, val2));
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(1, errors);
+  }
+
+  @Test
+  public void floatNot4Or8Bytes() throws Exception {
+    final byte[] qual1 = { 0x00, 0x0B };
+    final byte[] val1 = Bytes.fromLong(Float.floatToRawIntBits(4.2F));
+    final byte[] qual2 = { 0x00, 0x2B };
+    final byte[] bug = { 0 };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, MockBase.concatByteArrays(bug, val2));
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(1, errors);
+  }
+
+  @Test
+  public void dupeTimestampsSeconds() throws Exception {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x0B };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(1, errors);
+  }
+  
+  @Test
+  public void dupeTimestampsSecondsFix() throws Exception {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x0B };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), true, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(1, errors);
+    assertEquals(1, storage.numColumns(ROW));
+  }
+  
+  @Test
+  public void dupeTimestampsMs() throws Exception {
+    final byte[] qual1 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x0B };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    int errors = (Integer)fsck.invoke(null, tsdb, client, 
+        "tsdb".getBytes(MockBase.ASCII()), false, new String[] { 
+        "1356998400", "1357002000", "sum", "sys.cpu.user" });
+    assertEquals(1, errors);
+    assertEquals(1, storage.numColumns(ROW));
   }
 }
