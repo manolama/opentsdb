@@ -12,6 +12,8 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
+import static org.junit.Assert.assertArrayEquals;
+
 import java.util.ArrayList;
 
 import com.stumbleupon.async.Deferred;
@@ -626,6 +628,133 @@ final class TestCompactionQueue {
     verify(tsdb, times(1)).delete(KEY, new byte[][] { qual1, qual12, qual13, qual3, qual2 });
   }
 
+  @Test
+  public void tripleCompacted() throws Exception {
+    // Here we have a row with #kvs > scanner.maxNumKeyValues and the result
+    // that was compacted during a query. The result is a bunch of compacted
+    // columns. We want to make sure that we can merge them nicely
+    ArrayList<KeyValue> kvs = new ArrayList<KeyValue>(5);
+    ArrayList<Annotation> annotations = new ArrayList<Annotation>(0);
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    // 2nd compaction
+    final byte[] qual3 = { 0x00, 0x37 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    final byte[] qual4 = { 0x00, 0x47 };
+    final byte[] val4 = Bytes.fromLong(7L);
+    final byte[] qual34 = MockBase.concatByteArrays(qual3, qual4);
+    // 3rd compaction
+    final byte[] qual5 = { 0x00, 0x57 };
+    final byte[] val5 = Bytes.fromLong(8L);
+    final byte[] qual6 = { 0x00, 0x67 };
+    final byte[] val6 = Bytes.fromLong(9L);
+    final byte[] qual56 = MockBase.concatByteArrays(qual5, qual6);
+    kvs.add(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
+    kvs.add(makekv(qual34, MockBase.concatByteArrays(val3, val4, ZERO)));
+    kvs.add(makekv(qual56, MockBase.concatByteArrays(val5, val6, ZERO)));
+
+    final KeyValue kv = compactionq.compact(kvs, annotations);
+    assertArrayEquals(MockBase.concatByteArrays(qual12, qual34, qual56), kv.qualifier());
+    assertArrayEquals(MockBase.concatByteArrays(val1, val2, val3, val4, val5, val6, ZERO), kv.value());    
+    
+    // We didn't have anything to write, the last cell is already the correct
+    // compacted version of the row.
+    verify(tsdb, times(1)).put(KEY, 
+        MockBase.concatByteArrays(qual1, qual2, qual3, qual4, qual5, qual6),
+        MockBase.concatByteArrays(val1, val2, val3, val4, val5, val6, ZERO));
+    // And we had to delete the 3 individual cells + the first pre-existing
+    // compacted cell.
+    verify(tsdb, times(1)).delete(KEY, new byte[][] { qual12, qual34, qual56 });
+  }
+  
+  @Test
+  public void tripleCompactedOutOfOrder() throws Exception {
+    // Here we have a row with #kvs > scanner.maxNumKeyValues and the result
+    // that was compacted during a query. The result is a bunch of compacted
+    // columns. We want to make sure that we can merge them nicely
+    ArrayList<KeyValue> kvs = new ArrayList<KeyValue>(5);
+    ArrayList<Annotation> annotations = new ArrayList<Annotation>(0);
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    // 2nd compaction
+    final byte[] qual3 = { 0x00, 0x37 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    final byte[] qual4 = { 0x00, 0x47 };
+    final byte[] val4 = Bytes.fromLong(7L);
+    final byte[] qual34 = MockBase.concatByteArrays(qual3, qual4);
+    // 3rd compaction
+    final byte[] qual5 = { 0x00, 0x57 };
+    final byte[] val5 = Bytes.fromLong(8L);
+    final byte[] qual6 = { 0x00, 0x67 };
+    final byte[] val6 = Bytes.fromLong(9L);
+    final byte[] qual56 = MockBase.concatByteArrays(qual5, qual6);
+    kvs.add(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
+    kvs.add(makekv(qual56, MockBase.concatByteArrays(val5, val6, ZERO)));
+    kvs.add(makekv(qual34, MockBase.concatByteArrays(val3, val4, ZERO)));
+
+    final KeyValue kv = compactionq.compact(kvs, annotations);
+    assertArrayEquals(MockBase.concatByteArrays(qual12, qual34, qual56), kv.qualifier());
+    assertArrayEquals(MockBase.concatByteArrays(val1, val2, val3, val4, val5, val6, ZERO), kv.value());    
+    
+    // We didn't have anything to write, the last cell is already the correct
+    // compacted version of the row.
+    verify(tsdb, times(1)).put(KEY, 
+        MockBase.concatByteArrays(qual1, qual2, qual3, qual4, qual5, qual6),
+        MockBase.concatByteArrays(val1, val2, val3, val4, val5, val6, ZERO));
+    // And we had to delete the 3 individual cells + the first pre-existing
+    // compacted cell.
+    verify(tsdb, times(1)).delete(KEY, new byte[][] { qual12, qual56, qual34 });
+  }
+  
+  @Test
+  public void tripleCompactedSecondsAndMs() throws Exception {
+    // Here we have a row with #kvs > scanner.maxNumKeyValues and the result
+    // that was compacted during a query. The result is a bunch of compacted
+    // columns. We want to make sure that we can merge them nicely
+    ArrayList<KeyValue> kvs = new ArrayList<KeyValue>(5);
+    ArrayList<Annotation> annotations = new ArrayList<Annotation>(0);
+    // start one off w ms
+    final byte[] qual1 = { (byte) 0xF0, 0x00, 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
+    // 2nd compaction
+    final byte[] qual3 = { 0x00, 0x37 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    final byte[] qual4 = { (byte) 0xF0, 0x04, 0x65, 0x07 };
+    final byte[] val4 = Bytes.fromLong(7L);
+    final byte[] qual34 = MockBase.concatByteArrays(qual3, qual4);
+    // 3rd compaction
+    final byte[] qual5 = { (byte) 0xF0, 0x05, 0x5F, 0x07 };
+    final byte[] val5 = Bytes.fromLong(8L);
+    final byte[] qual6 = { 0x00, 0x67 };
+    final byte[] val6 = Bytes.fromLong(9L);
+    final byte[] qual56 = MockBase.concatByteArrays(qual5, qual6);
+    kvs.add(makekv(qual12, MockBase.concatByteArrays(val1, val2, ZERO)));
+    kvs.add(makekv(qual34, MockBase.concatByteArrays(val3, val4, ZERO)));
+    kvs.add(makekv(qual56, MockBase.concatByteArrays(val5, val6, ZERO)));
+
+    final KeyValue kv = compactionq.compact(kvs, annotations);
+    assertArrayEquals(MockBase.concatByteArrays(qual12, qual34, qual56), kv.qualifier());
+    assertArrayEquals(MockBase.concatByteArrays(val1, val2, val3, val4, val5, val6, ZERO), kv.value());    
+    
+    // We didn't have anything to write, the last cell is already the correct
+    // compacted version of the row.
+    verify(tsdb, times(1)).put(KEY, 
+        MockBase.concatByteArrays(qual1, qual2, qual3, qual4, qual5, qual6),
+        MockBase.concatByteArrays(val1, val2, val3, val4, val5, val6, ZERO));
+    // And we had to delete the 3 individual cells + the first pre-existing
+    // compacted cell.
+    verify(tsdb, times(1)).delete(KEY, new byte[][] { qual12, qual34, qual56 });
+  }
+  
   // ----------------- //
   // Helper functions. //
   // ----------------- //
