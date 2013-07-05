@@ -283,10 +283,10 @@ final class RowSeq implements DataPoints {
     return Collections.emptyList();
   }
   
-  /** @return null since annotations are stored at the SpanGroup level. They
+  /** @return an empty list since annotations are stored at the Span level. They
    * are filtered when a row is compacted */ 
   public List<Annotation> getAnnotations() {
-    return null;
+    return Collections.emptyList();
   }
 
   /** @return the number of data points in this row 
