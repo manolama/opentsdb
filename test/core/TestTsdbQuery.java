@@ -1419,6 +1419,153 @@ public final class TestTsdbQuery {
     assertEquals(6, dps[0].aggregatedSize());
   }
   
+  @Test
+  public void runInterpolationSeconds() throws Exception {
+    setQueryStorage();
+    
+    HashMap<String, String> tags = new HashMap<String, String>(1);
+    tags.put("host", "web01");
+    long timestamp = 1356998400;
+    for (int i = 1; i <= 300; i++) {
+      tsdb.addPoint("sys.cpu.user", timestamp += 30, i, tags).joinUninterruptibly();
+    }
+    
+    tags.clear();
+    tags.put("host", "web02");
+    timestamp = 1356998415;
+    for (int i = 300; i > 0; i--) {
+      tsdb.addPoint("sys.cpu.user", timestamp += 30, i, tags).joinUninterruptibly();
+    }
+    
+    tags.clear();
+    query.setStartTime(1356998400);
+    query.setEndTime(1357041600);
+    query.setTimeSeries("sys.cpu.user", tags, Aggregators.SUM, false);
+    final DataPoints[] dps = query.run();
+    assertNotNull(dps);
+    assertEquals("sys.cpu.user", dps[0].metricName());
+    assertEquals("host", dps[0].getAggregatedTags().get(0));
+    assertNull(dps[0].getAnnotations());
+    assertTrue(dps[0].getTags().isEmpty());
+    
+    long v = 1;
+    long ts = 1356998430000L;
+    for (DataPoint dp : dps[0]) {
+      //System.out.println("Time: " + dp.timestamp() + " v [" + dp.longValue() + "]");
+      assertEquals(ts, dp.timestamp());
+      ts += 15000;
+      assertEquals(v, dp.longValue());
+      
+      if (dp.timestamp() == 1357007400000L) {
+        v = 1;
+      } else if (v == 1 || v == 302) {
+        v = 301;
+      } else {
+        v = 302;
+      }
+    }
+    assertEquals(600, dps[0].size());
+  }
+  
+  @Test
+  public void runInterpolationMs() throws Exception {
+    setQueryStorage();
+    
+    HashMap<String, String> tags = new HashMap<String, String>(1);
+    tags.put("host", "web01");
+    long timestamp = 1356998400000L;
+    for (int i = 1; i <= 300; i++) {
+      tsdb.addPoint("sys.cpu.user", timestamp += 500, i, tags).joinUninterruptibly();
+    }
+    
+    tags.clear();
+    tags.put("host", "web02");
+    timestamp = 1356998400250L;
+    for (int i = 300; i > 0; i--) {
+      tsdb.addPoint("sys.cpu.user", timestamp += 500, i, tags).joinUninterruptibly();
+    }
+    
+    tags.clear();
+    query.setStartTime(1356998400);
+    query.setEndTime(1357041600);
+    query.setTimeSeries("sys.cpu.user", tags, Aggregators.SUM, false);
+    final DataPoints[] dps = query.run();
+    assertNotNull(dps);
+    assertEquals("sys.cpu.user", dps[0].metricName());
+    assertEquals("host", dps[0].getAggregatedTags().get(0));
+    assertNull(dps[0].getAnnotations());
+    assertTrue(dps[0].getTags().isEmpty());
+    
+    long v = 1;
+    long ts = 1356998400500L;
+    for (DataPoint dp : dps[0]) {
+      //System.out.println("Time: " + dp.timestamp() + " v [" + dp.longValue() + "]");
+      assertEquals(ts, dp.timestamp());
+      ts += 250;
+      assertEquals(v, dp.longValue());
+      
+      if (dp.timestamp() == 1356998550000L) {
+        v = 1;
+      } else if (v == 1 || v == 302) {
+        v = 301;
+      } else {
+        v = 302;
+      }
+    }
+    assertEquals(600, dps[0].size());
+  }
+  
+  @Test
+  public void runInterpolationMsDownsampled() throws Exception {
+    setQueryStorage();
+    
+    HashMap<String, String> tags = new HashMap<String, String>(1);
+    tags.put("host", "web01");
+    long timestamp = 1356998400000L;
+    for (int i = 1; i <= 300; i++) {
+      tsdb.addPoint("sys.cpu.user", timestamp += 500, i, tags).joinUninterruptibly();
+    }
+    
+    tags.clear();
+    tags.put("host", "web02");
+    timestamp = 1356998400250L;
+    for (int i = 300; i > 0; i--) {
+      tsdb.addPoint("sys.cpu.user", timestamp += 500, i, tags).joinUninterruptibly();
+    }
+    
+    tags.clear();
+    query.setStartTime(1356998400);
+    query.setEndTime(1357041600);
+    query.setTimeSeries("sys.cpu.user", tags, Aggregators.SUM, false);
+    query.downsample(1000, Aggregators.SUM);
+    final DataPoints[] dps = query.run();
+    assertNotNull(dps);
+    assertEquals("sys.cpu.user", dps[0].metricName());
+    assertEquals("host", dps[0].getAggregatedTags().get(0));
+    assertNull(dps[0].getAnnotations());
+    assertTrue(dps[0].getTags().isEmpty());
+    
+    long v = 3;
+    long ts = 1356998400750L;
+    for (DataPoint dp : dps[0]) {
+      //System.out.println("Time: " + dp.timestamp() + " v [" + dp.longValue() + "]");
+      assertEquals(ts, dp.timestamp());
+      if ((ts % 1000) != 0) {
+        ts += 250;
+      } else {
+        ts += 750;
+      }
+      assertEquals(v, dp.longValue());
+      
+      if (dp.timestamp() == 1356998549750L) {
+        v = 3;
+      } else {
+        v = 603;
+      }
+    }
+    assertEquals(300, dps[0].size());
+  }
+  
   // ----------------- //
   // Helper functions. //
   // ----------------- //

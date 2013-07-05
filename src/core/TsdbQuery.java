@@ -485,7 +485,6 @@ final class TsdbQuery implements Query {
     // down cast to seconds if we have a query in ms
     if ((start & Const.SECOND_MASK) != 0) {
       start /= 1000;
-      System.out.println("DS Start: " + start);
     }
     final long ts = start - Const.MAX_TIMESPAN * 2 - sample_interval;
     return ts > 0 ? ts : 0;
@@ -504,7 +503,6 @@ final class TsdbQuery implements Query {
     long end = getEndTime();
     if ((end & Const.SECOND_MASK) != 0) {
       end /= 1000;
-      System.out.println("DS End: " + end);
     }
     return end + Const.MAX_TIMESPAN + 1 + sample_interval;
   }
