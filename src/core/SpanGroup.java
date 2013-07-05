@@ -756,7 +756,7 @@ final class SpanGroup implements DataPoints {
         final long r = y0 + (x - x0) * (y1 - y0) / (x1 - x0);
         //LOG.debug("Lerping to time " + x + ": " + y0 + " @ " + x0
         //          + " -> " + y1 + " @ " + x1 + " => " + r);
-        if ((x1 & 0xFFFFFFFF00000000L) != 0) {
+        if ((x1 & Const.MILLISECOND_MASK) != 0) {
           throw new AssertionError("x1=" + x1 + " in " + this);
         }
         return r;
