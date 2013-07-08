@@ -265,7 +265,7 @@ public final class TestDateTime {
   @Test
   public void parseDurationY() {
     long t = DateTime.parseDuration("2y");
-    assertEquals(((long)2 * 365 * 24 * 60 * 60 * 1000), t);
+    assertEquals((2 * 365L * 24 * 60 * 60 * 1000), t);
   }
   
   @Test (expected = IllegalArgumentException.class)

@@ -121,8 +121,8 @@ public class DateTime {
     } else {
       try {
         long time;
-        if (datetime.contains(".")) {
-          if (datetime.length() != 14) {
+        if (datetime.length() == 14) {
+          if (datetime.charAt(10) != '.') {
             throw new IllegalArgumentException("Invalid time: " + datetime  
                 + ".");
           }
@@ -178,7 +178,7 @@ public class DateTime {
     }
     switch (duration.toLowerCase().charAt(duration.length() - 1)) {
       case 's': 
-        if (duration.toLowerCase().contains("ms")) {
+        if (duration.charAt(duration.length() - 2) == 'm') {
           return interval;
         }
         return interval * 1000;                    // seconds
@@ -186,8 +186,8 @@ public class DateTime {
       case 'h': return (interval * 3600) * 1000;             // hours
       case 'd': return (interval * 3600 * 24) * 1000;        // days
       case 'w': return (interval * 3600 * 24 * 7) * 1000;    // weeks
-      case 'n': return ((long)interval * 3600 * 24 * 30) * 1000;   // month (average)
-      case 'y': return ((long)interval * 3600 * 24 * 365) * 1000;  // years (screw leap years)
+      case 'n': return (interval * 3600L * 24 * 30) * 1000;   // month (average)
+      case 'y': return (interval * 3600L * 24 * 365) * 1000;  // years (screw leap years)
     }
     throw new IllegalArgumentException("Invalid duration (suffix): " + duration);
   }
