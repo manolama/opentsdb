@@ -29,25 +29,25 @@ public final class Const {
    * When this bit is set, the value is a floating point value.
    * Otherwise it's an integer value.
    */
-  static final short FLAG_FLOAT = 0x8;
+  public static final short FLAG_FLOAT = 0x8;
 
   /** Mask to select the size of a value from the qualifier.  */
-  static final short LENGTH_MASK = 0x7;
+  public static final short LENGTH_MASK = 0x7;
 
   /** Mask for the millisecond qualifier flag */
-  public static final short MS_BYTE_FLAG = 0xF0;
+  public static final byte MS_BYTE_FLAG = (byte)0xF0;
   
   /** Flag to set on millisecond qualifier timestamps */
   public static final int MS_FLAG = 0xF0000000;
   
   /** Mask to select all the FLAG_BITS.  */
-  static final short FLAGS_MASK = FLAG_FLOAT | LENGTH_MASK;
+  public static final short FLAGS_MASK = FLAG_FLOAT | LENGTH_MASK;
 
   /** Mask to verify a timestamp on 4 bytes in seconds */
   public static final long SECOND_MASK = 0xFFFFFFFF00000000L;
   
   /** Mask to verify a timestamp on 6 bytes in milliseconds */
-  static final long MILLISECOND_MASK = 0xFFFFF00000000000L;
+  public static final long MILLISECOND_MASK = 0xFFFFF00000000000L;
   
   /** Max time delta (in seconds) we can store in a column qualifier.  */
   public static final short MAX_TIMESPAN = 3600;
