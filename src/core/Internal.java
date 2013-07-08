@@ -125,9 +125,9 @@ public final class Internal {
    * Extracts a Cell from a single data point, fixing potential errors with
    * the qualifier flags
    * @param column The column to parse
-   * @return A Cell if successful, null if the column was empty or did not
-   * parse correctly
-   * @throws IllegalArgumentException if the qualifier was not 2 bytes long or
+   * @return A Cell if successful, null if the column did not contain a data
+   * point (i.e. it was meta data) or failed to parse
+   * @throws IllegalDataException  if the qualifier was not 2 bytes long or
    * it wasn't a millisecond qualifier
    * @since 2.0
    */
@@ -142,7 +142,7 @@ public final class Internal {
       }
       return cells.get(0);
     }
-    throw new IllegalArgumentException(
+    throw new IllegalDataException (
         "Qualifier does not appear to be a single data point: " + column);
   }
   
@@ -191,7 +191,7 @@ public final class Internal {
       final int len = qual.length;
       final byte[] val = kv.value();
       
-      if (len %2 != 0) {
+      if (len % 2 != 0) {
         // skip a non data point column
         continue;
       } else if (len == 2) {  // Single-value cell.
@@ -408,7 +408,6 @@ public final class Internal {
    * they're correct now, because once they're compacted it's going to
    * be quite hard to tell if the flags are right or wrong, and we need
    * them to be correct to easily decode the values.
-   * (from CompactionQueue)
    * @param flags The least significant byte of a qualifier.
    * @param val_len The number of bytes in the value of this qualifier.
    * @return The least significant byte of the qualifier with correct flags.
@@ -521,7 +520,7 @@ public final class Internal {
    * @param qualifier The qualifier to parse
    * @param offset An offset within the byte array
    * @return The offset in milliseconds from the base time
-   * @throws IllegalArgument if the qualifier is null or the offset falls 
+   * @throws IllegalDataException if the qualifier is null or the offset falls 
    * outside of the qualifier array
    * @since 2.0
    */
@@ -530,7 +529,7 @@ public final class Internal {
     validateQualifier(qualifier, offset);
     if ((qualifier[offset + 0] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
       return (int)(Bytes.getUnsignedInt(qualifier, offset) & 0x0FFFFFC0) 
-        >>> (Const.FLAG_BITS + 2);        
+        >>> (Const.MS_FLAG_BITS);        
     } else {
       final int seconds = (Bytes.getUnsignedShort(qualifier, offset) & 0xFFFF) 
         >>> Const.FLAG_BITS;
@@ -545,7 +544,7 @@ public final class Internal {
    * @throws IllegalArgument if the qualifier is null or empty
    * @since 2.0
    */
-  public static short getValueLengthFromQualifier(final byte[] qualifier) {
+  public static byte getValueLengthFromQualifier(final byte[] qualifier) {
     return getValueLengthFromQualifier(qualifier, 0);
   }
   
@@ -558,7 +557,7 @@ public final class Internal {
    * outside of the qualifier array
    * @since 2.0
    */
-  public static short getValueLengthFromQualifier(final byte[] qualifier, 
+  public static byte getValueLengthFromQualifier(final byte[] qualifier, 
       final int offset) {
     validateQualifier(qualifier, offset);    
     short length;
@@ -567,7 +566,7 @@ public final class Internal {
     } else {
       length = (short) (qualifier[offset + 1] & Internal.LENGTH_MASK);
     }
-    return (short) (length + 1);
+    return (byte) (length + 1);
   }
 
   /**
@@ -678,17 +677,10 @@ public final class Internal {
       final int offset) {
     validateQualifier(qualifier, offset);
     if ((qualifier[offset] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
-      final byte[] qual = new byte[4];
-      qual[0] = qualifier[offset];
-      qual[1] = qualifier[offset + 1];
-      qual[2] = qualifier[offset + 2];
-      qual[3] = qualifier[offset + 3];
-      return qual;
+      return new byte[] { qualifier[offset], qualifier[offset + 1],
+          qualifier[offset + 2], qualifier[offset + 3] };
     } else {
-      final byte[] qual = new byte[2];
-      qual[0] = qualifier[offset];
-      qual[1] = qualifier[offset + 1];
-      return qual;
+      return new byte[] { qualifier[offset], qualifier[offset + 1] };
     }
   }
   
@@ -708,7 +700,7 @@ public final class Internal {
       base_time = ((timestamp / 1000) - ((timestamp / 1000) 
           % Const.MAX_TIMESPAN));
       final int qual = (int) (((timestamp - (base_time * 1000) 
-          << (Const.FLAG_BITS + 2)) | flags) | Const.MS_FLAG);
+          << (Const.MS_FLAG_BITS)) | flags) | Const.MS_FLAG);
       return Bytes.fromInt(qual);
     } else {
       base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
@@ -723,17 +715,14 @@ public final class Internal {
    * within bounds
    * @param qualifier The qualifier to validate
    * @param offset An optional offset
-   * @throws IllegalArgument if the qualifier is null or the offset falls 
+   * @throws IllegalDataException if the qualifier is null or the offset falls 
    * outside of the qualifier array
    * @since 2.0
    */
   private static void validateQualifier(final byte[] qualifier, 
       final int offset) {
-    if (qualifier == null || qualifier.length < 0) {
-      throw new IllegalArgumentException("Null or empty qualifier");
-    }
     if (offset < 0 || offset >= qualifier.length - 1) {
-      throw new IllegalArgumentException("Offset of [" + offset + 
+      throw new IllegalDataException("Offset of [" + offset + 
           "] is greater than the qualifier length [" + qualifier.length + "]");
     }
   }
