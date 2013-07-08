@@ -176,7 +176,7 @@ final class TestCompactionQueue {
     ArrayList<Annotation> annotations = new ArrayList<Annotation>(0);
 
     for (int i = 0; i < 3599999; i++) {
-      final int qualifier = (((i << Const.FLAG_BITS  + 2 ) | 0x07) | 0xF0000000);
+      final int qualifier = (((i << Const.MS_FLAG_BITS ) | 0x07) | 0xF0000000);
       kvs.add(makekv(Bytes.fromInt(qualifier), Bytes.fromLong(i)));
       i += 100;
     }

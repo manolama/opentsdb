@@ -57,6 +57,10 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
 
   private static final Logger LOG = LoggerFactory.getLogger(CompactionQueue.class);
 
+  /** Used to sort individual columns from a data row */
+  private static final Internal.KeyValueComparator COMPARATOR = 
+    new Internal.KeyValueComparator();
+  
   /**
    * How many items are currently in the queue.
    * Because {@link ConcurrentSkipListMap#size} has O(N) complexity.
@@ -338,10 +342,10 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
           
           // there may be a situation where two second columns are concatenated
           // into 4 bytes. If so, we need to perform a complex compaction
-          if (len == 4 && Internal.inMilliseconds(qual[0])) {
-            trivial = false;
-          } else if (len == 4) {
-            trivial = false;
+          if (len == 4) {
+            if (!Internal.inMilliseconds(qual[0])) {
+              trivial = false;
+            }
             val_len += kv.value().length;
           } else {
             // We don't need it below for complex compactions, so we update it
@@ -483,7 +487,7 @@ final class CompactionQueue extends ConcurrentSkipListMap<byte[], Boolean> {
     if (sort) {
       // we have a mix of millisecond and second columns so we need to sort them
       // by timestamp before compaction
-      Collections.sort(row, new Internal.KeyValueComparator());
+      Collections.sort(row, COMPARATOR);
     }
     
     for (final KeyValue kv : row) {
