@@ -79,10 +79,9 @@ final class RowSeq implements DataPoints {
 
   /**
    * Merges data points for the same HBase row into the local object.
-   * Since async queries can return data in any order, and a row may have more
-   * than scanner.max_kvs data points, we could be called on to merge two
-   * scanner results for the same row. This may ONLY be called after setRow()
-   * has initiated the rowseq.
+   * When executing multiple async queries simultaneously, they may call into 
+   * this method with data sets that are out of order. This may ONLY be called 
+   * after setRow() has initiated the rowseq.
    * @param row The compacted HBase row to merge into this instance.
    * @throws IllegalStateException if {@link #setRow} wasn't called first.
    * @throws IllegalArgumentException if the data points in the argument
@@ -102,7 +101,7 @@ final class RowSeq implements DataPoints {
     final byte[] remote_qual = row.qualifier();
     final byte[] remote_val = row.value();
     final byte[] merged_qualifiers = new byte[qualifiers.length + remote_qual.length];
-    final byte[] merged_values = new byte[values.length + row.value().length]; 
+    final byte[] merged_values = new byte[values.length + remote_val.length]; 
 
     int remote_q_index = 0;
     int local_q_index = 0;
@@ -258,11 +257,6 @@ final class RowSeq implements DataPoints {
                                    + Arrays.toString(values));
   }
 
-  /** 
-   * @return the name of the metric associated with this row
-   * @throws IllegalStateException if the row key was null
-   * @throws NoSuchUniqueId if the row key UID did not exist
-   */
   public String metricName() {
     if (key == null) {
       throw new IllegalStateException("the row key is null!");
@@ -270,10 +264,6 @@ final class RowSeq implements DataPoints {
     return RowKey.metricName(tsdb, key);
   }
 
-  /**
-   * @return the list of tag pairs for this row
-   * @throws NoSuchUniqueId if the any of the tagk/v UIDs did not exist
-   */
   public Map<String, String> getTags() {
     return Tags.getTags(tsdb, key);
   }
@@ -308,7 +298,6 @@ final class RowSeq implements DataPoints {
     return 0;
   }
 
-  /** @return an iterator to run over the list of data points */
   public SeekableView iterator() {
     return internalIterator();
   }
@@ -336,15 +325,6 @@ final class RowSeq implements DataPoints {
     }
   }
 
-  /**
-   * Returns the timestamp for a data point at index {@code i} if it exists.
-   * <b>Note:</b> To get to a timestamp this method must walk the entire byte
-   * array, i.e. O(n) so call this sparingly. Use the iterator instead.
-   * @param i A 0 based index incremented per the number of data points in the
-   * row.
-   * @return A Unix epoch timestamp in milliseconds
-   * @throws IndexOutOfBoundsException if the index would be out of bounds
-   */
   public long timestamp(final int i) {
     checkIndex(i);
     // Important: Span.addRow assumes this method to work in O(1).
@@ -364,29 +344,12 @@ final class RowSeq implements DataPoints {
         "WTF timestamp for index: " + i + " on " + this);
   }
 
-  /**
-   * Determines whether or not the value at index {@code i} is an integer
-   * @param i A 0 based index incremented per the number of data points in the
-   * row.
-   * @return True if the value is an integer, false if it's a floating point
-   * @throws IndexOutOfBoundsException if the index would be out of bounds
-   */
   public boolean isInteger(final int i) {
     checkIndex(i);
     return (Internal.getFlagsFromQualifier(qualifiers, i) & 
         Const.FLAG_FLOAT) == 0x0;
   }
 
-  /**
-   * Returns the value at index {@code i}
-   * @param i A 0 based index incremented per the number of data points in the
-   * row.
-   * @return the value as a long
-   * @throws IndexOutOfBoundsException if the index would be out of bounds
-   * @throws ClassCastException if the value is a float instead. Call 
-   * {@link #isInteger} first
-   * @throws IllegalDataException if the data is malformed
-   */
   public long longValue(int i) {
     if (!isInteger(i)) {
       throw new ClassCastException("value #" + i + " is not a long in " + this);
@@ -398,16 +361,6 @@ final class RowSeq implements DataPoints {
     return it.longValue();
   }
 
-  /**
-   * Returns the value at index {@code i}
-   * @param i A 0 based index incremented per the number of data points in the
-   * row.
-   * @return the value as a double
-   * @throws IndexOutOfBoundsException if the index would be out of bounds
-   * @throws ClassCastException if the value is an integer instead. Call 
-   * {@link #isInteger} first
-   * @throws IllegalDataException if the data is malformed
-   */
   public double doubleValue(int i) {
     if (isInteger(i)) {
       throw new ClassCastException("value #" + i + " is not a float in " + this);
@@ -577,7 +530,7 @@ final class RowSeq implements DataPoints {
     public long timestamp() {
       assert qualifier != 0: "not initialized: " + this;
       if ((qualifier & Const.MS_FLAG) == Const.MS_FLAG) {
-        final long ms = (qualifier & 0x0FFFFFC0) >>> (Const.FLAG_BITS + 2);
+        final long ms = (qualifier & 0x0FFFFFC0) >>> (Const.MS_FLAG_BITS);
         return (base_time * 1000) + ms;            
       } else {
         final long seconds = (qualifier & 0xFFFF) >>> Const.FLAG_BITS;
