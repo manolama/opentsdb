@@ -161,7 +161,7 @@ final class Span implements DataPoints {
    * Package private helper to access the last timestamp in an HBase row.
    * @param metric_width The number of bytes on which metric IDs are stored.
    * @param row A compacted HBase row.
-   * @return A strictly positive 32-bit timestamp in seconds or ms.
+   * @return A strictly positive timestamp in seconds or ms.
    * @throws IllegalArgumentException if {@code row} doesn't contain any cell.
    */
   static long lastTimestampInRow(final short metric_width,
@@ -170,7 +170,7 @@ final class Span implements DataPoints {
     final byte[] qual = row.qualifier();
     if (qual.length >= 4 && Internal.inMilliseconds(qual[qual.length - 4])) {
       return (base_time * 1000) + ((Bytes.getUnsignedInt(qual, qual.length - 4) & 
-          0x0FFFFFC0) >>> (Const.FLAG_BITS + 2));
+          0x0FFFFFC0) >>> (Const.MS_FLAG_BITS));
     }
     final short last_delta = (short)
       (Bytes.getUnsignedShort(qual, qual.length - 2) >>> Const.FLAG_BITS);
@@ -179,10 +179,7 @@ final class Span implements DataPoints {
 
   /** @return an iterator to run over the list of data points */
   public SeekableView iterator() {
-    if (!sorted) {
-      Collections.sort(rows, new RowSeq.RowSeqComparator());
-      sorted = true;
-    }
+    checkRowOrder();
     return spanIterator();
   }
 
@@ -193,10 +190,7 @@ final class Span implements DataPoints {
    * in {@code rows} and the second is offset in that {@link RowSeq} instance.
    */
   private long getIdxOffsetFor(final int i) {
-    if (!sorted) {
-      Collections.sort(rows, new RowSeq.RowSeqComparator());
-      sorted = true;
-    }
+    checkRowOrder();
     int idx = 0;
     int offset = 0;
     for (final RowSeq row : rows) {
@@ -220,10 +214,7 @@ final class Span implements DataPoints {
    * @throws IndexOutOfBoundsException if the index would be out of bounds
    */
   public long timestamp(final int i) {
-    if (!sorted) {
-      Collections.sort(rows, new RowSeq.RowSeqComparator());
-      sorted = true;
-    }
+    checkRowOrder();
     final long idxoffset = getIdxOffsetFor(i);
     final int idx = (int) (idxoffset >>> 32);
     final int offset = (int) (idxoffset & 0x00000000FFFFFFFF);
@@ -238,10 +229,7 @@ final class Span implements DataPoints {
    * @throws IndexOutOfBoundsException if the index would be out of bounds
    */
   public boolean isInteger(final int i) {
-    if (!sorted) {
-      Collections.sort(rows, new RowSeq.RowSeqComparator());
-      sorted = true;
-    }
+    checkRowOrder();
     final long idxoffset = getIdxOffsetFor(i);
     final int idx = (int) (idxoffset >>> 32);
     final int offset = (int) (idxoffset & 0x00000000FFFFFFFF);
@@ -259,10 +247,7 @@ final class Span implements DataPoints {
    * @throws IllegalDataException if the data is malformed
    */
   public long longValue(final int i) {
-    if (!sorted) {
-      Collections.sort(rows, new RowSeq.RowSeqComparator());
-      sorted = true;
-    }
+    checkRowOrder();
     final long idxoffset = getIdxOffsetFor(i);
     final int idx = (int) (idxoffset >>> 32);
     final int offset = (int) (idxoffset & 0x00000000FFFFFFFF);
@@ -280,10 +265,7 @@ final class Span implements DataPoints {
    * @throws IllegalDataException if the data is malformed
    */
   public double doubleValue(final int i) {
-    if (!sorted) {
-      Collections.sort(rows, new RowSeq.RowSeqComparator());
-      sorted = true;
-    }
+    checkRowOrder();
     final long idxoffset = getIdxOffsetFor(i);
     final int idx = (int) (idxoffset >>> 32);
     final int offset = (int) (idxoffset & 0x00000000FFFFFFFF);
@@ -313,10 +295,7 @@ final class Span implements DataPoints {
    * @return A strictly positive index in the {@code rows} array.
    */
   private short seekRow(final long timestamp) {
-    if (!sorted) {
-      Collections.sort(rows, new RowSeq.RowSeqComparator());
-      sorted = true;
-    }
+    checkRowOrder();
     short row_index = 0;
     RowSeq row = null;
     final int nrows = rows.size();
@@ -335,6 +314,18 @@ final class Span implements DataPoints {
     return row_index;
   }
 
+  /**
+   * Checks the sorted flag and sorts the rows if necessary. Should be called
+   * by any iteration method.
+   * Since 2.0
+   */
+  private void checkRowOrder() {
+    if (!sorted) {
+      Collections.sort(rows, new RowSeq.RowSeqComparator());
+      sorted = true;
+    }
+  }
+  
   /** Package private iterator method to access it as a Span.Iterator. */
   Span.Iterator spanIterator() {
     if (!sorted) {
