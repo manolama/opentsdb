@@ -24,6 +24,9 @@ public final class Const {
 
   /** Number of LSBs in time_deltas reserved for flags.  */
   public static final short FLAG_BITS = 4;
+  
+  /** Number of LSBs in time_deltas reserved for flags.  */
+  public static final short MS_FLAG_BITS = 6;
 
   /**
    * When this bit is set, the value is a floating point value.
