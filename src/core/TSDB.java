@@ -12,6 +12,7 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -32,10 +33,10 @@ import org.hbase.async.HBaseClient;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
-import org.hbase.async.RowLock;
-import org.hbase.async.RowLockRequest;
 
 import net.opentsdb.tree.TreeBuilder;
+import net.opentsdb.tsd.RTPublisher;
+import net.opentsdb.tsd.RpcPlugin;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
@@ -61,6 +62,8 @@ public final class TSDB {
   
   static final byte[] FAMILY = { 't' };
 
+  /** Charset used to convert Strings to byte arrays and back. */
+  private static final Charset CHARSET = Charset.forName("ISO-8859-1");
   private static final String METRICS_QUAL = "metrics";
   private static final short METRICS_WIDTH = 3;
   private static final String TAG_NAME_QUAL = "tagk";
@@ -96,6 +99,12 @@ public final class TSDB {
 
   /** Search indexer to use if configure */
   private SearchPlugin search = null;
+  
+  /** Optional real time pulblisher plugin to use if configured */
+  private RTPublisher rt_publisher = null;
+  
+  /** List of activated RPC plugins */
+  private List<RpcPlugin> rpc_plugins = null;
   
   /**
    * Constructor
@@ -134,11 +143,12 @@ public final class TSDB {
    * objects that rely on such. It also moves most of the potential exception
    * throwing code out of the constructor so TSDMain can shutdown clients and
    * such properly.
+   * @param init_rpcs Whether or not to initialize RPC plugins as well
    * @throws RuntimeException if the plugin path could not be processed
    * @throws IllegalArgumentException if a plugin could not be initialized
    * @since 2.0
    */
-  public void initializePlugins() {
+  public void initializePlugins(final boolean init_rpcs) {
     final String plugin_path = config.getString("tsd.core.plugin_path");
     if (plugin_path != null && !plugin_path.isEmpty()) {
       try {
@@ -168,6 +178,54 @@ public final class TSDB {
           + search.version());
     } else {
       search = null;
+    }
+    
+    // load the real time publisher plugin if enabled
+    if (config.getBoolean("tsd.rtpublisher.enable")) {
+      rt_publisher = PluginLoader.loadSpecificPlugin(
+          config.getString("tsd.rtpublisher.plugin"), RTPublisher.class);
+      if (rt_publisher == null) {
+        throw new IllegalArgumentException(
+            "Unable to locate real time publisher plugin: " + 
+            config.getString("tsd.rtpublisher.plugin"));
+      }
+      try {
+        rt_publisher.initialize(this);
+      } catch (Exception e) {
+        throw new RuntimeException(
+            "Failed to initialize real time publisher plugin", e);
+      }
+      LOG.info("Successfully initialized real time publisher plugin [" + 
+          rt_publisher.getClass().getCanonicalName() + "] version: " 
+          + rt_publisher.version());
+    } else {
+      rt_publisher = null;
+    }
+    
+    if (init_rpcs && config.hasProperty("tsd.rpc.plugins")) {
+      final String[] plugins = config.getString("tsd.rpc.plugins").split(",");
+      for (final String plugin : plugins) {
+        final RpcPlugin rpc = PluginLoader.loadSpecificPlugin(plugin.trim(), 
+            RpcPlugin.class);
+        if (rpc == null) {
+          throw new IllegalArgumentException(
+              "Unable to locate RPC plugin: " + plugin.trim());
+        }
+        try {
+          rpc.initialize(this);
+        } catch (Exception e) {
+          throw new RuntimeException(
+              "Failed to initialize RPC plugin", e);
+        }
+        
+        if (rpc_plugins == null) {
+          rpc_plugins = new ArrayList<RpcPlugin>(1);
+        }
+        rpc_plugins.add(rpc);
+        LOG.info("Successfully initialized RPC plugin [" + 
+            rpc.getClass().getCanonicalName() + "] version: " 
+            + rpc.version());
+      }
     }
   }
   
@@ -275,9 +333,39 @@ public final class TSDB {
    * @param collector The collector to use.
    */
   public void collectStats(final StatsCollector collector) {
-    collectUidStats(metrics, collector);
-    collectUidStats(tag_names, collector);
-    collectUidStats(tag_values, collector);
+    final byte[][] kinds = { 
+        METRICS_QUAL.getBytes(CHARSET), 
+        TAG_NAME_QUAL.getBytes(CHARSET), 
+        TAG_VALUE_QUAL.getBytes(CHARSET) 
+      };
+    try {
+      final Map<String, Long> used_uids = UniqueId.getUsedUIDs(this, kinds)
+        .joinUninterruptibly();
+      
+      collectUidStats(metrics, collector);
+      collector.record("uid.ids-used", used_uids.get(METRICS_QUAL), 
+          "kind=" + METRICS_QUAL);
+      collector.record("uid.ids-available", 
+          (metrics.maxPossibleId() - used_uids.get(METRICS_QUAL)), 
+          "kind=" + METRICS_QUAL);
+      
+      collectUidStats(tag_names, collector);
+      collector.record("uid.ids-used", used_uids.get(TAG_NAME_QUAL), 
+          "kind=" + TAG_NAME_QUAL);
+      collector.record("uid.ids-available", 
+          (tag_names.maxPossibleId() - used_uids.get(TAG_NAME_QUAL)), 
+          "kind=" + TAG_NAME_QUAL);
+      
+      collectUidStats(tag_values, collector);
+      collector.record("uid.ids-used", used_uids.get(TAG_VALUE_QUAL), 
+          "kind=" + TAG_VALUE_QUAL);
+      collector.record("uid.ids-available", 
+          (tag_values.maxPossibleId() - used_uids.get(TAG_VALUE_QUAL)), 
+          "kind=" + TAG_VALUE_QUAL);
+      
+    } catch (Exception e) {
+      throw new RuntimeException("Shouldn't be here", e);
+    }
 
     {
       final Runtime runtime = Runtime.getRuntime();
@@ -455,12 +543,7 @@ public final class TSDB {
     }
 
     IncomingDataPoints.checkMetricAndTags(metric, tags);
-    final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);
-    if (config.enable_meta_tracking()) {
-      final byte[] tsuid = UniqueId.getTSUIDFromKey(row, METRICS_WIDTH, 
-          Const.TIMESTAMP_BYTES);
-      TSMeta.incrementAndGetCounter(this, tsuid);
-    }
+    final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);  
     final long base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
     Bytes.setInt(row, (int) base_time, metrics.width());
     scheduleForCompaction(row, (int) base_time);
@@ -468,9 +551,38 @@ public final class TSDB {
                                      | flags);
     final PutRequest point = new PutRequest(table, row, FAMILY,
                                             Bytes.fromShort(qualifier), value);
+    
     // TODO(tsuna): Add a callback to time the latency of HBase and store the
     // timing in a moving Histogram (once we have a class for this).
-    return client.put(point);
+    Deferred<Object> result = client.put(point);
+    if (!config.enable_meta_tracking() && rt_publisher == null) {
+      return result;
+    }
+    
+    final byte[] tsuid = UniqueId.getTSUIDFromKey(row, METRICS_WIDTH, 
+        Const.TIMESTAMP_BYTES); 
+    if (config.enable_meta_tracking()) {
+      TSMeta.incrementAndGetCounter(this, tsuid);
+    }
+    if (rt_publisher != null) {
+      
+      /**
+       * Simply logs real time publisher errors when they're thrown. Without
+       * this, exceptions will just disappear (unless logged by the plugin) 
+       * since we don't wait for a result.
+       */
+      final class RTError implements Callback<Object, Exception> {
+        @Override
+        public Object call(final Exception e) throws Exception {
+          LOG.error("Exception from Real Time Publisher", e);
+          return null;
+        }
+      }
+      
+      rt_publisher.sinkDataPoint(metric, timestamp, value, tags, tsuid, flags)
+        .addErrback(new RTError());
+    }
+    return result;
   }
 
   /**
@@ -490,10 +602,10 @@ public final class TSDB {
   }
 
   /**
-   * Gracefully shuts down this instance.
+   * Gracefully shuts down this TSD instance.
    * <p>
-   * This does the same thing as {@link #flush} and also releases all other
-   * resources.
+   * The method must call {@code shutdown()} on all plugins as well as flush the
+   * compaction queue.
    * @return A {@link Deferred} that will be called once all the un-committed
    * data has been successfully and durably stored, and all resources used by
    * this instance have been released.  The value of the deferred object
@@ -504,6 +616,9 @@ public final class TSDB {
    * recoverable by retrying, some are not.
    */
   public Deferred<Object> shutdown() {
+    final ArrayList<Deferred<Object>> deferreds = 
+      new ArrayList<Deferred<Object>>();
+    
     final class HClientShutdown implements Callback<Object, ArrayList<Object>> {
       public Object call(final ArrayList<Object> args) {
         return client.shutdown();
@@ -512,6 +627,7 @@ public final class TSDB {
         return "shutdown HBase client";
       }
     }
+    
     final class ShutdownErrback implements Callback<Object, Exception> {
       public Object call(final Exception e) {
         final Logger LOG = LoggerFactory.getLogger(ShutdownErrback.class);
@@ -519,11 +635,11 @@ public final class TSDB {
           final DeferredGroupException ge = (DeferredGroupException) e;
           for (final Object r : ge.results()) {
             if (r instanceof Exception) {
-              LOG.error("Failed to flush the compaction queue", (Exception) r);
+              LOG.error("Failed to shutdown the TSD", (Exception) r);
             }
           }
         } else {
-          LOG.error("Failed to flush the compaction queue", e);
+          LOG.error("Failed to shutdown the TSD", e);
         }
         return client.shutdown();
       }
@@ -531,10 +647,40 @@ public final class TSDB {
         return "shutdown HBase client after error";
       }
     }
-    // First flush the compaction queue, then shutdown the HBase client.
-    return config.enable_compactions()
-      ? compactionq.flush().addCallbacks(new HClientShutdown(),
-                                         new ShutdownErrback())
+    
+    final class CompactCB implements Callback<Object, ArrayList<Object>> {
+      public Object call(ArrayList<Object> compactions) throws Exception {
+        return null;
+      }
+    }
+    
+    if (config.enable_compactions()) {
+      LOG.info("Flushing compaction queue");
+      deferreds.add(compactionq.flush().addCallback(new CompactCB()));
+    }
+    if (search != null) {
+      LOG.info("Shutting down search plugin: " + 
+          search.getClass().getCanonicalName());
+      deferreds.add(search.shutdown());
+    }
+    if (rt_publisher != null) {
+      LOG.info("Shutting down RT plugin: " + 
+          rt_publisher.getClass().getCanonicalName());
+      deferreds.add(rt_publisher.shutdown());
+    }
+    
+    if (rpc_plugins != null && !rpc_plugins.isEmpty()) {
+      for (final RpcPlugin rpc : rpc_plugins) {
+        LOG.info("Shutting down RPC plugin: " + 
+            rpc.getClass().getCanonicalName());
+        deferreds.add(rpc.shutdown());
+      }
+    }
+    
+    // wait for plugins to shutdown before we close the client
+    return deferreds.size() > 0
+      ? Deferred.group(deferreds).addCallbacks(new HClientShutdown(),
+                                               new ShutdownErrback())
       : client.shutdown();
   }
 
@@ -659,90 +805,7 @@ public final class TSDB {
   public byte[] dataTable() {
     return this.table;
   }
-  
-  /**
-   * Attempts to run the PutRequest given in argument, retrying if needed.
-   * <p>
-   * <b>Note:</b> Puts are synchronized.
-   * <p>
-   * @param put The PutRequest to execute.
-   * @param attempts The maximum number of attempts.
-   * @param wait The initial amount of time in ms to sleep for after a
-   * failure.  This amount is doubled after each failed attempt.
-   * @throws HBaseException if all the attempts have failed.  This exception
-   * will be the exception of the last attempt.
-   * @since 2.0
-   */
-  public void hbasePutWithRetry(final PutRequest put, short attempts, short wait)
-    throws HBaseException {
-    put.setBufferable(false);  // TODO(tsuna): Remove once this code is async.
-    while (attempts-- > 0) {
-      try {
-        client.put(put).joinUninterruptibly();
-        return;
-      } catch (HBaseException e) {
-        if (attempts > 0) {
-          LOG.error("Put failed, attempts left=" + attempts
-                    + " (retrying in " + wait + " ms), put=" + put, e);
-          try {
-            Thread.sleep(wait);
-          } catch (InterruptedException ie) {
-            throw new RuntimeException("interrupted", ie);
-          }
-          wait *= 2;
-        } else {
-          throw e;
-        }
-      } catch (Exception e) {
-        LOG.error("WTF?  Unexpected exception type, put=" + put, e);
-      }
-    }
-    throw new IllegalStateException("This code should never be reached!");
-  }
-  
-  /**
-   * Attempt to acquire a lock on the given row
-   * <b>Warning:</b> Caller MUST release this lock or it will sit there for
-   * minutes (by default)
-   * @param table The table to acquire a lock on
-   * @param row The row to acquire a lock on
-   * @param attempts The maximum number of attempts to try, must be 1 or greater
-   * @return A row lock if successful
-   * @throws HBaseException if the lock could not be acquired
-   * @since 2.0
-   */
-  public RowLock hbaseAcquireLock(final byte[] table, final byte[] row, 
-      short attempts) {
-    final short max_attempts = attempts;
-    HBaseException hbe = null;
-    while (attempts-- > 0) {
-      RowLock lock;
-      try {
-        lock = client.lockRow(
-            new RowLockRequest(table, row)).joinUninterruptibly();
-      } catch (HBaseException e) {
-        try {
-          Thread.sleep(61000 / max_attempts);
-        } catch (InterruptedException ie) {
-          break;  // We've been asked to stop here, let's bail out.
-        }
-        hbe = e;
-        continue;
-      } catch (Exception e) {
-        throw new RuntimeException("Should never be here", e);
-      }
-      if (lock == null) {  // Should not happen.
-        LOG.error("WTF, got a null pointer as a RowLock!");
-        continue;
-      }
-      return lock;
-    }
-    if (hbe == null) {
-      throw new IllegalStateException("Should never happen!");
-    }
-    throw hbe;
-  }
- 
+
   /**
    * Index the given timeseries meta object via the configured search plugin
    * @param meta The meta data object to index
@@ -750,7 +813,7 @@ public final class TSDB {
    */
   public void indexTSMeta(final TSMeta meta) {
     if (search != null) {
-      search.indexTSMeta(meta);
+      search.indexTSMeta(meta).addErrback(new PluginError());
     }
   }
   
@@ -761,7 +824,7 @@ public final class TSDB {
    */
   public void deleteTSMeta(final String tsuid) {
     if (search != null) {
-      search.deleteTSMeta(tsuid);
+      search.deleteTSMeta(tsuid).addErrback(new PluginError());
     }
   }
   
@@ -772,7 +835,7 @@ public final class TSDB {
    */
   public void indexUIDMeta(final UIDMeta meta) {
     if (search != null) {
-      search.indexUIDMeta(meta);
+      search.indexUIDMeta(meta).addErrback(new PluginError());
     }
   }
   
@@ -783,7 +846,7 @@ public final class TSDB {
    */
   public void deleteUIDMeta(final UIDMeta meta) {
     if (search != null) {
-      search.deleteUIDMeta(meta);
+      search.deleteUIDMeta(meta).addErrback(new PluginError());
     }
   }
   
@@ -794,7 +857,7 @@ public final class TSDB {
    */
   public void indexAnnotation(final Annotation note) {
     if (search != null) {
-      search.indexAnnotation(note);
+      search.indexAnnotation(note).addErrback(new PluginError());
     }
   }
   
@@ -805,7 +868,7 @@ public final class TSDB {
    */
   public void deleteAnnotation(final Annotation note) {
     if (search != null) {
-      search.deleteAnnotation(note);
+      search.deleteAnnotation(note).addErrback(new PluginError());
     }
   }
   
@@ -836,6 +899,19 @@ public final class TSDB {
     }
     
     return search.executeQuery(query);
+  }
+  
+  /**
+   * Simply logs plugin errors when they're thrown by attaching as an errorback. 
+   * Without this, exceptions will just disappear (unless logged by the plugin) 
+   * since we don't wait for a result.
+   */
+  final class PluginError implements Callback<Object, Exception> {
+    @Override
+    public Object call(final Exception e) throws Exception {
+      LOG.error("Exception from Search plugin indexer", e);
+      return null;
+    }
   }
   
   // ------------------ //

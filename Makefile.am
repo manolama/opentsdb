@@ -91,6 +91,8 @@ tsdb_SRC := \
 	src/tsd/PutDataPointRpc.java	\
 	src/tsd/QueryRpc.java	\
 	src/tsd/RpcHandler.java	\
+	src/tsd/RpcPlugin.java	\
+	src/tsd/RTPublisher.java	\
 	src/tsd/SearchRpc.java	\
 	src/tsd/StaticFileRpc.java	\
 	src/tsd/StatsRpc.java	\
@@ -103,7 +105,7 @@ tsdb_SRC := \
 	src/uid/NoSuchUniqueName.java	\
 	src/uid/UniqueId.java	\
 	src/uid/UniqueIdInterface.java \
-	src/utils/Config.java \ 
+	src/utils/Config.java \
 	src/utils/DateTime.java \
 	src/utils/JSON.java \
 	src/utils/JSONException.java	\
@@ -131,6 +133,7 @@ test_SRC := \
 	test/core/TestCompactionQueue.java	\
 	test/core/TestTags.java	\
 	test/core/TestTSDB.java	\
+	test/core/TestTsdbQuery.java	\
 	test/core/TestTSQuery.java	\
 	test/core/TestTSSubQuery.java	\
 	test/plugin/DummyPlugin.java \
@@ -153,14 +156,16 @@ test_SRC := \
 	test/tsd/TestHttpQuery.java	\
 	test/tsd/TestPutRpc.java	\
 	test/tsd/TestQueryRpc.java	\
+	test/tsd/TestRpcPlugin.java	\
+	test/tsd/TestRTPublisher.java	\
 	test/tsd/TestSearchRpc.java	\
 	test/tsd/TestSuggestRpc.java	\
 	test/tsd/TestTreeRpc.java	\
 	test/tsd/TestUniqueIdRpc.java	\
 	test/uid/TestNoSuchUniqueId.java	\
 	test/uid/TestUniqueId.java \
-	test/utils/TestConfig.java \ 
-	test/utils/TestDateTime.java \ 
+	test/utils/TestConfig.java \
+	test/utils/TestDateTime.java \
 	test/utils/TestJSON.java \
 	test/utils/TestPluginLoader.java
 	
@@ -168,13 +173,17 @@ test_plugin_SRC := \
   test/plugin/DummyPluginA.java \
   test/plugin/DummyPluginB.java \
   test/search/DummySearchPlugin.java \
-  test/tsd/DummyHttpSerializer.java
+  test/tsd/DummyHttpSerializer.java \
+  test/tsd/DummyRpcPlugin.java \
+  test/tsd/DummyRTPublisher.java
 
 # Do NOT include the test dir path, just the META portion
 test_plugin_SVCS := \
   META-INF/services/net.opentsdb.plugin.DummyPlugin \
   META-INF/services/net.opentsdb.search.SearchPlugin \
-  META-INF/services/net.opentsdb.tsd.HttpSerializer
+  META-INF/services/net.opentsdb.tsd.HttpSerializer \
+  META-INF/services/net.opentsdb.tsd.RpcPlugin \
+  META-INF/services/net.opentsdb.tsd.RTPublisher
   
 test_plugin_MF := \
   test/META-INF/MANIFEST.MF
@@ -221,7 +230,7 @@ package_dir := $(subst .,/,$(package))
 UNITTESTS := $(test_SRC:test/%.java=$(package_dir)/%.class)
 PLUGINTESTS := $(test_plugin_SRC:test/%.java=$(package_dir)/%.class)
 PLUGINSVCS := $(test_plugin_SVCS:%=-C $(srcdir)/test %)
-AM_JAVACFLAGS = -Xlint -source 6
+AM_JAVACFLAGS = -Xlint -source 6 -encoding utf-8
 JVM_ARGS =
 classes := $(tsdb_SRC:src/%.java=$(package_dir)/%.class) \
         $(builddata_SRC:src/%.java=$(package_dir)/%.class)
@@ -230,6 +239,7 @@ edit_tsdb_script := srcdir=''; test -f ./$$script.in || srcdir=$(srcdir)/; \
         sed -e "s:@pkgdatadir[@]:$$pkgdatadir:g" \
             -e "s:@abs_srcdir[@]:$$abs_srcdir:g" \
             -e "s:@abs_builddir[@]:$$abs_builddir:g" \
+            -e "s:@configdir[@]:$$configdir:g" \
             $${srcdir}$$script.in >$$script.tmp
 
 tsdb: $(srcdir)/tsdb.in
@@ -508,6 +518,38 @@ $(RPM): opentsdb.spec
 	  test -f "$$rpm" && mv "$$rpm" $@ && break; \
 	done
 	if test -d noarch; then rmdir noarch; fi
+
+debian: dist staticroot
+	$(mkdir_p) $(distdir)/debian
+	$(mkdir_p) $(distdir)/debian/DEBIAN
+	$(mkdir_p) $(distdir)/debian/etc/init.d
+	$(mkdir_p) $(distdir)/debian/etc/opentsdb
+	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/bin
+	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/lib
+	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/plugins
+	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/static
+	$(mkdir_p) $(distdir)/debian/usr/share/opentsdb/tools
+	cp $(top_srcdir)/build-aux/deb/logback.xml $(distdir)/debian/etc/opentsdb
+	cp $(top_srcdir)/build-aux/deb/opentsdb.conf $(distdir)/debian/etc/opentsdb
+	cp $(srcdir)/src/mygnuplot.sh $(distdir)/debian/usr/share/opentsdb/bin
+	script=tsdb; pkgdatadir='/usr/share/opentsdb'; configdir='/etc/opentsdb'; \
+       abs_srcdir=''; abs_builddir=''; $(edit_tsdb_script)
+	cat tsdb.tmp >"$(distdir)/debian/usr/share/opentsdb/bin/tsdb"
+	rm -f tsdb.tmp
+	chmod 755 $(distdir)/debian/usr/share/opentsdb/bin/tsdb
+	cp $(top_srcdir)/build-aux/deb/control/* $(distdir)/debian/DEBIAN
+	sed -e "s:@version[@]:$(PACKAGE_VERSION):g" \
+	     $(distdir)/debian/DEBIAN/control >$(distdir)/debian/DEBIAN/control.tmp
+	mv $(distdir)/debian/DEBIAN/control.tmp $(distdir)/debian/DEBIAN/control
+	chmod 755 $(distdir)/debian/DEBIAN/*
+	cp $(top_srcdir)/build-aux/deb/init.d/opentsdb $(distdir)/debian/etc/init.d
+	cp $(jar) $(distdir)/debian/usr/share/opentsdb/lib
+	cp -r staticroot/favicon.ico $(distdir)/debian/usr/share/opentsdb/static
+	cp -r gwt/queryui/* $(distdir)/debian/usr/share/opentsdb/static
+	`for dep_jar in $(tsdb_DEPS); do cp $$dep_jar \
+	     $(distdir)/debian/usr/share/opentsdb/lib; done;`
+	cp $(top_srcdir)/tools/* $(distdir)/debian/usr/share/opentsdb/tools
+	dpkg -b $(distdir)/debian $(distdir)/optsdb-$(PACKAGE_VERSION)_all.deb
 
 .PHONY: jar doc check gwtc gwtdev printdeps staticroot gwttsd rpm
 include third_party/include.mk

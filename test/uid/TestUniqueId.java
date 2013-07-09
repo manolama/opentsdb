@@ -15,13 +15,16 @@ package net.opentsdb.uid;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
+import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.utils.Config;
 
 import org.hbase.async.AtomicIncrementRequest;
+import org.hbase.async.Bytes;
 import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseClient;
 import org.hbase.async.HBaseException;
@@ -105,6 +108,13 @@ public final class TestUniqueId {
     assertEquals(3, uid.width());
   }
 
+  @Test
+  public void testMaxPossibleId() {
+    assertEquals(255, (new UniqueId(client, table, kind, 1)).maxPossibleId());
+    assertEquals(65535, (new UniqueId(client, table, kind, 2)).maxPossibleId());
+    assertEquals(16777215L, (new UniqueId(client, table, kind, 3)).maxPossibleId());
+  } 
+  
   @Test
   public void getNameSuccessfulHBaseLookup() {
     uid = new UniqueId(client, table, kind, 3);
@@ -316,16 +326,6 @@ public final class TestUniqueId {
     // Then A attempts to go through the process and should discover that the
     // ID has already been assigned.
 
-//    uid = new UniqueId(client, table, kind, 3);  // Used by client A.
-//    final TSDB tsdb = mock(TSDB.class);
-//    HBaseClient client_b = mock(HBaseClient.class);  // For client B.
-//    final UniqueId uid_b = new UniqueId(client_b, table, kind, 3);
-//    final Config config = mock(Config.class);
-//    when(config.enable_meta_tracking()).thenReturn(false);
-//    when(tsdb.getConfig()).thenReturn(config);
-//    uid.setTSDB(tsdb);
-//    uid_b.setTSDB(tsdb);
-    
     uid = new UniqueId(client, table, kind, 3); // Used by client A.
     HBaseClient client_b = mock(HBaseClient.class); // For client B.
     final UniqueId uid_b = new UniqueId(client_b, table, kind, 3);
@@ -341,20 +341,16 @@ public final class TestUniqueId {
       .thenReturn(d)
       .thenReturn(Deferred.fromResult(kvs));
 
-    final Answer<byte[]> the_race = new Answer<byte[]>() {
-      public byte[] answer(final InvocationOnMock unused_invocation) {
-        // While answering A's first Get, B doest a full getOrCreateId.
+    final Answer<Deferred<byte[]>> the_race = new Answer<Deferred<byte[]>>() {
+      public Deferred<byte[]> answer(final InvocationOnMock unused_invocation) {
+        // While answering A's first Get, B does a full getOrCreateId.
         assertArrayEquals(id, uid_b.getOrCreateId("foo"));
-        return null;
+        return Deferred.<byte[]>fromResult(null);
       }
     };
 
-    try {
-      when(d.joinUninterruptibly())
-        .thenAnswer(the_race); // Start the race when answering A's first Get.
-    } catch (Exception e) {
-      fail("Should never happen: " + e);
-    }
+    // trigger the race condition when the initial get request callback is added
+    when(d.addCallback(anyByteCB())).thenAnswer(the_race);
 
     when(client_b.get(anyGet())) // null => ID doesn't exist.
       .thenReturn(Deferred.<ArrayList<KeyValue>>fromResult(null));
@@ -694,6 +690,53 @@ public final class TestUniqueId {
     UniqueId.getTagPairsFromTSUID("", (short)3, (short)3, (short)3);
   }
   
+  @Test
+  public void getUsedUIDs() throws Exception {
+    final ArrayList<KeyValue> kvs = new ArrayList<KeyValue>(3);
+    final byte[] metrics = { 'm', 'e', 't', 'r', 'i', 'c', 's' };
+    final byte[] tagk = { 't', 'a', 'g', 'k' };
+    final byte[] tagv = { 't', 'a', 'g', 'v' };
+    kvs.add(new KeyValue(MAXID, ID, metrics, Bytes.fromLong(64L)));
+    kvs.add(new KeyValue(MAXID, ID, tagk, Bytes.fromLong(42L)));
+    kvs.add(new KeyValue(MAXID, ID, tagv, Bytes.fromLong(1024L)));
+    final TSDB tsdb = mock(TSDB.class);
+    when(tsdb.getClient()).thenReturn(client);
+    when(tsdb.uidTable()).thenReturn(new byte[] { 'u', 'i', 'd' });
+    when(client.get(anyGet()))
+      .thenReturn(Deferred.fromResult(kvs));
+    
+    final byte[][] kinds = { metrics, tagk, tagv };
+    final Map<String, Long> uids = UniqueId.getUsedUIDs(tsdb, kinds)
+      .joinUninterruptibly();
+    assertNotNull(uids);
+    assertEquals(3, uids.size());
+    assertEquals(64L, uids.get("metrics").longValue());
+    assertEquals(42L, uids.get("tagk").longValue());
+    assertEquals(1024L, uids.get("tagv").longValue());
+  }
+  
+  @Test
+  public void getUsedUIDsEmptyRow() throws Exception {
+    final ArrayList<KeyValue> kvs = new ArrayList<KeyValue>(0);
+    final byte[] metrics = { 'm', 'e', 't', 'r', 'i', 'c', 's' };
+    final byte[] tagk = { 't', 'a', 'g', 'k' };
+    final byte[] tagv = { 't', 'a', 'g', 'v' };
+    final TSDB tsdb = mock(TSDB.class);
+    when(tsdb.getClient()).thenReturn(client);
+    when(tsdb.uidTable()).thenReturn(new byte[] { 'u', 'i', 'd' });
+    when(client.get(anyGet()))
+      .thenReturn(Deferred.fromResult(kvs));
+    
+    final byte[][] kinds = { metrics, tagk, tagv };
+    final Map<String, Long> uids = UniqueId.getUsedUIDs(tsdb, kinds)
+      .joinUninterruptibly();
+    assertNotNull(uids);
+    assertEquals(3, uids.size());
+    assertEquals(0L, uids.get("metrics").longValue());
+    assertEquals(0L, uids.get("tagk").longValue());
+    assertEquals(0L, uids.get("tagv").longValue());
+  }
+  
   // ----------------- //
   // Helper functions. //
   // ----------------- //
@@ -704,17 +747,6 @@ public final class TestUniqueId {
 
   private static GetRequest anyGet() {
     return any(GetRequest.class);
-  }
-
-  private static GetRequest getForRow(final byte[] row) {
-    return argThat(new ArgumentMatcher<GetRequest>() {
-      public boolean matches(Object get) {
-        return Arrays.equals(((GetRequest) get).key(), row);
-      }
-      public void describeTo(org.hamcrest.Description description) {
-        description.appendText("GetRequest for row " + Arrays.toString(row));
-      }
-    });
   }
 
   private static AtomicIncrementRequest incrementForRow(final byte[] row) {
@@ -731,6 +763,11 @@ public final class TestUniqueId {
 
   private static PutRequest anyPut() {
     return any(PutRequest.class);
+  }
+  
+  @SuppressWarnings("unchecked")
+  private static Callback<byte[], ArrayList<KeyValue>> anyByteCB() {
+    return any(Callback.class);
   }
 
   private static PutRequest putForRow(final byte[] row) {
