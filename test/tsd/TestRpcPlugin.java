@@ -32,7 +32,7 @@ import org.powermock.modules.junit4.PowerMockRunner;
   "com.sum.*", "org.xml.*"})
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({TSDB.class, Config.class, RpcPlugin.class})
-public final class TestRPCPlugin {
+public final class TestRpcPlugin {
   private TSDB tsdb= mock(TSDB.class);
   private Config config = mock(Config.class);
   private RpcPlugin rpc_plugin;
