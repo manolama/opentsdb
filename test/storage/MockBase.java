@@ -345,6 +345,7 @@ public final class MockBase {
           when(kv.value()).thenReturn(entry.getValue());
           when(kv.qualifier()).thenReturn(entry.getKey());
           when(kv.key()).thenReturn(get.key());
+          when(kv.family()).thenReturn(family);
           kvs.add(kv);
         }
         return Deferred.fromResult(kvs);
