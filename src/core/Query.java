@@ -17,6 +17,8 @@ import java.util.Map;
 
 import org.hbase.async.HBaseException;
 
+import com.stumbleupon.async.Deferred;
+
 import net.opentsdb.uid.NoSuchUniqueName;
 
 /**
@@ -124,5 +126,18 @@ public interface Query {
    * perform the search.
    */
   DataPoints[] run() throws HBaseException;
+
+  /**
+   * Runs this query.
+   * @return The data points matched by this query.
+   * <p>
+   * Each element in the non-{@code null} but possibly empty array returned
+   * corresponds to one time series for which some data points have been
+   * matched by the query.
+   * @throws HBaseException if there was a problem communicating with HBase to
+   * perform the search.
+   * @since 2.0
+   */
+  Deferred<DataPoints[]> runAsync();
 
 }
