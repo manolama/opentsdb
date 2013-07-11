@@ -20,8 +20,9 @@ import java.util.List;
 
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import com.stumbleupon.async.Callback;
+import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.Query;
@@ -43,8 +44,7 @@ import net.opentsdb.meta.Annotation;
  * @since 2.0
  */
 final class QueryRpc implements HttpRpc {
-  private static final Logger LOG = LoggerFactory.getLogger(QueryRpc.class);
-  
+ 
   /**
    * Implements the /api/query endpoint to fetch data from OpenTSDB.
    * @param tsdb The TSDB to use for fetching data
@@ -83,42 +83,79 @@ final class QueryRpc implements HttpRpc {
     final int nqueries = tsdbqueries.length;
     final ArrayList<DataPoints[]> results = 
       new ArrayList<DataPoints[]>(nqueries);
+    final ArrayList<Deferred<DataPoints[]>> deferreds =
+      new ArrayList<Deferred<DataPoints[]>>(nqueries);
     
     for (int i = 0; i < nqueries; i++) {
-      try {  // execute the TSDB query!
-        // XXX This is slow and will block Netty.  TODO(tsuna): Don't block.
-        // TODO(tsuna): Optimization: run each query in parallel.
-        final DataPoints[] series = tsdbqueries[i].run();
-        if (series.length < 1){
-          continue;
-        }
-        results.add(series);
-      } catch (RuntimeException e) {
-        LOG.info("Query failed (stack trace coming): " + tsdbqueries[i]);
-        throw e;
-      }
-      tsdbqueries[i] = null;  // free()
+      deferreds.add(tsdbqueries[i].runAsync());
     }
-    tsdbqueries = null;  // free()
     
     // if the user wants global annotations, we need to scan and fetch
-    List<Annotation> globals = null;
-    if (!data_query.getNoAnnotations() && data_query.getGlobalAnnotations()) {
-      try {
-        globals = Annotation.getGlobalAnnotations(tsdb, 
-            data_query.startTime() / 1000, data_query.endTime() / 1000)
-            .joinUninterruptibly();
-      } catch (Exception e) {
-        throw new RuntimeException(e);
+    final List<Annotation> globals = new ArrayList<Annotation>(0);
+
+    /**
+     * This callback is used to keep only the results from queries that actually
+     * return some data. It should be added to the grouped response to the
+     * deferreds array list.
+     */
+    class QueriesCB implements Callback<Object, ArrayList<Object>> {
+
+      @Override
+      public Object call(final ArrayList<Object> query_results) throws Exception {
+        for (Object obj : query_results) {
+          final DataPoints[] dps = (DataPoints[])obj;
+          if (dps.length > 0) {
+            results.add(dps);
+          }
+        }
+        return null;
       }
       
+    }
+    
+    /**
+     * Used to copy the results of a global annotation lookup to the local
+     * {@code globals} list. The list must be final to be accessible from the
+     * serialization code below.
+     */
+    class AnnotationsCB implements Callback<Object, List<Annotation>> {
+
+      @Override
+      public Object call(final List<Annotation> annotations) throws Exception {
+        globals.addAll(annotations);
+        return null;
+      }
+      
+    }
+
+    // we have to join on the deferred groups for now until the metric and tag
+    // calls are asynced in DataPoints. Otherwise if we try to place the
+    // serialization code in a callback, it will hang the query
+    if (!data_query.getNoAnnotations() && data_query.getGlobalAnnotations()) {
+      final Deferred<List<Annotation>> gbs = Annotation.getGlobalAnnotations(tsdb, 
+          data_query.startTime() / 1000, data_query.endTime() / 1000);
+      final ArrayList<Deferred<Object>> dfs =
+        new ArrayList<Deferred<Object>>(2);
+      dfs.add(Deferred.group(deferreds).addCallback(new QueriesCB()));
+      dfs.add(gbs.addCallback(new AnnotationsCB()));
+      try {
+        Deferred.group(dfs).joinUninterruptibly();
+      } catch (Exception e) {
+        throw new RuntimeException("Shouldn't be here", e);
+      }
+    } else {
+      try {
+        Deferred.group(deferreds).addCallback(new QueriesCB()).joinUninterruptibly();
+      } catch (Exception e) {
+        throw new RuntimeException("Shouldn't be here", e);
+      }
     }
     
     switch (query.apiVersion()) {
     case 0:
     case 1:
       query.sendReply(query.serializer().formatQueryV1(data_query, results, 
-          globals));
+          null));
       break;
     default: 
       throw new BadRequestException(HttpResponseStatus.NOT_IMPLEMENTED, 

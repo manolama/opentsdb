@@ -34,6 +34,8 @@ import org.junit.runner.RunWith;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
+import com.stumbleupon.async.Deferred;
+
 /**
  * Unit tests for the Query RPC class that handles parsing user queries for
  * timeseries data and returning that data
@@ -63,6 +65,8 @@ public final class TestQueryRpc {
     tsdb = NettyMocks.getMockedHTTPTSDB();
     when(tsdb.newQuery()).thenReturn(empty_query);
     when(empty_query.run()).thenReturn(new DataPoints[0]);
+    when(empty_query.runAsync())
+      .thenReturn(Deferred.fromResult(new DataPoints[0]));
   }
   
   @Test
@@ -271,7 +275,7 @@ public final class TestQueryRpc {
     HttpQuery query = NettyMocks.postQuery(tsdb, "/api/query",
         "{\"start\":1356998400,\"end\":1356998460,\"queries\":[{\"aggregator"
         + "\": \"sum\",\"metric\": \"sys.cpu.0\",\"rate\": \"true\",\"tags\": "
-        + "{\"host\": \"*\",\"dc\": \"lga\"}}]}");
+        + "{\"host\": \"*\",\"dc\": \"lga\"}}]}");  
     rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.OK, query.response().getStatus());
   }
