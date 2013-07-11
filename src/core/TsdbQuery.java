@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.hbase.async.Bytes;
+import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
@@ -317,8 +318,11 @@ final class TsdbQuery implements Query {
    */
   public DataPoints[] run() throws HBaseException {
     try {
-      return findSpans().addCallback(new GroupByAndAggregateCB())
-        .joinUninterruptibly();
+      if (tsuids != null && tsuids.size() > 0) {
+        return runTSUIDQuery().addCallback(new GroupByAndAggregateCB()).joinUninterruptibly();
+      } else {
+        return findSpans().addCallback(new GroupByAndAggregateCB()).joinUninterruptibly();
+      }
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -332,7 +336,11 @@ final class TsdbQuery implements Query {
    * @since 2.0
    */
   public Deferred<DataPoints[]> runAsync() {
-    return findSpans().addCallback(new GroupByAndAggregateCB());
+    if (tsuids != null && tsuids.size() > 0) {
+      return runTSUIDQuery().addCallback(new GroupByAndAggregateCB());
+    } else {
+      return findSpans().addCallback(new GroupByAndAggregateCB());
+    }
   }
 
   /**
@@ -437,6 +445,95 @@ final class TsdbQuery implements Query {
     return results;
   }
 
+  /**
+   * Finds all the {@link Span}s that match this query for individual TSUIDs
+   * Instead of scanning across many rows, this method will create a GET request
+   * for each row of data in the span. This may be more efficient if there are
+   * many time series for the same metric.
+   * @return A map from HBase row key to the {@link Span} for that row key.
+   * Since a {@link Span} actually contains multiple HBase rows, the row key
+   * stored in the map has its timestamp zero'ed out.
+   * @throws HBaseException if there was a problem communicating with HBase to
+   * perform the search.
+   * @throws IllegalArgumentException if bad data was retrieved from HBase.
+   * @since 2.0
+   */
+  private Deferred<TreeMap<byte[], Span>> runTSUIDQuery() {
+    final short metric_width = tsdb.metrics.width();
+    final TreeMap<byte[], Span> spans =  // The key is a row key from HBase.
+      new TreeMap<byte[], Span>(new SpanCmp(metric_width));
+    final AtomicInteger nrows = new AtomicInteger();
+
+    long get_start = getScanStartTime();
+    get_start = (get_start - (get_start % Const.MAX_TIMESPAN));
+    long get_end = getScanEndTime();
+    get_end = (get_end - (get_end % Const.MAX_TIMESPAN));
+    
+    final ArrayList<Deferred<Boolean>> deferreds = 
+      new ArrayList<Deferred<Boolean>>((int)(get_end - get_start) / 3600);
+    
+    /**
+     * Responsible for compacting the data points and adding them to the spans
+     */
+    class GetCB implements Callback<Boolean, ArrayList<KeyValue>> {
+
+      @Override
+      public Boolean call(final ArrayList<KeyValue> row) throws Exception {
+        if (row == null) {
+          return false;
+        }
+        final byte[] key = row.get(0).key();
+        Span datapoints = spans.get(key);
+        if (datapoints == null) {
+          datapoints = new Span(tsdb);
+          spans.put(key, datapoints);
+        }
+        final KeyValue compacted = tsdb.compact(row, datapoints.getAnnotations());
+        if (compacted != null) {  // Can be null if we ignored all KVs.
+          datapoints.addRow(compacted);
+          nrows.incrementAndGet();
+        }
+        return true;
+      }
+      
+    }
+    
+    // save some time by instantiating a single callback object that will be 
+    // shared by all of the GetRequests
+    final GetCB cb = new GetCB();
+    
+    while (get_start < get_end) {
+      
+      for (final String tsuid_string : tsuids) {
+        final byte[] tsuid = UniqueId.stringToUid(tsuid_string);
+        final byte[] key = UniqueId.keyFromTSUID(tsuid, get_start, 
+            TSDB.metrics_width(), Const.TIMESTAMP_BYTES);
+        final GetRequest get = new GetRequest(tsdb.table, key);
+        get.family(TSDB.FAMILY);
+        deferreds.add(tsdb.getClient().get(get).addCallback(cb));
+      }
+      
+      get_start += 3600;
+    }
+    
+    /**
+     * Used to wait for all of the groups to complete, then log the query results
+     */
+    class GroupCB implements Callback<TreeMap<byte[], Span>, ArrayList<Object>> {
+
+      @Override
+      public TreeMap<byte[], Span> call(final ArrayList<Object> cbs)
+          throws Exception {
+        LOG.info(TsdbQuery.this + " matched " + nrows.get() + " rows in " + 
+            spans.size() + " spans");
+        return spans;
+      }
+      
+    }
+
+    return Deferred.group(deferreds).addCallback(new GroupCB());
+  }
+  
   /**
    * Callback that should be attached the the output of 
    * {@link TsdbQuery#findSpans} to group and sort the results if necessary.
