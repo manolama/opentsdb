@@ -624,6 +624,16 @@ public final class TestUniqueId {
   }
   
   @Test
+  public void keyFromTSUID() {
+    final byte[] tsuid = new byte[] { 0, 0, 1, 0, 0, 2, 0, 0, 3 };
+    final long base_time = 1356998400L;
+    final byte[] key = UniqueId.keyFromTSUID(tsuid, base_time, (short)3, (short)4);
+    assertArrayEquals(new byte[] 
+       { 0, 0, 1, 0x50, (byte) 0xE2, 0x27, 0, 0, 0, 2, 0, 0, 3 },
+       key);
+  }
+  
+  @Test
   public void getTagPairsFromTSUID() {
     List<byte[]> tags = UniqueId.getTagPairsFromTSUID(
         "000000000001000002000003000004", 

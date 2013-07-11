@@ -855,6 +855,25 @@ public final class UniqueId implements UniqueIdInterface {
   }
   
   /**
+   * Creates a row key given a TSUID and a base time
+   * @param tsuid The TSUID to use
+   * @param base_time The base time to use
+   * @param metric_width The width of the metric
+   * @param timestamp_width The width of the timestamp
+   * @return A row key
+   * @throws ArrayIndexOutOfBoundsException if the TSUID is invalid
+   */
+  public static byte[] keyFromTSUID(final byte[] tsuid, final long base_time, 
+      final short metric_width, final short timestamp_width) {
+    final byte[] key = new byte[tsuid.length + timestamp_width];
+    System.arraycopy(tsuid, 0, key, 0, metric_width);
+    Bytes.setInt(key, (int) base_time, metric_width);
+    System.arraycopy(tsuid, metric_width, key, metric_width + timestamp_width,
+        tsuid.length - metric_width);
+    return key;
+  }
+  
+  /**
    * Extracts a list of tagk/tagv pairs from a tsuid
    * @param tsuid The tsuid to parse
    * @param metric_width The width of the metric tag in bytes
