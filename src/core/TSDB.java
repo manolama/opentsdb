@@ -553,46 +553,53 @@ public final class TSDB {
     }
 
     IncomingDataPoints.checkMetricAndTags(metric, tags);
-    final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);  
-    final long base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
-    Bytes.setInt(row, (int) base_time, metrics.width());
-    scheduleForCompaction(row, (int) base_time);
-    final short qualifier = (short) ((timestamp - base_time) << Const.FLAG_BITS
-                                     | flags);
-    final PutRequest point = new PutRequest(table, row, FAMILY,
-                                            Bytes.fromShort(qualifier), value);
     
-    // TODO(tsuna): Add a callback to time the latency of HBase and store the
-    // timing in a moving Histogram (once we have a class for this).
-    Deferred<Object> result = client.put(point);
-    if (!config.enable_meta_tracking() && rt_publisher == null) {
-      return result;
-    }
-    
-    final byte[] tsuid = UniqueId.getTSUIDFromKey(row, METRICS_WIDTH, 
-        Const.TIMESTAMP_BYTES); 
-    if (config.enable_meta_tracking()) {
-      TSMeta.incrementAndGetCounter(this, tsuid);
-    }
-    if (rt_publisher != null) {
-      
-      /**
-       * Simply logs real time publisher errors when they're thrown. Without
-       * this, exceptions will just disappear (unless logged by the plugin) 
-       * since we don't wait for a result.
-       */
-      final class RTError implements Callback<Object, Exception> {
-        @Override
-        public Object call(final Exception e) throws Exception {
-          LOG.error("Exception from Real Time Publisher", e);
-          return null;
+    class AddPointCB implements Callback<Deferred<Object>, byte[]> {
+      public Deferred<Object> call(final byte[] row) {
+        final long base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
+        Bytes.setInt(row, (int) base_time, metrics.width());
+        scheduleForCompaction(row, (int) base_time);
+        final short qualifier = (short) ((timestamp - base_time) 
+            << Const.FLAG_BITS  | flags);
+        final PutRequest point = new PutRequest(table, row, FAMILY,
+                                                Bytes.fromShort(qualifier), 
+                                                value);
+        // TODO(tsuna): Add a callback to time the latency of HBase and store 
+        // the timing in a moving Histogram (once we have a class for this).
+        Deferred<Object> result = client.put(point);
+        if (!config.enable_meta_tracking() && rt_publisher == null) {
+          return result;
         }
+        
+        final byte[] tsuid = UniqueId.getTSUIDFromKey(row, METRICS_WIDTH, 
+            Const.TIMESTAMP_BYTES); 
+        if (config.enable_meta_tracking()) {
+          TSMeta.incrementAndGetCounter(TSDB.this, tsuid);
+        }
+        if (rt_publisher != null) {
+          
+          /**
+           * Simply logs real time publisher errors when they're thrown. Without
+           * this, exceptions will just disappear (unless logged by the plugin) 
+           * since we don't wait for a result.
+           */
+          final class RTError implements Callback<Object, Exception> {
+            @Override
+            public Object call(final Exception e) throws Exception {
+              LOG.error("Exception from Real Time Publisher", e);
+              return null;
+            }
+          }
+          
+          rt_publisher.sinkDataPoint(metric, timestamp, value, tags, tsuid, flags)
+            .addErrback(new RTError());
+        }
+        return result;
       }
-      
-      rt_publisher.sinkDataPoint(metric, timestamp, value, tags, tsuid, flags)
-        .addErrback(new RTError());
     }
-    return result;
+
+    return IncomingDataPoints.rowKeyTemplate(this, metric, tags)
+      .addCallbackDeferring(new AddPointCB());
   }
 
   /**
