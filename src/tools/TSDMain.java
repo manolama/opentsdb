@@ -99,6 +99,9 @@ final class TSDMain {
                    "Number for async io workers (default: cpu * 2).");
     argp.addOption("--async-io", "true|false",
                    "Use async NIO (default true) or traditional blocking io");
+    argp.addOption("--backlog", "NUM",
+                   "Size of connection attempt queue (default: 3072 or kernel"
+                   + " somaxconn.");
     argp.addOption("--flush-interval", "MSEC",
                    "Maximum time for which a new data point can be buffered"
                    + " (default: " + DEFAULT_FLUSH_INTERVAL + ").");
@@ -150,6 +153,9 @@ final class TSDMain {
       final ServerBootstrap server = new ServerBootstrap(factory);
 
       server.setPipelineFactory(new PipelineFactory(tsdb));
+      if (argp.get("--backlog") != null) {
+        server.setOption("backlog", Integer.parseInt(argp.get("--backlog")));
+      }
       server.setOption("child.tcpNoDelay", true);
       server.setOption("child.keepAlive", true);
       server.setOption("reuseAddress", true);
