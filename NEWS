@@ -1,6 +1,12 @@
 OpenTSDB - User visible changes.
 
-* Version 1.1.0 (2013-01-??) [???????]
+* Version 1.1.1 (2013-??-??) [???????]
+
+Noteworthy changes:
+  - UIDs are now assigned in a lock-less fashion.
+
+
+* Version 1.1.0 (2013-03-08) [12879d7]
 
 Noteworthy changes:
   - Licensing adjustment: allow LGPLv2.1+ in addition to LGPLv3+.
@@ -22,6 +28,8 @@ Noteworthy changes:
   - Allow tuning the number of worker threads or using OIO.
   - Fix auto-completion bug causing partial results to show in the web UI.
   - Various internal bug fixes.
+  - Update all dependencies.
+  - TSDB data compaction is now enabled by default.
 
 
 * Version 1.0.0 (2011-12-23) [66a6b42]
