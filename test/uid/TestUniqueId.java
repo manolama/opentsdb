@@ -269,6 +269,7 @@ public final class TestUniqueId {
       .thenReturn(Deferred.fromResult(5L));
 
     when(client.compareAndSet(anyPut(), emptyArray()))
+      .thenReturn(Deferred.fromResult(true))
       .thenReturn(Deferred.fromResult(true));
 
     assertArrayEquals(id, uid.getOrCreateId("foo"));
@@ -336,7 +337,8 @@ public final class TestUniqueId {
       public Deferred<byte[]> answer(final InvocationOnMock unused_invocation) {
         // While answering A's first Get, B does a full getOrCreateId.
         assertArrayEquals(id, uid_b.getOrCreateId("foo"));
-        return Deferred.<byte[]>fromResult(null);
+        d.callback(null);
+        return (byte[]) ((Deferred) d).join();
       }
     };
 
@@ -351,6 +353,7 @@ public final class TestUniqueId {
       .thenReturn(Deferred.fromResult(5L));
 
     when(client_b.compareAndSet(anyPut(), emptyArray()))
+      .thenReturn(Deferred.fromResult(true))
       .thenReturn(Deferred.fromResult(true));
 
     // Now that B is finished, A proceeds and allocates a UID that will be
@@ -420,15 +423,16 @@ public final class TestUniqueId {
     // Update once HBASE-2292 is fixed:
     HBaseException hbe = fakeHBaseException();
     when(client.atomicIncrement(incrementForRow(MAXID)))
-      .thenThrow(hbe)
+      .thenReturn(Deferred.<Long>fromError(hbe))
       .thenReturn(Deferred.fromResult(5L));
 
     when(client.compareAndSet(anyPut(), emptyArray()))
+      .thenReturn(Deferred.fromResult(true))
       .thenReturn(Deferred.fromResult(true));
 
     final byte[] id = { 0, 0, 5 };
     assertArrayEquals(id, uid.getOrCreateId("foo"));
-    verify(client, times(2)).get(anyGet()); // Initial Get + retry.
+    verify(client, times(1)).get(anyGet()); // Initial Get.
     // First increment (failed) + retry.
     verify(client, times(2)).atomicIncrement(incrementForRow(MAXID));
     // Reverse + forward mappings.
@@ -452,6 +456,7 @@ public final class TestUniqueId {
       .thenReturn(Deferred.fromResult(6L));
 
     when(client.compareAndSet(anyPut(), emptyArray()))
+      .thenReturn(Deferred.fromResult(true))
       .thenReturn(Deferred.fromResult(true));
 
     final byte[] id = { 0, 0, 6 };
