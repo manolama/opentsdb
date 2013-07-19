@@ -16,6 +16,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
@@ -23,6 +25,7 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import net.opentsdb.meta.Annotation;
 import net.opentsdb.storage.MockBase;
@@ -41,10 +44,14 @@ import org.hbase.async.Scanner;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
+
+import com.stumbleupon.async.Deferred;
 
 /**
  * Massive test class that is used to test all facets of querying for data. 
@@ -63,7 +70,8 @@ import org.powermock.modules.junit4.PowerMockRunner;
 @PrepareForTest({TSDB.class, Config.class, UniqueId.class, HBaseClient.class, 
   CompactionQueue.class, GetRequest.class, PutRequest.class, KeyValue.class, 
   Scanner.class, TsdbQuery.class, DeleteRequest.class, Annotation.class, 
-  RowKey.class, Span.class, SpanGroup.class})
+  RowKey.class, Span.class, SpanGroup.class, IncomingDataPoints.class, 
+  Tags.class })
 public final class TestTsdbQuery {
   private Config config;
   private TSDB tsdb = null;
@@ -117,6 +125,14 @@ public final class TestTsdbQuery {
     when(tag_values.getId("web03"))
       .thenThrow(new NoSuchUniqueName("web03", "metric"));
     
+    PowerMockito.mockStatic(Tags.class);
+    ArrayList<byte[]> tags = new ArrayList<byte[]>(2);
+    tags.add(new byte[] { 0, 0, 1 });
+    tags.add(new byte[] { 0, 0, 1 });
+    when(Tags.resolveAll((TSDB)any(), (Map<String, String>)any()))
+        .thenReturn(tags);
+    
+    PowerMockito.when(Tags.getTags((TSDB)any(), (byte[])any())).thenCallRealMethod();
     when(metrics.width()).thenReturn((short)3);
     when(tag_names.width()).thenReturn((short)3);
     when(tag_values.width()).thenReturn((short)3);
@@ -284,6 +300,7 @@ public final class TestTsdbQuery {
     query.setEndTime(1357041600);
     query.setTimeSeries("sys.cpu.user", tags, Aggregators.SUM, false);
     final DataPoints[] dps = query.run();
+    storage.dumpToSystemOut(false);
     assertNotNull(dps);
     assertEquals("sys.cpu.user", dps[0].metricName());
     assertTrue(dps[0].getAggregatedTags().isEmpty());
@@ -292,6 +309,7 @@ public final class TestTsdbQuery {
     
     int value = 1;
     for (DataPoint dp : dps[0]) {
+      System.out.println("ts: " + dp.timestamp() + "  V: " + dp.longValue());
       assertEquals(value, dp.longValue());
       value++;
     }
@@ -1058,9 +1076,41 @@ public final class TestTsdbQuery {
   // Helper functions. //
   // ----------------- //
   
+  @SuppressWarnings("unchecked")
   private void setQueryStorage() throws Exception {
     storage = new MockBase(tsdb, client, true, true, true, true);
     storage.setFamily("t".getBytes(MockBase.ASCII()));
+    
+    PowerMockito.mockStatic(IncomingDataPoints.class);   
+    final byte[] user_web01 = new byte[] { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1};
+    final byte[] nice_web01 = new byte[] { 0, 0, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1}; 
+    final byte[] user_web02 = new byte[] { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2}; 
+    final byte[] nice_web02 = new byte[] { 0, 0, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2}; 
+    PowerMockito.doAnswer(
+        new Answer<Deferred<byte[]>>() {
+          public Deferred<byte[]> answer(final InvocationOnMock args) 
+            throws Exception {
+            final String metric = (String)args.getArguments()[1];
+            final Map<String, String> tags = 
+              (Map<String, String>)args.getArguments()[2];
+            
+            if (metric.equals("sys.cpu.user")) {
+              if (tags.get("host").equals("web01")) {
+                return Deferred.fromResult(user_web01);
+              } else {
+                return Deferred.fromResult(user_web02);
+              }
+            } else {
+              if (tags.get("host").equals("web01")) {
+                return Deferred.fromResult(nice_web01);
+              } else {
+                return Deferred.fromResult(nice_web02);
+              }
+            }
+          }
+        }
+    ).when(IncomingDataPoints.class, "rowKeyTemplate", (TSDB)any(), anyString(), 
+        (Map<String, String>)any());
   }
   
   private void storeLongTimeSeries() throws Exception {
