@@ -70,8 +70,7 @@ import com.stumbleupon.async.Deferred;
 @PrepareForTest({TSDB.class, Config.class, UniqueId.class, HBaseClient.class, 
   CompactionQueue.class, GetRequest.class, PutRequest.class, KeyValue.class, 
   Scanner.class, TsdbQuery.class, DeleteRequest.class, Annotation.class, 
-  RowKey.class, Span.class, SpanGroup.class, IncomingDataPoints.class, 
-  Tags.class })
+  RowKey.class, Span.class, SpanGroup.class, IncomingDataPoints.class })
 public final class TestTsdbQuery {
   private Config config;
   private TSDB tsdb = null;
@@ -113,26 +112,27 @@ public final class TestTsdbQuery {
     when(metrics.getId("sys.cpu.nice")).thenReturn(new byte[] { 0, 0, 2 });
     when(metrics.getName(new byte[] { 0, 0, 2 })).thenReturn("sys.cpu.nice");
     when(tag_names.getId("host")).thenReturn(new byte[] { 0, 0, 1 });
+    when(tag_names.getIdAsync("host")).thenReturn(
+        Deferred.fromResult(new byte[] { 0, 0, 1 }));
     when(tag_names.getName(new byte[] { 0, 0, 1 })).thenReturn("host");
-    when(tag_names.getOrCreateId("host")).thenReturn(new byte[] { 0, 0, 1 });
-    when(tag_names.getId("dc")).thenThrow(new NoSuchUniqueName("dc", "metric"));
+    when(tag_names.getOrCreateIdAsync("host")).thenReturn(
+        Deferred.fromResult(new byte[] { 0, 0, 1 }));
+    when(tag_names.getIdAsync("dc")).thenThrow(new NoSuchUniqueName("dc", "metric"));
     when(tag_values.getId("web01")).thenReturn(new byte[] { 0, 0, 1 });
+    when(tag_values.getIdAsync("web01")).thenReturn(
+        Deferred.fromResult(new byte[] { 0, 0, 1 }));
     when(tag_values.getName(new byte[] { 0, 0, 1 })).thenReturn("web01");
-    when(tag_values.getOrCreateId("web01")).thenReturn(new byte[] { 0, 0, 1 });
+    when(tag_values.getOrCreateIdAsync("web01")).thenReturn(
+        Deferred.fromResult(new byte[] { 0, 0, 1 }));
     when(tag_values.getId("web02")).thenReturn(new byte[] { 0, 0, 2 });
+    when(tag_values.getIdAsync("web02")).thenReturn(
+        Deferred.fromResult(new byte[] { 0, 0, 2 }));
     when(tag_values.getName(new byte[] { 0, 0, 2 })).thenReturn("web02");
-    when(tag_values.getOrCreateId("web02")).thenReturn(new byte[] { 0, 0, 2 });
+    when(tag_values.getOrCreateIdAsync("web02")).thenReturn(
+        Deferred.fromResult(new byte[] { 0, 0, 2 }));
     when(tag_values.getId("web03"))
       .thenThrow(new NoSuchUniqueName("web03", "metric"));
     
-    PowerMockito.mockStatic(Tags.class);
-    ArrayList<byte[]> tags = new ArrayList<byte[]>(2);
-    tags.add(new byte[] { 0, 0, 1 });
-    tags.add(new byte[] { 0, 0, 1 });
-    when(Tags.resolveAll((TSDB)any(), (Map<String, String>)any()))
-        .thenReturn(tags);
-    
-    PowerMockito.when(Tags.getTags((TSDB)any(), (byte[])any())).thenCallRealMethod();
     when(metrics.width()).thenReturn((short)3);
     when(tag_names.width()).thenReturn((short)3);
     when(tag_values.width()).thenReturn((short)3);
@@ -208,6 +208,7 @@ public final class TestTsdbQuery {
   
   @Test
   public void setTimeSeries() throws Exception {
+    setQueryStorage();
     HashMap<String, String> tags = new HashMap<String, String>(1);
     tags.put("host", "web01");
     query.setTimeSeries("sys.cpu.user", tags, Aggregators.SUM, false);
@@ -300,7 +301,7 @@ public final class TestTsdbQuery {
     query.setEndTime(1357041600);
     query.setTimeSeries("sys.cpu.user", tags, Aggregators.SUM, false);
     final DataPoints[] dps = query.run();
-    storage.dumpToSystemOut(false);
+    
     assertNotNull(dps);
     assertEquals("sys.cpu.user", dps[0].metricName());
     assertTrue(dps[0].getAggregatedTags().isEmpty());
@@ -309,7 +310,6 @@ public final class TestTsdbQuery {
     
     int value = 1;
     for (DataPoint dp : dps[0]) {
-      System.out.println("ts: " + dp.timestamp() + "  V: " + dp.longValue());
       assertEquals(value, dp.longValue());
       value++;
     }
@@ -1080,12 +1080,8 @@ public final class TestTsdbQuery {
   private void setQueryStorage() throws Exception {
     storage = new MockBase(tsdb, client, true, true, true, true);
     storage.setFamily("t".getBytes(MockBase.ASCII()));
-    
+
     PowerMockito.mockStatic(IncomingDataPoints.class);   
-    final byte[] user_web01 = new byte[] { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1};
-    final byte[] nice_web01 = new byte[] { 0, 0, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1}; 
-    final byte[] user_web02 = new byte[] { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2}; 
-    final byte[] nice_web02 = new byte[] { 0, 0, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2}; 
     PowerMockito.doAnswer(
         new Answer<Deferred<byte[]>>() {
           public Deferred<byte[]> answer(final InvocationOnMock args) 
@@ -1096,15 +1092,19 @@ public final class TestTsdbQuery {
             
             if (metric.equals("sys.cpu.user")) {
               if (tags.get("host").equals("web01")) {
-                return Deferred.fromResult(user_web01);
+                return Deferred.fromResult(
+                    new byte[] { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1});
               } else {
-                return Deferred.fromResult(user_web02);
+                return Deferred.fromResult(
+                    new byte[] { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2});
               }
             } else {
               if (tags.get("host").equals("web01")) {
-                return Deferred.fromResult(nice_web01);
+                return Deferred.fromResult(
+                    new byte[] { 0, 0, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1});
               } else {
-                return Deferred.fromResult(nice_web02);
+                return Deferred.fromResult(
+                    new byte[] { 0, 0, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 2});
               }
             }
           }
