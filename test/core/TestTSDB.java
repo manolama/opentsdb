@@ -56,7 +56,7 @@ import com.stumbleupon.async.Deferred;
   "com.sum.*", "org.xml.*"})
 @PrepareForTest({TSDB.class, Config.class, UniqueId.class, HBaseClient.class, 
   CompactionQueue.class, GetRequest.class, PutRequest.class, KeyValue.class, 
-  Scanner.class, AtomicIncrementRequest.class, Tags.class, IncomingDataPoints.class})
+  Scanner.class, AtomicIncrementRequest.class, IncomingDataPoints.class})
 public final class TestTSDB {
   private Config config;
   private TSDB tsdb = null;
