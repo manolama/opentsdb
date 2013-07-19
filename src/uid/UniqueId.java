@@ -158,7 +158,7 @@ public final class UniqueId implements UniqueIdInterface {
   
   /** The largest possible ID given the number of bytes the IDs are represented on. */
   public long maxPossibleId() {
-    return (1 << idWidth * Byte.SIZE) - 1;
+    return (1 << id_width * Byte.SIZE) - 1;
   }
   
   /**
