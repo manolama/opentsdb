@@ -24,6 +24,8 @@ import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.ImmutableMap;
+
 /**
  * OpenTSDB Configuration Class
  * 
@@ -293,6 +295,11 @@ public class Config {
     return response.toString();
   }
 
+  /** @return An immutable copy of the configuration map */
+  public final Map<String, String> getMap() {
+    return ImmutableMap.copyOf(properties);
+  }
+  
   /**
    * Loads default entries that were not provided by a file or command line
    * 
@@ -320,12 +327,14 @@ public class Config {
     default_map.put("tsd.storage.flush_interval", "1000");
     default_map.put("tsd.storage.hbase.data_table", "tsdb");
     default_map.put("tsd.storage.hbase.uid_table", "tsdb-uid");
+    default_map.put("tsd.storage.hbase.tree_table", "tsdb-tree");
     default_map.put("tsd.storage.hbase.zk_quorum", "localhost");
     default_map.put("tsd.storage.hbase.zk_basedir", "/hbase");
     default_map.put("tsd.storage.enable_compaction", "true");
     default_map.put("tsd.http.show_stack_trace", "true");
     default_map.put("tsd.http.request.enable_chunked", "false");
     default_map.put("tsd.http.request.max_chunk", "4096");
+    default_map.put("tsd.http.request.cors_domains", "");
 
     for (Map.Entry<String, String> entry : default_map.entrySet()) {
       if (!properties.containsKey(entry.getKey()))

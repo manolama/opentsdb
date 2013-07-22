@@ -45,6 +45,7 @@ import net.opentsdb.search.SearchQuery;
 import net.opentsdb.tree.Branch;
 import net.opentsdb.tree.Tree;
 import net.opentsdb.tree.TreeRule;
+import net.opentsdb.utils.Config;
 import net.opentsdb.utils.JSON;
 
 /**
@@ -508,6 +509,17 @@ class HttpJsonSerializer extends HttpSerializer {
           }
           json.writeEndArray();
           
+          if (data_query.getShowTSUIDs()) {
+            json.writeFieldName("tsuids");
+            json.writeStartArray();
+            final List<String> tsuids = dps.getTSUIDs();
+            Collections.sort(tsuids);
+            for (String tsuid : tsuids) {
+              json.writeString(tsuid);
+            }
+            json.writeEndArray();
+          }
+          
           if (!data_query.getNoAnnotations()) {
             final List<Annotation> annotations = dps.getAnnotations();
             if (annotations != null) {
@@ -697,6 +709,16 @@ class HttpJsonSerializer extends HttpSerializer {
    */
   public ChannelBuffer formatSearchResultsV1(final SearchQuery results) {
     return serializeJSON(results);
+  }
+  
+  /**
+   * Format the running configuration
+   * @param config The running config to serialize
+   * @return A ChannelBuffer object to pass on to the caller
+   * @throws JSONException if serialization failed
+   */
+  public ChannelBuffer formatConfigV1(final Config config) {
+    return serializeJSON(config.getMap());
   }
   
   /**

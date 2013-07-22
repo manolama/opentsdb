@@ -26,6 +26,8 @@ import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.utils.JSON;
 
+import org.hbase.async.Bytes;
+import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
 import org.slf4j.Logger;
@@ -39,7 +41,7 @@ import com.stumbleupon.async.Deferred;
  * stored in the UID table. Also can be used to delete a tree. This class should
  * be used only by the CLI tools.
  */
-final class TreeSync {
+final class TreeSync extends Thread {
   private static final Logger LOG = LoggerFactory.getLogger(TreeSync.class);
   
   /** Charset used to convert Strings to byte arrays and back. */
@@ -64,28 +66,36 @@ final class TreeSync {
   /** TSDB to use for storage access */
   final TSDB tsdb;
   
+  /** The ID to start the sync with for this thread */
+  final long start_id;
+  
+  /** The end of the ID block to work on */
+  final long end_id;
+  
+  /** Diagnostic ID for this thread */
+  final int thread_id;
+  
   /**
    * Default constructor, stores the TSDB to use
    * @param tsdb The TSDB to use for access
+   * @param start_id The starting ID of the block we'll work on
+   * @param quotient The total number of IDs in our block
+   * @param thread_id The ID of this thread (starts at 0)
    */
-  public TreeSync(final TSDB tsdb) {
+  public TreeSync(final TSDB tsdb, final long start_id, final double quotient,
+      final int thread_id) {
     this.tsdb = tsdb;
+    this.start_id = start_id;
+    this.end_id = start_id + (long) quotient + 1; // teensy bit of overlap
+    this.thread_id = thread_id;
   }
   
   /**
    * Performs a tree synchronization using a table scanner across the UID table
    * @return 0 if completed successfully, something else if an error occurred
    */
-  public int run() throws Exception {
-    final byte[] start_row = new byte[TSDB.metrics_width()];
-    final byte[] end_row = new byte[TSDB.metrics_width()];
-    Arrays.fill(end_row, (byte)0xFF);
-
-    final Scanner scanner = tsdb.getClient().newScanner(tsdb.uidTable());
-    scanner.setStartKey(start_row);
-    scanner.setStopKey(end_row);
-    scanner.setFamily("name".getBytes(CHARSET));
-    scanner.setQualifier("ts_meta".getBytes(CHARSET));
+  public void run() {
+    final Scanner scanner = getScanner();
 
     /**
      * Called after loading all of the trees so we can setup a list of 
@@ -118,13 +128,19 @@ final class TreeSync {
     }
     
     // start the process by loading all of the trees in the system
-    final ArrayList<TreeBuilder> tree_builders = 
-      Tree.fetchAllTrees(tsdb).addCallback(new LoadAllTreesCB())
+    final ArrayList<TreeBuilder> tree_builders;
+    try {
+      tree_builders = Tree.fetchAllTrees(tsdb).addCallback(new LoadAllTreesCB())
       .joinUninterruptibly();
+      LOG.info("[" + thread_id + "] Complete");
+    } catch (Exception e) {
+      LOG.error("[" + thread_id + "] Unexpected Exception", e);
+      throw new RuntimeException("[" + thread_id + "] Unexpected exception", e);
+    }
     
     if (tree_builders == null) {
       LOG.warn("No enabled trees were found in the system");
-      return -1;
+      return;
     } else {
       LOG.info("Found [" + tree_builders.size() + "] trees");
     }
@@ -135,7 +151,7 @@ final class TreeSync {
       new ArrayList<Deferred<Boolean>>();
     
     final Deferred<Boolean> completed = new Deferred<Boolean>();
-    
+
     /**
      * Scanner callback that loops through the UID table recursively until 
      * the scanner returns a null row set.
@@ -162,7 +178,6 @@ final class TreeSync {
         }
         
         for (final ArrayList<KeyValue> row : rows) {
-          
           // convert to a string one time
           final String tsuid = UniqueId.uidToString(row.get(0).key());
           
@@ -177,7 +192,7 @@ final class TreeSync {
             @Override
             public Deferred<Boolean> call(ArrayList<Object> builder_calls)
                 throws Exception {
-              LOG.debug("Processed [" + builder_calls.size() + "] tree_calls");
+              //LOG.debug("Processed [" + builder_calls.size() + "] tree_calls");
               return Deferred.fromResult(true);
             }
             
@@ -231,7 +246,8 @@ final class TreeSync {
                 LOG.warn("Timeseries [" + tsuid + 
                     "] includes a non-existant UID: " + e.getMessage());
               } else {
-                throw e;
+                LOG.error("[" + thread_id + "] Exception while processing TSUID [" + 
+                    tsuid + "]", e);
               }
               
               return Deferred.fromResult(false);
@@ -271,15 +287,36 @@ final class TreeSync {
         // current set of TSMetas has been processed so we don't slaughter our
         // host
         Deferred.group(tree_calls).addCallbackDeferring(new ContinueCB());
-        return null;
+        return Deferred.fromResult(null);
+      }
+      
+    }
+    
+    /**
+     * Used to capture unhandled exceptions from the scanner callbacks and 
+     * exit the thread properly
+     */
+    final class ErrBack implements Callback<Deferred<Boolean>, Exception> {
+      
+      @Override
+      public Deferred<Boolean> call(Exception e) throws Exception {
+        LOG.error("Unexpected exception", e);
+        completed.callback(false);
+        return Deferred.fromResult(false);
       }
       
     }
     
     final TsuidScanner tree_scanner = new TsuidScanner();
-    tree_scanner.scan();
-    completed.joinUninterruptibly();
-    return 0;
+    tree_scanner.scan().addErrback(new ErrBack());
+    try {
+      completed.joinUninterruptibly();
+      LOG.info("[" + thread_id + "] Complete");
+    } catch (Exception e) {
+      LOG.error("[" + thread_id + "] Scanner Exception", e);
+      throw new RuntimeException("[" + thread_id + "] Scanner exception", e);
+    }
+    return;
   }
 
   /**
@@ -300,5 +337,27 @@ final class TreeSync {
     Tree.deleteTree(tsdb, tree_id, delete_definition).joinUninterruptibly();
     LOG.info("Completed tree deletion for: " + tree_id);
     return 0;
+  }
+
+  /**
+   * Returns a scanner set to scan the range configured for this thread
+   * @return A scanner on the "name" CF configured for the specified range
+   * @throws HBaseException if something goes boom
+   */
+  private Scanner getScanner() throws HBaseException {
+    final short metric_width = TSDB.metrics_width();
+    final byte[] start_row = 
+      Arrays.copyOfRange(Bytes.fromLong(start_id), 8 - metric_width, 8);
+    final byte[] end_row = 
+      Arrays.copyOfRange(Bytes.fromLong(end_id), 8 - metric_width, 8);
+
+    LOG.debug("[" + thread_id + "] Start row: " + UniqueId.uidToString(start_row));
+    LOG.debug("[" + thread_id + "] End row: " + UniqueId.uidToString(end_row));
+    final Scanner scanner = tsdb.getClient().newScanner(tsdb.uidTable());
+    scanner.setStartKey(start_row);
+    scanner.setStopKey(end_row);
+    scanner.setFamily("name".getBytes(CHARSET));
+    scanner.setQualifier("ts_meta".getBytes(CHARSET));
+    return scanner;
   }
 }

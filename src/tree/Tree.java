@@ -76,7 +76,7 @@ public final class Tree {
   /** Width of tree IDs in bytes */
   private static final short TREE_ID_WIDTH = 2;
   /** Name of the CF where trees and branches are stored */
-  private static final byte[] NAME_FAMILY = "name".getBytes(CHARSET);
+  private static final byte[] TREE_FAMILY = "t".getBytes(CHARSET);
   /** The tree qualifier */
   private static final byte[] TREE_QUALIFIER = "tree".getBytes(CHARSET);
   /** Integer width in bytes */
@@ -107,6 +107,9 @@ public final class Tree {
   
   /** Whether or not the tree should process meta data or not */
   private boolean enabled;
+
+  /** Whether or not to store not matched and collisions */
+  private boolean store_failures;
   
   /** Sorted, two dimensional map of the tree's rules */
   private TreeMap<Integer, TreeMap<Integer, TreeRule>> rules;
@@ -152,6 +155,7 @@ public final class Tree {
     created = original.created;
     description = original.description;
     enabled = original.enabled;
+    store_failures = original.store_failures;
     name = original.name;
     notes = original.notes;
     strict_match = original.strict_match;
@@ -220,6 +224,10 @@ public final class Tree {
     if (overwrite || tree.changed.get("enabled")) {
       enabled = tree.enabled;
       changed.put("enabled", true);
+    }
+    if (overwrite || tree.changed.get("store_failures")) {
+      store_failures = tree.store_failures;
+      changed.put("store_failures", true);
     }
     for (boolean has_changes : changed.values()) {
       if (has_changes) {
@@ -353,8 +361,8 @@ public final class Tree {
         // reset the change map so we don't keep writing
         initializeChangedMap();
         
-        final PutRequest put = new PutRequest(tsdb.uidTable(), 
-            Tree.idToBytes(tree_id), NAME_FAMILY, TREE_QUALIFIER, 
+        final PutRequest put = new PutRequest(tsdb.treeTable(), 
+            Tree.idToBytes(tree_id), TREE_FAMILY, TREE_QUALIFIER, 
             stored_tree.toStorageJson());
         return tsdb.getClient().compareAndSet(put, original_tree);
       }
@@ -463,8 +471,8 @@ public final class Tree {
     }
 
     // fetch the whole row
-    final GetRequest get = new GetRequest(tsdb.uidTable(), idToBytes(tree_id));
-    get.family(NAME_FAMILY);
+    final GetRequest get = new GetRequest(tsdb.treeTable(), idToBytes(tree_id));
+    get.family(TREE_FAMILY);
     
     /**
      * Called from the GetRequest with results from storage. Loops through the
@@ -497,6 +505,7 @@ public final class Tree {
             tree.notes = local_tree.notes;
             tree.strict_match = local_tree.strict_match;
             tree.enabled = local_tree.enabled;
+            tree.store_failures = local_tree.store_failures;
             
           // Tree rule
           } else if (Bytes.memcmp(TreeRule.RULE_PREFIX(), column.qualifier(), 0, 
@@ -573,6 +582,7 @@ public final class Tree {
               tree.notes = local_tree.notes;
               tree.strict_match = local_tree.strict_match;
               tree.enabled = local_tree.enabled;
+              tree.store_failures = local_tree.store_failures;
               
               // WARNING: Since the JSON data in storage doesn't contain the tree
               // ID, we need to parse it from the row key
@@ -629,8 +639,8 @@ public final class Tree {
     System.arraycopy(idToBytes(tree_id), 0, row_key, 0, TREE_ID_WIDTH);
     row_key[TREE_ID_WIDTH] = COLLISION_ROW_SUFFIX;
     
-    final GetRequest get = new GetRequest(tsdb.uidTable(), row_key);
-    get.family(NAME_FAMILY);
+    final GetRequest get = new GetRequest(tsdb.treeTable(), row_key);
+    get.family(TREE_FAMILY);
     
     // if the caller provided a list of TSUIDs, then we need to compile a list
     // of qualifiers so we only fetch those columns.
@@ -713,8 +723,8 @@ public final class Tree {
     System.arraycopy(idToBytes(tree_id), 0, row_key, 0, TREE_ID_WIDTH);
     row_key[TREE_ID_WIDTH] = NOT_MATCHED_ROW_SUFFIX;
     
-    final GetRequest get = new GetRequest(tsdb.uidTable(), row_key);
-    get.family(NAME_FAMILY);
+    final GetRequest get = new GetRequest(tsdb.treeTable(), row_key);
+    get.family(TREE_FAMILY);
     
     // if the caller provided a list of TSUIDs, then we need to compile a list
     // of qualifiers so we only fetch those columns.
@@ -795,10 +805,10 @@ public final class Tree {
     // qualifiers of every column to see if it's safe to delete
     final byte[] start = idToBytes(tree_id);
     final byte[] end = idToBytes(tree_id + 1);
-    final Scanner scanner = tsdb.getClient().newScanner(tsdb.uidTable());
+    final Scanner scanner = tsdb.getClient().newScanner(tsdb.treeTable());
     scanner.setStartKey(start);
     scanner.setStopKey(end);   
-    scanner.setFamily(NAME_FAMILY);
+    scanner.setFamily(TREE_FAMILY);
     
     final Deferred<Boolean> completed = new Deferred<Boolean>();
     
@@ -882,8 +892,8 @@ public final class Tree {
           }
           
           if (qualifiers.size() > 0) {
-            final DeleteRequest delete = new DeleteRequest(tsdb.uidTable(), 
-                row.get(0).key(), NAME_FAMILY, 
+            final DeleteRequest delete = new DeleteRequest(tsdb.treeTable(), 
+                row.get(0).key(), TREE_FAMILY, 
                 qualifiers.toArray(new byte[qualifiers.size()][])
                 );
             delete_deferreds.add(tsdb.getClient().delete(delete));
@@ -966,6 +976,11 @@ public final class Tree {
     return NOT_MATCHED_PREFIX;
   }
   
+  /** @return The family to use when storing tree data */
+  public static byte[] TREE_FAMILY() {
+    return TREE_FAMILY;
+  }
+  
   /**
    * Sets or resets the changed map flags
    */
@@ -985,6 +1000,7 @@ public final class Tree {
     changed.put("version", false);
     changed.put("node_separator", false);
     changed.put("enabled", false);
+    changed.put("store_failures", false);
   }
   
   /**
@@ -1008,6 +1024,7 @@ public final class Tree {
       json.writeBooleanField("strictMatch", strict_match);
       json.writeNumberField("created", created);
       json.writeBooleanField("enabled", enabled);
+      json.writeBooleanField("storeFailures", store_failures);
       json.writeEndObject();
       json.close();
       
@@ -1029,10 +1046,10 @@ public final class Tree {
     final byte[] end = new byte[TREE_ID_WIDTH];
     Arrays.fill(end, (byte)0xFF);
     
-    final Scanner scanner = tsdb.getClient().newScanner(tsdb.uidTable());
+    final Scanner scanner = tsdb.getClient().newScanner(tsdb.treeTable());
     scanner.setStartKey(start);
     scanner.setStopKey(end);   
-    scanner.setFamily(NAME_FAMILY);
+    scanner.setFamily(TREE_FAMILY);
     
     // set the filter to match only on TREE_ID_WIDTH row keys
     final StringBuilder buf = new StringBuilder(20);
@@ -1054,6 +1071,11 @@ public final class Tree {
    * @throws HBaseException if there was an issue
    */
   public Deferred<Boolean> flushCollisions(final TSDB tsdb) {
+    if (!store_failures) {
+      collisions.clear();
+      return Deferred.fromResult(true);
+    }
+    
     final byte[] row_key = new byte[TREE_ID_WIDTH + 1];
     System.arraycopy(idToBytes(tree_id), 0, row_key, 0, TREE_ID_WIDTH);
     row_key[TREE_ID_WIDTH] = COLLISION_ROW_SUFFIX;
@@ -1075,8 +1097,8 @@ public final class Tree {
       index++;
     }
 
-    final PutRequest put = new PutRequest(tsdb.uidTable(), row_key, 
-        NAME_FAMILY, qualifiers, values);
+    final PutRequest put = new PutRequest(tsdb.treeTable(), row_key, 
+        TREE_FAMILY, qualifiers, values);
     collisions.clear();
     
     /**
@@ -1107,6 +1129,11 @@ public final class Tree {
    * @throws HBaseException if there was an issue
    */
   public Deferred<Boolean> flushNotMatched(final TSDB tsdb) {
+    if (!store_failures) {
+      not_matched.clear();
+      return Deferred.fromResult(true);
+    }
+    
     final byte[] row_key = new byte[TREE_ID_WIDTH + 1];
     System.arraycopy(idToBytes(tree_id), 0, row_key, 0, TREE_ID_WIDTH);
     row_key[TREE_ID_WIDTH] = NOT_MATCHED_ROW_SUFFIX;
@@ -1128,8 +1155,8 @@ public final class Tree {
       index++;
     }
     
-    final PutRequest put = new PutRequest(tsdb.uidTable(), row_key, 
-        NAME_FAMILY, qualifiers, values);
+    final PutRequest put = new PutRequest(tsdb.treeTable(), row_key, 
+        TREE_FAMILY, qualifiers, values);
     not_matched.clear();
     
     /**
@@ -1183,6 +1210,11 @@ public final class Tree {
   /** @return Whether or not the tree should process TSMeta objects */
   public boolean getEnabled() { 
     return enabled;
+  }
+  
+  /** @return Whether or not to store not matched and collisions */
+  public boolean getStoreFailures() {
+    return store_failures;
   }
   
   /** @return The tree's rule set */
@@ -1242,6 +1274,12 @@ public final class Tree {
   public void setEnabled(boolean enabled) {
     this.enabled = enabled;
     changed.put("enabled", true);
+  }
+  
+  /** @param store_failures Whether or not to store not matched or collisions */
+  public void setStoreFailures(boolean store_failures) {
+    this.store_failures = store_failures;
+    changed.put("store_failures", true);
   }
   
   /** @param treeId ID of the tree, users cannot modify this */

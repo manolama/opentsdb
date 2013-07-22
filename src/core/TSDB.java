@@ -12,6 +12,7 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -35,6 +36,7 @@ import org.hbase.async.PutRequest;
 
 import net.opentsdb.tree.TreeBuilder;
 import net.opentsdb.tsd.RTPublisher;
+import net.opentsdb.tsd.RpcPlugin;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
@@ -60,6 +62,8 @@ public final class TSDB {
   
   static final byte[] FAMILY = { 't' };
 
+  /** Charset used to convert Strings to byte arrays and back. */
+  private static final Charset CHARSET = Charset.forName("ISO-8859-1");
   private static final String METRICS_QUAL = "metrics";
   private static final short METRICS_WIDTH = 3;
   private static final String TAG_NAME_QUAL = "tagk";
@@ -74,6 +78,8 @@ public final class TSDB {
   final byte[] table;
   /** Name of the table in which UID information is stored. */
   final byte[] uidtable;
+  /** Name of the table where tree data is stored. */
+  final byte[] treetable;
 
   /** Unique IDs for the metric names. */
   final UniqueId metrics;
@@ -99,6 +105,9 @@ public final class TSDB {
   /** Optional real time pulblisher plugin to use if configured */
   private RTPublisher rt_publisher = null;
   
+  /** List of activated RPC plugins */
+  private List<RpcPlugin> rpc_plugins = null;
+  
   /**
    * Constructor
    * @param config An initialized configuration object
@@ -110,8 +119,9 @@ public final class TSDB {
         config.getString("tsd.storage.hbase.zk_quorum"),
         config.getString("tsd.storage.hbase.zk_basedir"));
     this.client.setFlushInterval(config.getShort("tsd.storage.flush_interval"));
-    table = config.getString("tsd.storage.hbase.data_table").getBytes();
-    uidtable = config.getString("tsd.storage.hbase.uid_table").getBytes();
+    table = config.getString("tsd.storage.hbase.data_table").getBytes(CHARSET);
+    uidtable = config.getString("tsd.storage.hbase.uid_table").getBytes(CHARSET);
+    treetable = config.getString("tsd.storage.hbase.tree_table").getBytes(CHARSET);
 
     metrics = new UniqueId(client, uidtable, METRICS_QUAL, METRICS_WIDTH);
     tag_names = new UniqueId(client, uidtable, TAG_NAME_QUAL, TAG_NAME_WIDTH);
@@ -136,11 +146,12 @@ public final class TSDB {
    * objects that rely on such. It also moves most of the potential exception
    * throwing code out of the constructor so TSDMain can shutdown clients and
    * such properly.
+   * @param init_rpcs Whether or not to initialize RPC plugins as well
    * @throws RuntimeException if the plugin path could not be processed
    * @throws IllegalArgumentException if a plugin could not be initialized
    * @since 2.0
    */
-  public void initializePlugins() {
+  public void initializePlugins(final boolean init_rpcs) {
     final String plugin_path = config.getString("tsd.core.plugin_path");
     if (plugin_path != null && !plugin_path.isEmpty()) {
       try {
@@ -192,6 +203,32 @@ public final class TSDB {
           + rt_publisher.version());
     } else {
       rt_publisher = null;
+    }
+    
+    if (init_rpcs && config.hasProperty("tsd.rpc.plugins")) {
+      final String[] plugins = config.getString("tsd.rpc.plugins").split(",");
+      for (final String plugin : plugins) {
+        final RpcPlugin rpc = PluginLoader.loadSpecificPlugin(plugin.trim(), 
+            RpcPlugin.class);
+        if (rpc == null) {
+          throw new IllegalArgumentException(
+              "Unable to locate RPC plugin: " + plugin.trim());
+        }
+        try {
+          rpc.initialize(this);
+        } catch (Exception e) {
+          throw new RuntimeException(
+              "Failed to initialize RPC plugin", e);
+        }
+        
+        if (rpc_plugins == null) {
+          rpc_plugins = new ArrayList<RpcPlugin>(1);
+        }
+        rpc_plugins.add(rpc);
+        LOG.info("Successfully initialized RPC plugin [" + 
+            rpc.getClass().getCanonicalName() + "] version: " 
+            + rpc.version());
+      }
     }
   }
   
@@ -270,10 +307,17 @@ public final class TSDB {
    * @since 2.0
    */
   public Deferred<ArrayList<Object>> checkNecessaryTablesExist() {
-    return Deferred.group(client.ensureTableExists(
-        config.getString("tsd.storage.hbase.data_table")),
-        client.ensureTableExists(
-            config.getString("tsd.storage.hbase.uid_table")));
+    final ArrayList<Deferred<Object>> checks = 
+      new ArrayList<Deferred<Object>>(2);
+    checks.add(client.ensureTableExists(
+        config.getString("tsd.storage.hbase.data_table")));
+    checks.add(client.ensureTableExists(
+        config.getString("tsd.storage.hbase.uid_table")));
+    if (config.enable_tree_processing()) {
+      checks.add(client.ensureTableExists(
+          config.getString("tsd.storage.hbase.tree_table")));
+    }
+    return Deferred.group(checks);
   }
   
   /** Number of cache hits during lookups involving UIDs. */
@@ -299,9 +343,39 @@ public final class TSDB {
    * @param collector The collector to use.
    */
   public void collectStats(final StatsCollector collector) {
-    collectUidStats(metrics, collector);
-    collectUidStats(tag_names, collector);
-    collectUidStats(tag_values, collector);
+    final byte[][] kinds = { 
+        METRICS_QUAL.getBytes(CHARSET), 
+        TAG_NAME_QUAL.getBytes(CHARSET), 
+        TAG_VALUE_QUAL.getBytes(CHARSET) 
+      };
+    try {
+      final Map<String, Long> used_uids = UniqueId.getUsedUIDs(this, kinds)
+        .joinUninterruptibly();
+      
+      collectUidStats(metrics, collector);
+      collector.record("uid.ids-used", used_uids.get(METRICS_QUAL), 
+          "kind=" + METRICS_QUAL);
+      collector.record("uid.ids-available", 
+          (metrics.maxPossibleId() - used_uids.get(METRICS_QUAL)), 
+          "kind=" + METRICS_QUAL);
+      
+      collectUidStats(tag_names, collector);
+      collector.record("uid.ids-used", used_uids.get(TAG_NAME_QUAL), 
+          "kind=" + TAG_NAME_QUAL);
+      collector.record("uid.ids-available", 
+          (tag_names.maxPossibleId() - used_uids.get(TAG_NAME_QUAL)), 
+          "kind=" + TAG_NAME_QUAL);
+      
+      collectUidStats(tag_values, collector);
+      collector.record("uid.ids-used", used_uids.get(TAG_VALUE_QUAL), 
+          "kind=" + TAG_VALUE_QUAL);
+      collector.record("uid.ids-available", 
+          (tag_values.maxPossibleId() - used_uids.get(TAG_VALUE_QUAL)), 
+          "kind=" + TAG_VALUE_QUAL);
+      
+    } catch (Exception e) {
+      throw new RuntimeException("Shouldn't be here", e);
+    }
 
     {
       final Runtime runtime = Runtime.getRuntime();
@@ -538,10 +612,10 @@ public final class TSDB {
   }
 
   /**
-   * Gracefully shuts down this instance.
+   * Gracefully shuts down this TSD instance.
    * <p>
-   * This does the same thing as {@link #flush} and also releases all other
-   * resources.
+   * The method must call {@code shutdown()} on all plugins as well as flush the
+   * compaction queue.
    * @return A {@link Deferred} that will be called once all the un-committed
    * data has been successfully and durably stored, and all resources used by
    * this instance have been released.  The value of the deferred object
@@ -552,6 +626,9 @@ public final class TSDB {
    * recoverable by retrying, some are not.
    */
   public Deferred<Object> shutdown() {
+    final ArrayList<Deferred<Object>> deferreds = 
+      new ArrayList<Deferred<Object>>();
+    
     final class HClientShutdown implements Callback<Object, ArrayList<Object>> {
       public Object call(final ArrayList<Object> args) {
         return client.shutdown();
@@ -560,6 +637,7 @@ public final class TSDB {
         return "shutdown HBase client";
       }
     }
+    
     final class ShutdownErrback implements Callback<Object, Exception> {
       public Object call(final Exception e) {
         final Logger LOG = LoggerFactory.getLogger(ShutdownErrback.class);
@@ -567,11 +645,11 @@ public final class TSDB {
           final DeferredGroupException ge = (DeferredGroupException) e;
           for (final Object r : ge.results()) {
             if (r instanceof Exception) {
-              LOG.error("Failed to flush the compaction queue", (Exception) r);
+              LOG.error("Failed to shutdown the TSD", (Exception) r);
             }
           }
         } else {
-          LOG.error("Failed to flush the compaction queue", e);
+          LOG.error("Failed to shutdown the TSD", e);
         }
         return client.shutdown();
       }
@@ -579,10 +657,40 @@ public final class TSDB {
         return "shutdown HBase client after error";
       }
     }
-    // First flush the compaction queue, then shutdown the HBase client.
-    return config.enable_compactions()
-      ? compactionq.flush().addCallbacks(new HClientShutdown(),
-                                         new ShutdownErrback())
+    
+    final class CompactCB implements Callback<Object, ArrayList<Object>> {
+      public Object call(ArrayList<Object> compactions) throws Exception {
+        return null;
+      }
+    }
+    
+    if (config.enable_compactions()) {
+      LOG.info("Flushing compaction queue");
+      deferreds.add(compactionq.flush().addCallback(new CompactCB()));
+    }
+    if (search != null) {
+      LOG.info("Shutting down search plugin: " + 
+          search.getClass().getCanonicalName());
+      deferreds.add(search.shutdown());
+    }
+    if (rt_publisher != null) {
+      LOG.info("Shutting down RT plugin: " + 
+          rt_publisher.getClass().getCanonicalName());
+      deferreds.add(rt_publisher.shutdown());
+    }
+    
+    if (rpc_plugins != null && !rpc_plugins.isEmpty()) {
+      for (final RpcPlugin rpc : rpc_plugins) {
+        LOG.info("Shutting down RPC plugin: " + 
+            rpc.getClass().getCanonicalName());
+        deferreds.add(rpc.shutdown());
+      }
+    }
+    
+    // wait for plugins to shutdown before we close the client
+    return deferreds.size() > 0
+      ? Deferred.group(deferreds).addCallbacks(new HClientShutdown(),
+                                               new ShutdownErrback())
       : client.shutdown();
   }
 
@@ -706,6 +814,11 @@ public final class TSDB {
   /** @return the name of the data table as a byte array for client requests */
   public byte[] dataTable() {
     return this.table;
+  }
+  
+  /** @return the name of the tree table as a byte array for client requests */
+  public byte[] treeTable() {
+    return this.treetable;
   }
 
   /**
