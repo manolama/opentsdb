@@ -408,7 +408,9 @@ public final class Tags {
       }
 
       // Put all the deferred tag resolutions in this list.
-      tag_ids.add(name_id.addCallbackDeferring(new TagNameResolvedCB()));
+      final Deferred<byte[]> resolve = 
+        name_id.addCallbackDeferring(new TagNameResolvedCB());
+      tag_ids.add(resolve);
     }
 
     // And then once we have all the tags resolved, sort them.
