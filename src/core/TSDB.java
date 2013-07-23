@@ -237,8 +237,54 @@ public final class TSDB {
                                    final long timestamp,
                                    final long value,
                                    final Map<String, String> tags) {
-    final short flags = 0x7;  // An int stored on 8 bytes.
-    return addPointInternal(metric, timestamp, Bytes.fromLong(value),
+    final byte[] v;
+    if (Byte.MIN_VALUE <= value && value <= Byte.MAX_VALUE) {
+      v = new byte[] { (byte) value };
+    } else if (Short.MIN_VALUE <= value && value <= Short.MAX_VALUE) {
+      v = Bytes.fromShort((short) value);
+    } else if (Integer.MIN_VALUE <= value && value <= Integer.MAX_VALUE) {
+      v = Bytes.fromInt((int) value);
+    } else {
+      v = Bytes.fromLong(value);
+    }
+    final short flags = (short) (v.length - 1);  // Just the length.
+    return addPointInternal(metric, timestamp, v, tags, flags);
+  }
+
+  /**
+   * Adds a double precision floating-point value data point in the TSDB.
+   * @param metric A non-empty string.
+   * @param timestamp The timestamp associated with the value.
+   * @param value The value of the data point.
+   * @param tags The tags on this series.  This map must be non-empty.
+   * @return A deferred object that indicates the completion of the request.
+   * The {@link Object} has not special meaning and can be {@code null} (think
+   * of it as {@code Deferred<Void>}). But you probably want to attach at
+   * least an errback to this {@code Deferred} to handle failures.
+   * @throws IllegalArgumentException if the timestamp is less than or equal
+   * to the previous timestamp added or 0 for the first timestamp, or if the
+   * difference with the previous timestamp is too large.
+   * @throws IllegalArgumentException if the metric name is empty or contains
+   * illegal characters.
+   * @throws IllegalArgumentException if the value is NaN or infinite.
+   * @throws IllegalArgumentException if the tags list is empty or one of the
+   * elements contains illegal characters.
+   * @throws HBaseException (deferred) if there was a problem while persisting
+   * data.
+   * @since 1.2
+   */
+  public Deferred<Object> addPoint(final String metric,
+                                   final long timestamp,
+                                   final double value,
+                                   final Map<String, String> tags) {
+    if (Double.isNaN(value) || Double.isInfinite(value)) {
+      throw new IllegalArgumentException("value is NaN or Infinite: " + value
+                                         + " for metric=" + metric
+                                         + " timestamp=" + timestamp);
+    }
+    final short flags = Const.FLAG_FLOAT | 0x7;  // A float stored on 4 bytes.
+    return addPointInternal(metric, timestamp,
+                            Bytes.fromLong(Double.doubleToRawLongBits(value)),
                             tags, flags);
   }
 
