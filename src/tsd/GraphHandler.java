@@ -37,6 +37,9 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.stumbleupon.async.Callback;
+import com.stumbleupon.async.Deferred;
+
 import net.opentsdb.core.Aggregator;
 import net.opentsdb.core.Aggregators;
 import net.opentsdb.core.Const;
@@ -157,17 +160,20 @@ final class GraphHandler implements HttpRpc {
       return;
     }
     Query[] tsdbqueries;
-    List<String> options;
+    
     tsdbqueries = parseQuery(tsdb, query);
-    options = query.getQueryStringParams("o");
-    if (options == null) {
+    final List<String> options;
+    final List<String> qs_options = query.getQueryStringParams("o");
+    if (qs_options == null) {
       options = new ArrayList<String>(tsdbqueries.length);
       for (int i = 0; i < tsdbqueries.length; i++) {
         options.add("");
       }
-    } else if (options.size() != tsdbqueries.length) {
-      throw new BadRequestException(options.size() + " `o' parameters, but "
+    } else if (qs_options.size() != tsdbqueries.length) {
+      throw new BadRequestException(qs_options.size() + " `o' parameters, but "
         + tsdbqueries.length + " `m' parameters.");
+    } else {
+      options = qs_options;
     }
     for (final Query tsdbquery : tsdbqueries) {
       try {
@@ -188,27 +194,59 @@ final class GraphHandler implements HttpRpc {
     final int nqueries = tsdbqueries.length;
     @SuppressWarnings("unchecked")
     final HashSet<String>[] aggregated_tags = new HashSet[nqueries];
-    int npoints = 0;
+    final ArrayList<Deferred<DataPoints[]>> deferreds =
+      new ArrayList<Deferred<DataPoints[]>>(nqueries);
+    final AtomicInteger npoints = new AtomicInteger();
     for (int i = 0; i < nqueries; i++) {
-      try {  // execute the TSDB query!
-        // XXX This is slow and will block Netty.  TODO(tsuna): Don't block.
-        // TODO(tsuna): Optimization: run each query in parallel.
-        final DataPoints[] series = tsdbqueries[i].run();
-        for (final DataPoints datapoints : series) {
-          plot.add(datapoints, options.get(i));
-          aggregated_tags[i] = new HashSet<String>();
-          aggregated_tags[i].addAll(datapoints.getAggregatedTags());
-          npoints += datapoints.aggregatedSize();
-        }
-      } catch (RuntimeException e) {
-        logInfo(query, "Query failed (stack trace coming): "
-                + tsdbqueries[i]);
-        throw e;
-      }
-      tsdbqueries[i] = null;  // free()
+      deferreds.add(tsdbqueries[i].runAsync());
     }
-    tsdbqueries = null;  // free()
 
+    /**
+     * This will be called by each query to attempt to fetch the aggregated
+     * tags for a query
+     */
+    class AggTagsCB implements Callback<Object, List<String>> {
+      final int index;
+      public AggTagsCB(final int index) {
+        this.index = index;
+      }
+      public Object call(final List<String> tags) throws Exception {
+        aggregated_tags[index] = new HashSet<String>();
+        aggregated_tags[index].addAll(tags);
+        return null;
+      }
+    }
+    
+    /**
+    * After all of the queries have run, we get the results in the order given
+    * and add the results to the plots.
+    */
+    class QueriesCB implements Callback<Object, ArrayList<DataPoints[]>> {
+      public Object call(final ArrayList<DataPoints[]> query_results) 
+        throws Exception {
+        int i = 0;
+        final ArrayList<Deferred<Object>> tag_deferreds = 
+          new ArrayList<Deferred<Object>>(query_results.size());
+        for (DataPoints[] results : query_results) {
+          for (final DataPoints datapoints : results) {
+            plot.add(datapoints, options.get(i));
+            final Deferred<Object> agg_tags = 
+              datapoints.getAggregatedTagsAsync().addCallback(new AggTagsCB(i));
+            tag_deferreds.add(agg_tags);
+            npoints.addAndGet(datapoints.aggregatedSize());
+          }
+          i++;
+        }
+        return Deferred.group(tag_deferreds);
+      }
+    }
+    
+    try {
+      Deferred.groupInOrder(deferreds).addCallback(new QueriesCB())
+        .joinUninterruptibly();
+    } catch (Exception e) {
+      throw new RuntimeException("Failure in the join", e);
+    }
     if (query.hasQueryStringParam("ascii")) {
       respondAsciiQuery(query, max_age, basepath, plot);
       return;
@@ -216,7 +254,7 @@ final class GraphHandler implements HttpRpc {
 
     try {
       gnuplot.execute(new RunGnuplot(query, max_age, plot, basepath,
-                                     aggregated_tags, npoints));
+                                     aggregated_tags, npoints.get()));
     } catch (RejectedExecutionException e) {
       query.internalError(new Exception("Too many requests pending,"
                                         + " please try again later", e));
