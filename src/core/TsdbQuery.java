@@ -279,8 +279,10 @@ final class TsdbQuery implements Query {
   public DataPoints[] run() throws HBaseException {
     try {
       return runAsync().joinUninterruptibly();
+    } catch (RuntimeException e) {
+      throw e;
     } catch (Exception e) {
-      throw new RuntimeException("Should not be here", e);
+      throw new RuntimeException("Should never be here", e);
     }
   }
   
