@@ -25,6 +25,8 @@ import org.slf4j.LoggerFactory;
 import org.hbase.async.Bytes;
 import org.hbase.async.KeyValue;
 
+import com.stumbleupon.async.Deferred;
+
 /**
  * Represents a read-only sequence of continuous data points.
  * <p>
@@ -51,17 +53,42 @@ final class Span implements DataPoints {
   }
 
   public String metricName() {
+    try {
+      return metricNameAsync().joinUninterruptibly();
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException("Should never be here", e);
+    }
+  }
+  
+  public Deferred<String> metricNameAsync() {
     checkNotEmpty();
-    return rows.get(0).metricName();
+    return rows.get(0).metricNameAsync();
   }
 
   public Map<String, String> getTags() {
-    checkNotEmpty();
-    return rows.get(0).getTags();
+    try {
+      return getTagsAsync().joinUninterruptibly();
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException("Should never be here", e);
+    }
   }
 
+  public Deferred<Map<String, String>> getTagsAsync() {
+    checkNotEmpty();
+    return rows.get(0).getTagsAsync();
+  }
+  
   public List<String> getAggregatedTags() {
     return Collections.emptyList();
+  }
+  
+  public Deferred<List<String>> getAggregatedTagsAsync() {
+    final List<String> empty = Collections.emptyList();
+    return Deferred.fromResult(empty);
   }
 
   public int size() {
