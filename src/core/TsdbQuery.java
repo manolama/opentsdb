@@ -101,6 +101,9 @@ final class TsdbQuery implements Query {
   /** If true, use rate of change instead of actual values. */
   private boolean rate;
 
+  /** Specifies the various options for rate calcuations */
+  private RateOptions rate_options;
+  
   /** Aggregator function to use. */
   private Aggregator aggregator;
 
@@ -161,13 +164,24 @@ final class TsdbQuery implements Query {
                             final Map<String, String> tags,
                             final Aggregator function,
                             final boolean rate) throws NoSuchUniqueName {
+    setTimeSeries(metric, tags, function, rate, 
+        new RateOptions(false, Long.MAX_VALUE, RateOptions.DEFAULT_RESET_VALUE));
+  }
+
+  public void setTimeSeries(final String metric,
+                            final Map<String, String> tags,
+                            final Aggregator function,
+                            final boolean rate,
+                            final RateOptions rate_options) 
+    throws NoSuchUniqueName {
     findGroupBys(tags);
     this.metric = tsdb.metrics.getId(metric);
     this.tags = Tags.resolveAll(tsdb, tags);
     aggregator = function;
     this.rate = rate;
+    this.rate_options = rate_options;
   }
-
+    
   /**
    * Sets up a query for the given timeseries UIDs. For now, all TSUIDs in the
    * group must share a common metric. This is to avoid issues where the scanner
@@ -360,7 +374,7 @@ final class TsdbQuery implements Query {
                                             getScanStartTime(),
                                             getScanEndTime(),
                                             spans.values(),
-                                            rate,
+                                            rate, rate_options,
                                             aggregator,
                                             sample_interval, downsampler);
       return new SpanGroup[] { group };
@@ -404,7 +418,7 @@ final class TsdbQuery implements Query {
       SpanGroup thegroup = groups.get(group);
       if (thegroup == null) {
         thegroup = new SpanGroup(tsdb, getScanStartTime(), getScanEndTime(),
-                                 null, rate, aggregator,
+                                 null, rate, rate_options, aggregator,
                                  sample_interval, downsampler);
         // Copy the array because we're going to keep `group' and overwrite
         // its contents.  So we want the collection to have an immutable copy.

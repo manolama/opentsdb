@@ -17,6 +17,8 @@ import java.util.Date;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.event.dom.client.DomEvent;
+import com.google.gwt.event.logical.shared.ValueChangeEvent;
+import com.google.gwt.event.logical.shared.ValueChangeHandler;
 import com.google.gwt.event.shared.EventHandler;
 import com.google.gwt.i18n.client.DateTimeFormat;
 import com.google.gwt.user.client.ui.Grid;
@@ -103,8 +105,19 @@ final class DateTimeBox extends DateBox {
     // properly, so it simply appears slightly wider than necessary.
     textbox.setVisibleLength(19 + 2);
     textbox.setMaxLength(19);
+    
+    ((DateTimePicker) getDatePicker()).addValueChangeHandler(new ValueChangeHandler<Date>() {
+      public void onValueChange(ValueChangeEvent<Date> event) {
+        Date date = event.getValue();
+        if (!textbox.getText().endsWith("ago")) {
+          setValue(date);
+        } else {
+          textbox.setText(textbox.getText());
+        }
+      }
+    });
   }
-
+  
   /**
    * A {@link DatePicker} with a customized UI for time support.
    */
