@@ -209,8 +209,10 @@ final class RowSeq implements DataPoints {
     
     // set the meta bit based on the local and remote metas
     byte meta = 0;
-    if ((values[values.length - 1] & Const.MS_MIXED_COMPACT) == 1 || 
-        (remote_val[remote_val.length - 1] & Const.MS_MIXED_COMPACT) == 1) {
+    if ((values[values.length - 1] & Const.MS_MIXED_COMPACT) == 
+                                     Const.MS_MIXED_COMPACT || 
+        (remote_val[remote_val.length - 1] & Const.MS_MIXED_COMPACT) == 
+                                             Const.MS_MIXED_COMPACT) {
       meta = Const.MS_MIXED_COMPACT;
     }
     values = Arrays.copyOfRange(merged_values, 0, merged_v_index + 1);
@@ -289,7 +291,8 @@ final class RowSeq implements DataPoints {
   public int size() {
     // if we don't have a mix of second and millisecond qualifiers we can run
     // this in O(1), otherwise we have to run O(n)
-    if ((values[values.length - 1] & Const.MS_MIXED_COMPACT) == 1) {
+    if ((values[values.length - 1] & Const.MS_MIXED_COMPACT) == 
+      Const.MS_MIXED_COMPACT) {
       int size = 0;
       for (int i = 0; i < qualifiers.length; i += 2) {
         if ((qualifiers[i] & Const.MS_BYTE_FLAG) == Const.MS_BYTE_FLAG) {
@@ -342,7 +345,8 @@ final class RowSeq implements DataPoints {
     // if we don't have a mix of second and millisecond qualifiers we can run
     // this in O(1), otherwise we have to run O(n)
     // Important: Span.addRow assumes this method to work in O(1).
-    if ((values[values.length - 1] & Const.MS_MIXED_COMPACT) == 1) {
+    if ((values[values.length - 1] & Const.MS_MIXED_COMPACT) == 
+      Const.MS_MIXED_COMPACT) {
       int index = 0;
       for (int idx = 0; idx < qualifiers.length; idx += 2) {
         if (i == index) {
