@@ -805,22 +805,51 @@ final class SpanGroup implements DataPoints {
             + " strictly greater than the previous one (" + x1 + "), but it's"
             + " not.  this=" + this);
           
+          // we need to account for LONGs that are being converted to a double
+          // to do so, we can see if it's greater than the most precise integer
+          // a double can store. Then we calc the diff on the Longs before
+          // casting to a double. 
+          // TODO(cl) If the diff between data points is > 2^53 we're still in 
+          // trouble though that's less likely than giant integer counters.
+          final boolean double_overflow = 
+              (timestamps[pos] & FLAG_FLOAT) != FLAG_FLOAT && 
+              (timestamps[prev] & FLAG_FLOAT) != FLAG_FLOAT &&
+              (values[prev] >= Const.MAX_INT_IN_DOUBLE || 
+                  values[pos] >= Const.MAX_INT_IN_DOUBLE);
+          //LOG.debug("Double overflow detected");
+          
+          final double difference;
+          if (double_overflow) {
+            final long diff = values[pos] - values[prev];
+            difference = (double)(diff);
+          } else {
+            difference = y1 - y0;
+          }
+          //LOG.debug("Difference is: " + difference);
+          
           // If we have a counter rate of change calculation, y0 and y1
           // have values such that the rate would be < 0 then calculate the
           // new rate value assuming a roll over
-          if (rate_options.isCounter() && y1 > y0) {
-            final double r = (rate_options.getCounterMax() - y1 + y0) / (x0 - x1);
+          if (rate_options.isCounter() && difference < 0) {
+            final double r;
+            if (double_overflow) {
+              long diff = rate_options.getCounterMax() - values[prev];
+              diff += values[pos];
+              r = (double)diff / (x0 - x1);
+            } else {
+              r = (rate_options.getCounterMax() - y1 + y0) / (x0 - x1);
+            }
             if (rate_options.getResetValue() > RateOptions.DEFAULT_RESET_VALUE
                 && r > rate_options.getResetValue()) {
               return 0.0;
             }
-            LOG.debug("Rolled Rate for " + y1 + " @ " + x1
-             + " -> " + y0 + " @ " + x0 + " => " + r);
+//            LOG.debug("Rolled Rate for " + y1 + " @ " + x1
+//             + " -> " + y0 + " @ " + x0 + " => " + r);
             return r;
           }
-          final double r = (y0 - y1) / (x0 - x1);
-          LOG.debug("Rate for " + y1 + " @ " + x1
-           + " -> " + y0 + " @ " + x0 + " => " + r);
+          final double r = difference / (x0 - x1);
+          //LOG.debug("Rate for " + y1 + " @ " + x1
+          // + " -> " + y0 + " @ " + x0 + " => " + r);
           return r;
         }
         if (current == pos) {
