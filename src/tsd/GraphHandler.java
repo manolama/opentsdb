@@ -851,7 +851,7 @@ final class GraphHandler implements HttpRpc {
       final HashMap<String, String> parsedtags = new HashMap<String, String>();
       final String metric = Tags.parseWithMetric(parts[i], parsedtags);
       final boolean rate = parts[--i].startsWith("rate");
-      final RateOptions rate_options = parseRateOptions(rate, parts[i]); 
+      final RateOptions rate_options = QueryRpc.parseRateOptions(rate, parts[i]); 
       if (rate) {
         i--;  // Move to the next part.
       }
@@ -965,54 +965,4 @@ final class GraphHandler implements HttpRpc {
     LOG.error(query.channel().toString() + ' ' + msg, e);
   }
 
-  /**
-  * Parses the "rate" section of the query string and returns an instance
-  * of the RateOptions class that contains the values found.
-  * <p/>
-  * The format of the rate specification is rate[{counter[,#[,#]]}].
-  * @param rate If true, then the query is set as a rate query and the rate
-  * specification will be parsed. If false, a default RateOptions instance
-  * will be returned and largely ignored by the rest of the processing
-  * @param spec The part of the query string that pertains to the rate
-  * @return An initialized RateOptions instance based on the specification
-  */
-  static final public RateOptions parseRateOptions(final boolean rate,
-      final String spec) {
-    if (!rate || spec.length() == 4) {
-      return new RateOptions(false, Long.MAX_VALUE,
-          RateOptions.DEFAULT_RESET_VALUE);
-    }
-
-    if (spec.length() < 6) {
-      throw new BadRequestException("Invalid rate options specification: "
-          + spec);
-    }
-
-    String[] parts = Tags
-        .splitString(spec.substring(5, spec.length() - 1), ',');
-    if (parts.length < 1 || parts.length > 3) {
-      throw new BadRequestException(
-          "Incorrect number of values in rate options specification, must be " +
-          "counter[,counter max value,reset value], recieved: "
-              + parts.length + " parts");
-    }
-
-    final boolean counter = "counter".equals(parts[0]);
-    try {
-      final long max = (parts.length >= 2 && parts[1].length() > 0 ? Long
-          .parseLong(parts[1]) : Long.MAX_VALUE);
-      try {
-        final long reset = (parts.length >= 3 && parts[2].length() > 0 ? Long
-            .parseLong(parts[2]) : RateOptions.DEFAULT_RESET_VALUE);
-        return new RateOptions(counter, max, reset);
-      } catch (NumberFormatException e) {
-        throw new BadRequestException(
-            "Reset value of counter was not a number, received '" + parts[2]
-                + "'");
-      }
-    } catch (NumberFormatException e) {
-      throw new BadRequestException(
-          "Max value of counter was not a number, received '" + parts[1] + "'");
-    }
-  }
 }
