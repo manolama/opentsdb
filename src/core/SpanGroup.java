@@ -844,7 +844,7 @@ final class SpanGroup implements DataPoints {
             final long diff = values[pos] - values[prev];
             difference = (double)(diff);
           } else {
-            difference = y1 - y0;
+            difference = y0 - y1;
           }
           //LOG.debug("Difference is: " + difference);
           
