@@ -73,10 +73,10 @@ final class SpanGroup implements DataPoints {
   private final ArrayList<Span> spans = new ArrayList<Span>();
 
   /** If true, use rate of change instead of actual values. */
-  private boolean rate;
+  private final boolean rate;
   
   /** Specifies the various options for rate calculations */
-  private RateOptions rate_options;
+  private RateOptions rate_options; 
 
   /** Aggregator to use to aggregate data points from different Spans. */
   private final Aggregator aggregator;
@@ -130,19 +130,21 @@ final class SpanGroup implements DataPoints {
    * of the actual values.
    * @param rate_options Specifies the optional additional rate calculation options.
    * @param aggregator The aggregation function to use.
-   * @param interval Number of seconds wanted between each data point.
+   * @param interval Number of milliseconds wanted between each data point.
    * @param downsampler Aggregation function to use to group data points
    * within an interval.
    * @since 2.0
    */
-   SpanGroup(final TSDB tsdb,
-             final long start_time, final long end_time,
-             final Iterable<Span> spans,
-             final boolean rate, final RateOptions rate_options,
-             final Aggregator aggregator,
-             final int interval, final Aggregator downsampler) {
-     this.start_time = start_time;
-     this.end_time = end_time;
+  SpanGroup(final TSDB tsdb,
+            final long start_time, final long end_time,
+            final Iterable<Span> spans,
+            final boolean rate, final RateOptions rate_options,
+            final Aggregator aggregator,
+            final int interval, final Aggregator downsampler) {
+     this.start_time = (start_time & Const.SECOND_MASK) == 0 ? 
+         start_time * 1000 : start_time;
+     this.end_time = (end_time & Const.SECOND_MASK) == 0 ? 
+         end_time * 1000 : end_time;
      if (spans != null) {
        for (final Span span : spans) {
          add(span);
@@ -153,7 +155,7 @@ final class SpanGroup implements DataPoints {
      this.aggregator = aggregator;
      this.downsampler = downsampler;
      this.sample_interval = interval;
-   }
+  }
 
   /**
    * Adds a span to this group, provided that it's in the right time range.
@@ -832,7 +834,7 @@ final class SpanGroup implements DataPoints {
             // but in the future we should add a ratems flag that will calculate
             // the rate as is.
             final double r = (rate_options.getCounterMax() - y1 + y0) / 
-                                          ((double)(x0 - x1) / (double)1000);
+                                        ((double)(x0 - x1) / (double)1000);
             if (rate_options.getResetValue() > RateOptions.DEFAULT_RESET_VALUE
                 && r > rate_options.getResetValue()) {
               return 0.0;
@@ -904,9 +906,6 @@ final class SpanGroup implements DataPoints {
       + ", tags=" + tags
       + ", aggregated_tags=" + aggregated_tags
       + ", rate=" + rate
-      + ", counter=" + rate_options.isCounter()
-      + ", counterMax=" + rate_options.getCounterMax()
-      + ", resetValue=" + rate_options.getResetValue()
       + ", aggregator=" + aggregator
       + ", downsampler=" + downsampler
       + ", sample_interval=" + sample_interval
