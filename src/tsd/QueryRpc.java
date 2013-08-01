@@ -31,7 +31,6 @@ import net.opentsdb.core.TSQuery;
 import net.opentsdb.core.TSSubQuery;
 import net.opentsdb.core.Tags;
 import net.opentsdb.meta.Annotation;
-import net.opentsdb.utils.JSON;
 
 /**
  * Handles queries for timeseries datapoints. Each request is parsed into a
@@ -291,6 +290,8 @@ final class QueryRpc implements HttpRpc {
    * will be returned and largely ignored by the rest of the processing
    * @param spec The part of the query string that pertains to the rate
    * @return An initialized RateOptions instance based on the specification
+   * @throws BadRequestException if the parameter is malformed
+   * @since 2.0
    */
    static final public RateOptions parseRateOptions(final boolean rate,
        final String spec) {
