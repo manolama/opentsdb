@@ -835,8 +835,8 @@ final class SpanGroup implements DataPoints {
           final boolean double_overflow = 
               (timestamps[pos] & FLAG_FLOAT) != FLAG_FLOAT && 
               (timestamps[prev] & FLAG_FLOAT) != FLAG_FLOAT &&
-              (values[prev] >= Const.MAX_INT_IN_DOUBLE || 
-                  values[pos] >= Const.MAX_INT_IN_DOUBLE);
+              ((values[prev] & Const.MAX_INT_IN_DOUBLE) != 0 || 
+                  (values[pos] & Const.MAX_INT_IN_DOUBLE) != 0);
           //LOG.debug("Double overflow detected");
           
           final double difference;
