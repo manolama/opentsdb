@@ -279,21 +279,21 @@ public final class Tags {
     final short name_width = tsdb.tag_names.width();
     final short value_width = tsdb.tag_values.width();
     final short tag_bytes = (short) (name_width + value_width);
-    final byte[] tmp_name = new byte[name_width];
-    final byte[] tmp_value = new byte[value_width];
     final short metric_ts_bytes = (short) (tsdb.metrics.width()
                                            + Const.TIMESTAMP_BYTES);
-    final ArrayList<Deferred<String>> deferreds = new ArrayList<Deferred<String>>(
-        (row.length - metric_ts_bytes) / tag_bytes);
+    
+    final ArrayList<Deferred<String>> deferreds = 
+      new ArrayList<Deferred<String>>((row.length - metric_ts_bytes) / tag_bytes);
     
     for (short pos = metric_ts_bytes; pos < row.length; pos += tag_bytes) {
+      final byte[] tmp_name = new byte[name_width];
+      final byte[] tmp_value = new byte[value_width];
+
       System.arraycopy(row, pos, tmp_name, 0, name_width);
       deferreds.add(tsdb.tag_names.getNameAsync(tmp_name));
-      //final String name = tsdb.tag_names.getName(tmp_name);
+
       System.arraycopy(row, pos + name_width, tmp_value, 0, value_width);
       deferreds.add(tsdb.tag_values.getNameAsync(tmp_value));
-      //final String value = tsdb.tag_values.getName(tmp_value);
-      //result.put(name, value);
     }
     
     class NameCB implements Callback<Map<String, String>, ArrayList<String>> {
