@@ -223,8 +223,7 @@ public final class UniqueId implements UniqueIdInterface {
         if (name == null) {
           throw new NoSuchUniqueId(kind(), id);
         }
-        addNameToCache(id, name);
-        addIdToCache(name, id);        
+        cacheMapping(name, id);    
         return name;
       }
     }
@@ -283,8 +282,7 @@ public final class UniqueId implements UniqueIdInterface {
                                           + " which is != " + id_width
                                           + " required for '" + kind() + '\'');
         }
-        addIdToCache(name, id);
-        addNameToCache(id, name);
+        cacheMapping(name, id);
         return id;
       }
     }
