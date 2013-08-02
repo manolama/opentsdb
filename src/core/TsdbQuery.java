@@ -212,6 +212,7 @@ final class TsdbQuery implements Query {
       }
     }
     
+    // the metric will be set with the scanner is configured
     this.tsuids = tsuids;
     aggregator = function;
     this.rate = rate;
@@ -504,9 +505,10 @@ final class TsdbQuery implements Query {
     if (tsuids != null && !tsuids.isEmpty()) {
       final String tsuid = tsuids.get(0);
       final String metric_uid = tsuid.substring(0, TSDB.metrics_width() * 2);
-      System.arraycopy(UniqueId.stringToUid(metric_uid), 
-          0, start_row, 0, metric_width);
-      System.arraycopy(UniqueId.stringToUid(metric_uid), 0, end_row, 0, metric_width);
+      metric = UniqueId.stringToUid(metric_uid);
+      System.arraycopy(metric, 0, start_row, 0, metric_width);
+      System.arraycopy(metric, 0, end_row, 0, metric_width);
+      
     } else {
       System.arraycopy(metric, 0, start_row, 0, metric_width);
       System.arraycopy(metric, 0, end_row, 0, metric_width);
