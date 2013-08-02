@@ -495,8 +495,7 @@ public final class UniqueId implements UniqueIdInterface {
         return getIdAsync(name);
       }
 
-      addIdToCache(name, row);
-      addNameToCache(row, name);
+      cacheMapping(name, row);
       
       if (tsdb != null && tsdb.getConfig().enable_meta_tracking()) {
         final UIDMeta meta = new UIDMeta(type, row, name);
@@ -509,7 +508,12 @@ public final class UniqueId implements UniqueIdInterface {
 
   }
 
-
+  /** Adds the bidirectional mapping in the cache. */
+  private void cacheMapping(final String name, final byte[] id) {
+    addIdToCache(name, id);
+    addNameToCache(id, name);
+  } 
+  
   /**
    * Finds the ID associated with a given name or creates it.
    * <p>
@@ -667,8 +671,7 @@ public final class UniqueId implements UniqueIdInterface {
         final byte[] id = row.get(0).value();
         final byte[] cached_id = name_cache.get(name);
         if (cached_id == null) {
-          addIdToCache(name, id);
-          addNameToCache(id, name);
+          cacheMapping(name, id); 
         } else if (!Arrays.equals(id, cached_id)) {
           throw new IllegalStateException("WTF?  For kind=" + kind()
             + " name=" + name + ", we have id=" + Arrays.toString(cached_id)
