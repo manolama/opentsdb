@@ -14,10 +14,14 @@ package net.opentsdb.core;
 
 import java.util.Arrays;
 
+import org.hbase.async.Bytes;
+
+import net.opentsdb.uid.UniqueId;
+
 import com.stumbleupon.async.Deferred;
 
 /** Helper functions to deal with the row key. */
-final class RowKey {
+final public class RowKey {
 
   private RowKey() {
     // Can't create instances of this utility class.
@@ -49,5 +53,34 @@ final class RowKey {
   static Deferred<String> metricNameAsync(final TSDB tsdb, final byte[] row) {
     final byte[] id = Arrays.copyOfRange(row, 0, tsdb.metrics.width());
     return tsdb.metrics.getNameAsync(id);
+  }
+  
+  /**
+   * Generates a row key given a TSUID and an absolute timestamp. The timestamp
+   * will be normalized to an hourly base time.
+   * @param tsdb The TSDB to use for fetching tag widths
+   * @param tsuid The TSUID to use for the key
+   * @param timestamp An absolute time from which we generate the row base time
+   * @return A row key for use in fetching data from OpenTSDB
+   * @since 2.0
+   */
+  public static byte[] rowKeyFromTSUID(final TSDB tsdb, final String tsuid, 
+      final long timestamp) {
+    final long base_time;
+    if ((timestamp & Const.SECOND_MASK) != 0) {
+      // drop the ms timestamp to seconds to calculate the base timestamp
+      base_time = ((timestamp / 1000) - 
+          ((timestamp / 1000) % Const.MAX_TIMESPAN));
+    } else {
+      base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
+    }
+    final byte[] row = new byte[(tsuid.length() / 2) + Const.TIMESTAMP_BYTES];
+    final byte[] tsuid_bytes = UniqueId.stringToUid(tsuid);
+    System.arraycopy(tsuid_bytes, 0, row, 0, TSDB.metrics_width());
+    Bytes.setInt(row, (int) base_time, TSDB.metrics_width());
+    System.arraycopy(tsuid_bytes, TSDB.metrics_width(), row, 
+        TSDB.metrics_width() + Const.TIMESTAMP_BYTES, 
+        tsuid_bytes.length - TSDB.metrics_width());
+    return row;
   }
 }
