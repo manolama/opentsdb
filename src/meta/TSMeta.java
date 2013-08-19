@@ -21,7 +21,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import net.opentsdb.core.IncomingDataPoint;
+import net.opentsdb.core.Internal;
+import net.opentsdb.core.RowKey;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.core.Tags;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
 import net.opentsdb.utils.JSON;
@@ -677,6 +681,108 @@ public final class TSMeta {
     get.family(FAMILY);
     get.qualifiers(new byte[][] { COUNTER_QUALIFIER, META_QUALIFIER });
     return tsdb.getClient().get(get).addCallbackDeferring(new GetCB());
+  }
+  
+  /**
+   * Attempts to retrieve the last data point for the given TSUID. 
+   * This operates by checking the meta table for the {@link #COUNTER_QUALIFIER}
+   * and if found, parses the HBase timestamp for the counter (i.e. the time when
+   * the counter was written) and tries to load the row in the data table for
+   * the hour where that timestamp would have landed. If the counter does not
+   * exist or the data row doesn't exist or is empty, the results will be a null
+   * IncomingDataPoint. 
+   * <b>Note:</b> This will be accurate most of the time since the counter will
+   * be updated at the time a data point is written within a second or so. 
+   * However if the user is writing historical data, putting data with older 
+   * timestamps or performing an import, then the counter timestamp will be
+   * inaccurate.
+   * @param tsdb The TSDB to which we belong
+   * @param tsuid TSUID to fetch
+   * @param resolve_names Whether or not to resolve the TSUID to names and 
+   * return them in the IncomingDataPoint
+   * @return An {@link IncomingDataPoint} if data was found, null if not
+   * @throws NoSuchUniqueId if one of the tag lookups failed
+   */
+  public static Deferred<IncomingDataPoint> getLastPoint(final TSDB tsdb, 
+      final String tsuid, final boolean resolve_names) {
+    final GetRequest get = new GetRequest(tsdb.metaTable(), 
+        UniqueId.stringToUid(tsuid));
+    get.family(FAMILY);
+    get.qualifier(COUNTER_QUALIFIER);
+    
+    /**
+     * Called after GetLastDataPointCB has completed. If nothing was found then
+     * we just return a null, otherwise we set the TSUID and optionally resolve
+     * the metric and tag names.
+     */
+    final class ReturnCB implements Callback<Deferred<IncomingDataPoint>, 
+      IncomingDataPoint> {
+      
+      public Deferred<IncomingDataPoint> call(final IncomingDataPoint dp) 
+        throws Exception {
+        if (dp == null) {
+          return Deferred.fromResult(null);
+        }
+       
+        dp.setTSUID(tsuid);
+        if (!resolve_names) {
+          return Deferred.fromResult(dp);
+        }
+        
+        class TagsCB implements Callback<IncomingDataPoint, 
+          HashMap<String, String>> {
+          public IncomingDataPoint call(final HashMap<String, String> tags) 
+            throws Exception {
+            dp.setTags(tags);
+            return dp;
+          }
+        }
+        
+        class MetricCB implements Callback<Deferred<IncomingDataPoint>, String> {
+          public Deferred<IncomingDataPoint> call(final String name) 
+            throws Exception {
+            dp.setMetric(name);
+            final List<byte[]> tags = UniqueId.getTagPairsFromTSUID(tsuid, 
+                TSDB.metrics_width(), TSDB.tagk_width(), TSDB.tagv_width());
+            return Tags.resolveIdsAsync(tsdb, tags).addCallback(new TagsCB());
+          }
+        }
+        
+        // start the resolve dance
+        final String metric_uid = tsuid.substring(0, TSDB.metrics_width() * 2);     
+        return tsdb.getUidName(UniqueIdType.METRIC, 
+            UniqueId.stringToUid(metric_uid))
+              .addCallbackDeferring(new MetricCB());
+      }
+    }
+    
+    /**
+     * Callback from the GetRequest that simply determines if the row is empty
+     * or not
+     */
+    final class ExistsCB implements Callback<Deferred<IncomingDataPoint>, 
+      ArrayList<KeyValue>> {
+      public Deferred<IncomingDataPoint> call(final ArrayList<KeyValue> row) 
+        throws Exception {
+        if (row == null || row.isEmpty() || row.get(0).value() == null) {
+          return Deferred.fromResult(null);
+        }
+        
+        // we want the timestamp in seconds so we can figure out what row the
+        // data *should* be in (though it's not gauranteed)
+        final long last_write = row.get(0).timestamp();
+        System.out.println("Fetching for time: " + last_write);
+        final byte[] key = RowKey.rowKeyFromTSUID(tsdb, tsuid, last_write);
+        final GetRequest get = new GetRequest(tsdb.dataTable(), key);
+        get.family("t".getBytes());
+        
+        return tsdb.getClient().get(get).addCallback(
+            new Internal.GetLastDataPointCB(tsdb))
+            .addCallbackDeferring(new ReturnCB());
+      }
+    }
+    
+    return tsdb.getClient().get(get).addCallbackDeferring(new ExistsCB());
   }
   
   /** @return The configured meta data column qualifier byte array*/
