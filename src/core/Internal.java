@@ -381,6 +381,7 @@ public final class Internal {
    * result of a GetRequest. Non data points will be parsed out and the
    * resulting time and value stored in an IncomingDataPoint if found. If no 
    * valid data was found, a null is returned.
+   * @since 2.0
    */
   public static class GetLastDataPointCB implements Callback<IncomingDataPoint, 
     ArrayList<KeyValue>> {
