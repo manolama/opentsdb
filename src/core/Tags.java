@@ -349,7 +349,7 @@ public final class Tags {
    * @throws NoSuchUniqueName if one of the elements in the map contained an
    * unknown tag name or tag value.
    */
-  static ArrayList<byte[]> resolveAll(final TSDB tsdb,
+  public static ArrayList<byte[]> resolveAll(final TSDB tsdb,
                                       final Map<String, String> tags)
     throws NoSuchUniqueName {
     try {
@@ -443,7 +443,7 @@ public final class Tags {
    * @throws IllegalArgumentException if one of the elements in the array had
    * the wrong number of bytes.
    */
-  static HashMap<String, String> resolveIds(final TSDB tsdb,
+  public static HashMap<String, String> resolveIds(final TSDB tsdb,
                                             final ArrayList<byte[]> tags)
     throws NoSuchUniqueId {
     try {
@@ -471,14 +471,14 @@ public final class Tags {
     final short name_width = tsdb.tag_names.width();
     final short value_width = tsdb.tag_values.width();
     final short tag_bytes = (short) (name_width + value_width);
-    final byte[] tmp_name = new byte[name_width];
-    final byte[] tmp_value = new byte[value_width];
     final HashMap<String, String> result
       = new HashMap<String, String>(tags.size());
     final ArrayList<Deferred<String>> deferreds 
       = new ArrayList<Deferred<String>>(tags.size());
     
     for (final byte[] tag : tags) {
+      final byte[] tmp_name = new byte[name_width];
+      final byte[] tmp_value = new byte[value_width];
       if (tag.length != tag_bytes) {
         throw new IllegalArgumentException("invalid length: " + tag.length
             + " (expected " + tag_bytes + "): " + Arrays.toString(tag));
