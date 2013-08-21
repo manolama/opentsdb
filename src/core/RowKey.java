@@ -16,8 +16,6 @@ import java.util.Arrays;
 
 import org.hbase.async.Bytes;
 
-import net.opentsdb.uid.UniqueId;
-
 import com.stumbleupon.async.Deferred;
 
 /** Helper functions to deal with the row key. */
@@ -64,7 +62,7 @@ final public class RowKey {
    * @return A row key for use in fetching data from OpenTSDB
    * @since 2.0
    */
-  public static byte[] rowKeyFromTSUID(final TSDB tsdb, final String tsuid, 
+  public static byte[] rowKeyFromTSUID(final TSDB tsdb, final byte[] tsuid, 
       final long timestamp) {
     final long base_time;
     if ((timestamp & Const.SECOND_MASK) != 0) {
@@ -74,13 +72,12 @@ final public class RowKey {
     } else {
       base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
     }
-    final byte[] row = new byte[(tsuid.length() / 2) + Const.TIMESTAMP_BYTES];
-    final byte[] tsuid_bytes = UniqueId.stringToUid(tsuid);
-    System.arraycopy(tsuid_bytes, 0, row, 0, TSDB.metrics_width());
+    final byte[] row = new byte[tsuid.length + Const.TIMESTAMP_BYTES];
+    System.arraycopy(tsuid, 0, row, 0, TSDB.metrics_width());
     Bytes.setInt(row, (int) base_time, TSDB.metrics_width());
-    System.arraycopy(tsuid_bytes, TSDB.metrics_width(), row, 
+    System.arraycopy(tsuid, TSDB.metrics_width(), row, 
         TSDB.metrics_width() + Const.TIMESTAMP_BYTES, 
-        tsuid_bytes.length - TSDB.metrics_width());
+        tsuid.length - TSDB.metrics_width());
     return row;
   }
 }
