@@ -85,7 +85,7 @@ def main(argv):
         parser.error('Duration must be strictly positive.')
     elif options.downsample_window <= 0:
         parser.error('Downsample window must be strictly positive.')
-    elif options.critical is not None and options.warning is not None:
+    elif options.critical is None and options.warning is None:
         parser.error('You must specify at least a warning threshold (-w) or a'
                      ' critical threshold (-c).')
     elif options.ignore_recent < 0:
@@ -143,7 +143,7 @@ def main(argv):
       return 2
 
     # if failure...
-    if res.status != 200:
+    if res.status not in (200, 202):
         print ('CRITICAL: status = %d when talking to %s:%d'
                % (res.status, options.host, options.port))
         if options.verbose:
