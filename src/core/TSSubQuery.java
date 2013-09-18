@@ -12,6 +12,7 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +74,48 @@ public final class TSSubQuery {
    */
   public TSSubQuery() {
     
+  }
+  
+  public String toString() {
+    final StringBuilder buf = new StringBuilder();
+    buf.append("TSSubQuery(metric=")
+      .append(metric == null || metric.isEmpty() ? "" : metric);
+    buf.append(", tags=[");
+    if (tags != null && !tags.isEmpty()) {
+      int counter = 0;
+      for (Map.Entry<String, String> entry : tags.entrySet()) {
+        if (counter > 0) {
+          buf.append(", ");
+        }
+        buf.append(entry.getKey())
+          .append("=")
+          .append(entry.getValue());
+        counter++;
+      }
+    }
+    buf.append("], tsuids=[");
+    if (tsuids != null && !tsuids.isEmpty()) {
+      int counter = 0;
+      for (String tsuid : tsuids) {
+        if (counter > 0) {
+          buf.append(", ");
+        }
+        buf.append(tsuid);
+        counter++;
+      }
+    }
+    buf.append("], agg=")
+      .append(aggregator)
+      .append(", downsample=")
+      .append(downsample)
+      .append(", ds_interval=")
+      .append(downsample_interval)
+      .append(", rate=")
+      .append(rate)
+      .append(", rate_options=")
+      .append(rate_options);
+    buf.append(")");
+    return buf.toString();
   }
   
   /**
@@ -151,8 +194,11 @@ public final class TSSubQuery {
     return tsuids;
   }
 
-  /** @return the user supplied list of query tags, may be null or empty */
+  /** @return the user supplied list of query tags, may be empty */
   public Map<String, String> getTags() {
+    if (tags == null) {
+      return Collections.emptyMap();
+    }
     return tags;
   }
 
