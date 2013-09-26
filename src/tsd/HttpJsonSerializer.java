@@ -300,6 +300,12 @@ class HttpJsonSerializer extends HttpSerializer {
           tree.setDescription(entry.getValue());
         } else if (entry.getKey().toLowerCase().equals("notes")) {
           tree.setNotes(entry.getValue());
+        } else if (entry.getKey().toLowerCase().equals("enabled")) {
+          if (entry.getValue().toLowerCase().equals("true")) {
+            tree.setEnabled(true);
+          } else {
+            tree.setEnabled(false);
+          }
         } else if (entry.getKey().toLowerCase().equals("strictMatch")) {
           if (entry.getValue().toLowerCase().equals("true")) {
             tree.setStrictMatch(true);
@@ -764,7 +770,13 @@ class HttpJsonSerializer extends HttpSerializer {
    * @throws JSONException if serialization failed
    */
   public ChannelBuffer formatConfigV1(final Config config) {
-    return serializeJSON(config.getMap());
+    TreeMap<String, String> map = new TreeMap<String, String>(config.getMap());
+    for (Map.Entry<String, String> entry : map.entrySet()) {
+      if (entry.getKey().toUpperCase().contains("PASS")) {
+        map.put(entry.getKey(), "********");
+      }
+    }
+    return serializeJSON(map);
   }
   
   /**
