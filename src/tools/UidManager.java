@@ -121,8 +121,10 @@ final class UidManager {
         + "  assign <kind> <name> [names]:"
         + " Assign an ID for the given name(s).\n"
         + "  rename <kind> <name> <newname>: Renames this UID.\n"
-        + "  fsck: [-f] Checks the consistency of UIDs.\n"
-        + "        -f   Fix errors. Without -f errors are logged.\n"
+        + "  fsck: [fix] [delete_unknown] Checks the consistency of UIDs.\n"
+        + "        fix            - Fix errors. By default errors are logged.\n"
+        + "        delete_unknown - Remove columns with unknown qualifiers.\n"
+        + "                         The \"fix\" flag must be supplied as well.\n"
         + "\n"
         + "  [kind] <name>: Lookup the ID of this name.\n"
         + "  [kind] <ID>: Lookup the name of this ID.\n"
@@ -220,8 +222,18 @@ final class UidManager {
       }
       return rename(tsdb.getClient(), table, idwidth, args);
     } else if (args[0].equals("fsck")) {
-      boolean fix = args.length > 1 && args[1].equals("-f") ? true : false;
-      return fsck(tsdb.getClient(), table, fix);
+      boolean fix = false;
+      boolean fix_unknowns = false;
+      if (args.length > 1) {
+        for (String arg : args) {
+          if (arg.equals("fix")) {
+            fix = true;
+          } else if (arg.equals("delete_unknown")) {
+            fix_unknowns = true;
+          }
+        }
+      }
+      return fsck(tsdb.getClient(), table, fix, fix_unknowns);
     } else if (args[0].equals("metasync")) {
       // check for the data table existence and initialize our plugins 
       // so that update meta data can be pushed to search engines
@@ -442,12 +454,15 @@ final class UidManager {
    * @return The exit status of the command (0 means success).
    */
   private static int fsck(final HBaseClient client, final byte[] table, 
-      final boolean fix) {
+      final boolean fix, final boolean fix_unknowns) {
 
     if (fix) {
       LOG.info("----------------------------------");
       LOG.info("-    Running fsck in FIX mode    -");
+      LOG.info("-      Remove Unknowns: " + fix_unknowns + "     -");
       LOG.info("----------------------------------");
+    } else {
+      LOG.info("Running in log only mode");
     }
     
     final class Uids {
@@ -530,8 +545,14 @@ final class UidManager {
             if (!Bytes.equals(qualifier, METRICS) &&
                 !Bytes.equals(qualifier, TAGK) &&
                 !Bytes.equals(qualifier, TAGV)) {
-              // TODO - do something with columns that shouldn't be there
               LOG.warn("Unknown qualifier: " + UniqueId.uidToString(qualifier));
+              if (fix && fix_unknowns) {
+                final DeleteRequest delete = new DeleteRequest(table, kv.key(), 
+                    kv.family(), qualifier);
+                client.delete(delete);
+                LOG.info("FIX: Removed unknown qualifier: " 
+                    + UniqueId.uidToString(qualifier));
+              }
               continue;
             }
 
