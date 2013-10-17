@@ -746,6 +746,31 @@ public final class TestUniqueId {
     assertEquals(0L, uids.get("tagv").longValue());
   }
   
+  @Test
+  public void uidToLong() throws Exception {
+    assertEquals(42L, UniqueId.uidToLong(new byte[] { 0, 0, 0x2A }, (short) 3));
+  }
+  
+  @Test
+  public void uidToLongFromString() throws Exception {
+    assertEquals(42L, UniqueId.uidToLong("00002A", (short) 3));
+  }
+  
+  @Test (expected = NullPointerException.class)
+  public void uidToLongNull() throws Exception {
+    assertEquals(42L, UniqueId.uidToLong((byte[])null, (short) 3));
+  }
+  
+  @Test (expected = IllegalArgumentException.class)
+  public void uidToLongTooShort() throws Exception {
+    assertEquals(42L, UniqueId.uidToLong(new byte[] { 0, 0, 0x2A }, (short) 4));
+  }
+  
+  @Test (expected = IllegalArgumentException.class)
+  public void uidToLongTooLong() throws Exception {
+    assertEquals(42L, UniqueId.uidToLong(new byte[] { 0, 0, 0x2A }, (short) 2));
+  }
+  
   // ----------------- //
   // Helper functions. //
   // ----------------- //

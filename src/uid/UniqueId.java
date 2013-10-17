@@ -964,6 +964,41 @@ public final class UniqueId implements UniqueIdInterface {
   public static byte[] stringToUid(final String uid) {
     return stringToUid(uid, (short)0);
   }
+
+  /**
+   * Converts a UID to an integer value. The array must be the same length as
+   * uid_length or an exception will be thrown.
+   * @param uid The hex encoded UID to convert
+   * @param uid_length Length the array SHOULD be according to the UID config
+   * @return The UID converted to an integer
+   * @throws IllegalArgumentException if the length of the byte array does not
+   * match the uid_length value
+   * @since 2.1
+   */
+  public static long uidToLong(final String uid, final short uid_length) {
+    return uidToLong(stringToUid(uid), uid_length);
+  }
+  
+  /**
+   * Converts a UID to an integer value. The array must be the same length as
+   * uid_length or an exception will be thrown.
+   * @param uid The byte array to convert
+   * @param uid_length Length the array SHOULD be according to the UID config
+   * @return The UID converted to an integer
+   * @throws IllegalArgumentException if the length of the byte array does not
+   * match the uid_length value
+   * @since 2.1
+   */
+  public static long uidToLong(final byte[] uid, final short uid_length) {
+    if (uid.length != uid_length) {
+      throw new IllegalArgumentException("UID was " + uid.length 
+          + " bytes long but expected to be " + uid_length);
+    }
+    
+    final byte[] uid_raw = new byte[8];
+    System.arraycopy(uid, 0, uid_raw, 8 - uid_length, uid_length);
+    return Bytes.getLong(uid_raw);
+  }
   
   /**
    * Attempts to convert the given string to a type enumerator
