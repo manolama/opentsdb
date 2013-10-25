@@ -545,13 +545,15 @@ final class UidManager {
             if (!Bytes.equals(qualifier, METRICS) &&
                 !Bytes.equals(qualifier, TAGK) &&
                 !Bytes.equals(qualifier, TAGV)) {
-              LOG.warn("Unknown qualifier: " + UniqueId.uidToString(qualifier));
+              LOG.warn("Unknown qualifier " + UniqueId.uidToString(qualifier) 
+                  + " in row " + UniqueId.uidToString(kv.key()));
               if (fix && fix_unknowns) {
                 final DeleteRequest delete = new DeleteRequest(table, kv.key(), 
                     kv.family(), qualifier);
                 client.delete(delete);
-                LOG.info("FIX: Removed unknown qualifier: " 
-                    + UniqueId.uidToString(qualifier));
+                LOG.info("FIX: Removed unknown qualifier " 
+                  + UniqueId.uidToString(qualifier) 
+                  + " in row " + UniqueId.uidToString(kv.key()));
               }
               continue;
             }
