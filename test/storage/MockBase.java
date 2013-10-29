@@ -887,23 +887,19 @@ public final class MockBase {
       final Object[] args = invocation.getArguments();
       final AtomicIncrementRequest air = (AtomicIncrementRequest)args[0];
       final long amount = air.getAmount();
-      System.out.println("Incrementing by: " + amount);
       Bytes.ByteMap<Bytes.ByteMap<byte[]>> row = storage.get(air.key());
       if (row == null) {
-        System.out.println("No row");
         row = new Bytes.ByteMap<Bytes.ByteMap<byte[]>>();
         storage.put(air.key(), row);
       }
       
       Bytes.ByteMap<byte[]> cf = row.get(air.family());
       if (cf == null) {
-        System.out.println("No cf");
         cf = new Bytes.ByteMap<byte[]>();
         row.put(air.family(), cf);
       }
       
       if (!cf.containsKey(air.qualifier())) {
-        System.out.println("No col");
         cf.put(air.qualifier(), Bytes.fromLong(amount));
         return Deferred.fromResult(amount);
       }
@@ -911,7 +907,6 @@ public final class MockBase {
       long incremented_value = Bytes.getLong(cf.get(air.qualifier()));
       incremented_value += amount;
       cf.put(air.qualifier(), Bytes.fromLong(incremented_value));
-      System.out.println("New val: " + incremented_value);
       return Deferred.fromResult(incremented_value);
     }
     
