@@ -123,6 +123,8 @@ final class TsdbQuery implements Query {
   /** Optional list of TSUIDs to fetch and aggregate instead of a metric */
   private List<String> tsuids;
   
+  private boolean is_regex_tagv;
+  
   /** Constructor. */
   public TsdbQuery(final TSDB tsdb) {
     this.tsdb = tsdb;
@@ -184,6 +186,10 @@ final class TsdbQuery implements Query {
     return end_time;
   }
 
+  public void setIsRegexTagv(final boolean is_regex_tagv) {
+    this.is_regex_tagv = is_regex_tagv;
+  }
+  
   public void setTimeSeries(final String metric,
       final Map<String, String> tags,
       final Aggregator function,
@@ -289,13 +295,14 @@ final class TsdbQuery implements Query {
         if (tagvalue.charAt(0) == '*') {
           continue;  // For a 'GROUP BY' with any value, we're done.
         }
-        // 'GROUP BY' with specific values.  Need to split the values
-        // to group on and store their IDs in group_by_values.
-        final String[] values = Tags.splitString(tagvalue, '|');
+        
+        final short value_width = tsdb.tag_values.width();
         if (group_by_values == null) {
           group_by_values = new ByteMap<byte[][]>();
         }
-        final short value_width = tsdb.tag_values.width();
+        // 'GROUP BY' with specific values.  Need to split the values
+        // to group on and store their IDs in group_by_values.
+        final String[] values = Tags.splitString(tagvalue, '|');
         final byte[][] value_ids = new byte[values.length][value_width];
         group_by_values.put(tsdb.tag_names.getId(tag.getKey()),
                             value_ids);
@@ -303,6 +310,28 @@ final class TsdbQuery implements Query {
           final byte[] value_id = tsdb.tag_values.getId(values[j]);
           System.arraycopy(value_id, 0, value_ids[j], 0, value_width);
         }
+      } else if (is_regex_tagv) {
+        final List<byte[]> uids = tsdb.getMatchingRegex(tagvalue);
+        if (uids == null || uids.isEmpty()) {
+          throw new IllegalArgumentException(
+              "No tag values found to match regex " + tagvalue);
+        }
+        
+        LOG.trace("Found " + uids.size() + " matching tag values on " + tagvalue);
+        if (group_bys == null) {
+          group_bys = new ArrayList<byte[]>();
+        }
+        group_bys.add(tsdb.tag_names.getId(tag.getKey()));
+        final short value_width = tsdb.tag_values.width();
+        if (group_by_values == null) {
+          group_by_values = new ByteMap<byte[][]>();
+        }
+        final byte[][] value_ids = new byte[uids.size()][value_width];
+        group_by_values.put(tsdb.tag_names.getId(tag.getKey()), value_ids);
+        for (int j = 0; j < uids.size(); j++) {
+          System.arraycopy(uids.get(j), 0, value_ids[j], 0, value_width);
+        }
+        i.remove();
       }
     }
   }
@@ -442,6 +471,9 @@ final class TsdbQuery implements Query {
     public DataPoints[] call(final TreeMap<byte[], Span> spans) throws Exception {
       if (spans == null || spans.size() <= 0) {
         return NO_RESULT;
+      }
+      if (is_regex_tagv) {
+        group_bys = null;
       }
       if (group_bys == null) {
         // We haven't been asked to find groups, so let's put all the spans
@@ -664,6 +696,7 @@ final class TsdbQuery implements Query {
     // Skip any number of tags before the end.
     buf.append("(?:.{").append(tagsize).append("})*$");
     scanner.setKeyRegexp(buf.toString(), CHARSET);
+    LOG.info(buf.toString());
    }
 
   /**

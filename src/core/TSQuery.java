@@ -60,6 +60,9 @@ public final class TSQuery {
   /** Whether or not to show TSUIDs when returning data */
   private boolean show_tsuids;
   
+  /** Whether or not the tagv value is a regular expression */
+  private boolean is_regex_tagv = true;
+  
   /** A list of parsed sub queries, must have one or more to fetch data */
   private ArrayList<TSSubQuery> queries;
 
@@ -115,7 +118,7 @@ public final class TSQuery {
     
     // validate queries
     for (TSSubQuery sub : queries) {
-      sub.validateAndSetQuery();
+      sub.validateAndSetQuery(is_regex_tagv);
     }
   }
   
@@ -134,6 +137,7 @@ public final class TSQuery {
       final Query query = tsdb.newQuery();
       query.setStartTime(start_time);
       query.setEndTime(end_time);
+      query.setIsRegexTagv(is_regex_tagv);
       if (sub.downsampler() != null) {
         query.downsample((int)sub.downsampleInterval(), sub.downsampler());
       } else if (!ms_resolution) {
@@ -257,6 +261,11 @@ public final class TSQuery {
     return show_tsuids;
   }
   
+  /** @return whether or not the tagv value is a regular expression */
+  public boolean getIsRegexTagv() {
+    return is_regex_tagv;
+  }
+  
   /** @return the list of sub queries */
   public List<TSSubQuery> getQueries() {
     return queries;
@@ -314,6 +323,11 @@ public final class TSQuery {
   /** @param show_tsuids whether or not to show TSUIDs in output */
   public void setShowTSUIDs(boolean show_tsuids) {
     this.show_tsuids = show_tsuids;
+  }
+  
+  /** @param is_regex_tagv whether or not the tagvs are regular expressions */
+  public void setIsRegexTagv(boolean is_regex_tagv) {
+    this.is_regex_tagv = is_regex_tagv;
   }
   
   /** @param queries a list of {@link TSSubQuery} objects to store*/

@@ -1268,4 +1268,86 @@ public final class UniqueId implements UniqueIdInterface {
     get.qualifiers(kinds);
     return tsdb.getClient().get(get).addCallback(new GetCB());
   }
+
+  public List<byte[]> getMatchingRegex(final String pattern) {
+    
+    final byte[] start_row;
+    final byte[] end_row;
+    start_row = START_ROW;
+    end_row = END_ROW;
+    final Scanner scanner = client.newScanner(table);
+    scanner.setStartKey(start_row);
+    scanner.setStopKey(end_row);
+    scanner.setFamily(ID_FAMILY);
+    scanner.setQualifier(kind);
+    scanner.setKeyRegexp(pattern);
+    
+    final Deferred<List<byte[]>> results = new Deferred<List<byte[]>>();
+    final List<byte[]> uids = new ArrayList<byte[]>();
+    
+    /* 
+    */
+    final class ScannerCB implements Callback<Object,
+      ArrayList<ArrayList<KeyValue>>> {
+      
+      int nrows = 0;
+
+      /**
+      * Starts the scanner and is called recursively to fetch the next set of
+      * rows from the scanner.
+      * @return The map of spans if loaded successfully, null if no data was
+      * found
+      */
+       public Object scan() {
+         return scanner.nextRows().addCallback(this);
+       }
+  
+      /**
+      * Loops through each row of the scanner results and parses out data
+      * points and optional meta data
+      * @return null if no rows were found, otherwise the TreeMap with spans
+      */
+       @Override
+       public Object call(final ArrayList<ArrayList<KeyValue>> rows)
+         throws Exception {
+         try {
+           if (rows == null) {
+
+             LOG.info(pattern + " matched " + nrows + " rows");
+             if (nrows < 1) {
+               results.callback(null);
+             } else {
+               results.callback(uids);
+             }
+             return null;
+           }
+           
+           for (final ArrayList<KeyValue> row : rows) {
+             for (KeyValue kv : row) {
+               if (kv.value().length != id_width) {
+                 LOG.warn("Invalid UID width for name " + 
+                     new String(kv.key(), CHARSET) + " of kind " 
+                     + new String(kind, CHARSET));
+                 continue;
+               }
+               uids.add(kv.value());
+               nrows++;               
+             }
+           }
+           
+           return scan();
+         } catch (Exception e) {
+           results.callback(e);
+           return null;
+         }
+       }
+     }
+    
+    new ScannerCB().scan();
+    try {
+      return results.joinUninterruptibly();
+    } catch (Exception e) {
+      throw new RuntimeException("Should never be here", e);
+    }
+  }
 }

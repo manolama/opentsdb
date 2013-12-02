@@ -837,6 +837,10 @@ public final class TSDB {
     return tag_values.suggest(search, max_results);
   }
 
+  public List<byte[]> getMatchingRegex(final String pattern) {
+    return this.tag_values.getMatchingRegex(pattern);
+  }
+  
   /**
    * Discards all in-memory caches.
    * @since 1.1

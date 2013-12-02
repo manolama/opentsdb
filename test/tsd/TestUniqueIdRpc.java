@@ -1040,6 +1040,7 @@ public final class TestUniqueIdRpc {
         Bytes.fromLong(1L));
 
     storage.addColumn(new byte[] { 0, 0, 2, 0, 0, 1, 0, 0, 1, 0, 0, 2, 0, 0, 2 },
+        NAME_FAMILY,
         "ts_meta".getBytes(MockBase.ASCII()),
         ("{\"tsuid\":\"000002000001000001000002000002\",\"displayName\":\"Display\"," +
             "\"description\":\"Description\",\"notes\":\"Notes\",\"created" +
@@ -1047,9 +1048,11 @@ public final class TestUniqueIdRpc {
             "\"Data\",\"retention\":42,\"max\":1.0,\"min\":\"NaN\"}")
             .getBytes(MockBase.ASCII()));
     storage.addColumn(new byte[] { 0, 0, 2, 0, 0, 1, 0, 0, 1, 0, 0, 2, 0, 0, 2 },
+        NAME_FAMILY,
         "ts_ctr".getBytes(MockBase.ASCII()),
         Bytes.fromLong(1L));
     storage.addColumn(new byte[] { 0, 0, 2, 0, 0, 1, 0, 0, 3, 0, 0, 2, 0, 0, 2 },
+        NAME_FAMILY,
         "ts_meta".getBytes(MockBase.ASCII()),
         ("{\"tsuid\":\"000002000001000003000002000002\",\"displayName\":\"Display\"," +
             "\"description\":\"Description\",\"notes\":\"Notes\",\"created" +
@@ -1057,6 +1060,7 @@ public final class TestUniqueIdRpc {
             "\"Data\",\"retention\":42,\"max\":1.0,\"min\":\"NaN\"}")
             .getBytes(MockBase.ASCII()));
     storage.addColumn(new byte[] { 0, 0, 2, 0, 0, 1, 0, 0, 3, 0, 0, 2, 0, 0, 2 },
+        NAME_FAMILY,
         "ts_ctr".getBytes(MockBase.ASCII()),
         Bytes.fromLong(1L));
 

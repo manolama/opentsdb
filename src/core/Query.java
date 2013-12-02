@@ -66,7 +66,9 @@ public interface Query {
    * @return A strictly positive integer.
    */
   long getEndTime();
-
+  
+  void setIsRegexTagv(final boolean is_regex_tagv);
+  
   /**
   * Sets the time series to the query.
   * @param metric The metric to retreive from the TSDB.

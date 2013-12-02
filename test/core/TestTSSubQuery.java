@@ -31,7 +31,7 @@ public final class TestTSSubQuery {
   @Test
   public void validate() {
     TSSubQuery sub = getMetricForValidate();
-    sub.validateAndSetQuery();
+    sub.validateAndSetQuery(false);
     assertEquals("sys.cpu.0", sub.getMetric());
     assertEquals("*", sub.getTags().get("host"));
     assertEquals("lga", sub.getTags().get("dc"));
@@ -47,7 +47,7 @@ public final class TestTSSubQuery {
     ArrayList<String> tsuids = new ArrayList<String>(1);
     tsuids.add("ABCD");
     sub.setTsuids(tsuids);
-    sub.validateAndSetQuery();
+    sub.validateAndSetQuery(false);
     assertNotNull(sub.getTsuids());
     assertEquals("*", sub.getTags().get("host"));
     assertEquals("lga", sub.getTags().get("dc"));
@@ -60,7 +60,7 @@ public final class TestTSSubQuery {
   public void validateNoDS() {
     TSSubQuery sub = getMetricForValidate();
     sub.setDownsample(null);
-    sub.validateAndSetQuery();
+    sub.validateAndSetQuery(false);
     assertEquals("sys.cpu.0", sub.getMetric());
     assertEquals("*", sub.getTags().get("host"));
     assertEquals("lga", sub.getTags().get("dc"));
@@ -73,21 +73,21 @@ public final class TestTSSubQuery {
   public void validateNullAgg() {
     TSSubQuery sub = getMetricForValidate();
     sub.setAggregator(null);
-    sub.validateAndSetQuery();
+    sub.validateAndSetQuery(false);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void validateEmptyAgg() {
     TSSubQuery sub = getMetricForValidate();
     sub.setAggregator("");
-    sub.validateAndSetQuery();
+    sub.validateAndSetQuery(false);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void validateBadAgg() {
     TSSubQuery sub = getMetricForValidate();
     sub.setAggregator("Notanagg");
-    sub.validateAndSetQuery();
+    sub.validateAndSetQuery(false);
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -95,7 +95,7 @@ public final class TestTSSubQuery {
     TSSubQuery sub = getMetricForValidate();
     sub.setMetric(null);
     sub.setTsuids(null);
-    sub.validateAndSetQuery();
+    sub.validateAndSetQuery(false);
   }
   
   @Test (expected = IllegalArgumentException.class)
@@ -103,20 +103,20 @@ public final class TestTSSubQuery {
     TSSubQuery sub = getMetricForValidate();
     sub.setMetric(null);
     sub.setTsuids(new ArrayList<String>());
-    sub.validateAndSetQuery();
+    sub.validateAndSetQuery(false);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void validateBadDS() {
     TSSubQuery sub = getMetricForValidate();
     sub.setDownsample("bad");
-    sub.validateAndSetQuery();
+    sub.validateAndSetQuery(false);
   }
   
   /**
    * Sets up an object with good, common values for testing the validation
    * function with an "m" type query (no tsuids). Each test can "set" the 
-   * method it wants to fool with and call .validateAndSetQuery()
+   * method it wants to fool with and call .validateAndSetQuery(false)
    * <b>Warning:</b> This method is also shared by {@link TestTSQuery} so be
    * careful if you change any values
    * @return A sub query object

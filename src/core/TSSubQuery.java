@@ -17,6 +17,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import net.opentsdb.utils.DateTime;
 
@@ -68,7 +70,7 @@ public final class TSSubQuery {
   
   /** Parsed downsample interval */
   private long downsample_interval;
-  
+
   /**
    * Default constructor necessary for POJO de/serialization
    */
@@ -127,7 +129,7 @@ public final class TSSubQuery {
    * by the {@link TSQuery} object the sub query is assigned to.
    * @throws IllegalArgumentException if something is wrong with the query
    */
-  public void validateAndSetQuery() {
+  public void validateAndSetQuery(final boolean is_regex_tagv) {
     if (aggregator == null || aggregator.isEmpty()) {
       throw new IllegalArgumentException("Missing the aggregation function");
     }
@@ -161,6 +163,23 @@ public final class TSSubQuery {
       }
       downsample_interval = DateTime.parseDuration(
           downsample.substring(0, dash));
+    }
+    
+    // validate regex
+    if (is_regex_tagv) {
+      if (tags == null) {
+        throw new IllegalArgumentException(
+            "Tagv Regex was specified but no tags were found");
+      }
+      
+      for (Map.Entry<String, String> entry : tags.entrySet()) {
+        try {
+          Pattern.compile(entry.getValue());
+        } catch (PatternSyntaxException pse) {
+          throw new IllegalArgumentException ("Invalid regex for tag pair [" 
+              + entry.getKey() + "=" + entry.getValue() + "]", pse);
+        }
+      }
     }
   }
 
