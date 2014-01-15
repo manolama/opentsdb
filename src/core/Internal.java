@@ -26,7 +26,6 @@ import org.hbase.async.Bytes;
 import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
 
-import com.google.gwt.logging.client.DefaultLevel.Config;
 import com.stumbleupon.async.Callback;
 
 /**
