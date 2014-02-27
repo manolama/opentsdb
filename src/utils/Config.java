@@ -449,6 +449,7 @@ public class Config {
     default_map.put("tsd.http.request.max_chunk", "4096");
     default_map.put("tsd.http.request.cors_domains", "");
     default_map.put("tsd.http.request.cors_headers", "Authorization, "
+    default_map.put("tsd.query.timeout", "-1");
       + "Content-Type, Accept, Origin, User-Agent, DNT, Cache-Control, "
       + "X-Mx-ReqToken, Keep-Alive, X-Requested-With, If-Modified-Since");
 
@@ -458,6 +459,20 @@ public class Config {
     }
 
     loadStaticVariables();
+    // set statics
+    auto_metric = this.getBoolean("tsd.core.auto_create_metrics");
+    enable_compactions = this.getBoolean("tsd.storage.enable_compaction");
+    enable_chunked_requests = this.getBoolean("tsd.http.request.enable_chunked");
+    enable_realtime_ts = this.getBoolean("tsd.core.meta.enable_realtime_ts");
+    enable_realtime_uid = this.getBoolean("tsd.core.meta.enable_realtime_uid");
+    enable_tsuid_incrementing = 
+      this.getBoolean("tsd.core.meta.enable_tsuid_incrementing");
+    enable_tsuid_tracking = 
+      this.getBoolean("tsd.core.meta.enable_tsuid_tracking");
+    if (this.hasProperty("tsd.http.request.max_chunk")) {
+      max_chunked_requests = this.getInt("tsd.http.request.max_chunk");
+    }
+    enable_tree_processing = this.getBoolean("tsd.core.tree.enable_processing");
   }
 
   /**
