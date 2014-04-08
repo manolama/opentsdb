@@ -76,16 +76,6 @@
           <excludes>
             <exclude>**/client/*.java</exclude>
           </excludes>
-          <testIncludes>
-            <include>**/Test*.java</include>
-            <include>**/MockBase.java</include>
-            <include>**/NettyMocks.java</include>
-          </testIncludes>
-          <testExcludes>
-            <exclude>**/TestPluginLoader.java</exclude>
-            <exclude>**/TestSearchPlugin.java</exclude>
-            <exclude>**/TestRpcPlugin.java</exclude>
-          </testExcludes>
         </configuration>
       </plugin>
 
