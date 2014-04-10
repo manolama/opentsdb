@@ -31,10 +31,10 @@ import com.google.common.collect.ImmutableMap;
  * 
  * This handles all of the user configurable variables for a TSD. On
  * initialization default values are configured for all variables. Then
- * implementations should call the {@link loadConfig()} methods to search for a
+ * implementations should call the {@link #loadConfig()} methods to search for a
  * default configuration or try to load one provided by the user.
  * 
- * To add a configuration, simply set a default value in {@link setDefaults).
+ * To add a configuration, simply set a default value in {@link #setDefaults()}.
  * Wherever you need to access the config value, use the proper helper to fetch
  * the value, accounting for exceptions that may be thrown if necessary.
  * 
@@ -146,7 +146,7 @@ public class Config {
     return this.auto_metric;
   }
   
-  /** @param set whether or not to auto create metrics */
+  /** @param auto_metric whether or not to auto create metrics */
   public void setAutoMetric(boolean auto_metric) {
     this.auto_metric = auto_metric;
   }
@@ -194,8 +194,8 @@ public class Config {
   /**
    * Allows for modifying properties after loading
    * 
-   * @warn This should only be used on initialization and is meant for command
-   *       line overrides
+   * WARNING: This should only be used on initialization and is meant for 
+   * command line overrides
    * 
    * @param property The name of the property to override
    * @param value The value to store
