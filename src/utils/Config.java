@@ -39,8 +39,8 @@ import com.google.common.collect.ImmutableMap;
  * the value, accounting for exceptions that may be thrown if necessary.
  * 
  * The get<type> number helpers will return NumberFormatExceptions if the
- * requested property is null or unparseable. The {@link getString()} helper
- * will return a NullPointerException if the property isn't found.
+ * requested property is null or unparseable. The {@link #getString(String)} 
+ * helper will return a NullPointerException if the property isn't found.
  * <p>
  * Plugins can extend this class and copy the properties from the main
  * TSDB.config instance. Plugins should never change the main TSD's config

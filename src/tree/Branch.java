@@ -54,7 +54,7 @@ import net.opentsdb.utils.JSONException;
  * <p>
  * Branch IDs are hex encoded byte arrays composed of the tree ID + hash of 
  * the display name for each previous branch. The tree ID is encoded on 
- * {@link #Tree.TREE_ID_WIDTH()} bytes, each hash is then {@code INT_WIDTH} 
+ * {@link Tree#TREE_ID_WIDTH()} bytes, each hash is then {@code INT_WIDTH} 
  * bytes. So the if the tree ID width is 2 bytes and Java Integers are 4 bytes, 
  * the root for tree # 1 is just {@code 0001}. A child of the root could be 
  * {@code 00001A3B190C2} and so on. These IDs are used as the row key in storage.
