@@ -422,7 +422,7 @@ public final class TestHttpQuery {
     final Channel channelMock = NettyMocks.fakeChannel();
     final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
         HttpMethod.GET, "/");
-    req.addHeader("Content-Type", "text/plain");
+    req.headers().add("Content-Type", "text/plain");
     final HttpQuery query = new HttpQuery(tsdb, req, channelMock);
     assertEquals(Charset.forName("UTF-8"), query.getCharset());
   }
@@ -438,7 +438,7 @@ public final class TestHttpQuery {
     final Channel channelMock = NettyMocks.fakeChannel();
     final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
         HttpMethod.GET, "/");
-    req.addHeader("Content-Type", "text/plain; charset=UTF-16");
+    req.headers().add("Content-Type", "text/plain; charset=UTF-16");
     final HttpQuery query = new HttpQuery(tsdb, req, channelMock);
     assertEquals(Charset.forName("UTF-16"), query.getCharset());
   }
@@ -448,7 +448,7 @@ public final class TestHttpQuery {
     final Channel channelMock = NettyMocks.fakeChannel();
     final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
         HttpMethod.GET, "/");
-    req.addHeader("Content-Type", "text/plain; charset=foobar");
+    req.headers().add("Content-Type", "text/plain; charset=foobar");
     final HttpQuery query = new HttpQuery(tsdb, req, channelMock);
     assertEquals(Charset.forName("UTF-16"), query.getCharset());
   }
@@ -476,7 +476,7 @@ public final class TestHttpQuery {
     final Channel channelMock = NettyMocks.fakeChannel();
     final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
         HttpMethod.GET, "/");
-    req.addHeader("Content-Type", "text/plain; charset=UTF-16");
+    req.headers().add("Content-Type", "text/plain; charset=UTF-16");
     final ChannelBuffer buf = ChannelBuffers.copiedBuffer("S\u00ED Se\u00F1or", 
         CharsetUtil.UTF_16);
     req.setContent(buf);
@@ -735,27 +735,26 @@ public final class TestHttpQuery {
     final Channel channelMock = NettyMocks.fakeChannel();
     final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
         HttpMethod.GET, "/");
-    req.addHeader("Content-Type", "application/json");
+    req.headers().add("Content-Type", "application/json");
     final HttpQuery query = new HttpQuery(tsdb, req, channelMock);
     query.setSerializer();
     assertEquals(HttpJsonSerializer.class.getCanonicalName(), 
         query.serializer().getClass().getCanonicalName());
   }
   
-//  TODO - restore when maven can generate the unit test plugin
-//  @Test
-//  public void setSerializerDummyCT() throws Exception {
-//    PluginLoader.loadJAR("plugin_test.jar");
-//    HttpQuery.initializeSerializerMaps(null);
-//    final Channel channelMock = NettyMocks.fakeChannel();
-//    final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
-//        HttpMethod.GET, "/");
-//    req.addHeader("Content-Type", "application/tsdbdummy");
-//    final HttpQuery query = new HttpQuery(tsdb, req, channelMock);
-//    query.setSerializer();
-//    assertEquals("net.opentsdb.tsd.DummyHttpSerializer", 
-//        query.serializer().getClass().getCanonicalName());
-//  }
+  @Test
+  public void setSerializerDummyCT() throws Exception {
+    PluginLoader.loadJAR("plugin_test.jar");
+    HttpQuery.initializeSerializerMaps(null);
+    final Channel channelMock = NettyMocks.fakeChannel();
+    final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
+        HttpMethod.GET, "/");
+    req.headers().add("Content-Type", "application/tsdbdummy");
+    final HttpQuery query = new HttpQuery(tsdb, req, channelMock);
+    query.setSerializer();
+    assertEquals("net.opentsdb.tsd.DummyHttpSerializer", 
+        query.serializer().getClass().getCanonicalName());
+  }
   
   @Test
   public void setSerializerDefaultCT() throws Exception {
@@ -763,7 +762,7 @@ public final class TestHttpQuery {
     final Channel channelMock = NettyMocks.fakeChannel();
     final HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, 
         HttpMethod.GET, "/");
-    req.addHeader("Content-Type", "invalid/notfoundtype");
+    req.headers().add("Content-Type", "invalid/notfoundtype");
     final HttpQuery query = new HttpQuery(tsdb, req, channelMock);
     query.setSerializer();
     assertEquals(HttpJsonSerializer.class.getCanonicalName(), 
@@ -996,7 +995,7 @@ public final class TestHttpQuery {
     HttpQuery query = NettyMocks.getQuery(tsdb, "/");
     query.redirect("/redirect");
     assertEquals(HttpResponseStatus.OK, query.response().getStatus());
-    assertEquals("/redirect", query.response().getHeader("Location"));
+    assertEquals("/redirect", query.response().headers().get("Location"));
     assertEquals("<html></head><meta http-equiv=\"refresh\" content=\"0; url="
         + "/redirect\"></head></html>", 
         query.response().getContent().toString(Charset.forName("UTF-8")));
@@ -1157,7 +1156,7 @@ public final class TestHttpQuery {
     query.sendStatusOnly(HttpResponseStatus.NO_CONTENT);
     assertEquals(HttpResponseStatus.NO_CONTENT, query.response().getStatus());
     assertEquals(0, query.response().getContent().capacity());
-    assertNull(query.response().getHeader("Content-Type"));
+    assertNull(query.response().headers().get("Content-Type"));
   }
   
   @Test (expected = NullPointerException.class)
