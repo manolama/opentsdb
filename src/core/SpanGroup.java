@@ -21,6 +21,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
@@ -50,9 +53,8 @@ import net.opentsdb.meta.Annotation;
  * iterator when using the {@link Span.DownsamplingIterator}.
  */
 final class SpanGroup implements DataPoints {
-
-  /** Annotations */
-  private final ArrayList<Annotation> annotations;
+  
+  private static final Logger LOG = LoggerFactory.getLogger(SpanGroup.class);
 
   /** Start time (UNIX timestamp in seconds or ms) on 32 bits ("unsigned" int). */
   private final long start_time;
@@ -148,19 +150,20 @@ final class SpanGroup implements DataPoints {
             final boolean rate, final RateOptions rate_options,
             final Aggregator aggregator,
             final long interval, final Aggregator downsampler) {
-    annotations = new ArrayList<Annotation>();
-    this.start_time = (start_time & Const.SECOND_MASK) == 0 ? start_time * 1000 : start_time;
-    this.end_time = (end_time & Const.SECOND_MASK) == 0 ? end_time * 1000 : end_time;
-    if (spans != null) {
-      for (final Span span : spans) {
-        add(span);
-      }
-    }
-    this.rate = rate;
-    this.rate_options = rate_options;
-    this.aggregator = aggregator;
-    this.downsampler = downsampler;
-    this.sample_interval = interval;
+     this.start_time = (start_time & Const.SECOND_MASK) == 0 ? 
+         start_time * 1000 : start_time;
+     this.end_time = (end_time & Const.SECOND_MASK) == 0 ? 
+         end_time * 1000 : end_time;
+     if (spans != null) {
+       for (final Span span : spans) {
+         add(span);
+       }
+     }
+     this.rate = rate;
+     this.rate_options = rate_options;
+     this.aggregator = aggregator;
+     this.downsampler = downsampler;
+     this.sample_interval = interval;
   }
 
   /**
@@ -175,44 +178,25 @@ final class SpanGroup implements DataPoints {
       throw new AssertionError("The set of tags has already been computed"
                                + ", you can't add more Spans to " + this);
     }
-
+    
     // normalize timestamps to milliseconds for proper comparison
     final long start = (start_time & Const.SECOND_MASK) == 0 ? 
         start_time * 1000 : start_time;
     final long end = (end_time & Const.SECOND_MASK) == 0 ? 
         end_time * 1000 : end_time;
-
-    if (span.size() == 0) {
-      // copy annotations that are in the time range
-      for (Annotation annot : span.getAnnotations()) {
-        long annot_start = annot.getStartTime();
-        if ((annot_start & Const.SECOND_MASK) == 0) {
-          annot_start *= 1000;
-        }
-        long annot_end = annot.getStartTime();
-        if ((annot_end & Const.SECOND_MASK) == 0) {
-          annot_end *= 1000;
-        }
-        if (annot_end >= start && annot_start <= end) {
-          annotations.add(annot);
-        }
-      }
-    } else {
-      long first_dp = span.timestamp(0);
-      if ((first_dp & Const.SECOND_MASK) == 0) {
-        first_dp *= 1000;
-      }
-      // The following call to timestamp() will throw an
-      // IndexOutOfBoundsException if size == 0, which is OK since it would
-      // be a programming error.
-      long last_dp = span.timestamp(span.size() - 1);
-      if ((last_dp & Const.SECOND_MASK) == 0) {
-        last_dp *= 1000;
-      }
-      if (first_dp <= end && last_dp >= start) {
-        this.spans.add(span);
-        annotations.addAll(span.getAnnotations());
-      }
+    long first_dp = span.timestamp(0);
+    if ((first_dp & Const.SECOND_MASK) == 0) {
+      first_dp *= 1000;
+    }
+    // The following call to timestamp() will throw an
+    // IndexOutOfBoundsException if size == 0, which is OK since it would
+    // be a programming error.
+    long last_dp = span.timestamp(span.size() - 1);
+    if ((last_dp & Const.SECOND_MASK) == 0) {
+      last_dp *= 1000;
+    }
+    if (first_dp <= end && last_dp >= start) {
+      this.spans.add(span);
     }
   }
 
@@ -356,9 +340,19 @@ final class SpanGroup implements DataPoints {
    * more were found
    */
   public List<Annotation> getAnnotations() {
-    return annotations.isEmpty() ? null : annotations;
+    ArrayList<Annotation> annotations = new ArrayList<Annotation>();
+    for (Span sp : spans) {
+      if (sp.getAnnotations().size() > 0) {
+        annotations.addAll(sp.getAnnotations());
+      }
+    }
+    
+    if (annotations.size() > 0) {
+      return annotations;
+    }
+    return null;
   }
-
+  
   public int size() {
     // TODO(tsuna): There is a way of doing this way more efficiently by
     // inspecting the Spans and counting only data points that fall in
@@ -612,19 +606,27 @@ final class SpanGroup implements DataPoints {
       values = new long[size * (rate ? 3 : 2)];
       // Initialize every Iterator, fetch their first values that fall
       // within our time range.
+      int num_empty_spans = 0;
       for (int i = 0; i < size; i++) {
-        final SeekableView it =
-          (downsampler == null
-           ? spans.get(i).spanIterator()
-           : spans.get(i).downsampler(sample_interval, downsampler));
+        final SeekableView it;
+        if (downsampler == null) {
+          it = spans.get(i).spanIterator();
+        } else {
+          it = spans.get(i).downsampler(sample_interval, downsampler);
+        }
         iterators[i] = it;
         it.seek(start_time);
         final DataPoint dp;
         try {
           dp = it.next();
         } catch (NoSuchElementException e) {
-          throw new AssertionError("Span #" + i + " is empty! span="
-                                   + spans.get(i));
+          // It should be rare but could happen after downsampling when
+          // we throw away some data points at the beginning after aligning
+          // start time by downsmpling interval and there are no data points
+          // left for the current span.
+          ++num_empty_spans;
+          endReached(i);
+          continue;
         }
         //LOG.debug("Creating iterator #" + i);
         if (dp.timestamp() >= start_time) {
@@ -632,8 +634,10 @@ final class SpanGroup implements DataPoints {
           //          + dp.timestamp() + " >= " + start_time);
           putDataPoint(size + i, dp);
         } else {
-          //LOG.debug("No DP in range for #" + i + ": "
-          //          + dp.timestamp() + " < " + start_time);
+          if (LOG.isDebugEnabled()) {
+            LOG.debug(String.format("No DP in range for #%d: %d < %d", i,
+                                    dp.timestamp(), start_time));
+          }
           endReached(i);
           continue;
         }
@@ -644,6 +648,10 @@ final class SpanGroup implements DataPoints {
             endReached(i);
           }
         }
+      }
+      if (num_empty_spans > 0) {
+        LOG.debug(String.format("%d out of %d spans are empty!",
+                                num_empty_spans, size));
       }
     }
 
@@ -847,7 +855,6 @@ final class SpanGroup implements DataPoints {
     // Aggregator.Longs interface //
     // -------------------------- //
 
-    @Override
     public boolean hasNextValue() {
       return hasNextValue(false);
     }
@@ -955,7 +962,7 @@ final class SpanGroup implements DataPoints {
           final double difference;
           if (double_overflow) {
             final long diff = values[pos] - values[prev];
-            difference = diff;
+            difference = (double)(diff);
           } else {
             difference = y0 - y1;
           }
@@ -972,7 +979,7 @@ final class SpanGroup implements DataPoints {
               // TODO - for backwards compatibility we'll convert the ms to seconds
               // but in the future we should add a ratems flag that will calculate
               // the rate as is.
-              r = diff / ((double)(x0 - x1) / (double)1000);
+              r = (double)diff / ((double)(x0 - x1) / (double)1000);
             } else {
               // TODO - for backwards compatibility we'll convert the ms to seconds
               // but in the future we should add a ratems flag that will calculate
@@ -988,7 +995,7 @@ final class SpanGroup implements DataPoints {
             // + " -> " + y0 + " @ " + x0 + " => " + r);
             return r;
           }
-
+          
           // TODO - for backwards compatibility we'll convert the ms to seconds
           // but in the future we should add a ratems flag that will calculate
           // the rate as is.
@@ -1055,7 +1062,6 @@ final class SpanGroup implements DataPoints {
 
   }
 
-  @Override
   public String toString() {
     return "SpanGroup(" + toStringSharedAttributes()
       + ", spans=" + spans
