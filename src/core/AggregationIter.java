@@ -589,28 +589,6 @@ final class AggregationIter implements SeekableView, DataPoint,
       final double y0 = ((timestamps[pos] & FLAG_FLOAT) == FLAG_FLOAT
                          ? Double.longBitsToDouble(values[pos])
                          : values[pos]);
-      if (current == pos) {
-        //LOG.debug("Exact match, no lerp needed");
-        return y0;
-      }
-      final long x = timestamps[current] & TIME_MASK;
-      final long x0 = timestamps[pos] & TIME_MASK;
-      if (x == x0) {
-        //LOG.debug("No lerp needed x == x0 (" + x + " == "+x0+") => " + y0);
-        return y0;
-      }
-      final int next = pos + iterators.length;
-      final double y1 = ((timestamps[next] & FLAG_FLOAT) == FLAG_FLOAT
-                         ? Double.longBitsToDouble(values[next])
-                         : values[next]);
-      final long x1 = timestamps[next] & TIME_MASK;
-      if (x == x1) {
-        //LOG.debug("No lerp needed x == x1 (" + x + " == "+x1+") => " + y1);
-        return y1;
-      }
-      if ((x1 & Const.MILLISECOND_MASK) != 0) {
-        throw new AssertionError("x1=" + x1 + " in " + this);
-      }
       if (rate) {
         // No LERP for the rate. Just uses the rate of any previous timestamp.
         // If x0 is smaller than the current time stamp 'x', we just use
@@ -621,6 +599,29 @@ final class AggregationIter implements SeekableView, DataPoint,
         // timestamp 'x'.
         return y0;
       }
+      if (current == pos) {
+        LOG.debug("Exact match, no lerp needed");
+        return y0;
+      }
+      final long x = timestamps[current] & TIME_MASK;
+      final long x0 = timestamps[pos] & TIME_MASK;
+      if (x == x0) {
+        LOG.debug("No lerp needed x == x0 (" + x + " == "+x0+") => " + y0);
+        return y0;
+      }
+      final int next = pos + iterators.length;
+      final double y1 = ((timestamps[next] & FLAG_FLOAT) == FLAG_FLOAT
+                         ? Double.longBitsToDouble(values[next])
+                         : values[next]);
+      final long x1 = timestamps[next] & TIME_MASK;
+      if (x == x1) {
+        LOG.debug("No lerp needed x == x1 (" + x + " == "+x1+") => " + y1);
+        return y1;
+      }
+      if ((x1 & Const.MILLISECOND_MASK) != 0) {
+        throw new AssertionError("x1=" + x1 + " in " + this);
+      }
+
       final double r;
       switch (method) {
       case LERP:
