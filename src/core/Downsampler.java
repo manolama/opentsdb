@@ -18,7 +18,7 @@ import java.util.NoSuchElementException;
 /**
  * Iterator that downsamples data points using an {@link Aggregator}.
  */
-public class Downsampler implements SeekableView {
+public class Downsampler implements SeekableView, DataPoint {
 
   /** Function to use for downsampling. */
   private final Aggregator downsampler;
@@ -26,7 +26,9 @@ public class Downsampler implements SeekableView {
   private final ValuesInInterval values_in_interval;
   // NOTE: Uses MutableDoubleDataPoint to reduce memory allocation overhead.
   /** The current downsample result. */
-  private MutableDoubleDataPoint data_point = new MutableDoubleDataPoint();
+  //private MutableDoubleDataPoint data_point = new MutableDoubleDataPoint();
+  private long timestamp;
+  private double value;
 
   /**
    * Ctor.
@@ -42,18 +44,6 @@ public class Downsampler implements SeekableView {
     this.downsampler = downsampler;
   }
 
-  /**
-   * Downsamples for the current interval.
-   * @return A {@link DataPoint} as a downsample result.
-   */
-  private DataPoint downsample() {
-    double downsample_value = downsampler.runDouble(values_in_interval);
-    data_point.reset(values_in_interval.getIntervalTimestamp(),
-                     downsample_value);
-    values_in_interval.moveToNextInterval();
-    return data_point;
-  }
-
   // ------------------ //
   // Iterator interface //
   // ------------------ //
@@ -64,7 +54,19 @@ public class Downsampler implements SeekableView {
 
   public DataPoint next() {
     if (hasNext()) {
-      return downsample();
+      // get the value for the interval
+      value = downsampler.runDouble(values_in_interval);
+      
+      timestamp = values_in_interval.getIntervalTimestamp();
+
+//      data_point.reset(values_in_interval.getIntervalTimestamp(),
+//                       downsample_value);
+      
+      // reset iterator to the next interval bucket
+      values_in_interval.moveToNextInterval();
+      
+      // return the data
+      return this;
     }
     throw new NoSuchElementException("no more data points in " + this);
   }
@@ -87,13 +89,13 @@ public class Downsampler implements SeekableView {
     buf.append("Downsampler: ")
        .append("interval_ms=").append(values_in_interval.interval_ms)
        .append(", downsampler=").append(downsampler)
-       .append(", current data=(").append(data_point)
+       .append(", current data=(").append(value)
        .append("), values_in_interval=").append(values_in_interval);
    return buf.toString();
   }
 
   /** Iterates source values for an interval. */
-  private static class ValuesInInterval implements Aggregator.Doubles {
+  private static class ValuesInInterval implements Aggregator.Doubles, DataPoint {
 
     /** The iterator of original source values. */
     private final SeekableView source;
@@ -104,7 +106,10 @@ public class Downsampler implements SeekableView {
     /** True if the last value was successfully extracted from the source. */
     private boolean has_next_value_from_source = false;
     /** The last data point extracted from the source. */
-    private MutableDoubleDataPoint next_dp = new MutableDoubleDataPoint();
+    //private MutableDoubleDataPoint next_dp = new MutableDoubleDataPoint();
+    private DataPoint next_dp;
+//    private long timestamp;
+//    private double value;
 
     /** True if it is initialized for iterating intervals. */
     private boolean initialized = false;
@@ -136,7 +141,10 @@ public class Downsampler implements SeekableView {
     private void moveToNextValue() {
       if (source.hasNext()) {
         has_next_value_from_source = true;
-        next_dp.reset(source.next());
+        next_dp = source.next();
+//        timestamp = dp.timestamp();
+//        value = dp.toDouble();
+        //next_dp.reset(source.next());
       } else {
         has_next_value_from_source = false;
       }
@@ -148,8 +156,8 @@ public class Downsampler implements SeekableView {
      * interval. */
     private void resetEndOfInterval() {
       if (has_next_value_from_source) {
-        long timestamp = next_dp.timestamp();
-        timestamp_end_interval = calculateIntervalEndTimestamp(timestamp);
+        //long timestamp = next_dp.timestamp();
+        timestamp_end_interval = calculateIntervalEndTimestamp(next_dp.timestamp());
       }
     }
 
@@ -215,9 +223,9 @@ public class Downsampler implements SeekableView {
     @Override
     public double nextDoubleValue() {
       if (hasNextValue()) {
-        double value = next_dp.toDouble();
+        double v = next_dp.toDouble();
         moveToNextValue();
-        return value;
+        return v;
       }
       throw new NoSuchElementException("no more values in interval of "
           + timestamp_end_interval);
@@ -237,5 +245,60 @@ public class Downsampler implements SeekableView {
       buf.append(", source=").append(source);
       return buf.toString();
     }
+
+    @Override
+    public long timestamp() {
+      // TODO Auto-generated method stub
+      return next_dp.timestamp();
+    }
+
+    @Override
+    public boolean isInteger() {
+      // TODO Auto-generated method stub
+      return false;
+    }
+
+    @Override
+    public long longValue() {
+      // TODO Auto-generated method stub
+      return 0;
+    }
+
+    @Override
+    public double doubleValue() {
+      // TODO Auto-generated method stub
+      return next_dp.toDouble();
+    }
+
+    @Override
+    public double toDouble() {
+      // TODO Auto-generated method stub
+      return next_dp.toDouble();
+    }
+  }
+
+  @Override
+  public long timestamp() {
+    return timestamp;
+  }
+
+  @Override
+  public boolean isInteger() {
+    return false;
+  }
+
+  @Override
+  public long longValue() {
+    return 0;
+  }
+
+  @Override
+  public double doubleValue() {
+    return value;
+  }
+
+  @Override
+  public double toDouble() {
+    return value;
   }
 }
