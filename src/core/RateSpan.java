@@ -51,7 +51,7 @@ public class RateSpan implements SeekableView {
   @Override
   public boolean hasNext() {
     initializeIfNotDone();
-    return isValid(next_rate);
+    return next_rate.timestamp() < Long.MAX_VALUE;
   }
 
   /**
@@ -99,19 +99,12 @@ public class RateSpan implements SeekableView {
     // performance penalty by accessing the first data of a span.
     if (!initialized) {
       initialized = true;
-      setFirstRate();
+      // NOTE: Calculates the first rate between the time zero and the first
+      // data point for the backward compatibility.
+      // TODO: Don't compute the first rate with the time zero.
+      next_data.resetWithDoubleValue(0, 0);
+      populateNextRate();
     }
-  }
-
-  /**
-   * Sets the first rate to be retrieved.
-   */
-  private void setFirstRate() {
-    // NOTE: Calculates the first rate between the time zero and the first
-    // data point for the backward compatibility.
-    // TODO: Don't compute the first rate with the time zero.
-    next_data.resetWithDoubleValue(0, 0);
-    populateNextRate();
   }
 
   /**
@@ -122,76 +115,20 @@ public class RateSpan implements SeekableView {
     while (source.hasNext()) {
       prev_data.reset(next_data);
       next_data.reset(source.next());
-      if (next_data.timestamp() > prev_data.timestamp()) {
-        next_rate.reset(next_data.timestamp(), calculateRate(prev_data));
-      } else {
-        // Just use the existing one.
+      if (next_data.timestamp() <= prev_data.timestamp()) {
+        throw new AssertionError("Foobar!");
       }
+//      assert next_data.timestamp() > prev_data.timestamp(): 
+//        ("Next timestamp (" + next_data.timestamp() + ") is supposed to be "
+//          + " strictly greater than the previous one (" + 
+//            prev_data.timestamp() + "), but it's"
+//          + " not.  this=" + this);
+        next_rate.reset(next_data.timestamp(), calculateRate(prev_data));
       return;
     }
-    invalidateNextRate();
-  }
-
-  /** Invalidates the next rate with invalid timestamp and value. */
-  private void invalidateNextRate() {
     // The Long.MAX_VALUE timestamp means invalid value and works fine with
     // open-ended time ranges.
     next_rate.reset(Long.MAX_VALUE, 0);
-  }
-
-  /** @return True if the data point is valid. */
-  private boolean isValid(DataPoint dp) {
-    return dp.timestamp() < Long.MAX_VALUE;
-  }
-
-  /**
-   * Adjusts a counter rate considering a roll over.
-   * @param time_delta_secs time delta in seconds
-   * @param delta delta of values
-   * @return Adjusted rate
-   */
-  private double adjustCounterRateForRollOver(final double time_delta_secs,
-                                              final double delta) {
-    // Assumes the count was reset if the calculated rate is larger than
-    // the reset value, then returns 0 for the rate.
-    final double r = delta / time_delta_secs;
-    if (options.getResetValue() > RateOptions.DEFAULT_RESET_VALUE
-        && r > options.getResetValue()) {
-      return 0.0;
-    }
-    return r;
-  }
-
-  /**
-   * Calculates the difference of the previous and current values.
-   * @return a delta
-   */
-  private double calculateDelta(final MutableDataPoint prev_data) {
-    if (prev_data.isInteger() && next_data.isInteger()) {
-      // NOTE: Calculates in the long type to avoid precision loss
-      // while converting long values to double values if both values are long.
-      // NOTE: Ignores the integer overflow.
-      return next_data.longValue() - prev_data.longValue();
-    }
-    return next_data.toDouble() - prev_data.toDouble();
-  }
-
-  /**
-   * Adjusts a negative delta of a counter assuming there was a roll over
-   * in the current data value.
-   * @return a delta
-   */
-  private double adjustNegativeCounterDelta(final MutableDataPoint prev_data) {
-    // NOTE: Assumes a roll over of a counter if we found that a counter value
-    // was decreased while calculating a rate of changes for a counter.
-    if (prev_data.isInteger() && next_data.isInteger()) {
-      // NOTE: Calculates in the long type to avoid precision loss
-      // while converting long values to double values if both values are long.
-      return options.getCounterMax() - prev_data.longValue() +
-          next_data.longValue();
-    }
-    return options.getCounterMax() - prev_data.toDouble() +
-        next_data.toDouble();
   }
 
   /**
@@ -204,10 +141,36 @@ public class RateSpan implements SeekableView {
     // but in the future we should add a ratems flag that will calculate
     // the rate as is.
     final double time_delta_secs = ((double)(t1 - t0) / 1000.0);
-    double difference = calculateDelta(prev_data);
+    double difference;
+    if (prev_data.isInteger() && next_data.isInteger()) {
+      // NOTE: Calculates in the long type to avoid precision loss
+      // while converting long values to double values if both values are long.
+      // NOTE: Ignores the integer overflow.
+      difference = next_data.longValue() - prev_data.longValue();
+    }   else {
+      difference = next_data.toDouble() - prev_data.toDouble();
+    }
+    
     if (options.isCounter() && difference < 0) {
-      difference = adjustNegativeCounterDelta(prev_data);
-      return adjustCounterRateForRollOver(time_delta_secs, difference);
+      // NOTE: Assumes a roll over of a counter if we found that a counter value
+      // was decreased while calculating a rate of changes for a counter.
+      if (prev_data.isInteger() && next_data.isInteger()) {
+        // NOTE: Calculates in the long type to avoid precision loss
+        // while converting long values to double values if both values are long.
+        difference = options.getCounterMax() - prev_data.longValue() +
+            next_data.longValue();
+      } else {
+        difference = options.getCounterMax() - prev_data.toDouble() +
+            next_data.toDouble();
+      }
+      // Assumes the count was reset if the calculated rate is larger than
+      // the reset value, then returns 0 for the rate.
+      final double r = time_delta_secs / time_delta_secs;
+      if (options.getResetValue() > RateOptions.DEFAULT_RESET_VALUE
+          && r > options.getResetValue()) {
+        return 0.0;
+      }
+      return r;
     } else {
       return difference / time_delta_secs;
     }
