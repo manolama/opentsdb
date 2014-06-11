@@ -56,7 +56,7 @@ public class TestDownsampler {
   public void setup() {
     source = spy(SeekableViewsForTest.fromArray(DATA_POINTS));
   }
-
+  
   @Test
   public void testDownsampler() {
     downsampler = new Downsampler(source, THOUSAND_SEC_INTERVAL, AVG);
@@ -83,6 +83,13 @@ public class TestDownsampler {
     assertEquals(BASE_TIME + 8600000L, timestamps_in_millis.get(4).longValue());
   }
 
+  @Test
+  public void emptySet() {
+    source = spy(SeekableViewsForTest.fromArray(new DataPoint[]{}));
+    downsampler = new Downsampler(source, THOUSAND_SEC_INTERVAL, AVG);
+    assertFalse(downsampler.hasNext());
+  }
+  
   @Test
   public void testDownsampler_10seconds() {
     source = spy(SeekableViewsForTest.fromArray(new DataPoint[] {
@@ -146,7 +153,7 @@ public class TestDownsampler {
     }
 
     assertEquals(4, values.size());
-    assertEquals(1, values.get(0).longValue());
+    assertEquals(1, values.get(0), 0.0001);
     assertEquals(BASE_TIME + 00000L, timestamps_in_millis.get(0).longValue());
     assertEquals(6, values.get(1).longValue());
     assertEquals(BASE_TIME + 15000L, timestamps_in_millis.get(1).longValue());
@@ -164,7 +171,7 @@ public class TestDownsampler {
   @Test
   public void testSeek() {
     downsampler = new Downsampler(source, THOUSAND_SEC_INTERVAL, AVG);
-    downsampler.seek(BASE_TIME + 3600000L);
+    downsampler.seek(BASE_TIME + 4800000L);
     verify(source, never()).next();
     List<Double> values = Lists.newArrayList();
     List<Long> timestamps_in_millis = Lists.newArrayList();
@@ -175,13 +182,13 @@ public class TestDownsampler {
       timestamps_in_millis.add(dp.timestamp());
     }
 
-    assertEquals(3, values.size());
-    assertEquals(45, values.get(0).longValue());
-    assertEquals(BASE_TIME + 3600000L, timestamps_in_millis.get(0).longValue());
-    assertEquals(40, values.get(1).longValue());
-    assertEquals(BASE_TIME + 6600000L, timestamps_in_millis.get(1).longValue());
-    assertEquals(50, values.get(2).longValue());
-    assertEquals(BASE_TIME + 8600000L, timestamps_in_millis.get(2).longValue());
+    assertEquals(2, values.size());
+    //assertEquals(45, values.get(0).longValue());
+    //assertEquals(BASE_TIME + 3600000L, timestamps_in_millis.get(0).longValue());
+    assertEquals(40, values.get(0).longValue());
+    assertEquals(BASE_TIME + 6600000L, timestamps_in_millis.get(0).longValue());
+    assertEquals(50, values.get(1).longValue());
+    assertEquals(BASE_TIME + 8600000L, timestamps_in_millis.get(1).longValue());
   }
 
   @Test
