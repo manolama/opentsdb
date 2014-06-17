@@ -177,6 +177,7 @@ test_SRC := \
 	test/tsd/TestUniqueIdRpc.java	\
 	test/uid/TestNoSuchUniqueId.java	\
 	test/uid/TestUniqueId.java \
+	test/utils/TestByteArrayPair.java \
 	test/utils/TestConfig.java \
 	test/utils/TestDateTime.java \
 	test/utils/TestJSON.java \
