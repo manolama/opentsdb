@@ -12,12 +12,14 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
+import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.AbstractMap.SimpleEntry;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,6 +97,36 @@ public final class Tags {
   }
 
   /**
+   * Parses a tag into a list of key/value pairs, allowing nulls for either
+   * value.
+   * @param tags The list into which the parsed tag should be stored
+   * @param tag A string of the form "tag=value" or "=value" or "tag="
+   * @throws IllegalArgumentException if the tag is malformed.
+   * @since 2.1
+   */
+  public static void parse(final List<Map.Entry<String, String>> tags,
+      final String tag) {
+    if (tag == null || tag.isEmpty()) {
+      throw new IllegalArgumentException("Missing tag pair");
+    }
+    if (tag.charAt(0) == '=') {
+      tags.add(new AbstractMap.SimpleEntry<String, String>(null, 
+          tag.substring(1)));
+      return;
+    } else if (tag.charAt(tag.length() - 1) == '=') {
+      tags.add(new AbstractMap.SimpleEntry<String, String>(
+          tag.substring(0, tag.length() - 1), null));
+      return;
+    }
+    
+    final String[] kv = splitString(tag, '=');
+    if (kv.length != 2 || kv[0].length() <= 0 || kv[1].length() <= 0) {
+      throw new IllegalArgumentException("invalid tag: " + tag);
+    }
+    tags.add(new AbstractMap.SimpleEntry<String, String>(kv[0], kv[1]));
+  }
+    
+  /**
    * Parses the metric and tags out of the given string.
    * @param metric A string of the form "metric" or "metric{tag=value,...}".
    * @param tags The map to populate with the tags parsed out of the first
@@ -128,6 +160,51 @@ public final class Tags {
     return metric.substring(0, curly);
   }
 
+  /**
+   * Parses an optional metric and tags out of the given string, any of
+   * which may be null. Requires at least one metric, tagk or tagv.
+   * @param metric A string of the form "metric" or "metric{tag=value,...}"
+   * or even "{tag=value,...}" where the metric may be missing.
+   * @param tags The list to populate with parsed tag pairs
+   * @return The name of the metric if it exists, null otherwise
+   * @throws IllegalArgumentException if the metric is malformed.
+   * @since 2.1
+   */
+  public static String parseWithMetric(final String metric,
+      final List<Map.Entry<String, String>> tags) {
+    final int curly = metric.indexOf('{');
+    if (curly < 0) {
+      if (metric.isEmpty()) {
+        throw new IllegalArgumentException("Metric string was empty");
+      }
+      return metric;
+    }
+    final int len = metric.length();
+    if (metric.charAt(len - 1) != '}') {  // "foo{"
+      throw new IllegalArgumentException("Missing '}' at the end of: " + metric);
+    } else if (curly == len - 2) {  // "foo{}"
+      if (metric.charAt(0) == '{') {
+        throw new IllegalArgumentException("Missing metric and tags: " + metric);
+      }
+      return metric.substring(0, len - 2);
+    }
+    // substring the tags out of "foo{a=b,...,x=y}" and parse them.
+    for (final String tag : splitString(metric.substring(curly + 1, len - 1),
+           ',')) {
+    try {
+      parse(tags, tag);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException("When parsing tag '" + tag
+                + "': " + e.getMessage());
+      }
+    }
+    // Return the "foo" part of "foo{a=b,...,x=y}"
+    if (metric.charAt(0) == '{') {
+      return null;
+    }
+    return metric.substring(0, curly);
+  }
+  
   /**
    * Parses an integer value as a long from the given character sequence.
    * <p>
