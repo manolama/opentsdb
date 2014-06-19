@@ -374,17 +374,18 @@ final class SpanGroup implements DataPoints {
   }
 
   private SeekableView newAggregationIter(long downsample_interval_ms) {
-    return AggregationIter.create(spans, start_time, end_time, aggregator,
-                                  aggregator.interpolationMethod(),
-                                  downsampler, downsample_interval_ms,
-                                  rate, rate_options);
+    return AggregationIterator.create(spans, start_time, end_time, aggregator,
+                                      aggregator.interpolationMethod(),
+                                      downsampler, downsample_interval_ms,
+                                      rate, rate_options);
   }
 
   public SeekableView iterator() {
     if (downsampler == null) {
       // NOTE: downsample interval will be ignored unless there is a downsampler.
       return newAggregationIter(0);
-    } if (sample_interval <= regular_interval_ms) {
+    }
+    if (sample_interval <= regular_interval_ms) {
       // Honors the given sample interval if it is too small.
       return newAggregationIter(sample_interval);
     } else {
