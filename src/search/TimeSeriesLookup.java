@@ -26,7 +26,9 @@ import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
 import net.opentsdb.utils.ByteArrayPair;
+import net.opentsdb.utils.Pair;
 
+import org.hbase.async.Bytes;
 import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
 import org.slf4j.Logger;
@@ -41,14 +43,8 @@ public class TimeSeriesLookup {
   private static final Logger LOG = 
       LoggerFactory.getLogger(TimeSeriesLookup.class);
   
-  /** The metric to iterate over, may be null */
-  private final String metric;
-  
-  /** Optional tags to match on, may be null */
-  private final List<Map.Entry<String, String>> tags;
-  
-  /** Whether or not to use the tsdb-meta table for lookups. Defaults to true */
-  private boolean use_meta;
+  /** The query with metrics and/or tags to use */
+  private final SearchQuery query;
   
   /** Whether or not to dump the output to standard out for CLI commands */
   private boolean to_stdout;
@@ -62,12 +58,9 @@ public class TimeSeriesLookup {
    * @param metric A metric to match on, may be null
    * @param tags One or more tags to match on, may be null
    */
-  public TimeSeriesLookup(final TSDB tsdb, final String metric, 
-      final List<Map.Entry<String, String>> tags) {
+  public TimeSeriesLookup(final TSDB tsdb, final SearchQuery query) {
     this.tsdb = tsdb;
-    this.metric = metric;
-    this.tags = tags;
-    use_meta = true;
+    this.query = query;
   }
   
   /**
@@ -82,23 +75,31 @@ public class TimeSeriesLookup {
    * UID.
    */
   public List<byte[]> lookup() {
+    LOG.info(query.toString());
     final Scanner scanner = getScanner();
     final List<byte[]> tsuids = new ArrayList<byte[]>();
     // we don't really know what size the UIDs will resolve to so just grab
     // a decent amount.
     final StringBuffer buf = to_stdout ? new StringBuffer(2048) : null;
     ArrayList<ArrayList<KeyValue>> rows;
+    final long start = System.currentTimeMillis();
+    byte[] last_tsuid = null; // used to avoid dupes when scanning the data table
     
     try {
       // synchronous to avoid stack overflows when scanning across the main data
       // table.
       while ((rows = scanner.nextRows().joinUninterruptibly()) != null) {
         for (final ArrayList<KeyValue> row : rows) {
-          final byte[] tsuid = use_meta ? row.get(0).key() : 
+          final byte[] tsuid = query.useMeta() ? row.get(0).key() : 
             UniqueId.getTSUIDFromKey(row.get(0).key(), TSDB.metrics_width(), 
                 Const.TIMESTAMP_BYTES);
           
           if (to_stdout) {
+            if (last_tsuid != null && Bytes.memcmp(last_tsuid, tsuid) == 0) {
+              continue;
+            }
+            last_tsuid = tsuid;
+            
             try {
               buf.append(UniqueId.uidToString(tsuid)).append(" ");
               buf.append(RowKey.metricNameAsync(tsdb, tsuid)
@@ -130,6 +131,8 @@ public class TimeSeriesLookup {
       scanner.close();
     }
     
+    LOG.debug("Lookup query matched " + tsuids.size() + " time series in " +
+        (System.currentTimeMillis() - start) + " ms");
     return tsuids;
   }
   
@@ -142,14 +145,15 @@ public class TimeSeriesLookup {
    */
   protected Scanner getScanner() {
     final Scanner scanner = tsdb.getClient().newScanner(
-        use_meta ? tsdb.metaTable() : tsdb.dataTable());
+        query.useMeta() ? tsdb.metaTable() : tsdb.dataTable());
     
     // if a metric is given, we need to resolve it's UID and set the start key
     // to the UID and the stop key to the next row by incrementing the UID. 
-    if (metric != null && !metric.isEmpty()) {
-      final byte[] metric_uid = tsdb.getUID(UniqueIdType.METRIC, metric);
+    if (query.getMetric() != null && !query.getMetric().isEmpty()) {
+      final byte[] metric_uid = tsdb.getUID(UniqueIdType.METRIC, 
+          query.getMetric());
       LOG.debug("Found UID (" + UniqueId.uidToString(metric_uid) + 
-        ") for metric (" + metric + ")");
+        ") for metric (" + query.getMetric() + ")");
       scanner.setStartKey(metric_uid);
       long uid = UniqueId.uidToLong(metric_uid, TSDB.metrics_width());
       uid++; // TODO - see what happens when this rolls over
@@ -162,9 +166,10 @@ public class TimeSeriesLookup {
     // val, null <- lookup all series with a tagk
     // val, val  <- lookup all series with a tag pair
     // null, val <- lookup all series with a tag value somewhere
-    if (tags != null && !tags.isEmpty()) {
-      final List<ByteArrayPair> pairs = new ArrayList<ByteArrayPair>(tags.size());
-      for (Map.Entry<String, String> tag : tags) {
+    if (query.getTags() != null && !query.getTags().isEmpty()) {
+      final List<ByteArrayPair> pairs = 
+          new ArrayList<ByteArrayPair>(query.getTags().size());
+      for (Pair<String, String> tag : query.getTags()) {
         final byte[] tagk = tag.getKey() != null ? 
             tsdb.getUID(UniqueIdType.TAGK, tag.getKey()) : null;
         final byte[] tagv = tag.getValue() != null ?
@@ -188,7 +193,7 @@ public class TimeSeriesLookup {
              * (pairs.size())));
       buf.append("(?s)^.{").append(TSDB.metrics_width())
          .append("}");
-      if (!use_meta) {
+      if (!query.useMeta()) {
         buf.append("(?:.{").append(Const.TIMESTAMP_BYTES).append("})*");
       }
       buf.append("(?:.{").append(tagsize).append("})*");
@@ -215,6 +220,7 @@ public class TimeSeriesLookup {
       buf.append("$");
       
       scanner.setKeyRegexp(buf.toString(), Charset.forName("ISO-8859-1"));
+      LOG.debug(buf.toString());
     }
     return scanner;
   }
@@ -238,11 +244,6 @@ public class TimeSeriesLookup {
     }
   }
 
-  /** @param use_meta Whether we use the meta or data tables for lookups */
-  public void setUseMeta(final boolean use_meta) {
-    this.use_meta = use_meta;
-  }
-  
   /** @param to_stdout Whether or not to dump to standard out as we scan */
   public void setToStdout(final boolean to_stdout) {
     this.to_stdout = to_stdout;
