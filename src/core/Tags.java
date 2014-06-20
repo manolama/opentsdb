@@ -12,14 +12,12 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
-import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.AbstractMap.SimpleEntry;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +29,7 @@ import org.hbase.async.Bytes;
 
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
+import net.opentsdb.utils.Pair;
 
 /** Helper functions to deal with tags. */
 public final class Tags {
@@ -104,18 +103,16 @@ public final class Tags {
    * @throws IllegalArgumentException if the tag is malformed.
    * @since 2.1
    */
-  public static void parse(final List<Map.Entry<String, String>> tags,
+  public static void parse(final List<Pair<String, String>> tags,
       final String tag) {
-    if (tag == null || tag.isEmpty()) {
+    if (tag == null || tag.isEmpty() || tag.length() < 2) {
       throw new IllegalArgumentException("Missing tag pair");
     }
     if (tag.charAt(0) == '=') {
-      tags.add(new AbstractMap.SimpleEntry<String, String>(null, 
-          tag.substring(1)));
+      tags.add(new Pair<String, String>(null, tag.substring(1)));
       return;
     } else if (tag.charAt(tag.length() - 1) == '=') {
-      tags.add(new AbstractMap.SimpleEntry<String, String>(
-          tag.substring(0, tag.length() - 1), null));
+      tags.add(new Pair<String, String>(tag.substring(0, tag.length() - 1), null));
       return;
     }
     
@@ -123,7 +120,7 @@ public final class Tags {
     if (kv.length != 2 || kv[0].length() <= 0 || kv[1].length() <= 0) {
       throw new IllegalArgumentException("invalid tag: " + tag);
     }
-    tags.add(new AbstractMap.SimpleEntry<String, String>(kv[0], kv[1]));
+    tags.add(new Pair<String, String>(kv[0], kv[1]));
   }
     
   /**
@@ -171,7 +168,7 @@ public final class Tags {
    * @since 2.1
    */
   public static String parseWithMetric(final String metric,
-      final List<Map.Entry<String, String>> tags) {
+      final List<Pair<String, String>> tags) {
     final int curly = metric.indexOf('{');
     if (curly < 0) {
       if (metric.isEmpty()) {

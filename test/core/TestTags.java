@@ -16,12 +16,12 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import net.opentsdb.storage.MockBase;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.utils.Config;
+import net.opentsdb.utils.Pair;
 
 import org.hbase.async.DeleteRequest;
 import org.hbase.async.GetRequest;
@@ -189,8 +189,8 @@ public final class TestTags {
 
   @Test
   public void parseWithMetricListMetricOnly() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(0);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(0);
     final String metric = Tags.parseWithMetric("sys.cpu.user", tags);
     assertEquals("sys.cpu.user", metric);
     assertEquals(0, tags.size());
@@ -198,8 +198,8 @@ public final class TestTags {
   
   @Test
   public void parseWithMetricListMetricEmptyCurlies() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(0);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(0);
     final String metric = Tags.parseWithMetric("sys.cpu.user{}", tags);
     assertEquals("sys.cpu.user", metric);
     assertEquals(0, tags.size());
@@ -207,8 +207,8 @@ public final class TestTags {
   
   @Test
   public void parseWithMetricListNullMetric() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(1);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(1);
     final String metric = Tags.parseWithMetric("{host=}", tags);
     assertNull(metric);
     assertEquals(1, tags.size());
@@ -218,8 +218,8 @@ public final class TestTags {
   
   @Test
   public void parseWithMetricListNullTagv() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(1);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(1);
     final String metric = Tags.parseWithMetric("sys.cpu.user{host=}", tags);
     assertEquals("sys.cpu.user", metric);
     assertEquals(1, tags.size());
@@ -229,7 +229,7 @@ public final class TestTags {
   
   @Test
   public void parseWithMetricListNullTagk() {
-    final List<Map.Entry<String, String>> tags = new ArrayList<Map.Entry<String, String>>(1);
+    final List<Pair<String, String>> tags = new ArrayList<Pair<String, String>>(1);
     final String metric = Tags.parseWithMetric("sys.cpu.user{=web01}", tags);
     assertEquals("sys.cpu.user", metric);
     assertEquals(1, tags.size());
@@ -239,8 +239,8 @@ public final class TestTags {
   
   @Test
   public void parseWithMetricListWTag() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(1);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(1);
     final String metric = Tags.parseWithMetric("sys.cpu.user{host=web01}", tags);
     assertEquals("sys.cpu.user", metric);
     assertEquals(1, tags.size());
@@ -250,8 +250,8 @@ public final class TestTags {
   
   @Test
   public void parseWithMetricListNullTagv2() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(2);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(2);
     final String metric = Tags.parseWithMetric("sys.cpu.user{host=web01,dc=}", 
         tags);
     assertEquals("sys.cpu.user", metric);
@@ -264,8 +264,8 @@ public final class TestTags {
   
   @Test
   public void parseWithMetricListNullTagk2() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(2);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(2);
     final String metric = Tags.parseWithMetric("sys.cpu.user{host=web01,=lga}", 
         tags);
     assertEquals("sys.cpu.user", metric);
@@ -278,8 +278,8 @@ public final class TestTags {
   
   @Test
   public void parseWithMetricListNullTagv3() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(3);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(3);
     final String metric = Tags.parseWithMetric("sys.cpu.user{host=web01,dc=,=root}", 
         tags);
     assertEquals("sys.cpu.user", metric);
@@ -294,8 +294,8 @@ public final class TestTags {
   
   @Test
   public void parseWithMetricListNullTagk3() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(3);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(3);
     final String metric = Tags.parseWithMetric("sys.cpu.user{host=web01,=lga,owner=}", 
         tags);
     assertEquals("sys.cpu.user", metric);
@@ -310,22 +310,22 @@ public final class TestTags {
   
   @Test (expected = NullPointerException.class)
   public void parseWithMetricListNull() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(0);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(0);
     Tags.parseWithMetric(null, tags);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseWithMetricListEmpty() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(0);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(0);
     Tags.parseWithMetric("", tags);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseWithMetricListMissingClosingCurly() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(0);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(0);
     Tags.parseWithMetric("sys.cpu.user{host=web01", tags);
   }
 
@@ -333,38 +333,44 @@ public final class TestTags {
   // a UID lookup so it will toss an exception then.
   @Test
   public void parseWithMetricListMissingOpeningCurly() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(0);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(0);
     assertEquals("sys.cpu.user host=web01}",
         Tags.parseWithMetric("sys.cpu.user host=web01}", tags));
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseWithMetricListMissingEquals() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(0);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(0);
     Tags.parseWithMetric("sys.cpu.user{hostweb01}", tags);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseWithMetricListMissingComma() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(0);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(0);
     Tags.parseWithMetric("sys.cpu.user{host=web01 dc=lga}", tags);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void parseWithMetricListTrailingComma() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(0);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(0);
     Tags.parseWithMetric("sys.cpu.user{host=web01,}", tags);
   }
 
   @Test (expected = IllegalArgumentException.class)
   public void parseWithMetricListForwardComma() {
-    final List<Map.Entry<String, String>> tags = 
-        new ArrayList<Map.Entry<String, String>>(0);
+    final List<Pair<String, String>> tags = 
+        new ArrayList<Pair<String, String>>(0);
     Tags.parseWithMetric("sys.cpu.user{,host=web01}", tags);
+  }
+  
+  @Test (expected = IllegalArgumentException.class)
+  public void parseWithMetricOnlyEquals() {
+    final HashMap<String, String> tags = new HashMap<String, String>(0);
+    Tags.parseWithMetric("{=}", tags);
   }
   
   @Test
