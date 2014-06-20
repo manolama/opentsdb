@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import net.opentsdb.core.Const;
 import net.opentsdb.core.RowKey;
@@ -37,11 +38,44 @@ import org.slf4j.LoggerFactory;
 /**
  * Lookup series related to a metric, tagk, tagv or any combination thereof.
  * This class doesn't handle wild-card searching yet.
+ * 
+ * When dealing with tags, we can lookup on tagks, tagvs or pairs. Thus:
+ * tagk, null  <- lookup all series with a tagk
+ * tagk, tagv  <- lookup all series with a tag pair
+ * null, tagv  <- lookup all series with a tag value somewhere
+ * 
+ * The user can supply multiple tags in a query so the logic is a little goofy
+ * but here it is:
+ * - Different tagks are AND'd, e.g. given "host=web01 dc=lga" we will lookup
+ *   series that contain both of those tag pairs. Also when given "host= dc="
+ *   then we lookup series with both tag keys regardless of their values.
+ * - Tagks without a tagv will override tag pairs. E.g. "host=web01 host=" will
+ *   return all series with the "host" tagk.
+ * - Tagvs without a tagk are OR'd. Given "=lga =phx" the lookup will fetch 
+ *   anything with either "lga" or "phx" as the value for a pair. When combined
+ *   with a tagk, e.g. "host=web01 =lga" then it will return any series with the
+ *   tag pair AND any tag with the "lga" value.
+ *  
+ * To avoid running performance degrading regexes in HBase regions, we'll double
+ * filter when necessary. If tagks are present, those are used in the rowkey 
+ * filter and a secondary filter is applied in the TSD with remaining tagvs.
+ * E.g. the query "host=web01 =lga" will issue a rowkey filter with "host=web01"
+ * then within the TSD scanner, we'll filter out only the rows that contain an
+ * "lga" tag value. We don't know where in a row key the tagv may fall, so we
+ * would have to first match on the pair, then backtrack to find the value and 
+ * make sure the pair is skipped. Thus its easier on the region server to execute
+ * a simpler rowkey regex, pass all the results to the TSD, then let us filter on
+ * tag values only when necessary. (if a query only has tag values, then this is
+ * moot and we can pass them in a rowkey filter since they're OR'd).
+ * 
  * @since 2.1
  */
 public class TimeSeriesLookup {
   private static final Logger LOG = 
       LoggerFactory.getLogger(TimeSeriesLookup.class);
+  
+  /** Charset used to convert Strings to byte arrays and back. */
+  private static final Charset CHARSET = Charset.forName("ISO-8859-1");
   
   /** The query with metrics and/or tags to use */
   private final SearchQuery query;
@@ -76,13 +110,17 @@ public class TimeSeriesLookup {
    */
   public List<byte[]> lookup() {
     LOG.info(query.toString());
-    final Scanner scanner = getScanner();
+    final StringBuilder tagv_filter = new StringBuilder();
+    final Scanner scanner = getScanner(tagv_filter);
     final List<byte[]> tsuids = new ArrayList<byte[]>();
+    final Pattern tagv_regex = tagv_filter.length() > 1 ? 
+        Pattern.compile(tagv_filter.toString()) : null;
     // we don't really know what size the UIDs will resolve to so just grab
     // a decent amount.
     final StringBuffer buf = to_stdout ? new StringBuffer(2048) : null;
-    ArrayList<ArrayList<KeyValue>> rows;
     final long start = System.currentTimeMillis();
+    
+    ArrayList<ArrayList<KeyValue>> rows;
     byte[] last_tsuid = null; // used to avoid dupes when scanning the data table
     
     try {
@@ -93,6 +131,13 @@ public class TimeSeriesLookup {
           final byte[] tsuid = query.useMeta() ? row.get(0).key() : 
             UniqueId.getTSUIDFromKey(row.get(0).key(), TSDB.metrics_width(), 
                 Const.TIMESTAMP_BYTES);
+          
+          // TODO - there MUST be a better way than creating a ton of temp
+          // string objects.
+          if (tagv_regex != null && 
+              !tagv_regex.matcher(new String(tsuid, CHARSET)).find()) {
+            continue;
+          }
           
           if (to_stdout) {
             if (last_tsuid != null && Bytes.memcmp(last_tsuid, tsuid) == 0) {
@@ -143,7 +188,7 @@ public class TimeSeriesLookup {
    * given then we setup a row key regex
    * @return A configured scanner
    */
-  protected Scanner getScanner() {
+  private Scanner getScanner(final StringBuilder tagv_filter) {
     final Scanner scanner = tsdb.getClient().newScanner(
         query.useMeta() ? tsdb.metaTable() : tsdb.dataTable());
     
@@ -162,10 +207,6 @@ public class TimeSeriesLookup {
       LOG.debug("Performing full table scan, no metric provided");
     }
     
-    // When building the regex, we can search for tagks, tagvs or pairs. Thus:
-    // val, null <- lookup all series with a tagk
-    // val, val  <- lookup all series with a tag pair
-    // null, val <- lookup all series with a tag value somewhere
     if (query.getTags() != null && !query.getTags().isEmpty()) {
       final List<ByteArrayPair> pairs = 
           new ArrayList<ByteArrayPair>(query.getTags().size());
@@ -184,43 +225,99 @@ public class TimeSeriesLookup {
       final short value_width = TSDB.tagv_width();
       final short tagsize = (short) (name_width + value_width);
       
-      // our regex may wind up something like this:
-      //(?s)^.{3}(?:.{6})*\\Q\000\000\001\000\000\003\\E(?:.{6})*
-      //                  \\Q\000\000\002\\E(?:.{3})+(?:.{6})*$
+      int index = 0;
       final StringBuilder buf = new StringBuilder(
           22  // "^.{N}" + "(?:.{M})*" + "$" + wiggle
           + ((13 + tagsize) // "(?:.{M})*\\Q" + tagsize bytes + "\\E"
              * (pairs.size())));
       buf.append("(?s)^.{").append(TSDB.metrics_width())
-         .append("}");
+        .append("}");
       if (!query.useMeta()) {
         buf.append("(?:.{").append(Const.TIMESTAMP_BYTES).append("})*");
       }
       buf.append("(?:.{").append(tagsize).append("})*");
       
-      for (final ByteArrayPair pair : pairs) {
-        if (pair.getKey() != null && pair.getValue() != null) {
-          buf.append("\\Q");
-          addId(buf, pair.getKey());
-          addId(buf, pair.getValue());
-          buf.append("\\E");
-        } else if (pair.getKey() == null) {
-          buf.append("(?:.{3})+");
-          buf.append("\\Q");
-          addId(buf, pair.getValue());
-          buf.append("\\E");
-        } else {
-          buf.append("\\Q");
-          addId(buf, pair.getKey());
-          buf.append("\\E");
-          buf.append("(?:.{3})+");
+      // at the top of the list will be the null=tagv pairs. We want to compile
+      // a separate regex for them.
+      for (; index < pairs.size(); index++) {
+        LOG.debug("tagv Pair: " + pairs.get(index));
+        if (pairs.get(index).getKey() != null) {
+          break;
         }
-        buf.append("(?:.{6})*"); // catch tag pairs in between
+        
+        if (index > 0) {
+          buf.append("|");
+        }
+        buf.append("(?:.{").append(name_width).append("})");
+        buf.append("\\Q");
+        addId(buf, pairs.get(index).getValue());
+        buf.append("\\E");
       }
-      buf.append("$");
+      buf.append("(?:.{").append(tagsize).append("})*")
+         .append("$");
       
-      scanner.setKeyRegexp(buf.toString(), Charset.forName("ISO-8859-1"));
-      LOG.debug(buf.toString());
+      if (index > 0 && index < pairs.size()) {
+        // we had one or more tagvs to lookup AND we have tagk or tag pairs to
+        // filter on, so we dump the previous regex into the tagv_filter and
+        // continue on with a row key
+        tagv_filter.append(buf.toString());
+        LOG.debug("Setting tagv filter: " + buf.toString());
+      } else if (index >= pairs.size()) {
+        // in this case we don't have any tagks to deal with so we can just
+        // pass the previously compiled regex to the rowkey filter of the 
+        // scanner
+        scanner.setKeyRegexp(buf.toString(), CHARSET);
+        LOG.debug("Setting scanner row key filter with tagvs only: " + 
+            buf.toString());
+      }
+      
+      // catch any left over tagk/tag pairs
+      if (index < pairs.size()){
+        buf.setLength(0);
+        buf.append("(?s)^.{").append(TSDB.metrics_width())
+           .append("}");
+        if (!query.useMeta()) {
+          buf.append("(?:.{").append(Const.TIMESTAMP_BYTES).append("})*");
+        }
+        
+        ByteArrayPair last_pair = null;
+        for (; index < pairs.size(); index++) {
+          LOG.debug("tagk Pair: " + pairs.get(index));
+          if (last_pair != null && last_pair.getValue() == null &&
+              Bytes.memcmp(last_pair.getKey(), pairs.get(index).getKey()) == 0) {
+            // tagk=null is a wildcard so we don't need to bother adding 
+            // tagk=tagv pairs with the same tagk.
+            LOG.debug("Skipping pair due to wildcard: " + pairs.get(index));
+          } else if (last_pair != null && 
+              Bytes.memcmp(last_pair.getKey(), pairs.get(index).getKey()) == 0) {
+            // in this case we're ORing e.g. "host=web01|host=web02"
+            buf.append("|\\Q");
+            addId(buf, pairs.get(index).getKey());
+            addId(buf, pairs.get(index).getValue());
+            buf.append("\\E");
+          } else {
+            // moving on to the next tagk set
+            buf.append("(?:.{6})*"); // catch tag pairs in between
+            if (pairs.get(index).getKey() != null && 
+                pairs.get(index).getValue() != null) {
+              buf.append("\\Q");
+              addId(buf, pairs.get(index).getKey());
+              addId(buf, pairs.get(index).getValue());
+              buf.append("\\E");
+            } else {
+              buf.append("\\Q");
+              addId(buf, pairs.get(index).getKey());
+              buf.append("\\E");
+              buf.append("(?:.{").append(value_width).append("})+");
+            }
+          }
+          last_pair = pairs.get(index);
+        }
+        buf.append("(?:.{").append(tagsize).append("})*").append("$");
+        
+        scanner.setKeyRegexp(buf.toString(), CHARSET);
+        LOG.debug("Setting scanner row key filter: " + buf.toString());
+      }
     }
     return scanner;
   }
