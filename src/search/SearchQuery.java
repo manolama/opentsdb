@@ -129,14 +129,16 @@ public class SearchQuery {
     buf.append("type=").append(type).append(", query=")
        .append(query).append(", metric=").append(metric)
        .append(", tags=[");
-    for(int i = 0; i < tags.size(); i++) {
-      if (i > 0) {
-        buf.append(", ");
+    if (tags != null) {
+      for(int i = 0; i < tags.size(); i++) {
+        if (i > 0) {
+          buf.append(", ");
+        }
+        buf.append("{").append(tags.get(i).getKey()).append("=")
+           .append(tags.get(i).getValue()).append("}");
       }
-      buf.append("{").append(tags.get(i).getKey()).append("=")
-         .append(tags.get(i).getValue()).append("}");
     }
-    buf.append(", use_meta=").append(use_meta)
+    buf.append("], use_meta=").append(use_meta)
        .append(", limit=").append(limit).append(", start_index=")
        .append(start_index);
     return buf.toString();
