@@ -12,9 +12,12 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.utils;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,9 +29,11 @@ public class TestByteArrayPair {
   final byte[] key = new byte[] { 1 };
   final byte[] val = new byte[] { 2 };
   final byte[] val2 = new byte[] { 3 };
-  
+  final byte[] set1 = new byte[] { 1, 2, 3 };
+  final byte[] set2 = new byte[] { 1, 2, 4 };
+
   @Test
-  public void setBoth() {
+  public void defaultCtor() {
     final ByteArrayPair pair = new ByteArrayPair(key, val);
     assertNotNull(pair);
     assertArrayEquals(key, pair.getKey());
@@ -36,7 +41,7 @@ public class TestByteArrayPair {
   }
   
   @Test
-  public void nullKey() {
+  public void defaultCtorNullKey() {
     final ByteArrayPair pair = new ByteArrayPair(null, val);
     assertNotNull(pair);
     assertNull(pair.getKey());
@@ -44,16 +49,113 @@ public class TestByteArrayPair {
   }
   
   @Test
-  public void nullValue() {
+  public void defaultCtorNullValue() {
     final ByteArrayPair pair = new ByteArrayPair(key, null);
     assertNotNull(pair);
     assertArrayEquals(key, pair.getKey());
     assertNull(pair.getValue());
   }
   
-  @Test (expected = IllegalArgumentException.class)
-  public void bothNull() {
-    new ByteArrayPair(null, null);
+  @Test
+  public void defaultCtorBothNull() {
+    final ByteArrayPair pair = new ByteArrayPair(null, null);
+    assertNotNull(pair);
+    assertNull(pair.getKey());
+    assertNull(pair.getValue());
+  }
+  
+  @Test
+  public void toStringTest() {
+    final ByteArrayPair pair = new ByteArrayPair(key, val);
+    assertEquals("key=[1], value=[2]", pair.toString());
+  }
+  
+  @Test
+  public void toStringTestNullKey() {
+    final ByteArrayPair pair = new ByteArrayPair(null, val);
+    assertEquals("key=null, value=[2]", pair.toString());
+  }
+  
+  @Test
+  public void toStringTestNullVal() {
+    final ByteArrayPair pair = new ByteArrayPair(key, null);
+    assertEquals("key=[1], value=null", pair.toString());
+  }
+  
+  @Test
+  public void toStringTestNulls() {
+    final ByteArrayPair pair = new ByteArrayPair(null, null);
+    assertEquals("key=null, value=null", pair.toString());
+  }
+
+  @Test
+  public void equalsTest() {
+   final ByteArrayPair pair = new ByteArrayPair(key, val);
+   final ByteArrayPair pair2 = new ByteArrayPair(key, val);
+   assertTrue(pair.equals(pair2));
+  }
+  
+  @Test
+  public void equalsTestSets() {
+   final ByteArrayPair pair = new ByteArrayPair(set1, val);
+   final ByteArrayPair pair2 = new ByteArrayPair(set1, val);
+   assertTrue(pair.equals(pair2));
+  }
+  
+  @Test
+  public void equalsTestSameReference() {
+   final ByteArrayPair pair = new ByteArrayPair(key, val);
+   final ByteArrayPair pair2 = pair;
+   assertTrue(pair.equals(pair2));
+  }
+  
+  @Test
+  public void equalsTestDiffKey() {
+   final ByteArrayPair pair = new ByteArrayPair(key, val);
+   final ByteArrayPair pair2 = new ByteArrayPair(val, val);
+   assertFalse(pair.equals(pair2));
+  }
+  
+  @Test
+  public void equalsTestDiffVal() {
+   final ByteArrayPair pair = new ByteArrayPair(key, val);
+   final ByteArrayPair pair2 = new ByteArrayPair(key, key);
+   assertFalse(pair.equals(pair2));
+  }
+  
+  @Test
+  public void equalsTestDiffKeySets() {
+   final ByteArrayPair pair = new ByteArrayPair(set1, val);
+   final ByteArrayPair pair2 = new ByteArrayPair(set2, key);
+   assertFalse(pair.equals(pair2));
+  }
+  
+  @Test
+  public void equalsTestDiffValSets() {
+   final ByteArrayPair pair = new ByteArrayPair(key, set1);
+   final ByteArrayPair pair2 = new ByteArrayPair(key, set2);
+   assertFalse(pair.equals(pair2));
+  }
+  
+  @Test
+  public void equalsTestNullKeys() {
+   final ByteArrayPair pair = new ByteArrayPair(null, val);
+   final ByteArrayPair pair2 = new ByteArrayPair(null, val);
+   assertTrue(pair.equals(pair2));
+  }
+  
+  @Test
+  public void equalsTestNullValues() {
+   final ByteArrayPair pair = new ByteArrayPair(key, null);
+   final ByteArrayPair pair2 = new ByteArrayPair(key, null);
+   assertTrue(pair.equals(pair2));
+  }
+  
+  @Test
+  public void equalsTestNulls() {
+   final ByteArrayPair pair = new ByteArrayPair(null, null);
+   final ByteArrayPair pair2 = new ByteArrayPair(null, null);
+   assertTrue(pair.equals(pair2));
   }
   
   @Test
@@ -66,6 +168,18 @@ public class TestByteArrayPair {
     assertArrayEquals(val, pairs.get(0).getValue());
     assertArrayEquals(val, pairs.get(1).getKey());
     assertArrayEquals(key, pairs.get(1).getValue());
+  }
+  
+  @Test
+  public void sortTestSets() {
+    List<ByteArrayPair> pairs = new ArrayList<ByteArrayPair>(2);
+    pairs.add(new ByteArrayPair(set2, val));
+    pairs.add(new ByteArrayPair(set1, val));
+    Collections.sort(pairs);
+    assertArrayEquals(set1, pairs.get(0).getKey());
+    assertArrayEquals(val, pairs.get(0).getValue());
+    assertArrayEquals(set2, pairs.get(1).getKey());
+    assertArrayEquals(val, pairs.get(1).getValue());
   }
   
   @Test

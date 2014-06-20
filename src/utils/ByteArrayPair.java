@@ -12,22 +12,20 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.utils;
 
+import java.util.Arrays;
+
 import org.hbase.async.Bytes;
 
 /**
  * Simple helper class to store a pair of byte arrays for use in situations
- * where a map or Map.Entry doesn't make sense. Either key or value in this
- * class can be null but NOT both.
+ * where a map or Map.Entry doesn't make sense. Extends the Pair class and
+ * overrides the equals method using {@code Bytes.memcmp()} to determine if both
+ * arrays have the same amount of data in the same order.
  * Sorting is performed on the key first, then on the value.
  */
-public class ByteArrayPair implements Comparable<ByteArrayPair> {
+public class ByteArrayPair extends Pair<byte[], byte[]> 
+  implements Comparable<ByteArrayPair> {
 
-  /** The key of the pair, may be null */
-  final private byte[] key;
-  
-  /** The value of the pair, may be null */
-  final private byte[] value;
-  
   /**
    * Default constructor initializes the object
    * @param key The key to store, may be null
@@ -35,9 +33,6 @@ public class ByteArrayPair implements Comparable<ByteArrayPair> {
    * @throws IllegalArgumentException If both values are null
    */
   public ByteArrayPair(final byte[] key, final byte[] value) {
-    if (key == null && value == null) {
-      throw new IllegalArgumentException("Key and value cannot be null");
-    }
     this.key = key;
     this.value = value;
   }
@@ -54,15 +49,33 @@ public class ByteArrayPair implements Comparable<ByteArrayPair> {
     }
     return key_compare;
   }
-  
-  /** @return The key byte array */
-  public final byte[] getKey() {
-    return key;
+
+  /** @return a descriptive string in the format "key=K, value=V" */
+  @Override
+  public String toString() {
+    return new StringBuilder().append("key=")
+      .append(Arrays.toString(key)).append(", value=")
+      .append(Arrays.toString(value)).toString();
   }
   
-  /** @return The value byte array */
-  public final byte[] getValue() {
-    return value;
+  /**
+   * Compares the two byte arrays for equality using {@code Bytes.memcmp()}
+   * @return true if the objects refer to the same address or both objects are
+   * have the same bytes in the same order
+   */
+  @Override
+  public boolean equals(final Object object) {
+    if (object == this) {
+      return true;
+    }
+    if (object instanceof ByteArrayPair) {
+      final ByteArrayPair other_pair = (ByteArrayPair)object;
+      return
+        (key == null ? other_pair.getKey() == null : 
+          Bytes.memcmp(key, other_pair.key) == 0)
+        && (value == null ? other_pair.getValue() == null : 
+          Bytes.memcmp(value, other_pair.value) == 0);
+    }
+    return false;
   }
-  
 }
