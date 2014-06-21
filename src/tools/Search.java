@@ -47,7 +47,7 @@ final class Search {
     if (args == null) {
       usage(argp, "Invalid usage");
       System.exit(2);
-    } else if (args.length < 2) {
+    } else if (args.length < 1) {
       usage(argp, "Not enough arguments");
       System.exit(2);
     }
@@ -86,14 +86,14 @@ final class Search {
                                 final boolean use_data_table,
                                 final String[] args) throws Exception {
     final int nargs = args.length;
-    if (args[1].equals("lookup")) {
-      if (nargs < 3) { // need a query
+    if (args[0].equals("lookup")) {
+      if (nargs < 2) { // need a query
         usage(null, "Not enough arguments");
         return 2;
       }
       return lookup(tsdb, use_data_table, args);
     } else {
-      usage(null, "Unknown sub command");
+      usage(null, "Unknown sub command: " + args[0]);
       return 2;
     }
   }
@@ -124,7 +124,7 @@ final class Search {
     final SearchQuery query = new SearchQuery();
     query.setType(SearchType.LOOKUP);
     
-    int index = 2;
+    int index = 1;
     if (!args[index].contains("=")) {
       query.setMetric(args[index++]);
     }
