@@ -240,7 +240,6 @@ public class TimeSeriesLookup {
       // at the top of the list will be the null=tagv pairs. We want to compile
       // a separate regex for them.
       for (; index < pairs.size(); index++) {
-        LOG.debug("tagv Pair: " + pairs.get(index));
         if (pairs.get(index).getKey() != null) {
           break;
         }
@@ -282,7 +281,6 @@ public class TimeSeriesLookup {
         
         ByteArrayPair last_pair = null;
         for (; index < pairs.size(); index++) {
-          LOG.debug("tagk Pair: " + pairs.get(index));
           if (last_pair != null && last_pair.getValue() == null &&
               Bytes.memcmp(last_pair.getKey(), pairs.get(index).getKey()) == 0) {
             // tagk=null is a wildcard so we don't need to bother adding 
@@ -296,8 +294,12 @@ public class TimeSeriesLookup {
             addId(buf, pairs.get(index).getValue());
             buf.append("\\E");
           } else {
+            if (last_pair != null) {
+              buf.append(")");
+            }
             // moving on to the next tagk set
             buf.append("(?:.{6})*"); // catch tag pairs in between
+            buf.append("(?:");
             if (pairs.get(index).getKey() != null && 
                 pairs.get(index).getValue() != null) {
               buf.append("\\Q");
@@ -313,7 +315,7 @@ public class TimeSeriesLookup {
           }
           last_pair = pairs.get(index);
         }
-        buf.append("(?:.{").append(tagsize).append("})*").append("$");
+        buf.append(")(?:.{").append(tagsize).append("})*").append("$");
         
         scanner.setKeyRegexp(buf.toString(), CHARSET);
         LOG.debug("Setting scanner row key filter: " + buf.toString());
