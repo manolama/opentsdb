@@ -63,6 +63,12 @@ final class Fsck {
     ArgP argp = new ArgP();
     CliOptions.addCommon(argp);
     argp.addOption("--fix", "Fix errors as they're found.");
+    argp.addOption("--full-table", "Scan the entire data table for errors.");
+    argp.addOption("--compact", "Compactions rows matching the query.");
+    argp.addOption("--last-write-wins", 
+        "Last data point written will be kept when fixing duplicates.");
+    argp.addOption("--delete-orphans", 
+        "Delete any time series rows where one or more UIDs fail resolution.");
     args = CliOptions.parse(argp, args);
     if (args == null) {
       usage(argp, "Invalid usage.", 1);
@@ -77,10 +83,14 @@ final class Fsck {
     tsdb.checkNecessaryTablesExist().joinUninterruptibly();
     final byte[] table = config.getString("tsd.storage.hbase.data_table").getBytes(); 
     final boolean fix = argp.has("--fix");
+    final boolean compact = argp.has("--compact");
+    final boolean last_write_wins = argp.has("--last-write-wins");
+    final boolean delete_orphans = argp.has("--delete-orphans");
     argp = null;
     int errors = 42;
     try {
-      errors = fsck(tsdb, tsdb.getClient(), table, fix, args);
+      errors = fsck(tsdb, tsdb.getClient(), table, fix, compact, last_write_wins, 
+          delete_orphans, args);
     } finally {
       tsdb.shutdown().joinUninterruptibly();
     }
@@ -91,6 +101,9 @@ final class Fsck {
                            final HBaseClient client,
                            final byte[] table,
                            final boolean fix,
+                           final boolean compact,
+                           final boolean last_write_wins,
+                           final boolean delete_orphans,
                            final String[] args) throws Exception {
 
     /** Callback to asynchronously delete a specific {@link KeyValue}.  */
