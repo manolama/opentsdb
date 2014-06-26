@@ -16,13 +16,16 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.uid.UniqueId;
 
 import org.hbase.async.Bytes;
 import org.hbase.async.GetRequest;
+import org.hbase.async.HBaseException;
 import org.hbase.async.KeyValue;
+import org.hbase.async.Scanner;
 
 /**
  * Various utilities shared amongst the CLI tools.
@@ -111,6 +114,30 @@ final class CliUtils {
     } catch (Exception e) {
       throw new RuntimeException("Shouldn't be here", e);
     }
+  }
+  
+  /**
+   * Returns a scanner set to iterate over a range of metrics in the main 
+   * tsdb-data table.
+   * @param tsdb The TSDB to use for data access
+   * @param start_id A metric ID to start scanning on
+   * @param end_id A metric ID to end scanning on
+   * @return A scanner on the "t" CF configured for the specified range
+   * @throws HBaseException if something goes pear shaped
+   */
+  static final Scanner getDataTableScanner(final TSDB tsdb, final long start_id, 
+      final long end_id) throws HBaseException {
+    final short metric_width = TSDB.metrics_width();
+    final byte[] start_row = 
+      Arrays.copyOfRange(Bytes.fromLong(start_id), 8 - metric_width, 8);
+    final byte[] end_row = 
+      Arrays.copyOfRange(Bytes.fromLong(end_id), 8 - metric_width, 8);
+
+    final Scanner scanner = tsdb.getClient().newScanner(tsdb.dataTable());
+    scanner.setStartKey(start_row);
+    scanner.setStopKey(end_row);
+    scanner.setFamily(TSDB.FAMILY());
+    return scanner;
   }
   
   /**
