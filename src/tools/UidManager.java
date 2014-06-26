@@ -955,7 +955,7 @@ final class UidManager {
    */
   private static int metaSync(final TSDB tsdb) throws Exception {
     final long start_time = System.currentTimeMillis() / 1000;
-    final long max_id = getMaxMetricID(tsdb);
+    final long max_id = CliUtils.getMaxMetricID(tsdb);
     
     // now figure out how many IDs to divy up between the workers
     final int workers = Runtime.getRuntime().availableProcessors() * 2;
@@ -1014,7 +1014,7 @@ final class UidManager {
    */
   private static int metaPurge(final TSDB tsdb) throws Exception {
     final long start_time = System.currentTimeMillis() / 1000;
-    final long max_id = getMaxMetricID(tsdb);
+    final long max_id = CliUtils.getMaxMetricID(tsdb);
     
     // now figure out how many IDs to divy up between the workers
     final int workers = Runtime.getRuntime().availableProcessors() * 2;
@@ -1061,7 +1061,7 @@ final class UidManager {
    */
   private static int treeSync(final TSDB tsdb) throws Exception {
     final long start_time = System.currentTimeMillis() / 1000;
-    final long max_id = getMaxMetricID(tsdb);
+    final long max_id = CliUtils.getMaxMetricID(tsdb);
     
  // now figure out how many IDs to divy up between the workers
     final int workers = Runtime.getRuntime().availableProcessors() * 2;
@@ -1110,33 +1110,6 @@ final class UidManager {
       final boolean delete_definition) throws Exception {
     final TreeSync sync = new TreeSync(tsdb, 0, 1, 0);
     return sync.purgeTree(tree_id, delete_definition);
-  }
-  
-  /**
-   * Returns the max metric ID from the UID table
-   * @param tsdb The TSDB to use for data access
-   * @return The max metric ID as an integer value
-   */
-  private static long getMaxMetricID(final TSDB tsdb) {
-    // first up, we need the max metric ID so we can split up the data table
-    // amongst threads.
-    final GetRequest get = new GetRequest(tsdb.uidTable(), new byte[] { 0 });
-    get.family("id".getBytes(CliUtils.CHARSET));
-    get.qualifier("metrics".getBytes(CliUtils.CHARSET));
-    ArrayList<KeyValue> row;
-    try {
-      row = tsdb.getClient().get(get).joinUninterruptibly();
-      if (row == null || row.isEmpty()) {
-        throw new IllegalStateException("No data in the metric max UID cell");
-      }
-      final byte[] id_bytes = row.get(0).value();
-      if (id_bytes.length != 8) {
-        throw new IllegalStateException("Invalid metric max UID, wrong # of bytes");
-      }
-      return Bytes.getLong(id_bytes);
-    } catch (Exception e) {
-      throw new RuntimeException("Shouldn't be here", e);
-    }
   }
 
 }
