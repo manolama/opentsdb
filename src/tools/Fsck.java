@@ -62,13 +62,7 @@ final class Fsck {
   public static void main(String[] args) throws Exception {
     ArgP argp = new ArgP();
     CliOptions.addCommon(argp);
-    argp.addOption("--fix", "Fix errors as they're found.");
-    argp.addOption("--full-table", "Scan the entire data table for errors.");
-    argp.addOption("--compact", "Compactions rows matching the query.");
-    argp.addOption("--last-write-wins", 
-        "Last data point written will be kept when fixing duplicates.");
-    argp.addOption("--delete-orphans", 
-        "Delete any time series rows where one or more UIDs fail resolution.");
+    FsckOptions.addDataOptions(argp);
     args = CliOptions.parse(argp, args);
     if (args == null) {
       usage(argp, "Invalid usage.", 1);
@@ -78,19 +72,14 @@ final class Fsck {
 
     // get a config object
     Config config = CliOptions.getConfig(argp);
-    
+    final FsckOptions options = new FsckOptions(argp, config);
     final TSDB tsdb = new TSDB(config);
     tsdb.checkNecessaryTablesExist().joinUninterruptibly();
     final byte[] table = config.getString("tsd.storage.hbase.data_table").getBytes(); 
-    final boolean fix = argp.has("--fix");
-    final boolean compact = argp.has("--compact");
-    final boolean last_write_wins = argp.has("--last-write-wins");
-    final boolean delete_orphans = argp.has("--delete-orphans");
     argp = null;
     int errors = 42;
     try {
-      errors = fsck(tsdb, tsdb.getClient(), table, fix, compact, last_write_wins, 
-          delete_orphans, args);
+      errors = fsck(tsdb, tsdb.getClient(), table, options, args);
     } finally {
       tsdb.shutdown().joinUninterruptibly();
     }
@@ -100,10 +89,7 @@ final class Fsck {
   private static int fsck(final TSDB tsdb,
                            final HBaseClient client,
                            final byte[] table,
-                           final boolean fix,
-                           final boolean compact,
-                           final boolean last_write_wins,
-                           final boolean delete_orphans,
+                           final FsckOptions options,
                            final String[] args) throws Exception {
 
     /** Callback to asynchronously delete a specific {@link KeyValue}.  */
@@ -278,7 +264,7 @@ final class Fsck {
                     && value[2] == -1 && value[3] == -1) {
                   errors++;
                   correctable++;
-                  if (fix) {
+                  if (options.fix()) {
                     value = value.clone();  // We're going to change it.
                     value[0] = value[1] = value[2] = value[3] = 0;
                     client.put(new PutRequest(table, kv.key(), kv.family(),
@@ -339,7 +325,7 @@ final class Fsck {
             } else {
               errors++;
               correctable++;
-              if (fix) {
+              if (options.fix()) {
                 if (compacted < 1) {
                   // keep the earliest value
                   boolean matched = false;
@@ -391,7 +377,7 @@ final class Fsck {
 
     System.out.println(errors != 0 ? "Found " + errors + " errors."
                        : "No error found.");
-    if (!fix && correctable > 0) {
+    if (!options.fix() && correctable > 0) {
       System.out.println(correctable + " of these errors are automatically"
                          + " correctable, re-run with --fix.\n"
                          + "Make sure you understand the errors above and you"
@@ -399,7 +385,7 @@ final class Fsck {
     }
     return errors;
   }
-
+  
   /**
    * The last data point we've seen for a particular time series.
    */
