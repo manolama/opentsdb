@@ -20,6 +20,7 @@ import net.opentsdb.utils.Config;
 final class FsckOptions {
   private boolean fix;
   private boolean compact;
+  private boolean fix_dupes;
   private boolean last_write_wins;
   private boolean delete_orphans;
   private boolean delete_unknown_columns;
@@ -40,6 +41,7 @@ final class FsckOptions {
   public FsckOptions(final ArgP argp, final Config config) {
     fix = argp.has("--fix");
     compact = argp.has("--compact");
+    fix_dupes = argp.has("--fix-dupes");
     last_write_wins = argp.has("--last_write_wins") || 
         config.getBoolean("tsd.storage.fix_duplicates");
     delete_orphans = argp.has("--delete-orphans");
@@ -70,6 +72,8 @@ final class FsckOptions {
     argp.addOption("--fix", "Fix errors as they're found.");
     argp.addOption("--full-table", "Scan the entire data table for errors.");
     argp.addOption("--compact", "Compactions rows matching the query.");
+    argp.addOption("--fix-dupes", 
+        "Keeps the oldest or newest duplicates. See --list-write-wins");
     argp.addOption("--last-write-wins", 
         "Last data point written will be kept when fixing duplicates.");
     argp.addOption("--delete-orphans", 
@@ -97,6 +101,11 @@ final class FsckOptions {
    * file */
   public boolean compact() {
     return compact;
+  }
+  
+  /** @return Whether or not to fix duplicates */
+  public boolean fixDupes() {
+    return fix_dupes;
   }
   
   /** @return Accept data points with the most recent timestamp when duplicates 
@@ -155,6 +164,11 @@ final class FsckOptions {
    * file */
   public void setCompact(final boolean compact) {
     this.compact = compact;
+  }
+  
+  /** @param fix_dupes Whether or not to fix duplicate data points */
+  public void setFixDupes(final boolean fix_dupes) {
+    this.fix_dupes = fix_dupes;
   }
   
 
