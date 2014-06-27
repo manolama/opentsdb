@@ -14,17 +14,25 @@ package net.opentsdb.tools;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
+import net.opentsdb.core.RowKey;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.core.Tags;
 import net.opentsdb.meta.Annotation;
 import net.opentsdb.storage.MockBase;
+import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.utils.Config;
@@ -44,16 +52,21 @@ import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
+import com.stumbleupon.async.Deferred;
+
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore({"javax.management.*", "javax.xml.*",
   "ch.qos.*", "org.slf4j.*",
   "com.sum.*", "org.xml.*"})
 @PrepareForTest({TSDB.class, Config.class, UniqueId.class, HBaseClient.class, 
   GetRequest.class, PutRequest.class, KeyValue.class, Fsck.class,
-  FsckOptions.class, Scanner.class, DeleteRequest.class, Annotation.class })
+  FsckOptions.class, Scanner.class, DeleteRequest.class, Annotation.class,
+  RowKey.class, Tags.class})
 public final class TestFsck {
   private final static byte[] ROW = 
     MockBase.stringToBytes("00000150E22700000001000001");
+  private final static byte[] TSUID = 
+      MockBase.stringToBytes("000001000001000001");
   private Config config;
   private TSDB tsdb = null;
   private HBaseClient client = mock(HBaseClient.class);
@@ -62,7 +75,11 @@ public final class TestFsck {
   private UniqueId tag_values = mock(UniqueId.class);
   private MockBase storage;
   private FsckOptions options = mock(FsckOptions.class);
- 
+  private final static List<byte[]> tags = new ArrayList<byte[]>(1);
+  static {
+    tags.add(new byte[] { 0, 0, 1, 0, 0, 1});
+  }
+  
   private final static Method fsck;
   static {
     try {
@@ -74,12 +91,14 @@ public final class TestFsck {
     }
   }
   
+  @SuppressWarnings("unchecked")
   @Before
   public void before() throws Exception {
     PowerMockito.whenNew(HBaseClient.class)
       .withArguments(anyString(), anyString()).thenReturn(client);
     config = new Config(false);
     tsdb = new TSDB(config);
+    when(client.flush()).thenReturn(Deferred.fromResult(null));
     
     storage = new MockBase(tsdb, client, true, true, true, true);
     storage.setFamily("t".getBytes(MockBase.ASCII()));
@@ -90,7 +109,7 @@ public final class TestFsck {
     when(options.deleteOrphans()).thenReturn(false);
     when(options.deleteUnknownColumns()).thenReturn(false);
     when(options.deleteBadValues()).thenReturn(false);
-    
+    when(options.threads()).thenReturn(1);
     PowerMockito.mockStatic(System.class);
     when(System.nanoTime())
       .thenReturn(1357300800000000L)
@@ -129,6 +148,14 @@ public final class TestFsck {
     when(tag_values.getId("web03"))
       .thenThrow(new NoSuchUniqueName("web03", "metric"));
     
+    PowerMockito.mockStatic(RowKey.class);
+    when(RowKey.metricNameAsync((TSDB)any(), (byte[])any()))
+      .thenReturn(Deferred.fromResult("sys.cpu.user"));
+
+    PowerMockito.mockStatic(Tags.class);
+    when(Tags.resolveIds((TSDB)any(), (ArrayList<byte[]>)any()))
+      .thenReturn(null); // don't care
+    
     when(metrics.width()).thenReturn((short)3);
     when(tag_names.width()).thenReturn((short)3);
     when(tag_values.width()).thenReturn((short)3);
@@ -151,12 +178,12 @@ public final class TestFsck {
 
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, val2);
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(0, errors);
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
   }
-  
+
   @Test
   public void noErrorsMilliseconds() throws Exception {
     HashMap<String, String> tags = new HashMap<String, String>(1);
@@ -173,12 +200,12 @@ public final class TestFsck {
         tsdb.addPoint("sys.cpu.user", ts, i, tags).joinUninterruptibly();
       }
     }
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(0, errors);
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(300, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
   }
-  
+
   @Test
   public void noErrorsAnnotation() throws Exception {
     HashMap<String, String> tags = new HashMap<String, String>(1);
@@ -187,19 +214,18 @@ public final class TestFsck {
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { 0x00, 0x27 };
     final byte[] val2 = new byte[] { 0, 0, 0, 0, 0, 0, 0,5 };
-
+    final byte[] noteq = { 0x01, 0x00, 0x01 };
+    final byte[] notev = "{}".getBytes();
+    
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, val2);
-
-    final Annotation note = new Annotation();
-    note.setTSUID(MockBase.bytesToString(ROW));
-    note.setDescription("woot");
-    note.setStartTime(1356998460);
-    note.syncToStorage(tsdb, true).joinUninterruptibly();
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(0, errors);
+    storage.addColumn(ROW, noteq, notev);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(3, fsck.kvs_processed.get());
+    assertEquals(1, fsck.annotations.get());
+    assertEquals(0, fsck.totalErrors());
   }
   
   @Test
@@ -219,10 +245,10 @@ public final class TestFsck {
       }
     }
   
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(0, errors);
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(300, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
   }
   
   @Test
@@ -242,20 +268,19 @@ public final class TestFsck {
       }
     }
     
-    final Annotation note = new Annotation();
-    note.setTSUID(MockBase.bytesToString(ROW));
-    note.setDescription("woot");
-    note.setStartTime(1356998460);
-    note.syncToStorage(tsdb, true).joinUninterruptibly();
+    final byte[] noteq = { 0x01, 0x00, 0x01 };
+    final byte[] notev = "{}".getBytes();
+    storage.addColumn(ROW, noteq, notev);
     
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(0, errors);
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(301, fsck.kvs_processed.get());
+    assertEquals(1, fsck.annotations.get());
+    assertEquals(0, fsck.totalErrors());
   }
 
   @Test
-  public void NoErrorsCompacted() throws Exception {
+  public void noErrorsCompacted() throws Exception {
     final byte[] qual1 = { 0x00, 0x07 };
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { 0x00, 0x27 };
@@ -263,33 +288,33 @@ public final class TestFsck {
     final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
     final byte[] val12 = MockBase.concatByteArrays(val1, val2, new byte[] { 0 });
     storage.addColumn(ROW, qual12, val12);
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(0, errors);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(1, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
   }
   
   @Test
-  public void NoErrorsCompactedMS() throws Exception {
+  public void noErrorsCompactedMS() throws Exception {
     final byte[] qual1 = { (byte) 0xF0, 0x00, 0x00, 0x07 };
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
     final byte[] val2 = Bytes.fromLong(5L);
     final byte[] qual3 = { (byte) 0xF0, 0x00, 0x04, 0x07 };
     final byte[] val3 = Bytes.fromLong(6L);
-
     storage.addColumn(ROW, 
         MockBase.concatByteArrays(qual1, qual2, qual3), 
         MockBase.concatByteArrays(val1, val2, val3, new byte[] { 0 }));
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(0, errors);
-    assertEquals(1, storage.numColumns(ROW));
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(1, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
   }
-  
+
   @Test
-  public void NoErrorsCompactedMix() throws Exception {
+  public void noErrorsCompactedMix() throws Exception {
     final byte[] qual1 = { 0x00, 0x07 };
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x07 };
@@ -297,15 +322,15 @@ public final class TestFsck {
     final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
     final byte[] val12 = MockBase.concatByteArrays(val1, val2, new byte[] { 0 });
     storage.addColumn(ROW, qual12, val12);
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(0, errors);
-    assertEquals(1, storage.numColumns(ROW));
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(1, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
   }
   
   @Test
-  public void NoErrorsCompactedMixReverse() throws Exception {
+  public void noErrorsCompactedMixReverse() throws Exception {
     final byte[] qual1 = { (byte) 0xF0, 0x00, 0x00, 0x07 };
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { 0x00, 0x27 };
@@ -313,11 +338,94 @@ public final class TestFsck {
     final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
     final byte[] val12 = MockBase.concatByteArrays(val1, val2, new byte[] { 0 });
     storage.addColumn(ROW, qual12, val12);
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(0, errors);
-    assertEquals(1, storage.numColumns(ROW));
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(1, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+  }
+  
+  @Test
+  public void noSuchMetricId() throws Exception {
+    when(RowKey.metricNameAsync((TSDB)any(), (byte[])any()))
+      .thenThrow(new NoSuchUniqueId("metric", new byte[] { 0, 0, 1 }));
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = new byte[] { 0, 0, 0, 0, 0, 0, 0,5 };
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.correctable());
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+  }
+  
+  @Test
+  public void noSuchMetricIdFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.deleteOrphans()).thenReturn(true);
+    when(RowKey.metricNameAsync((TSDB)any(), (byte[])any()))
+      .thenThrow(new NoSuchUniqueId("metric", new byte[] { 0, 0, 1 }));
+    
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = new byte[] { 0, 0, 0, 0, 0, 0, 0,5 };
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.correctable());
+    assertNull(storage.getColumn(ROW, qual1));
+  }
+  
+  @SuppressWarnings("unchecked")
+  @Test
+  public void noSuchTagId() throws Exception {
+    when(Tags.resolveIds((TSDB)any(), (ArrayList<byte[]>)any()))
+      .thenThrow(new NoSuchUniqueId("tagk", new byte[] { 0, 0, 1 }));
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = new byte[] { 0, 0, 0, 0, 0, 0, 0,5 };
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.correctable());
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+  }
+  
+  @SuppressWarnings("unchecked")
+  @Test
+  public void noSuchTagIdFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.deleteOrphans()).thenReturn(true);
+    when(Tags.resolveIds((TSDB)any(), (ArrayList<byte[]>)any()))
+      .thenThrow(new NoSuchUniqueId("tagk", new byte[] { 0, 0, 1 }));
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = new byte[] { 0, 0, 0, 0, 0, 0, 0,5 };
+
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.correctable());
+    assertNull(storage.getColumn(ROW, qual1));
   }
   
   @Test
@@ -329,10 +437,12 @@ public final class TestFsck {
     final byte[] qual12 = MockBase.concatByteArrays(qual1, qual2);
     final byte[] val12 = MockBase.concatByteArrays(val1, val2);
     storage.addColumn(ROW, qual12, val12);
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(1, errors);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(1, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(0, fsck.correctable());
   }
   
   @Test
@@ -341,13 +451,37 @@ public final class TestFsck {
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { 0x01 };
     final byte[] val2 = new byte[] { 5 };
-
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, val2);
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(1, errors);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.unknown.get());
+  }
+  
+  @Test
+  public void oneByteQualifierFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.deleteUnknownColumns()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x01 };
+    final byte[] val2 = new byte[] { 5 };
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.unknown.get());
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertNull(storage.getColumn(ROW, qual2));
   }
   
   @Test
@@ -356,13 +490,37 @@ public final class TestFsck {
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { 0x00, 0x27 };
     final byte[] val2 = new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 5 };
-
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, val2);
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(1, errors);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.bad_values.get());
+  }
+  
+  @Test
+  public void valueTooLongFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.deleteBadValues()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 5 };
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.bad_values.get());
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertNull(storage.getColumn(ROW, qual2));
   }
   
   @Test
@@ -371,59 +529,121 @@ public final class TestFsck {
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x0B };
     final byte[] val2 = new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 5 };
-
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, val2);
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(1, errors);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.bad_values.get());
   }
 
   @Test
-  public void singleByteQual() throws Exception {
+  public void valueTooLongMSFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.deleteBadValues()).thenReturn(true);
+    
     final byte[] qual1 = { 0x00, 0x07 };
     final byte[] val1 = Bytes.fromLong(4L);
-    final byte[] qual2 = { 0x27 };
-    final byte[] val2 = Bytes.fromLong(5L);
-
+    final byte[] qual2 = { (byte) 0xF0, 0x00, 0x02, 0x0B };
+    final byte[] val2 = new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 5 };
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, val2);
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(1, errors);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.bad_values.get());
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertNull(storage.getColumn(ROW, qual2));
   }
   
   @Test
-  public void OLDfloat8byteVal4byteQualOK() throws Exception {
+  public void float8byteVal4byteQual() throws Exception {
     final byte[] qual1 = { 0x00, 0x0B };
     final byte[] val1 = Bytes.fromLong(Float.floatToRawIntBits(4.2F));
     final byte[] qual2 = { 0x00, 0x2B };
     final byte[] val2 = Bytes.fromLong(Float.floatToRawIntBits(500.8F));
-
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, val2);
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(0, errors);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(2, fsck.totalErrors());
+    assertEquals(2, fsck.value_encoding.get());
+    assertEquals(2, fsck.correctable());
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertArrayEquals(val2, storage.getColumn(ROW, qual2));
   }
   
   @Test
-  public void OLDfloat8byteVal4byteQualSignExtensionBug() throws Exception {
+  public void float8byteVal4byteQualFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+
     final byte[] qual1 = { 0x00, 0x0B };
     final byte[] val1 = Bytes.fromLong(Float.floatToRawIntBits(4.2F));
+    final byte[] fixed_val1 = Bytes.fromInt(Float.floatToRawIntBits(4.2F));
+    final byte[] qual2 = { 0x00, 0x2B };
+    final byte[] val2 = Bytes.fromLong(Float.floatToRawIntBits(500.8F));
+    final byte[] fixed_val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(2, fsck.totalErrors());
+    assertEquals(2, fsck.totalFixed());
+    assertEquals(2, fsck.correctable());
+    assertEquals(2, fsck.value_encoding.get());
+    assertArrayEquals(fixed_val1, storage.getColumn(ROW, qual1));
+    assertArrayEquals(fixed_val2, storage.getColumn(ROW, qual2));
+  }
+  
+  @Test
+  public void float8byteVal4byteQualSignExtensionBug() throws Exception {
+    final byte[] qual1 = { 0x00, 0x0B };
+    final byte[] val1 = Bytes.fromInt(Float.floatToRawIntBits(4.2F));
     final byte[] qual2 = { 0x00, 0x2B };
     final byte[] bug = { (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF };
     final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
-
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, MockBase.concatByteArrays(bug, val2));
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(1, errors);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.value_encoding.get());
+  }
+  
+  @Test
+  public void float8byteVal4byteQualSignExtensionBugFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x0B };
+    final byte[] val1 = Bytes.fromInt(Float.floatToRawIntBits(4.2F));
+    final byte[] qual2 = { 0x00, 0x2B };
+    final byte[] bug = { (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, MockBase.concatByteArrays(bug, val2));
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.totalFixed());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.value_encoding.get());
+    assertArrayEquals(val2, storage.getColumn(ROW, qual2));
   }
   
   @Test
@@ -443,56 +663,138 @@ public final class TestFsck {
   }
   
   @Test
-  public void OLDfloat8byteVal4byteQualSignExtensionBugFix() throws Exception {
-    when(options.fix()).thenReturn(true);
+  public void float8byteVal4byteQualSignExtensionBugCompacted() 
+      throws Exception {
     final byte[] qual1 = { 0x00, 0x0B };
     final byte[] val1 = Bytes.fromLong(Float.floatToRawIntBits(4.2F));
     final byte[] qual2 = { 0x00, 0x2B };
     final byte[] bug = { (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF };
     final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
-
-    storage.addColumn(ROW, qual1, val1);
-    storage.addColumn(ROW, qual2, MockBase.concatByteArrays(bug, val2));
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(1, errors);
-    final byte[] fixed = storage.getColumn(ROW, qual2);
-    assertArrayEquals(MockBase.concatByteArrays(new byte[4], val2), fixed);
+    storage.addColumn(ROW, MockBase.concatByteArrays(qual1, qual2), 
+        MockBase.concatByteArrays(val1, bug, val2, new byte[] { 0 }));
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(1, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.bad_compacted_columns.get());
   }
   
   @Test
-  public void OLDfloat8byteVal4byteQualMessedUp() throws Exception {
+  public void float8byteVal4byteQualSignExtensionBugCompactedFix() 
+      throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.deleteBadCompacts()).thenReturn(true);
+    
     final byte[] qual1 = { 0x00, 0x0B };
     final byte[] val1 = Bytes.fromLong(Float.floatToRawIntBits(4.2F));
+    final byte[] qual2 = { 0x00, 0x2B };
+    final byte[] bug = { (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+    storage.addColumn(ROW, MockBase.concatByteArrays(qual1, qual2), 
+        MockBase.concatByteArrays(val1, bug, val2, new byte[] { 0 }));
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(1, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.bad_compacted_columns.get());
+    assertEquals(1, fsck.bad_compacted_columns_deleted.get());
+    assertNull(storage.getColumn(ROW, MockBase.concatByteArrays(qual1, qual2)));
+  }
+  
+  @Test
+  public void float8byteVal4byteQualMessedUp() throws Exception {
+    final byte[] qual1 = { 0x00, 0x0B };
+    final byte[] val1 = Bytes.fromInt(Float.floatToRawIntBits(4.2F));
     final byte[] qual2 = { 0x00, 0x2B };
     final byte[] bug = { (byte) 0xFB, (byte) 0x02, (byte) 0xF4, (byte) 0x0F };
     final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
-
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, MockBase.concatByteArrays(bug, val2));
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(1, errors);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.bad_values.get());
   }
 
   @Test
+  public void float8byteVal4byteQualMessedUpFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.deleteBadValues()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x0B };
+    final byte[] val1 = Bytes.fromInt(Float.floatToRawIntBits(4.2F));
+    final byte[] qual2 = { 0x00, 0x2B };
+    final byte[] bug = { (byte) 0xFB, (byte) 0x02, (byte) 0xF4, (byte) 0x0F };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, MockBase.concatByteArrays(bug, val2));
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.totalFixed());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.bad_values.get());
+    assertEquals(1, fsck.bad_values_deleted.get());
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertNull(storage.getColumn(ROW, qual2));
+  }
+  
+  @Test
   public void floatNot4Or8Bytes() throws Exception {
     final byte[] qual1 = { 0x00, 0x0B };
-    final byte[] val1 = Bytes.fromLong(Float.floatToRawIntBits(4.2F));
+    final byte[] val1 = Bytes.fromInt(Float.floatToRawIntBits(4.2F));
     final byte[] qual2 = { 0x00, 0x2B };
     final byte[] bug = { 0 };
     final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
-
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, MockBase.concatByteArrays(bug, val2));
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(1, errors);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.bad_values.get());
   }
 
+  @Test
+  public void floatNot4Or8BytesFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.deleteBadValues()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x0B };
+    final byte[] val1 = Bytes.fromInt(Float.floatToRawIntBits(4.2F));
+    final byte[] qual2 = { 0x00, 0x2B };
+    final byte[] bug = { 0 };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, MockBase.concatByteArrays(bug, val2));
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.totalFixed());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.bad_values.get());
+    assertEquals(1, fsck.bad_values_deleted.get());
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertNull(storage.getColumn(ROW, qual2));
+  }
+  
   @Test
   public void unknownObject() throws Exception {
     final byte[] qual1 = { 0x00, 0x07};
@@ -501,10 +803,38 @@ public final class TestFsck {
     final byte[] val2 = Bytes.fromLong(5L);
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, val2);
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(1, errors);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.unknown.get());
+  }
+  
+  @Test
+  public void unknownObjectFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.deleteUnknownColumns()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x07};
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x27, 0x04, 0x01, 0x01, 0x01, 0x01 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.totalFixed());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.unknown.get());
+    assertEquals(1, fsck.unknown_fixed.get());
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertNull(storage.getColumn(ROW, qual2));
   }
   
   @Test
@@ -515,11 +845,340 @@ public final class TestFsck {
     final byte[] val2 = Bytes.fromLong(5L);
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, val2);
-    int errors = (Integer)fsck.invoke(null, tsdb, client, 
-        "tsdb".getBytes(MockBase.ASCII()), options, 
-        new String[] {"1356998400", "1357002000", "sum", "sys.cpu.user" });
-    assertEquals(0, errors);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.future.get());
   }
+  
+  @Test
+  public void integerWrongLength() throws Exception {
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x23 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.bad_values.get());
+  }
+  
+  @Test
+  public void integerWrongLengthFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.deleteBadValues()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x23 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+    assertEquals(1, fsck.totalFixed());
+    assertEquals(1, fsck.correctable());
+    assertEquals(1, fsck.bad_values.get());
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertNull(storage.getColumn(ROW, qual2));
+  }
+  
+  @Test
+  public void integerVle1Byte() throws Exception {
+    final byte[] qual1 = { 0x00, 0x00 };
+    final byte[] val1 = new byte[] { 1 };
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(2L);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.vle.get());
+    assertEquals(7, fsck.vle_bytes.get());
+  }
+  
+  @Test
+  public void integerVle1ByteFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.vle()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x00 };
+    final byte[] val1 = new byte[] { 1 };
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(2L);
+    final byte[] fixed_qual2 = { 0x00, 0x20 };
+    final byte[] fixed_val2 = new byte[] { 2 };
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.vle.get());
+    assertEquals(7, fsck.vle_bytes.get());
+    assertEquals(1, fsck.vle_fixed.get());
+    storage.dumpToSystemOut();
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertArrayEquals(fixed_val2, storage.getColumn(ROW, fixed_qual2));
+  }
+  
+  @Test
+  public void integerVle1ByteNegative() throws Exception {
+    final byte[] qual1 = { 0x00, 0x00 };
+    final byte[] val1 = new byte[] { 1 };
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(-2L);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.vle.get());
+    assertEquals(7, fsck.vle_bytes.get());
+  }
+  
+  @Test
+  public void integerVle1ByteNegativeFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.vle()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x00 };
+    final byte[] val1 = new byte[] { 1 };
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(-2L);
+    final byte[] fixed_qual2 = { 0x00, 0x20 };
+    final byte[] fixed_val2 = new byte[] { -2 };
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.vle.get());
+    assertEquals(7, fsck.vle_bytes.get());
+    assertEquals(1, fsck.vle_fixed.get());
+    storage.dumpToSystemOut();
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertArrayEquals(fixed_val2, storage.getColumn(ROW, fixed_qual2));
+  }
+  
+  @Test
+  public void integerVle2Bytes() throws Exception {
+    final byte[] qual1 = { 0x00, 0x00 };
+    final byte[] val1 = new byte[] { 1 };
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(257L);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.vle.get());
+    assertEquals(6, fsck.vle_bytes.get());
+  }
+  
+  @Test
+  public void integerVle2BytesFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.vle()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x00 };
+    final byte[] val1 = new byte[] { 1 };
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(257L);
+    final byte[] fixed_qual2 = { 0x00, 0x21 };
+    final byte[] fixed_val2 = Bytes.fromShort((short)257);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.vle.get());
+    assertEquals(6, fsck.vle_bytes.get());
+    assertEquals(1, fsck.vle_fixed.get());
+    storage.dumpToSystemOut();
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertArrayEquals(fixed_val2, storage.getColumn(ROW, fixed_qual2));
+  }
+  
+  @Test
+  public void integerVle2BytesNegative() throws Exception {
+    final byte[] qual1 = { 0x00, 0x00 };
+    final byte[] val1 = new byte[] { 1 };
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(-257L);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.vle.get());
+    assertEquals(6, fsck.vle_bytes.get());
+  }
+  
+  @Test
+  public void integerVle2BytesNegativeFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.vle()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x00 };
+    final byte[] val1 = new byte[] { 1 };
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(-257L);
+    final byte[] fixed_qual2 = { 0x00, 0x21 };
+    final byte[] fixed_val2 = Bytes.fromShort((short)-257);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.vle.get());
+    assertEquals(6, fsck.vle_bytes.get());
+    assertEquals(1, fsck.vle_fixed.get());
+    storage.dumpToSystemOut();
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertArrayEquals(fixed_val2, storage.getColumn(ROW, fixed_qual2));
+  }
+  
+  @Test
+  public void integerVle4Bytes() throws Exception {
+    final byte[] qual1 = { 0x00, 0x00 };
+    final byte[] val1 = new byte[] { 1 };
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(65537L);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.vle.get());
+    assertEquals(4, fsck.vle_bytes.get());
+  }
+  
+  @Test
+  public void integerVle4BytesFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.vle()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x00 };
+    final byte[] val1 = new byte[] { 1 };
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(65537L);
+    final byte[] fixed_qual2 = { 0x00, 0x23 };
+    final byte[] fixed_val2 = Bytes.fromInt(65537);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.vle.get());
+    assertEquals(4, fsck.vle_bytes.get());
+    assertEquals(1, fsck.vle_fixed.get());
+    storage.dumpToSystemOut();
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertArrayEquals(fixed_val2, storage.getColumn(ROW, fixed_qual2));
+  }
+  
+  @Test
+  public void integerVle4BytesNegative() throws Exception {
+    final byte[] qual1 = { 0x00, 0x00 };
+    final byte[] val1 = new byte[] { 1 };
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(-65537L);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.vle.get());
+    assertEquals(4, fsck.vle_bytes.get());
+  }
+  
+  @Test
+  public void integerVle4BytesNegativeFix() throws Exception {
+    when(options.fix()).thenReturn(true);
+    when(options.vle()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x00 };
+    final byte[] val1 = new byte[] { 1 };
+    final byte[] qual2 = { 0x00, 0x27 };
+    final byte[] val2 = Bytes.fromLong(-65537L);
+    final byte[] fixed_qual2 = { 0x00, 0x23 };
+    final byte[] fixed_val2 = Bytes.fromInt(-65537);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(0, fsck.totalErrors());
+    assertEquals(0, fsck.totalFixed());
+    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.vle.get());
+    assertEquals(4, fsck.vle_bytes.get());
+    assertEquals(1, fsck.vle_fixed.get());
+    storage.dumpToSystemOut();
+    assertArrayEquals(val1, storage.getColumn(ROW, qual1));
+    assertArrayEquals(fixed_val2, storage.getColumn(ROW, fixed_qual2));
+  }
+  
+// TODO -------------------------------------------------------  
   
   @Test
   public void dupeTimestampsSeconds() throws Exception {
