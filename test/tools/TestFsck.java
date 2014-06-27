@@ -200,6 +200,7 @@ public final class TestFsck {
         tsdb.addPoint("sys.cpu.user", ts, i, tags).joinUninterruptibly();
       }
     }
+    
     final Fsck fsck = new Fsck(tsdb, options);
     fsck.runFullTable();
     assertEquals(300, fsck.kvs_processed.get());
@@ -442,7 +443,7 @@ public final class TestFsck {
     fsck.runFullTable();
     assertEquals(1, fsck.kvs_processed.get());
     assertEquals(1, fsck.totalErrors());
-    assertEquals(0, fsck.correctable());
+    assertEquals(1, fsck.correctable());
   }
   
   @Test
@@ -473,7 +474,7 @@ public final class TestFsck {
     final byte[] val2 = new byte[] { 5 };
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, val2);
-    
+    storage.dumpToSystemOut();
     final Fsck fsck = new Fsck(tsdb, options);
     fsck.runFullTable();
     assertEquals(2, fsck.kvs_processed.get());
@@ -1181,7 +1182,51 @@ public final class TestFsck {
 // TODO -------------------------------------------------------  
   
   @Test
-  public void dupeTimestampsSeconds() throws Exception {
+  public void dupesSinglesSeconds() throws Exception {
+    when(options.lastWriteWins()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x0B };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    storage.dumpToSystemOut();
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+  }
+  
+  @Test
+  public void dupeTimestampsMultipleSinglesSeconds() throws Exception {
+    //when(options.lastWriteWins()).thenReturn(true);
+    
+    final byte[] qual1 = { 0x00, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x00, 0x0B };
+    final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
+    final byte[] qual3 = { 0x00, 0x03 };
+    final byte[] val3 = Bytes.fromInt(42);
+    final byte[] qual4 = { 0x00, 0x01 };
+    final byte[] val4 = Bytes.fromShort((short)24);
+    final byte[] qual5 = { 0x00, 0x21 };
+    final byte[] val5 = Bytes.fromShort((short)24);
+    storage.addColumn(ROW, qual1, val1);
+    storage.addColumn(ROW, qual2, val2);
+    storage.addColumn(ROW, qual3, val3);
+    storage.addColumn(ROW, qual4, val4);
+    storage.addColumn(ROW, qual5, val5);
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(5, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+  }
+  
+  @Test
+  public void OLDdupeTimestampsSeconds() throws Exception {
     final byte[] qual1 = { 0x00, 0x07 };
     final byte[] val1 = Bytes.fromLong(4L);
     final byte[] qual2 = { 0x00, 0x0B };
@@ -1203,6 +1248,7 @@ public final class TestFsck {
     final byte[] qual2 = { 0x00, 0x0B };
     final byte[] val2 = Bytes.fromInt(Float.floatToRawIntBits(500.8F));
 
+    
     storage.addColumn(ROW, qual1, val1);
     storage.addColumn(ROW, qual2, val2);
     int errors = (Integer)fsck.invoke(null, tsdb, client, 
@@ -1247,6 +1293,29 @@ public final class TestFsck {
 
   @Test
   public void twoCompactedColumnsWSameTS() throws Exception {
+    // hopefully this never happens, but if it does, we can't fix it manually
+    // easily without splitting up and re-writing the compacted cells.
+    final byte[] qual1 = { 0x0, 0x07 };
+    final byte[] val1 = Bytes.fromLong(4L);
+    final byte[] qual2 = { 0x0, 0x27 };
+    final byte[] val2 = Bytes.fromLong(5L);
+    final byte[] qual3 = { 0x0, 0x37 };
+    final byte[] val3 = Bytes.fromLong(6L);
+    storage.addColumn(ROW, 
+        MockBase.concatByteArrays(qual1, qual2), 
+        MockBase.concatByteArrays(val1, val2, new byte[] { 0 }));
+    storage.addColumn(ROW, 
+        MockBase.concatByteArrays(qual2, qual3), 
+        MockBase.concatByteArrays(val2, val3, new byte[] { 0 }));
+    
+    final Fsck fsck = new Fsck(tsdb, options);
+    fsck.runFullTable();
+    assertEquals(2, fsck.kvs_processed.get());
+    assertEquals(1, fsck.totalErrors());
+  }
+  
+  @Test
+  public void OLDtwoCompactedColumnsWSameTS() throws Exception {
     // hopefully this never happens, but if it does, we can't fix it manually
     // easily without splitting up and re-writing the compacted cells.
     final byte[] qual1 = { 0x0, 0x07 };

@@ -14,6 +14,7 @@ package net.opentsdb.tools;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -219,6 +220,9 @@ final class Fsck {
       final TreeMap<Long, ArrayList<DP>> previous = 
         new TreeMap<Long, ArrayList<DP>>();
       
+      final long base_time = Bytes.getUnsignedInt(row.get(0).key(), 
+          TSDB.metrics_width());
+      
       for (final KeyValue kv : row) {
         // these are not final as they may be modified when fixing is enabled
         byte[] value = kv.value(); 
@@ -290,16 +294,16 @@ final class Fsck {
           try {
             final ArrayList<Cell> cells = Internal.extractDataPoints(kv);
             for (final Cell cell : cells) {
-              final long offset = 
-                  Internal.getOffsetFromQualifier(cell.qualifier());
-              ArrayList<DP> dps = previous.get(offset);
+              final long ts = cell.timestamp(base_time);
+              ArrayList<DP> dps = previous.get(ts);
               if (dps == null) {
                 dps = new ArrayList<DP>(1);
-                previous.put(offset, dps);
+                previous.put(ts, dps);
               }
               dps.add(new DP(kv.timestamp(), kv.qualifier(), true));
               total_datapoints++;
             }
+            compacted_columns++;
           } catch (IllegalDataException e) {
             bad_compacted_columns.getAndIncrement();
             LOG.error(e.getMessage());
@@ -309,17 +313,17 @@ final class Fsck {
               bad_compacted_columns_deleted.getAndIncrement();
             }
           }
-          compacted_columns++;
           continue;
         }
         
         // at this point we're dealing with a single data point encoded in 
         // seconds or milliseconds.
-        final long offset = Internal.getOffsetFromQualifier(qual);
-        ArrayList<DP> dps = previous.get(offset);
+        final long timestamp = 
+            Internal.getTimestampFromQualifier(qual, base_time);
+        ArrayList<DP> dps = previous.get(timestamp);
         if (dps == null) {
           dps = new ArrayList<DP>(1);
-          previous.put(offset, dps);
+          previous.put(timestamp, dps);
         }
         dps.add(new DP(kv.timestamp(), kv.qualifier(), false));
         single_datapoints++;
@@ -340,204 +344,112 @@ final class Fsck {
         // validate the floating point length and check for errors from old
         // versions of OpenTSDB
         if (Internal.getFlagsFromQualifier(qual) == (Const.FLAG_FLOAT | 0x3)) {  // float | 4 bytes
-          // The qualifier says the value is on 4 bytes, and the value is
-          // on 8 bytes, then the 4 MSBs must be 0s.  Old versions of the
-          // code were doing this.  It's kinda sad.  Some versions had a
-          // bug whereby the value would be sign-extended, so we can
-          // detect these values and fix them here.
-          if (value.length == 8) {
-            if (value[0] == -1 && value[1] == -1
-                && value[2] == -1 && value[3] == -1 && qual.length == 2) {
-              value_encoding.getAndIncrement();
-              LOG.error("Floating point value with 0xFF most significant"
-                  + " bytes, probably caused by sign extension bug"
-                  + " present in revisions [96908436..607256fc].\n"
-                  + "\t" + kv);
-              if (options.fix()) {
-                final float value_as_float =
-                    Float.intBitsToFloat(Bytes.getInt(value, 4));
-                value = Bytes.fromInt(
-                    Float.floatToRawIntBits((float)value_as_float));
-                final PutRequest put = new PutRequest(tsdb.dataTable(), 
-                    kv.key(), kv.family(), qual, value);
-                requests.add(tsdb.getClient().put(put));
-                value_encoding_fixed.getAndIncrement();
-              }
-            } else if (value[0] != 0 || value[1] != 0
-                       || value[2] != 0 || value[3] != 0) {
-              LOG.error("Floating point value was marked as 4 bytes long but"
-                  + " was actually 8 bytes long and the first four bytes were"
-                  + " not zeroed\n\t" + kv);
-              bad_values.getAndIncrement();
-              if (options.fix() && options.deleteBadValues()) {
-                final DeleteRequest delete = new DeleteRequest(tsdb.dataTable(), kv);
-                requests.add(tsdb.getClient().delete(delete));
-                bad_values_deleted.getAndIncrement();
-              }
-            } else {
-              LOG.warn("Floating point value was marked as 4 bytes long but"
-                  + " was actually 8 bytes long\n\t" + kv);
-              value_encoding.getAndIncrement();
-              if (options.fix()) {
-                final float value_as_float =
-                    Float.intBitsToFloat(Bytes.getInt(value, 4));
-                value = Bytes.fromInt(
-                    Float.floatToRawIntBits((float)value_as_float));
-                final PutRequest put = new PutRequest(tsdb.dataTable(), 
-                    kv.key(), kv.family(), qual, value);
-                requests.add(tsdb.getClient().put(put));
-                value_encoding_fixed.getAndIncrement();
-              }
-            }
-          } else if (value.length != 4) {
-            bad_values.getAndIncrement();
-            LOG.error("This floating point value must be encoded either on"
-                      + " 4 or 8 bytes, but it's on " + value.length
-                      + " bytes.\n\t" + kv);
-            if (options.fix() && options.deleteBadValues()) {
-              final DeleteRequest delete = new DeleteRequest(tsdb.dataTable(), kv);
-              requests.add(tsdb.getClient().delete(delete));
-              bad_values_deleted.getAndIncrement();
-            }
-          }
-          
-          continue;
+          fsckFloat(kv, requests);
         } else {
-          // this should be a single integer value. Check the encoding to make
-          // sure it's the proper length, and if the flag is set to fix encoding
-          // we can save space with VLE.
-          final byte length = Internal.getValueLengthFromQualifier(qual);
-          if (value.length != length) {
-            bad_values.getAndIncrement();
-            LOG.error("The integer value is " + value.length + " bytes long but "
-                + "should be " + length + " bytes.\n\t" + kv);
-            if (options.fix() && options.deleteBadValues()) {
-              final DeleteRequest delete = new DeleteRequest(tsdb.dataTable(), kv);
-              requests.add(tsdb.getClient().delete(delete));
-              bad_values_deleted.getAndIncrement();
-            }
-          }
-          
-          // OpenTSDB had support for VLE decoding of integers but only wrote
-          // on 8 bytes at the start. Lets see how much space we could save. 
-          // We'll assume that a length other than 8 bytes is already VLE'd
-          if (length == 8) {
-            final long decoded = Bytes.getLong(value);
-            boolean fixup = false;
-            if (Byte.MIN_VALUE <= decoded && decoded <= Byte.MAX_VALUE) {
-              vle.getAndIncrement();
-              vle_bytes.addAndGet(7);
-              fixup = true;
-              value = new byte[] { (byte) decoded };
-            } else if (Short.MIN_VALUE <= decoded && decoded <= Short.MAX_VALUE) {
-              vle.getAndIncrement();
-              vle_bytes.addAndGet(6);
-              fixup = true;
-              value = Bytes.fromShort((short) decoded);
-            } else if (Integer.MIN_VALUE <= decoded && 
-                decoded <= Integer.MAX_VALUE) {
-              vle.getAndIncrement();
-              vle_bytes.addAndGet(4);
-              fixup = true;
-              value = Bytes.fromInt((int) decoded);
-            } // else it needs 8 bytes, it's on 8 bytes, yipee
-            
-            if (fixup && options.fix() && options.vle()) {
-              qual[qual.length - 1] &= 0xF0 | (value.length - 1);
-              final PutRequest put = new PutRequest(tsdb.dataTable(), 
-                  kv.key(), kv.family(), qual, value);
-              requests.add(tsdb.getClient().put(put));
-              vle_fixed.getAndIncrement();
-            }
-          }
+          fsckInteger(kv, requests);
         }        
       } // end key value loop
       
-      // iterate over the data points and see if we had any duplicates
-//      for (Map.Entry<Long, ArrayList<DP>> offset_map : previous.entrySet()) {
-//        if (offset_map.getValue().size() < 2) {
-//          continue;
-//        }
-//        
-//        // for now, delete the non-compacted dupes
-//        int compacted = 0;
-//        long earliest_value = Long.MAX_VALUE;
-//        for (DP dp : offset_map.getValue()) {
-//          if (dp.compacted) {
-//            compacted++;
-//          }
-//          if (dp.timestamp < earliest_value) {
-//            earliest_value = dp.timestamp;
-//          }
-//        }
-//        
-//        // if there are more than one compacted columns with the same
-//        // timestamp, something went pear shaped and we need more work to
-//        // figure out what to do
-//        final StringBuilder buf = new StringBuilder();
-//        if (compacted > 1) {
-//          errors++;
-//          buf.setLength(0);
-//          buf.append("More than one compacted column had a value for the same timestamp: ")
-//             .append("timestamp: (")
-//             .append(time_map.getKey())
-//             .append(")\n");
-//          for (DP dp : time_map.getValue()) {
-//            buf.append("    ")
-//               .append(Arrays.toString(dp.qualifier))
-//               .append("\n");
-//          }
-//          LOG.error(buf.toString());
-//        } else {
-//          errors++;
-//          correctable++;
-//          if (fix) {
-//            if (compacted < 1) {
-//              // keep the earliest value
-//              boolean matched = false;
-//              for (DP dp : time_map.getValue()) {
-//                if (dp.stored_timestamp == earliest_value && !matched) {
-//                  matched = true;
-//                  continue;
-//                }
-//                final DeleteOutOfOrder delooo = 
-//                  new DeleteOutOfOrder(row.get(0).key(), 
-//                      "t".getBytes(), dp.qualifier);
-//                delooo.call(null);
-//              }
-//            } else {
-//              // keep the compacted value
-//              for (DP dp : time_map.getValue()) {
-//                if (dp.compacted) {
-//                  continue;
-//                }
-//                
-//                final DeleteOutOfOrder delooo = 
-//                  new DeleteOutOfOrder(row.get(0).key(),
-//                      "t".getBytes(), dp.qualifier);
-//                delooo.call(null);
-//              }
-//            }
-//          } else {
-//            buf.setLength(0);
-//            buf.append("More than one column had a value for the same timestamp: ")
-//               .append("timestamp: (")
-//               .append(time_map.getKey())
-//               .append(")\n");
-//            for (DP dp : time_map.getValue()) {
-//              buf.append("    ")
-//                 .append(Arrays.toString(dp.qualifier))
-//                 .append("\n");
-//            }
-//            LOG.error(buf.toString());
-//          }
-//        }
-//      }
+      // if we don't have more than one point in this row or it's just a single
+      // compacted column, then we are done.
+      if (total_datapoints == 1 || 
+          (compacted_columns == 0 && single_datapoints < 1)) {
+        return;
+      }
       
-      // TODO compact if we have 
+      // iterate over the data points and see if we had any duplicates
+      for (Map.Entry<Long, ArrayList<DP>> time_map : previous.entrySet()) {
+        // there was only one data point for this timestamp so we're good
+        if (time_map.getValue().size() < 2) {
+          continue;
+        }
+
+        int compacted = 0;
+        long keep_timestamp = options.lastWriteWins() ? 
+            Long.MIN_VALUE : Long.MAX_VALUE;
+        
+        // sort so we can figure out which one we're going to keep, i.e. oldest
+        // or newest
+        Collections.sort(time_map.getValue());
+        
+        for (DP dp : time_map.getValue()) {
+          if (dp.compacted) {
+            compacted++;
+          }
+          if (options.lastWriteWins() && dp.stored_timestamp > keep_timestamp) {
+            keep_timestamp = dp.stored_timestamp;
+          } else if (dp.stored_timestamp < keep_timestamp) {
+            keep_timestamp = dp.stored_timestamp;
+          }
+        }
+        
+        // if there are more than one compacted columns with the same
+        // timestamp, something went pear shaped and we need more work to
+        // figure out what to do
+        final StringBuilder buf = new StringBuilder();
+        duplicates.getAndIncrement();
+
+        if (options.fix()) {
+          if (compacted < 1) {
+            // keep the earliest value
+            boolean matched = false;
+            for (DP dp : time_map.getValue()) {
+              if (dp.stored_timestamp == keep_timestamp && !matched) {
+                matched = true;
+                continue;
+              }
+              final DeleteOutOfOrder delooo = 
+                new DeleteOutOfOrder(row.get(0).key(), 
+                    "t".getBytes(), dp.qualifier);
+              delooo.call(null);
+            }
+          } else {
+            // keep the compacted value
+            for (DP dp : time_map.getValue()) {
+              if (dp.compacted) {
+                continue;
+              }
+              
+              final DeleteOutOfOrder delooo = 
+                new DeleteOutOfOrder(row.get(0).key(),
+                    "t".getBytes(), dp.qualifier);
+              delooo.call(null);
+            }
+          }
+        } else {
+          buf.setLength(0);
+          buf.append("More than one column had a value for the same timestamp: ")
+             .append("(")
+             .append(time_map.getKey())
+             .append(")\n");
+          int index = 0;
+          for (DP dp : time_map.getValue()) {
+            buf.append("    ")
+               .append("write time: (")
+               .append(dp.stored_timestamp)
+               .append(") ")
+               .append(" compacted: (")
+               .append(dp.compacted)
+               .append(")  qualifier: ")
+               .append(Arrays.toString(dp.qualifier));
+            if (options.lastWriteWins() && index == time_map.getValue().size() - 1) {
+              buf.append("  <--- Keep latest");
+            } else if (!options.lastWriteWins() && index == 0) {
+              buf.append("  <--- Keep oldest");
+            }              
+            buf.append("\n");
+            index++;
+          }
+          LOG.error(buf.toString());
+        }
+        //}
+      }
+
     }
     
     private boolean fsckKey(final byte[] key) throws Exception {
+      // TODO - allow for global annotations!!!
+      
       if (key.length < key_prefix_length || 
           (key.length - key_prefix_length) % key_tags_length != 0) {
         LOG.error("Invalid row key.\n\tKey: " + UniqueId.uidToString(key));
@@ -588,6 +500,127 @@ final class Fsck {
         }
       }
       return true;
+    }
+  
+    private void fsckFloat(final KeyValue kv, 
+        final List<Deferred<Object>> requests) throws Exception {
+      byte[] qual = kv.qualifier();
+      byte[] value = kv.value();
+      
+      // The qualifier says the value is on 4 bytes, and the value is
+      // on 8 bytes, then the 4 MSBs must be 0s.  Old versions of the
+      // code were doing this.  It's kinda sad.  Some versions had a
+      // bug whereby the value would be sign-extended, so we can
+      // detect these values and fix them here.
+      if (value.length == 8) {
+        if (value[0] == -1 && value[1] == -1
+            && value[2] == -1 && value[3] == -1 && qual.length == 2) {
+          value_encoding.getAndIncrement();
+          LOG.error("Floating point value with 0xFF most significant"
+              + " bytes, probably caused by sign extension bug"
+              + " present in revisions [96908436..607256fc].\n"
+              + "\t" + kv);
+          if (options.fix()) {
+            final float value_as_float =
+                Float.intBitsToFloat(Bytes.getInt(value, 4));
+            value = Bytes.fromInt(
+                Float.floatToRawIntBits((float)value_as_float));
+            final PutRequest put = new PutRequest(tsdb.dataTable(), 
+                kv.key(), kv.family(), qual, value);
+            requests.add(tsdb.getClient().put(put));
+            value_encoding_fixed.getAndIncrement();
+          }
+        } else if (value[0] != 0 || value[1] != 0
+                   || value[2] != 0 || value[3] != 0) {
+          LOG.error("Floating point value was marked as 4 bytes long but"
+              + " was actually 8 bytes long and the first four bytes were"
+              + " not zeroed\n\t" + kv);
+          bad_values.getAndIncrement();
+          if (options.fix() && options.deleteBadValues()) {
+            final DeleteRequest delete = new DeleteRequest(tsdb.dataTable(), kv);
+            requests.add(tsdb.getClient().delete(delete));
+            bad_values_deleted.getAndIncrement();
+          }
+        } else {
+          LOG.warn("Floating point value was marked as 4 bytes long but"
+              + " was actually 8 bytes long\n\t" + kv);
+          value_encoding.getAndIncrement();
+          if (options.fix()) {
+            final float value_as_float =
+                Float.intBitsToFloat(Bytes.getInt(value, 4));
+            value = Bytes.fromInt(
+                Float.floatToRawIntBits((float)value_as_float));
+            final PutRequest put = new PutRequest(tsdb.dataTable(), 
+                kv.key(), kv.family(), qual, value);
+            requests.add(tsdb.getClient().put(put));
+            value_encoding_fixed.getAndIncrement();
+          }
+        }
+      } else if (value.length != 4) {
+        bad_values.getAndIncrement();
+        LOG.error("This floating point value must be encoded either on"
+                  + " 4 or 8 bytes, but it's on " + value.length
+                  + " bytes.\n\t" + kv);
+        if (options.fix() && options.deleteBadValues()) {
+          final DeleteRequest delete = new DeleteRequest(tsdb.dataTable(), kv);
+          requests.add(tsdb.getClient().delete(delete));
+          bad_values_deleted.getAndIncrement();
+        }
+      }
+    }
+    
+    private void fsckInteger(final KeyValue kv, 
+        final List<Deferred<Object>> requests) throws Exception {
+      byte[] qual = kv.qualifier();
+      byte[] value = kv.value();
+      
+      // this should be a single integer value. Check the encoding to make
+      // sure it's the proper length, and if the flag is set to fix encoding
+      // we can save space with VLE.
+      final byte length = Internal.getValueLengthFromQualifier(qual);
+      if (value.length != length) {
+        bad_values.getAndIncrement();
+        LOG.error("The integer value is " + value.length + " bytes long but "
+            + "should be " + length + " bytes.\n\t" + kv);
+        if (options.fix() && options.deleteBadValues()) {
+          final DeleteRequest delete = new DeleteRequest(tsdb.dataTable(), kv);
+          requests.add(tsdb.getClient().delete(delete));
+          bad_values_deleted.getAndIncrement();
+        }
+      }
+      
+      // OpenTSDB had support for VLE decoding of integers but only wrote
+      // on 8 bytes at the start. Lets see how much space we could save. 
+      // We'll assume that a length other than 8 bytes is already VLE'd
+      if (length == 8) {
+        final long decoded = Bytes.getLong(value);
+        boolean fixup = false;
+        if (Byte.MIN_VALUE <= decoded && decoded <= Byte.MAX_VALUE) {
+          vle.getAndIncrement();
+          vle_bytes.addAndGet(7);
+          fixup = true;
+          value = new byte[] { (byte) decoded };
+        } else if (Short.MIN_VALUE <= decoded && decoded <= Short.MAX_VALUE) {
+          vle.getAndIncrement();
+          vle_bytes.addAndGet(6);
+          fixup = true;
+          value = Bytes.fromShort((short) decoded);
+        } else if (Integer.MIN_VALUE <= decoded && 
+            decoded <= Integer.MAX_VALUE) {
+          vle.getAndIncrement();
+          vle_bytes.addAndGet(4);
+          fixup = true;
+          value = Bytes.fromInt((int) decoded);
+        } // else it needs 8 bytes, it's on 8 bytes, yipee
+        
+        if (fixup && options.fix() && options.vle()) {
+          qual[qual.length - 1] &= 0xF0 | (value.length - 1);
+          final PutRequest put = new PutRequest(tsdb.dataTable(), 
+              kv.key(), kv.family(), qual, value);
+          requests.add(tsdb.getClient().put(put));
+          vle_fixed.getAndIncrement();
+        }
+      }
     }
   }
   
@@ -642,30 +675,6 @@ final class Fsck {
                            final byte[] table,
                            final FsckOptions options,
                            final String[] args) throws Exception {
-
-    /** Callback to asynchronously delete a specific {@link KeyValue}.  */
-    final class DeleteOutOfOrder implements Callback<Deferred<Object>, Object> {
-
-        private final KeyValue kv;
-
-        public DeleteOutOfOrder(final KeyValue kv) {
-          this.kv = kv;
-        }
-
-        public DeleteOutOfOrder(final byte[] key, final byte[] family, 
-            final byte[] qualifier) {
-          this.kv = new KeyValue(key, family, qualifier, new byte[0]);
-        }
-        
-        public Deferred<Object> call(final Object arg) {
-          return client.delete(new DeleteRequest(table, kv.key(),
-                                                 kv.family(), kv.qualifier()));
-        }
-
-        public String toString() {
-          return "delete out-of-order data";
-        }
-      }
     
     int errors = 0;
     int correctable = 0;
@@ -834,8 +843,8 @@ final class Fsck {
               if (dp.compacted) {
                 compacted++;
               }
-              if (dp.timestamp < earliest_value) {
-                earliest_value = dp.timestamp;
+              if (dp.stored_timestamp < earliest_value) {
+                earliest_value = dp.stored_timestamp;
               }
             }
             
@@ -863,14 +872,14 @@ final class Fsck {
                   // keep the earliest value
                   boolean matched = false;
                   for (DP dp : time_map.getValue()) {
-                    if (dp.timestamp == earliest_value && !matched) {
+                    if (dp.stored_timestamp == earliest_value && !matched) {
                       matched = true;
                       continue;
                     }
-                    final DeleteOutOfOrder delooo = 
-                      new DeleteOutOfOrder(row.get(0).key(), 
-                          "t".getBytes(), dp.qualifier);
-                    delooo.call(null);
+//                    final DeleteOutOfOrder delooo = 
+//                      new DeleteOutOfOrder(row.get(0).key(), 
+//                          "t".getBytes(), dp.qualifier);
+//                    delooo.call(null);
                   }
                 } else {
                   // keep the compacted value
@@ -879,10 +888,10 @@ final class Fsck {
                       continue;
                     }
                     
-                    final DeleteOutOfOrder delooo = 
-                      new DeleteOutOfOrder(row.get(0).key(),
-                          "t".getBytes(), dp.qualifier);
-                    delooo.call(null);
+//                    final DeleteOutOfOrder delooo = 
+//                      new DeleteOutOfOrder(row.get(0).key(),
+//                          "t".getBytes(), dp.qualifier);
+//                    delooo.call(null);
                   }
                 }
               } else {
@@ -923,16 +932,23 @@ final class Fsck {
    * Internal class used for examining data points in a row to determine if
    * we have any duplicates. Can then be used to delete the duplicate columns.
    */
-  private static final class DP {
+  private static final class DP implements Comparable<DP> {
     
-    long timestamp;
+    long stored_timestamp;
     byte[] qualifier;
     boolean compacted;
     
     DP(final long timestamp, final byte[] qualifier, final boolean compacted) {
-      this.timestamp = timestamp;
+      this.stored_timestamp = timestamp;
       this.qualifier = qualifier;
       this.compacted = compacted;
+    }
+  
+    public int compareTo(final DP dp) {
+      if (stored_timestamp == dp.stored_timestamp) {
+        return 0;
+      } 
+      return stored_timestamp < dp.stored_timestamp ? -1 : 1;
     }
   }
   
@@ -961,4 +977,27 @@ final class Fsck {
     }
   }
 
+  /** Callback to asynchronously delete a specific {@link KeyValue}.  */
+  final class DeleteOutOfOrder implements Callback<Deferred<Object>, Object> {
+
+    private final KeyValue kv;
+
+    public DeleteOutOfOrder(final KeyValue kv) {
+      this.kv = kv;
+    }
+
+    public DeleteOutOfOrder(final byte[] key, final byte[] family, 
+        final byte[] qualifier) {
+      this.kv = new KeyValue(key, family, qualifier, new byte[0]);
+    }
+    
+    public Deferred<Object> call(final Object arg) {
+      return tsdb.getClient().delete(new DeleteRequest(tsdb.dataTable(), kv.key(),
+                                             kv.family(), kv.qualifier()));
+    }
+
+    public String toString() {
+      return "delete out-of-order data";
+    }
+  }
 }
