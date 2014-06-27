@@ -24,12 +24,18 @@ final class FsckOptions {
   private boolean delete_orphans;
   private boolean delete_unknown_columns;
   private boolean delete_bad_values;
+  private boolean delete_bad_keys;
+  private boolean delete_bad_compacts;
+  private boolean vle;
+  private int threads;
   
   /**
    * Default Ctor that sets the options based on command line flags and config
    * object
    * @param argp Command line arguments post parsing
    * @param config The configuration object loaded from a file 
+   * @throws IllegalArgumentException if a required value is missing or something
+   * was incorrect
    */
   public FsckOptions(final ArgP argp, final Config config) {
     fix = argp.has("--fix");
@@ -39,6 +45,21 @@ final class FsckOptions {
     delete_orphans = argp.has("--delete-orphans");
     delete_unknown_columns = argp.has("--delete-unknown-columns");
     delete_bad_values = argp.has("--delete-bad-values");
+    delete_bad_keys = argp.has("--delete-bad-keys");
+    delete_bad_compacts = argp.has("--delete-bad-compacts");
+    vle = argp.has("--vle");
+    if (argp.has("--threads")) {
+      threads = Integer.parseInt(argp.get("--threads"));
+      if (threads < 1) {
+        throw new IllegalArgumentException("Must have at least one thread");
+      }
+      if (threads > Runtime.getRuntime().availableProcessors() * 4) {
+        throw new IllegalArgumentException(
+            "Not allowed to run more than 4 threads per core");
+      }
+    } else {
+      threads = 0;
+    }
   }
   
   /**
@@ -54,9 +75,14 @@ final class FsckOptions {
     argp.addOption("--delete-orphans", 
         "Delete any time series rows where one or more UIDs fail resolution.");
     argp.addOption("--delete-unknown-columns", 
-        "Delete any unrecognized column that doesn't belong to OpenTSDB");
+        "Delete any unrecognized column that doesn't belong to OpenTSDB.");
     argp.addOption("--delete-bad-values", 
-        "Delete single column datapoints with bad values");
+        "Delete single column datapoints with bad values.");
+    argp.addOption("--delete-bad-keys", "Delete rows with invalid keys.");
+    argp.addOption("--delete-bad-compacts", 
+        "Delete compacted columns that cannot be parsed");
+    argp.addOption("--vle", 
+        "Re-encode integers with variable lengths to reduce space.");
   }
   
   /** @return Whether or not to fix errors while processing. Does not affect 
@@ -95,6 +121,26 @@ final class FsckOptions {
     return delete_bad_values;
   }
 
+  
+  /** @return Remove rows with invalid keys */
+  public boolean deleteBadKeys() {
+    return delete_bad_keys;
+  }
+  
+  /** @return Remove compacted columns that can't be parsed */
+  public boolean deleteBadCompacts() {
+    return delete_bad_compacts;
+  }
+  
+  /** @return Whether or not to re-encode integers with VLE */
+  public boolean vle() {
+    return vle;
+  }
+  
+  /** @return The number of threads to run. If 0, default to cores * 2 */
+  public int threads() {
+    return threads;
+  }
   
   /** @param fix Whether or not to fix errors while processing. Does not affect 
    * compacting */
@@ -137,4 +183,33 @@ final class FsckOptions {
     this.delete_bad_values = delete_bad_values;
   }
 
+  /** @param delete_bad_values Remove data points with invalid keys */
+  public void setDeleteBadKeys(final boolean delete_bad_keys) {
+    this.delete_bad_keys = delete_bad_keys;
+  }
+
+  /** @param delete_bad_compacts Remove compated columns that can't be parsed */
+  public void setDeleteBadCompacts(final boolean delete_bad_compacts) {
+    this.delete_bad_compacts = delete_bad_compacts;
+  }
+  
+  /** @param vle Whether or not to re-encode integers with vle */
+  public void setVle(final boolean vle) {
+    this.vle = vle;
+  }
+  
+  /** @param threads The number of threads to run
+   * @throws IllegalArgumentException if < 1 threads or more than cores * 4 
+   * threads are specified
+   */
+  public void setThreads(final int threads) {
+    if (threads < 1) {
+      throw new IllegalArgumentException("Must have at least one thread");
+    }
+    if (threads > Runtime.getRuntime().availableProcessors() * 4) {
+      throw new IllegalArgumentException(
+          "Not allowed to run more than 4 threads per core");
+    }
+    this.threads = threads;
+  }
 }
