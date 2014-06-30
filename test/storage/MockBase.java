@@ -658,8 +658,8 @@ public final class MockBase {
           cf.put(put.qualifiers()[i], column);
         }
         
-        column.put(put.timestamp() > 0 ? put.timestamp() : current_timestamp++, 
-            put.values()[i]);
+        column.put(put.timestamp() != Long.MAX_VALUE ? put.timestamp() : 
+          current_timestamp++, put.values()[i]);
       }
       
       return Deferred.fromResult(true);
@@ -732,8 +732,8 @@ public final class MockBase {
         column = new TreeMap<Long, byte[]>(Collections.reverseOrder());
         cf.put(put.qualifiers()[0], column);
       }
-      column.put(put.timestamp() > 0 ? put.timestamp() : current_timestamp++, 
-          put.value());
+      column.put(put.timestamp() != Long.MAX_VALUE ? put.timestamp() : 
+        current_timestamp++, put.value());
       return Deferred.fromResult(true);
     }
     
