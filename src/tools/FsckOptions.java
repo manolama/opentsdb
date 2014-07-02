@@ -20,14 +20,13 @@ import net.opentsdb.utils.Config;
 final class FsckOptions {
   private boolean fix;
   private boolean compact;
-  private boolean fix_dupes;
+  private boolean resolve_dupes;
   private boolean last_write_wins;
   private boolean delete_orphans;
   private boolean delete_unknown_columns;
   private boolean delete_bad_values;
-  private boolean delete_bad_keys;
+  private boolean delete_bad_rows;
   private boolean delete_bad_compacts;
-  private boolean vle;
   private int threads;
   
   /**
@@ -39,17 +38,20 @@ final class FsckOptions {
    * was incorrect
    */
   public FsckOptions(final ArgP argp, final Config config) {
-    fix = argp.has("--fix");
-    compact = argp.has("--compact");
-    fix_dupes = argp.has("--fix-dupes");
-    last_write_wins = argp.has("--last_write_wins") || 
+    fix = argp.has("--fix") || argp.has("--fix-all");
+    compact = argp.has("--compact") || argp.has("--fix-all");
+    resolve_dupes = argp.has("--resolve-duplicates") || argp.has("--fix-all");
+    last_write_wins = argp.has("--last-write-wins") || 
         config.getBoolean("tsd.storage.fix_duplicates");
-    delete_orphans = argp.has("--delete-orphans");
-    delete_unknown_columns = argp.has("--delete-unknown-columns");
-    delete_bad_values = argp.has("--delete-bad-values");
-    delete_bad_keys = argp.has("--delete-bad-keys");
-    delete_bad_compacts = argp.has("--delete-bad-compacts");
-    vle = argp.has("--vle");
+    delete_orphans = argp.has("--delete-orphans") || argp.has("--fix-all");
+    delete_unknown_columns = argp.has("--delete-unknown-columns") || 
+        argp.has("--fix-all");
+    delete_bad_values = argp.has("--delete-bad-values") || 
+        argp.has("--fix-all");
+    delete_bad_rows = argp.has("--delete-bad-rows") || 
+        argp.has("--fix-all");
+    delete_bad_compacts = argp.has("--delete-bad-compacts") || 
+        argp.has("--fix-all");
     if (argp.has("--threads")) {
       threads = Integer.parseInt(argp.get("--threads"));
       if (threads < 1) {
@@ -69,24 +71,27 @@ final class FsckOptions {
    * @param argp The parser to add options to
    */
   public static void addDataOptions(final ArgP argp) {
-    argp.addOption("--fix", "Fix errors as they're found.");
-    argp.addOption("--full-table", "Scan the entire data table for errors.");
-    argp.addOption("--compact", "Compactions rows matching the query.");
-    argp.addOption("--fix-dupes", 
-        "Keeps the oldest or newest duplicates. See --list-write-wins");
+    argp.addOption("--full-scan", "Scan the entire data table.");
+    argp.addOption("--fix", "Fix errors as they're found. Use in combination with"
+        + " other flags.");
+    argp.addOption("--fix-all", "Set all flags and fix errors as they're found.");
+    argp.addOption("--compact", "Compacts rows after parsing.");
+    argp.addOption("--resolve-duplicates", 
+        "Keeps the oldest (default) or newest duplicates. See --last-write-wins");
     argp.addOption("--last-write-wins", 
-        "Last data point written will be kept when fixing duplicates.");
+        "Last data point written will be kept when fixing duplicates.\n" +
+        "            May be set via config file and the 'tsd.storage.fix_duplicates' option.");
     argp.addOption("--delete-orphans", 
         "Delete any time series rows where one or more UIDs fail resolution.");
     argp.addOption("--delete-unknown-columns", 
         "Delete any unrecognized column that doesn't belong to OpenTSDB.");
     argp.addOption("--delete-bad-values", 
         "Delete single column datapoints with bad values.");
-    argp.addOption("--delete-bad-keys", "Delete rows with invalid keys.");
+    argp.addOption("--delete-bad-rows", "Delete rows with invalid keys.");
     argp.addOption("--delete-bad-compacts", 
-        "Delete compacted columns that cannot be parsed");
-    argp.addOption("--vle", 
-        "Re-encode integers with variable lengths to reduce space.");
+        "Delete compacted columns that cannot be parsed.");
+    argp.addOption("--threads", "NUMBER",
+        "Number of threads to use when executing a full table scan.");
   }
   
   /** @return Whether or not to fix errors while processing. Does not affect 
@@ -104,8 +109,8 @@ final class FsckOptions {
   }
   
   /** @return Whether or not to fix duplicates */
-  public boolean fixDupes() {
-    return fix_dupes;
+  public boolean resolveDupes() {
+    return resolve_dupes;
   }
   
   /** @return Accept data points with the most recent timestamp when duplicates 
@@ -132,20 +137,15 @@ final class FsckOptions {
 
   
   /** @return Remove rows with invalid keys */
-  public boolean deleteBadKeys() {
-    return delete_bad_keys;
+  public boolean deleteBadRows() {
+    return delete_bad_rows;
   }
   
   /** @return Remove compacted columns that can't be parsed */
   public boolean deleteBadCompacts() {
     return delete_bad_compacts;
   }
-  
-  /** @return Whether or not to re-encode integers with VLE */
-  public boolean vle() {
-    return vle;
-  }
-  
+
   /** @return The number of threads to run. If 0, default to cores * 2 */
   public int threads() {
     return threads;
@@ -167,8 +167,8 @@ final class FsckOptions {
   }
   
   /** @param fix_dupes Whether or not to fix duplicate data points */
-  public void setFixDupes(final boolean fix_dupes) {
-    this.fix_dupes = fix_dupes;
+  public void setResolveDupes(final boolean fix_dupes) {
+    this.resolve_dupes = fix_dupes;
   }
   
 
@@ -197,21 +197,16 @@ final class FsckOptions {
     this.delete_bad_values = delete_bad_values;
   }
 
-  /** @param delete_bad_values Remove data points with invalid keys */
-  public void setDeleteBadKeys(final boolean delete_bad_keys) {
-    this.delete_bad_keys = delete_bad_keys;
+  /** @param delete_bad_rows Remove data points with invalid keys */
+  public void setDeleteBadRows(final boolean delete_bad_rows) {
+    this.delete_bad_rows = delete_bad_rows;
   }
 
   /** @param delete_bad_compacts Remove compated columns that can't be parsed */
   public void setDeleteBadCompacts(final boolean delete_bad_compacts) {
     this.delete_bad_compacts = delete_bad_compacts;
   }
-  
-  /** @param vle Whether or not to re-encode integers with vle */
-  public void setVle(final boolean vle) {
-    this.vle = vle;
-  }
-  
+
   /** @param threads The number of threads to run
    * @throws IllegalArgumentException if < 1 threads or more than cores * 4 
    * threads are specified
