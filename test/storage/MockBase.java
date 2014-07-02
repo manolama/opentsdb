@@ -619,14 +619,14 @@ public final class MockBase {
             continue;
           }
           
-          for (Map.Entry<Long, byte[]> cell : column.getValue().entrySet()) {
-            KeyValue kv = mock(KeyValue.class);
-            when(kv.timestamp()).thenReturn(cell.getKey());
-            when(kv.value()).thenReturn(cell.getValue());
-            when(kv.qualifier()).thenReturn(column.getKey());
-            when(kv.key()).thenReturn(get.key());
-            kvs.add(kv);
-          }
+          // TODO - if we want to support multiple values, iterate over the 
+          // tree map. Otherwise Get returns just the latest value.
+          KeyValue kv = mock(KeyValue.class);
+          when(kv.timestamp()).thenReturn(column.getValue().firstKey());
+          when(kv.value()).thenReturn(column.getValue().firstEntry().getValue());
+          when(kv.qualifier()).thenReturn(column.getKey());
+          when(kv.key()).thenReturn(get.key());
+          kvs.add(kv);
         }
       }
       return Deferred.fromResult(kvs);
