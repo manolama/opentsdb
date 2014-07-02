@@ -244,6 +244,12 @@ public final class MockBase {
    */
   public void addColumn(final byte[] key, final byte[] family, 
       final byte[] qualifier, final byte[] value, final long timestamp) {
+    // AsyncHBase will throw an NPE if the user tries to write a NULL value
+    // so we better do the same. An empty value is ok though, i.e. new byte[] {}
+    if (value == null) {
+      throw new NullPointerException();
+    }
+    
     Bytes.ByteMap<Bytes.ByteMap<TreeMap<Long, byte[]>>> row = storage.get(key);
     if (row == null) {
       row = new Bytes.ByteMap<Bytes.ByteMap<TreeMap<Long, byte[]>>>();
