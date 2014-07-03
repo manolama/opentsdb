@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
+import com.stumbleupon.async.DeferredGroupException;
 
 import org.hbase.async.Bytes;
 
@@ -560,6 +561,11 @@ public final class Tags {
     throws NoSuchUniqueId {
     try {
       return resolveIdsAsync(tsdb, tags).joinUninterruptibly();
+    } catch (DeferredGroupException e) {
+      if (e.getCause().getClass().equals(NoSuchUniqueId.class)) {
+        throw (NoSuchUniqueId)e.getCause();
+      }
+      throw new RuntimeException(e.getCause());
     } catch (Exception e) {
       throw new RuntimeException("Shouldn't be here", e);
     }
