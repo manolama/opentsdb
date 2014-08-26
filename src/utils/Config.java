@@ -444,6 +444,7 @@ public class Config {
     default_map.put("tsd.storage.hbase.zk_quorum", "localhost");
     default_map.put("tsd.storage.hbase.zk_basedir", "/hbase");
     default_map.put("tsd.storage.enable_compaction", "true");
+    default_map.put("tsd.query.skip_unresolved_tagvs", "false");
     default_map.put("tsd.http.show_stack_trace", "true");
     default_map.put("tsd.http.request.enable_chunked", "false");
     default_map.put("tsd.http.request.max_chunk", "4096");

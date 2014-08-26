@@ -308,8 +308,17 @@ final class TsdbQuery implements Query {
         group_by_values.put(tsdb.tag_names.getId(tag.getKey()),
                             value_ids);
         for (int j = 0; j < values.length; j++) {
-          final byte[] value_id = tsdb.tag_values.getId(values[j]);
-          System.arraycopy(value_id, 0, value_ids[j], 0, value_width);
+          try {
+            final byte[] value_id = tsdb.tag_values.getId(values[j]);
+            System.arraycopy(value_id, 0, value_ids[j], 0, value_width);
+          } catch (NoSuchUniqueName nsu) {
+            if (tsdb.getConfig().getBoolean("tsd.query.skip_unresolved_tagvs")) {
+              LOG.warn("Query tag value not found: " + nsu.getMessage());
+              value_ids[j] = null;
+            } else {
+              throw nsu;
+            }
+          }
         }
       }
     }
@@ -668,6 +677,9 @@ final class TsdbQuery implements Query {
         } else {  // We want specific IDs.  List them: /(AAA|BBB|CCC|..)/
           buf.append("(?:");
           for (final byte[] value_id : value_ids) {
+            if (value_id == null) {
+              continue;
+            }
             buf.append("\\Q");
             addId(buf, value_id);
             buf.append('|');
@@ -822,7 +834,11 @@ final class TsdbQuery implements Query {
           buf.append("={");
           for (final byte[] value_id : value_ids) {
             try {
-              buf.append(tsdb.tag_values.getName(value_id));
+              if (value_id != null) {
+                buf.append(tsdb.tag_values.getName(value_id));
+              } else {
+                buf.append("null");
+              }
             } catch (NoSuchUniqueId e) {
               buf.append('<').append(e.getMessage()).append('>');
             }
