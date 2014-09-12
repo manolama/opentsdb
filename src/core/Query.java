@@ -140,6 +140,18 @@ public interface Query {
       final Aggregator function, final boolean rate, 
       final RateOptions rate_options);
   
+  /** 
+   * @param timeout How long to wait for the data in milliseconds
+   * @since 2.1 
+   */
+  public void setTimeout(final long timeout);
+  
+  /** 
+   * @param max_rows How many rows of data to fetch before canceling
+   * @since 2.1 
+   */
+  public void setMaxRows(final long max_rows);
+  
   /**
    * Downsamples the results by specifying a fixed interval between points.
    * <p>

@@ -157,6 +157,13 @@ final class QueryRpc implements HttpRpc {
     try {
       Deferred.groupInOrder(deferreds).addCallback(new QueriesCB())
         .joinUninterruptibly();
+    } catch (DeferredGroupException dge) {
+      if (dge.getCause().getClass() == InterruptedException.class) {
+        throw new BadRequestException(HttpResponseStatus.REQUEST_TIMEOUT, 
+            dge.getCause().getMessage());
+      } else {
+        throw new BadRequestException((RuntimeException)dge.getCause());
+      }
     } catch (Exception e) {
       throw new RuntimeException("Shouldn't be here", e);
     }
@@ -360,6 +367,16 @@ final class QueryRpc implements HttpRpc {
     
     if (query.hasQueryStringParam("ms")) {
       data_query.setMsResolution(true);
+    }
+    
+    if (query.hasQueryStringParam("timeout")) {
+      data_query.setTimeout(
+          Long.parseLong(query.getQueryStringParam("timeout")));
+    }
+    
+    if (query.hasQueryStringParam("max_rows")) {
+      data_query.setMaxRows(Long.parseLong(
+          query.getQueryStringParam("max_rows")));
     }
     
     // handle tsuid queries first

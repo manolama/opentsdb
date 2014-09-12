@@ -75,6 +75,12 @@ public final class TSQuery {
   /** Whether or not the user wasn't millisecond resolution */
   private boolean ms_resolution;
   
+  /** How long, in seconds, to wait for a query to complete */
+  private long timeout;
+  
+  /** Maximum number of rows before canceling a query */
+  private long max_rows;
+  
   /**
    * Default constructor necessary for POJO de/serialization
    */
@@ -135,6 +141,12 @@ public final class TSQuery {
       final Query query = tsdb.newQuery();
       query.setStartTime(start_time);
       query.setEndTime(end_time);
+      if (timeout > 0) {
+        query.setTimeout(timeout);
+      }
+      if (max_rows > 0) {
+        query.setMaxRows(max_rows);
+      }
       if (sub.downsampler() != null) {
         query.downsample(sub.downsampleInterval(), sub.downsampler());
       } else if (!ms_resolution) {
@@ -271,6 +283,16 @@ public final class TSQuery {
     return ms_resolution;
   }
   
+  /** @return how long in milliseconds to wait for data */
+  public long getTimeout() {
+    return timeout;
+  }
+  
+  /** @return the maximum number of rows to read before canceling */
+  public long getMaxRows() {
+    return max_rows;
+  }
+  
   /**
    * Sets the start time for further parsing. This can be an absolute or 
    * relative value. See {@link DateTime#parseDateTimeString} for details.
@@ -328,5 +350,15 @@ public final class TSQuery {
   /** @param ms_resolution whether or not the user wants millisecond resolution */
   public void setMsResolution(boolean ms_resolution) {
     this.ms_resolution = ms_resolution;
+  }
+
+  /** @param timeout how long in milliseconds to wait for data */
+  public void setTimeout(long timeout) {
+    this.timeout = timeout;
+  }
+  
+  /** @param max_rows the maximum number of rows to read before canceling */
+  public void setMaxRows(long max_rows) {
+    this.max_rows = max_rows;
   }
 }

@@ -122,9 +122,17 @@ final class TsdbQuery implements Query {
   /** Optional list of TSUIDs to fetch and aggregate instead of a metric */
   private List<String> tsuids;
   
+  /** How long, in seconds, to wait for data */
+  private long timeout;
+  
+  /** Maximum number of rows to fetch before canceling the query */
+  private long max_rows;
+  
   /** Constructor. */
   public TsdbQuery(final TSDB tsdb) {
     this.tsdb = tsdb;
+    timeout = 0;
+    max_rows = 0;
   }
 
   /**
@@ -248,6 +256,14 @@ final class TsdbQuery implements Query {
     this.rate_options = rate_options;
   }
   
+  public void setTimeout(final long timeout) {
+    this.timeout = timeout;
+  }
+  
+  public void setMaxRows(final long max_rows) {
+    this.max_rows = max_rows;
+  }
+  
   /**
    * Sets an optional downsampling function on this query
    * @param interval The interval, in milliseconds to rollup data points
@@ -368,7 +384,8 @@ final class TsdbQuery implements Query {
       boolean seenAnnotation = false;
       int hbase_time = 0; // milliseconds.
       long starttime = System.nanoTime();
-      long timeout = tsdb.getConfig().getLong("tsd.query.timeout");
+      long query_timeout = (timeout > 0) ? timeout : 
+        tsdb.getConfig().getLong("tsd.query.timeout");
       
       /**
       * Starts the scanner and is called recursively to fetch the next set of
@@ -405,11 +422,17 @@ final class TsdbQuery implements Query {
              return null;
            }
            
-           if (timeout >= 0 && hbase_time > timeout) {
-             throw new InterruptedException("Query timeout exceeded!");
+           if (query_timeout > 0 && hbase_time > query_timeout) {
+             throw new InterruptedException("Query timeout of " + timeout + 
+                 " seconds exceeded");
            }
            
            for (final ArrayList<KeyValue> row : rows) {
+             if (max_rows > 0 && nrows > max_rows) {
+               throw new InterruptedException("Query exceeded max number of rows: " + 
+                   max_rows);
+             }
+             
              final byte[] key = row.get(0).key();
              if (Bytes.memcmp(metric, key, 0, metric_width) != 0) {
                scanner.close();
@@ -840,7 +863,11 @@ final class TsdbQuery implements Query {
         buf.append(", ");
       }
     }
-    buf.append("))");
+    buf.append("), timeout=")
+       .append(timeout)
+       .append(", max_rows=")
+       .append(max_rows)
+       .append(")");
     return buf.toString();
   }
 
