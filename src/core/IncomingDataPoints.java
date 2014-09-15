@@ -515,5 +515,9 @@ final class IncomingDataPoints implements WritableDataPoints {
     buf.append("])");
     return buf.toString();
   }
-
+  
+  @Override
+  public Deferred<Object> persist() {
+	return Deferred.fromResult((Object)null);
+  }
 }

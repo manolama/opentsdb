@@ -72,7 +72,7 @@ public class Config {
   
   /** tsd.storage.enable_compaction */
   private boolean enable_compactions = true;
-
+  
   /** tsd.core.meta.enable_realtime_ts */
   private boolean enable_realtime_ts = false;
   
@@ -87,7 +87,7 @@ public class Config {
   
   /** tsd.http.request.enable_chunked */
   private boolean enable_chunked_requests = false;
-
+  
   /** tsd.storage.fix_duplicates */
   private boolean fix_duplicates = false;
 
@@ -206,7 +206,7 @@ public class Config {
   public int max_chunked_requests() {
     return this.max_chunked_requests;
   }
-
+  
   /** @return true if duplicate values should be fixed */
   public boolean fix_duplicates() {
     return fix_duplicates;
@@ -399,6 +399,20 @@ public class Config {
   /** @return An immutable copy of the configuration map */
   public final Map<String, String> getMap() {
     return ImmutableMap.copyOf(properties);
+  }
+  
+  /**
+   * set enable_compactions to true
+   */
+  public final void enableCompactions() {
+	  this.enable_compactions = true;
+  }
+
+  /**
+   * set enable_compactions to false 
+   */
+  public final void disableCompactions() {
+	  this.enable_compactions = false;
   }
   
   /**
