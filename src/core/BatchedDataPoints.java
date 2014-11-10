@@ -51,7 +51,7 @@ final class BatchedDataPoints implements WritableDataPoints {
   /**
    * Number of data points in this row.
    */
-  private short size = 0;
+  private int size = 0;
 
   /**
    * Storage of the compacted qualifier.
@@ -80,7 +80,6 @@ final class BatchedDataPoints implements WritableDataPoints {
 
   /**
    * Constructor.
-   *
    * @param tsdb The TSDB we belong to.
    */
   BatchedDataPoints(final TSDB tsdb, final String metric, 
@@ -112,6 +111,10 @@ final class BatchedDataPoints implements WritableDataPoints {
     }
   }
 
+  /**
+   * Resets the indices without overwriting the buffers. So the same amount of
+   * space will remain allocated.
+   */
   private void reset() {
     size = 0;
     qualifier_index = 0;
@@ -242,6 +245,14 @@ final class BatchedDataPoints implements WritableDataPoints {
     return Deferred.fromResult((Object) null);
   }
 
+  /**
+   * Checks the size of the qualifier and value arrays to make sure we have
+   * space. If not then we double the size of the arrays. This way a row
+   * allocates space for a full hour of second data but if the user requires
+   * millisecond storage with more than 3600 points, it will expand.
+   * @param next_qualifier The next qualifier to use for it's length
+   * @param next_value The next value to use for it's length
+   */
   private void ensureCapacity(final byte[] next_qualifier, 
       final byte[] next_value) {
     if (qualifier_index + next_qualifier.length >= batched_qualifier.length) {
@@ -253,6 +264,11 @@ final class BatchedDataPoints implements WritableDataPoints {
     }
   }
 
+  /**
+   * Appends the value and qualifier to the appropriate arrays
+   * @param next_qualifier The next qualifier to append
+   * @param next_value The next value to append
+   */
   private void append(final byte[] next_qualifier, final byte[] next_value) {
     ensureCapacity(next_qualifier, next_value);
 
@@ -356,6 +372,11 @@ final class BatchedDataPoints implements WritableDataPoints {
     }
   }
 
+  /**
+   * Calculates the 
+   * @param qualifier
+   * @return
+   */
   private static short delta(final short qualifier) {
     return (short) ((qualifier & 0xFFFF) >>> Const.FLAG_BITS);
   }
@@ -363,6 +384,7 @@ final class BatchedDataPoints implements WritableDataPoints {
   @Override
   public long timestamp(final int i) {
     checkIndex(i);
+    // once fixed, use the proper Internal.getTimestampFromQualifier() method
     return base_time + (delta(batched_qualifier[i]) & 0xFFFF);
   }
 
