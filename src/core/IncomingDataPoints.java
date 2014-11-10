@@ -520,9 +520,5 @@ final class IncomingDataPoints implements WritableDataPoints {
   public Deferred<Object> persist() {
 	return Deferred.fromResult((Object)null);
   }
-  @Override
-  public Deferred<Object> persist() {
-	return Deferred.fromResult((Object)null);
-  }
 
 }

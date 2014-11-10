@@ -401,26 +401,18 @@ public class Config {
     return ImmutableMap.copyOf(properties);
   }
 
-  public final void enableCompactions() {
-	  this.enable_compactions = true;
-  }
-
-  public final void disableCompactions() {
-	  this.enable_compactions = false;
-  }
-
   /**
    * set enable_compactions to true
    */
   public final void enableCompactions() {
-	  this.enable_compactions = true;
+    this.enable_compactions = true;
   }
 
   /**
    * set enable_compactions to false 
    */
   public final void disableCompactions() {
-	  this.enable_compactions = false;
+    this.enable_compactions = false;
   }
   
   /**

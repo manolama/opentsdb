@@ -29,6 +29,7 @@ public interface WritableDataPoints extends DataPoints {
    * Perform a put to the database to store writable points into the data table.
    * <p>
    * @return A deferred object to wait on for the results to be fetched.
+   * @since 2.2
    */
   Deferred<Object> persist();
 
@@ -119,6 +120,7 @@ public interface WritableDataPoints extends DataPoints {
    * chosen by the implementation.</li>
    * </ul>
    * @param batchornot if true, then this is a batch import.
+   * @since 2.2
    */
   void setBatchImport(boolean batchornot);
 

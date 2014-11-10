@@ -535,26 +535,16 @@ public final class TSDB {
     return new IncomingDataPoints(this);
   }
 
-	/**
-	 *
-	 * @param metric Every data point that gets appended must be associated to this metric.
-	 * @param tags The associated tags for all data points being added.
-	 * @return data structure which can have data points appended.
-	 */
-	public WritableDataPoints newBatch(String metric, Map<String, String> tags) {
-	  return new BatchedDataPoints(this, metric, tags);
-  }
-
   /**
-	 * Returns a new {@link BatchedDataPoints} instance suitable for this TSDB.
-	 * 
-	 * @param metric Every data point that gets appended must be associated to this metric.
-	 * @param tags The associated tags for all data points being added.
-	 * @return data structure which can have data points appended.
-	 */
-	public WritableDataPoints newBatch(String metric, Map<String, String> tags) {
-	  return new BatchedDataPoints(this, metric, tags);
-	}
+   * Returns a new {@link BatchedDataPoints} instance suitable for this TSDB.
+   * @param metric Every data point that gets appended must be associated to this metric.
+   * @param tags The associated tags for all data points being added.
+   * @return data structure which can have data points appended.
+   * @since 2.2
+   */
+  public WritableDataPoints newBatch(String metric, Map<String, String> tags) {
+    return new BatchedDataPoints(this, metric, tags);
+  }
 
   /**
    * Adds a single integer value data point in the TSDB.
