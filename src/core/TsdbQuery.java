@@ -21,6 +21,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +48,14 @@ final class TsdbQuery implements Query {
 
   private static final Logger LOG = LoggerFactory.getLogger(TsdbQuery.class);
 
+  /** Used when a query would cause a stack overflow due to async recursion */
+  protected static final ExecutorService thread_pool = 
+      Executors.newCachedThreadPool();
+  
+  /** The number of times we call {@code scanner.nextRows()} before breaking 
+   * out a new thread */
+  private static final int SCAN_RECURSION_DEPTH = 1024;
+  
   /** Used whenever there are no results. */
   private static final DataPoints[] NO_RESULT = new DataPoints[0];
 
@@ -352,21 +363,44 @@ final class TsdbQuery implements Query {
     final Scanner scanner = getScanner();
     final Deferred<TreeMap<byte[], Span>> results =
       new Deferred<TreeMap<byte[], Span>>();
+    final long scanner_start_time = System.currentTimeMillis();
+    final AtomicLong rows_with_data = new AtomicLong();
+    final byte[] seen_annotations = new byte[] { 0 };
     
     /**
-    * Scanner callback executed recursively each time we get a set of data
-    * from storage. This is responsible for determining what columns are
-    * returned and issuing requests to load leaf objects.
-    * When the scanner returns a null set of rows, the method initiates the
-    * final callback.
+    * Scanner callback executed recursively each time we get rows of datapoints
+    * from storage. Each time we get a set of rows, we look to see if the 
+    * scanner is complete, i.e. rows == null, or if we have reached the maximum
+    * recursion depth. If we have hit the max depth, then we will call
+    * {@code scan_completed} with {@code false} to let the Recursion callback
+    * know that it should fire up another ScannerCB in a separate thread so this
+    * one can rollback it's stack.
     */
-    final class ScannerCB implements Callback<Object,
+    final class ScannerCB extends Thread implements Callback<Deferred<Boolean>,
       ArrayList<ArrayList<KeyValue>>> {
       
-      int nrows = 0;
-      boolean seenAnnotation = false;
-      int hbase_time = 0; // milliseconds.
-      long starttime = System.nanoTime();
+      private final Deferred<Boolean> scan_completed = new Deferred<Boolean>();
+      private int scan_iterations = 0;
+      private int nrows = 0;
+      private byte had_annotation = 0;
+      
+      /**
+       * Ctor for the callback class
+       * @param completed_callback The callback to trigger when we're done or
+       * hit the max recursion limit.
+       */
+      public ScannerCB(final Callback<Object, Boolean> completed_callback) {
+        scan_completed.addCallback(completed_callback);
+      }
+      
+      /**
+       * Used by the thread pool if the scanner has exceeded the max number of
+       * calls to HBase so we don't overflow the stack of this thread.
+       */
+      @Override
+      public void run() {
+        scan();
+      }
       
       /**
       * Starts the scanner and is called recursively to fetch the next set of
@@ -374,9 +408,9 @@ final class TsdbQuery implements Query {
       * @return The map of spans if loaded successfully, null if no data was
       * found
       */
-       public Object scan() {
-         starttime = System.nanoTime();
-         return scanner.nextRows().addCallback(this);
+       public Deferred<Boolean> scan() {
+         scanner.nextRows().addCallback(this);
+         return scan_completed;
        }
   
       /**
@@ -385,28 +419,21 @@ final class TsdbQuery implements Query {
       * @return null if no rows were found, otherwise the TreeMap with spans
       */
        @Override
-       public Object call(final ArrayList<ArrayList<KeyValue>> rows)
+       public Deferred<Boolean> call(final ArrayList<ArrayList<KeyValue>> rows)
          throws Exception {
-         hbase_time += (System.nanoTime() - starttime) / 1000000;
          try {
            if (rows == null) {
-             hbase_time += (System.nanoTime() - starttime) / 1000000;
-             scanlatency.add(hbase_time);
-             LOG.info(TsdbQuery.this + " matched " + nrows + " rows in " +
-                 spans.size() + " spans in " + hbase_time + "ms");
-             if (nrows < 1 && !seenAnnotation) {
-               results.callback(null);
-             } else {
-               results.callback(spans);
-             }
+             seen_annotations[0] |= had_annotation;
+             rows_with_data.addAndGet(nrows);
+             scan_completed.callback(true);
              scanner.close();
              return null;
            }
+           scan_iterations++;
            
            for (final ArrayList<KeyValue> row : rows) {
              final byte[] key = row.get(0).key();
              if (Bytes.memcmp(metric, key, 0, metric_width) != 0) {
-               scanner.close();
                throw new IllegalDataException(
                    "HBase returned a row that doesn't match"
                    + " our scanner (" + scanner + ")! " + row + " does not start"
@@ -419,23 +446,66 @@ final class TsdbQuery implements Query {
              }
              final KeyValue compacted = 
                tsdb.compact(row, datapoints.getAnnotations());
-             seenAnnotation |= !datapoints.getAnnotations().isEmpty();
+             if (!datapoints.getAnnotations().isEmpty()) {
+               had_annotation = 1;
+             }
              if (compacted != null) { // Can be null if we ignored all KVs.
                datapoints.addRow(compacted);
                nrows++;
              }
            }
+           
+           // if we have exceeded the maximum scan recursion depth then we
+           // need to close out this callback chain and start a new one in
+           // a totally separate thread.
+           if (scan_iterations > SCAN_RECURSION_DEPTH) {
+             LOG.debug("Exceeded max scanner recursion depth of " + 
+                 SCAN_RECURSION_DEPTH + " iterations. Continuing scan "
+                     + "with new thread.");
+             seen_annotations[0] |= had_annotation;
+             rows_with_data.addAndGet(nrows);
+             scan_completed.callback(false);
+             return null;
+           }
 
-           return scan();
+           scan();
+           return null;
          } catch (Exception e) {
            scanner.close();
-           results.callback(e);
+           seen_annotations[0] |= had_annotation;
+           rows_with_data.addAndGet(nrows);
+           scan_completed.callback(e);
            return null;
          }
        }
      }
 
-     new ScannerCB().scan();
+    /**
+     * This is called at the end of each scanning loop. The value returned 
+     * determines if we return data or launch another scan iterator in a separate
+     * thread to avoid stack overflow issues due to async chaining.
+     */
+     class RecursionCB implements Callback<Object, Boolean> {
+       @Override
+       public Object call(final Boolean completed) {
+         if (completed == true) {
+           LOG.info(TsdbQuery.this + " matched " + rows_with_data.get() + " rows in " +
+             spans.size() + " spans in " + 
+             (System.currentTimeMillis() - scanner_start_time) + "ms");
+           if (rows_with_data.get() < 1 && seen_annotations[0] < 1) {
+             results.callback(null);
+           } else {
+             results.callback(spans);
+           }
+         } else {
+           final ScannerCB scanner_cb = new ScannerCB(this);
+           thread_pool.execute(scanner_cb);
+         }
+         return null;
+       }
+     }
+    
+     new ScannerCB(new RecursionCB()).scan();
      return results;
   }
 

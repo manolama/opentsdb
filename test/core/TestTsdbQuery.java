@@ -22,6 +22,7 @@ import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -50,6 +51,7 @@ import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
+import org.powermock.reflect.Whitebox;
 
 import com.stumbleupon.async.Deferred;
 
@@ -72,7 +74,7 @@ import com.stumbleupon.async.Deferred;
   Scanner.class, TsdbQuery.class, DeleteRequest.class, Annotation.class, 
   RowKey.class, Span.class, SpanGroup.class, IncomingDataPoints.class })
 public final class TestTsdbQuery {
-  private Config config;
+  private Config config = mock(Config.class);
   private TSDB tsdb = null;
   private HBaseClient client = mock(HBaseClient.class);
   private UniqueId metrics = mock(UniqueId.class);
@@ -84,11 +86,21 @@ public final class TestTsdbQuery {
   @Before
   public void before() throws Exception {
     PowerMockito.whenNew(HBaseClient.class)
-    .withArguments(anyString(), anyString()).thenReturn(client); 
-    config = new Config(false);
-    config.setFixDuplicates(true);  // TODO(jat): test both ways
+      .withArguments(anyString(), anyString()).thenReturn(client);
+    when(config.getString("tsd.storage.hbase.data_table")).thenReturn("tsdb");
+    when(config.getString("tsd.storage.hbase.uid_table")).thenReturn("tsdb-uid");
+    when(config.getString("tsd.storage.hbase.meta_table")).thenReturn("tsdb-meta");
+    when(config.getString("tsd.storage.hbase.tree_table")).thenReturn("tsdb-tree");
+    when(config.fix_duplicates()).thenReturn(true);
+    
+    // set compactions to FALSE first so we avoid firing off the compaction 
+    // thread while we're performing the tests. Then set it back to true as some
+    // tests depend on it.
+    when(config.enable_compactions()).thenReturn(false);
     tsdb = new TSDB(config);
+    when(config.enable_compactions()).thenReturn(true);
     query = new TsdbQuery(tsdb);
+    
 
     // replace the "real" field objects with mocks
     Field met = tsdb.getClass().getDeclaredField("metrics");
@@ -103,7 +115,7 @@ public final class TestTsdbQuery {
     tagv.setAccessible(true);
     tagv.set(tsdb, tag_values);
     
- // mock UniqueId
+    // mock UniqueId
     when(metrics.getId("sys.cpu.user")).thenReturn(new byte[] { 0, 0, 1 });
     when(metrics.getNameAsync(new byte[] { 0, 0, 1 }))
       .thenReturn(Deferred.fromResult("sys.cpu.user"));
@@ -296,7 +308,7 @@ public final class TestTsdbQuery {
     query.setTimeSeries("sys.cpu.user", tags, Aggregators.SUM, false);
 
     final DataPoints[] dps = query.run();
-    
+    System.out.println("Size: " + dps.length);
     assertNotNull(dps);
     assertEquals("sys.cpu.user", dps[0].metricName());
     assertTrue(dps[0].getAggregatedTags().isEmpty());
@@ -1597,6 +1609,38 @@ public final class TestTsdbQuery {
       ++i;
     }
     assertEquals(151, dps[0].size());
+  }
+
+  @Test
+  public void stackOverflowOKTest() throws Exception {
+    setQueryStorage();
+    storage.setMaxScannerRows(1);
+    // dump a bunch of rows of two metrics so that we can test filtering out
+    // on the metric
+    HashMap<String, String> tags = new HashMap<String, String>(1);
+    tags.put("host", "web01");
+    long timestamp = 1356998400;
+    for (int i = 1; i <= 1024 * 3; i++) {
+      tsdb.addPoint("sys.cpu.user", timestamp += 3600, i, tags).joinUninterruptibly();
+    }
+    
+    tags.clear();
+    query.setStartTime(1356998400);
+    query.setEndTime(1420070400);
+    query.setTimeSeries("sys.cpu.user", tags, Aggregators.SUM, false);
+    final DataPoints[] dps = query.run();
+    assertNotNull(dps);
+    assertEquals("sys.cpu.user", dps[0].metricName());
+    assertTrue(dps[0].getAggregatedTags().isEmpty());
+    assertNull(dps[0].getAnnotations());
+    assertEquals("web01", dps[0].getTags().get("host"));
+    
+    int value = 1;
+    for (DataPoint dp : dps[0]) {
+      assertEquals(value, dp.longValue());
+      value++;
+    }
+    assertEquals(3072, dps[0].aggregatedSize());
   }
   
   //---------------------- //
