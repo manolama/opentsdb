@@ -105,9 +105,10 @@ public final class TestUniqueIdRpc {
         "/api/uid/assign?metric=sys.cpu.0,sys.cpu.2");
     this.rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.OK, query.response().getStatus());
-    assertEquals(
-        "{\"metric\":{\"sys.cpu.0\":\"000001\",\"sys.cpu.2\":\"000003\"}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+    final String content = query.response().getContent()
+        .toString(Charset.forName("UTF-8"));
+    assertTrue(content.contains("\"sys.cpu.0\":\"000001\""));
+    assertTrue(content.contains("\"sys.cpu.2\":\"000003\""));
   }
   
   @Test
@@ -117,9 +118,11 @@ public final class TestUniqueIdRpc {
         "/api/uid/assign?metric=sys.cpu.1");
     this.rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.BAD_REQUEST, query.response().getStatus());
-    assertEquals("{\"metric_errors\":{\"sys.cpu.1\":\"Name already exists with " 
-        + "UID: 000002\"},\"metric\":{}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+    final String content = query.response().getContent()
+        .toString(Charset.forName("UTF-8"));
+    assertTrue(content.contains("{\"sys.cpu.1\":\"Name already exists with " 
+        + "UID: 000002\"}"));
+    assertTrue(content.contains("\"metric\":{}"));
   }
   
   @Test
@@ -129,10 +132,12 @@ public final class TestUniqueIdRpc {
         "/api/uid/assign?metric=sys.cpu.0,sys.cpu.1,sys.cpu.2");
     this.rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.BAD_REQUEST, query.response().getStatus());
-    assertEquals("{\"metric_errors\":{\"sys.cpu.1\":\"Name already exists with "
-        + "UID: 000002\"},\"metric\":{\"sys.cpu.0\":\"000001\",\"sys.cpu.2\":"
-        + "\"000003\"}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+    final String content = query.response().getContent()
+        .toString(Charset.forName("UTF-8"));
+    assertTrue(content.contains("{\"sys.cpu.1\":\"Name already exists with "
+        + "UID: 000002\"}"));
+    assertTrue(content.contains("\"sys.cpu.0\":\"000001\""));
+    assertTrue(content.contains("\"sys.cpu.2\":\"000003\""));
   }
   
   @Test
@@ -153,9 +158,10 @@ public final class TestUniqueIdRpc {
         "/api/uid/assign?tagk=host,fqdn");
     this.rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.OK, query.response().getStatus());
-    assertEquals(
-        "{\"tagk\":{\"fqdn\":\"000003\",\"host\":\"000001\"}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+    final String content = query.response().getContent()
+        .toString(Charset.forName("UTF-8"));
+    assertTrue(content.contains("\"fqdn\":\"000003\""));
+    assertTrue(content.contains("\"host\":\"000001\""));
   }
   
   @Test
@@ -165,9 +171,11 @@ public final class TestUniqueIdRpc {
         "/api/uid/assign?tagk=datacenter");
     this.rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.BAD_REQUEST, query.response().getStatus());
-    assertEquals("{\"tagk_errors\":{\"datacenter\":\"Name already exists with " 
-        + "UID: 000002\"},\"tagk\":{}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+    final String content = query.response().getContent()
+        .toString(Charset.forName("UTF-8"));
+    assertTrue(content.contains("{\"datacenter\":\"Name already exists with " 
+        + "UID: 000002\"}"));
+    assertTrue(content.contains("\"tagk\":{}"));
   }
   
   @Test
@@ -177,9 +185,12 @@ public final class TestUniqueIdRpc {
         "/api/uid/assign?tagk=host,datacenter,fqdn");
     this.rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.BAD_REQUEST, query.response().getStatus());
-    assertEquals("{\"tagk_errors\":{\"datacenter\":\"Name already exists with "
-        + "UID: 000002\"},\"tagk\":{\"fqdn\":\"000003\",\"host\":\"000001\"}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+    final String content = query.response().getContent()
+        .toString(Charset.forName("UTF-8"));
+    assertTrue(content.contains("{\"datacenter\":\"Name already exists with "
+        + "UID: 000002\"}"));
+    assertTrue(content.contains("\"fqdn\":\"000003\""));
+    assertTrue(content.contains("\"host\":\"000001\""));
   }
     
   @Test
@@ -200,9 +211,10 @@ public final class TestUniqueIdRpc {
         "/api/uid/assign?tagv=localhost,foo");
     this.rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.OK, query.response().getStatus());
-    assertEquals(
-        "{\"tagv\":{\"foo\":\"000003\",\"localhost\":\"000001\"}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+    final String content = query.response().getContent()
+        .toString(Charset.forName("UTF-8"));
+    assertTrue(content.contains("\"foo\":\"000003\""));
+    assertTrue(content.contains("\"localhost\":\"000001\""));
   }
   
   @Test
@@ -212,9 +224,11 @@ public final class TestUniqueIdRpc {
         "/api/uid/assign?tagv=myserver");
     this.rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.BAD_REQUEST, query.response().getStatus());
-    assertEquals("{\"tagv\":{},\"tagv_errors\":{\"myserver\":\"Name already "
-        + "exists with UID: 000002\"}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+    final String content = query.response().getContent()
+        .toString(Charset.forName("UTF-8"));
+    assertTrue(content.contains("\"tagv_errors\":{\"myserver\":\"Name already "
+        + "exists with UID: 000002\"}"));
+    assertTrue(content.contains("\"tagv\":{}"));
   }
   
   @Test
@@ -224,10 +238,12 @@ public final class TestUniqueIdRpc {
         "/api/uid/assign?tagv=localhost,myserver,foo");
     this.rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.BAD_REQUEST, query.response().getStatus());
-    assertEquals("{\"tagv\":{\"foo\":\"000003\",\"localhost\":\"000001\"},"
-        + "\"tagv_errors\":{\"myserver\":\"Name already exists with "
-        + "UID: 000002\"}}", 
-        query.response().getContent().toString(Charset.forName("UTF-8")));
+    final String content = query.response().getContent()
+        .toString(Charset.forName("UTF-8"));
+    assertTrue(content.contains("\"foo\":\"000003\""));
+    assertTrue(content.contains("\"localhost\":\"000001\""));
+    assertTrue(content.contains("\"tagv_errors\":{\"myserver\":"
+        + "\"Name already exists with UID: 000002\"}"));
   }
   
   @Test
