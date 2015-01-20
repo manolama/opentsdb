@@ -14,6 +14,7 @@ package net.opentsdb.tsd;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -153,8 +154,10 @@ public final class TestHttpJsonSerializer {
     HttpQuery.initializeSerializerMaps(tsdb);
     HttpQuery query = NettyMocks.getQuery(tsdb, "");
     HttpJsonSerializer serdes = new HttpJsonSerializer(query);
-    assertEquals("[{\"formatters\":",
-        serdes.formatSerializersV1().toString(Charset.forName("UTF-8"))
-        .substring(0, 15));
+    final String content = serdes.formatSerializersV1()
+        .toString(Charset.forName("UTF-8"));
+    assertTrue(content.contains("\"formatters\":["));
+    assertTrue(content.contains("\"SuggestV1\""));
+    assertTrue(content.contains("\"SerializersV1\""));
   }
 }
