@@ -24,11 +24,9 @@ import static org.junit.Assert.assertTrue;
 
 import java.lang.reflect.Field;
 import java.nio.charset.Charset;
-import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import net.opentsdb.core.RowKey;
 import net.opentsdb.core.TSDB;
@@ -41,7 +39,6 @@ import net.opentsdb.search.TimeSeriesLookup;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
 import net.opentsdb.utils.Config;
-import net.opentsdb.utils.JSON;
 import net.opentsdb.utils.Pair;
 
 import org.jboss.netty.handler.codec.http.DefaultHttpRequest;
@@ -94,7 +91,9 @@ public final class TestSearchRpc {
     rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.OK, query.response().getStatus());
     final String result = query.response().getContent().toString(UTF);
-    assertTrue(result.contains("\"results\":[{\"tsuid\""));
+    assertTrue(result.contains("\"tsuid\":\"000001000001000001\""));
+    assertTrue(result.contains("\"name\":\"sys.cpu.0\""));
+    assertTrue(result.contains("\"uid\":\"000001\""));
     assertEquals(1, search_query.getResults().size());
   }
   
@@ -106,7 +105,10 @@ public final class TestSearchRpc {
     rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.OK, query.response().getStatus());
     final String result = query.response().getContent().toString(UTF);
-    assertTrue(result.contains("\"results\":[{\"tags\""));
+    assertTrue(result.contains("\"metric\":\"sys.cpu.0\""));
+    assertTrue(result.contains("\"tsuid\":\"000001000001000001\""));
+    assertTrue(result.contains("\"host\":\"web01\""));
+    assertTrue(result.contains("\"owner\":\"ops\""));
     assertEquals(1, search_query.getResults().size());
   }
   
@@ -118,7 +120,9 @@ public final class TestSearchRpc {
     rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.OK, query.response().getStatus());
     final String result = query.response().getContent().toString(UTF);
-    assertTrue(result.contains("\"results\":[\"000001000001000001\""));
+    assertTrue(result.contains("\"000001000001000001\""));
+    assertTrue(result.contains("\"000002000002000002\""));
+    assertTrue(result.contains("\"totalResults\":2"));
     assertEquals(2, search_query.getResults().size());
   }
   
