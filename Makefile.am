@@ -33,6 +33,7 @@ tsdb_SRC := \
 	src/core/AggregationIterator.java	\
 	src/core/Aggregator.java	\
 	src/core/Aggregators.java	\
+	src/core/BatchedDataPoints.java \
 	src/core/ByteBufferList.java	\
 	src/core/ColumnDatapointIterator.java	\
 	src/core/CompactionQueue.java	\
@@ -139,12 +140,14 @@ tsdb_DEPS = \
 	$(PROTOBUF)	\
 	$(SLF4J_API)	\
 	$(SUASYNC)	\
-	$(ZOOKEEPER)
+	$(ZOOKEEPER) \
+	$(APACHE_MATH)
 
 test_SRC := \
 	test/core/SeekableViewsForTest.java \
 	test/core/TestAggregationIterator.java \
 	test/core/TestAggregators.java \
+	test/core/TestBatchedDataPoints.java \
 	test/core/TestCompactionQueue.java	\
 	test/core/TestDownsampler.java \
 	test/core/TestInternal.java	\
@@ -617,6 +620,7 @@ pom.xml: pom.xml.in Makefile
 	    -e 's/@SLF4J_API_VERSION@/$(SLF4J_API_VERSION)/' \
 	    -e 's/@SUASYNC_VERSION@/$(SUASYNC_VERSION)/' \
 	    -e 's/@ZOOKEEPER_VERSION@/$(ZOOKEEPER_VERSION)/' \
+	    -e 's/@APACHE_MATH_VERSION@/$(APACHE_MATH_VERSION)/' \
 	    -e 's/@spec_title@/$(spec_title)/' \
 	    -e 's/@spec_vendor@/$(spec_vendor)/' \
 	    -e 's/@spec_version@/$(PACKAGE_VERSION)/' \
