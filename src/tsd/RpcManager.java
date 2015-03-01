@@ -286,7 +286,11 @@ public final class RpcManager {
       http.put("api/uid", new UniqueIdRpc());
       http.put("api/query", new QueryRpc());
       http.put("api/tree", new TreeRpc());
-      http.put("api/annotation", new AnnotationRpc());
+      {
+        final AnnotationRpc annotation_rpc = new AnnotationRpc();
+        http.put("api/annotation", annotation_rpc);
+        http.put("api/annotations", annotation_rpc);
+      }
       http.put("api/search", new SearchRpc());
       http.put("api/config", new ShowConfig());
       

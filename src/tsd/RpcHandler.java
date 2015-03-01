@@ -30,6 +30,9 @@ import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.jboss.netty.handler.codec.http.HttpVersion;
+import org.jboss.netty.handler.timeout.IdleState;
+import org.jboss.netty.handler.timeout.IdleStateAwareChannelUpstreamHandler;
+import org.jboss.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -118,8 +121,6 @@ final class RpcHandler extends IdleStateAwareChannelUpstreamHandler {
     } else {
       LOG.info("Loaded CORS headers (" + cors_headers + ")");
     }
-      http_commands.put("api/annotation", annotation_rpc);
-      http_commands.put("api/annotations", annotation_rpc);
   }
 
   @Override
