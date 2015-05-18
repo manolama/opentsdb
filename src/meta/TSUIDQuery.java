@@ -18,6 +18,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import net.opentsdb.core.IncomingDataPoint;
 import net.opentsdb.core.Internal;
@@ -84,7 +85,7 @@ public class TSUIDQuery {
    * @throws NoSuchUniqueName if the metric or any of the tag names/values did
    * not exist
    */
-  public void setQuery(final String metric, final HashMap<String, String> tags) {
+  public void setQuery(final String metric, final Map<String, String> tags) {
     this.metric = tsdb.getUID(UniqueIdType.METRIC, metric);
     this.tags = Tags.resolveAll(tsdb, tags);
   }

@@ -50,6 +50,8 @@ tsdb_SRC := \
 	src/core/IncomingDataPoints.java	\
 	src/core/IllegalDataException.java	\
 	src/core/Internal.java	\
+	src/core/LastPointQuery  \
+	src/core/LastPointSubQuery  \
 	src/core/MutableDataPoint.java \
 	src/core/Query.java	\
 	src/core/QueryException.java	\
@@ -114,6 +116,7 @@ tsdb_SRC := \
 	src/tsd/PipelineFactory.java	\
 	src/tsd/PutDataPointRpc.java	\
 	src/tsd/QueryRpc.java	\
+	src/tsd/QueryRpcLastPoint.java	\
 	src/tsd/RpcHandler.java	\
 	src/tsd/RpcPlugin.java	\
 	src/tsd/RpcManager.java	\
@@ -189,6 +192,7 @@ test_SRC := \
 	test/core/TestTSQuery.java	\
 	test/core/TestTSSubQuery.java	\
 	test/plugin/DummyPlugin.java \
+	test/meta/BaseUIDMetaTest.java \
 	test/meta/TestAnnotation.java	\
 	test/meta/TestTSMeta.java	\
 	test/meta/TestTSUIDQuery.java	\

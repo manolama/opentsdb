@@ -13,14 +13,14 @@
 package net.opentsdb.meta;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Mockito.when;
-import static org.powermock.api.mockito.PowerMockito.mock;
+import static org.junit.Assert.assertNull;
+import static org.mockito.Matchers.any;
 
-import java.lang.reflect.Field;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
+import net.opentsdb.core.IncomingDataPoint;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.storage.MockBase;
 import net.opentsdb.uid.NoSuchUniqueName;
@@ -28,22 +28,20 @@ import net.opentsdb.uid.UniqueId;
 import net.opentsdb.utils.Config;
 
 import org.hbase.async.AtomicIncrementRequest;
-import org.hbase.async.Bytes;
 import org.hbase.async.DeleteRequest;
 import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseClient;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
 import org.hbase.async.Scanner;
-import org.junit.Before;
+import org.hbase.async.Bytes.ByteMap;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mockito;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
-
-import com.stumbleupon.async.Deferred;
 
 @PowerMockIgnore({"javax.management.*", "javax.xml.*",
   "ch.qos.*", "org.slf4j.*",
@@ -51,199 +49,10 @@ import com.stumbleupon.async.Deferred;
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({TSDB.class, Config.class, UniqueId.class, HBaseClient.class, 
   GetRequest.class, PutRequest.class, DeleteRequest.class, KeyValue.class, 
-  Scanner.class, TSMeta.class, AtomicIncrementRequest.class})
-public final class TestTSUIDQuery {
-  private static byte[] NAME_FAMILY = "name".getBytes(MockBase.ASCII());
-  private TSDB tsdb;
-  private Config config;
-  private HBaseClient client = mock(HBaseClient.class);
-  private MockBase storage;
-  private UniqueId metrics = mock(UniqueId.class);
-  private UniqueId tag_names = mock(UniqueId.class);
-  private UniqueId tag_values = mock(UniqueId.class);
-  private TSUIDQuery query;
-  
-  @Before
-  public void before() throws Exception {
-    config = mock(Config.class);
-    when(config.getString("tsd.storage.hbase.data_table")).thenReturn("tsdb");
-    when(config.getString("tsd.storage.hbase.uid_table")).thenReturn("tsdb-uid");
-    when(config.getString("tsd.storage.hbase.meta_table")).thenReturn("tsdb-meta");
-    when(config.getString("tsd.storage.hbase.tree_table")).thenReturn("tsdb-tree");
-    when(config.enable_tsuid_incrementing()).thenReturn(true);
-    when(config.enable_realtime_ts()).thenReturn(true);
-    
-    PowerMockito.whenNew(HBaseClient.class)
-      .withArguments(anyString(), anyString()).thenReturn(client);
-    tsdb = new TSDB(config);
-    storage = new MockBase(tsdb, client, true, true, true, true);
-    
-    storage.addColumn(new byte[] { 0, 0, 1 }, NAME_FAMILY,
-        "metrics".getBytes(MockBase.ASCII()),
-        "sys.cpu.user".getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 1 }, NAME_FAMILY,
-        "metric_meta".getBytes(MockBase.ASCII()), 
-        ("{\"uid\":\"000001\",\"type\":\"METRIC\",\"name\":\"sys.cpu.user\"," +
-        "\"description\":\"Description\",\"notes\":\"MyNotes\",\"created\":" + 
-        "1328140801,\"displayName\":\"System CPU\"}")
-        .getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 2 }, NAME_FAMILY,
-        "metrics".getBytes(MockBase.ASCII()),
-        "sys.cpu.nice".getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 2 }, NAME_FAMILY,
-        "metric_meta".getBytes(MockBase.ASCII()), 
-        ("{\"uid\":\"000002\",\"type\":\"METRIC\",\"name\":\"sys.cpu.nice\"," +
-        "\"description\":\"Description\",\"notes\":\"MyNotes\",\"created\":" + 
-        "1328140801,\"displayName\":\"System CPU\"}")
-        .getBytes(MockBase.ASCII()));
-    
-    storage.addColumn(new byte[] { 0, 0, 1 }, NAME_FAMILY,
-        "tagk".getBytes(MockBase.ASCII()),
-        "host".getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 1 }, NAME_FAMILY,
-        "tagk_meta".getBytes(MockBase.ASCII()), 
-        ("{\"uid\":\"000001\",\"type\":\"TAGK\",\"name\":\"host\"," +
-        "\"description\":\"Description\",\"notes\":\"MyNotes\",\"created\":" + 
-        "1328140801,\"displayName\":\"Host server name\"}")
-        .getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 2 }, NAME_FAMILY,
-        "tagk".getBytes(MockBase.ASCII()),
-        "datacenter".getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 2 }, NAME_FAMILY,
-        "tagk_meta".getBytes(MockBase.ASCII()), 
-        ("{\"uid\":\"000002\",\"type\":\"TAGK\",\"name\":\"datacenter\"," +
-        "\"description\":\"Description\",\"notes\":\"MyNotes\",\"created\":" + 
-        "1328140801,\"displayName\":\"Datecenter name\"}")
-        .getBytes(MockBase.ASCII()));
+  Scanner.class, TSMeta.class, AtomicIncrementRequest.class, System.class, 
+  TSUIDQuery.class})
+public class TestTSUIDQuery extends BaseUIDMetaTest {
 
-    storage.addColumn(new byte[] { 0, 0, 1 }, NAME_FAMILY,
-        "tagv".getBytes(MockBase.ASCII()),
-        "web01".getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 1 }, NAME_FAMILY,
-        "tagv_meta".getBytes(MockBase.ASCII()), 
-        ("{\"uid\":\"000001\",\"type\":\"TAGV\",\"name\":\"web01\"," +
-        "\"description\":\"Description\",\"notes\":\"MyNotes\",\"created\":" + 
-        "1328140801,\"displayName\":\"Web server 1\"}")
-        .getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 2 }, NAME_FAMILY,
-        "tagv".getBytes(MockBase.ASCII()),
-        "web02".getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 2 }, NAME_FAMILY,
-        "tagv_meta".getBytes(MockBase.ASCII()), 
-        ("{\"uid\":\"000002\",\"type\":\"TAGV\",\"name\":\"web02\"," +
-        "\"description\":\"Description\",\"notes\":\"MyNotes\",\"created\":" + 
-        "1328140801,\"displayName\":\"Web server 2\"}")
-        .getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 3 }, NAME_FAMILY,
-        "tagv".getBytes(MockBase.ASCII()),
-        "dc01".getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 3 }, NAME_FAMILY,
-        "tagv_meta".getBytes(MockBase.ASCII()), 
-        ("{\"uid\":\"000003\",\"type\":\"TAGV\",\"name\":\"dc01\"," +
-        "\"description\":\"Description\",\"notes\":\"MyNotes\",\"created\":" + 
-        "1328140801,\"displayName\":\"Web server 2\"}")
-        .getBytes(MockBase.ASCII()));
-
-    storage.addColumn(new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 1 }, NAME_FAMILY,
-        "ts_meta".getBytes(MockBase.ASCII()),
-        ("{\"tsuid\":\"000001000001000001\",\"" +
-        "description\":\"Description\",\"notes\":\"Notes\",\"created\":1328140800," +
-        "\"custom\":null,\"units\":\"\",\"retention\":42,\"max\":1.0,\"min\":" +
-        "\"NaN\",\"displayName\":\"Display\",\"dataType\":\"Data\"}")
-        .getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 1 }, NAME_FAMILY,
-        "ts_ctr".getBytes(MockBase.ASCII()),
-        Bytes.fromLong(1L));
-    storage.addColumn(new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 2 }, NAME_FAMILY,
-        "ts_meta".getBytes(MockBase.ASCII()),
-        ("{\"tsuid\":\"000001000001000002\",\"" +
-        "description\":\"Description\",\"notes\":\"Notes\",\"created\":1328140800," +
-        "\"custom\":null,\"units\":\"\",\"retention\":42,\"max\":1.0,\"min\":" +
-        "\"NaN\",\"displayName\":\"Display\",\"dataType\":\"Data\"}")
-        .getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 2 }, NAME_FAMILY,
-        "ts_ctr".getBytes(MockBase.ASCII()),
-        Bytes.fromLong(1L));
-    storage.addColumn(new byte[] { 0, 0, 2, 0, 0, 2, 0, 0, 3, 0, 0, 1, 0, 0, 1 },
-        NAME_FAMILY, "ts_meta".getBytes(MockBase.ASCII()),
-        ("{\"tsuid\":\"000002000002000003000001000001\",\"" +
-        "description\":\"Description\",\"notes\":\"Notes\",\"created\":1328140800," +
-        "\"custom\":null,\"units\":\"\",\"retention\":42,\"max\":1.0,\"min\":" +
-        "\"NaN\",\"displayName\":\"Display\",\"dataType\":\"Data\"}")
-        .getBytes(MockBase.ASCII()));
-    storage.addColumn(new byte[] { 0, 0, 2, 0, 0, 2, 0, 0, 3, 0, 0, 1, 0, 0, 1 },
-        NAME_FAMILY, "ts_ctr".getBytes(MockBase.ASCII()),
-        Bytes.fromLong(1L));
-    
-    // replace the "real" field objects with mocks
-    Field cl = tsdb.getClass().getDeclaredField("client");
-    cl.setAccessible(true);
-    cl.set(tsdb, client);
-    
-    Field met = tsdb.getClass().getDeclaredField("metrics");
-    met.setAccessible(true);
-    met.set(tsdb, metrics);
-    
-    Field tagk = tsdb.getClass().getDeclaredField("tag_names");
-    tagk.setAccessible(true);
-    tagk.set(tsdb, tag_names);
-    
-    Field tagv = tsdb.getClass().getDeclaredField("tag_values");
-    tagv.setAccessible(true);
-    tagv.set(tsdb, tag_values);
-    
-    // mock UniqueId
-    when(metrics.getId("sys.cpu.user")).thenReturn(new byte[] { 0, 0, 1 });
-    when(metrics.getNameAsync(new byte[] { 0, 0, 1 }))
-      .thenReturn(Deferred.fromResult("sys.cpu.user"));
-    when(metrics.getId("sys.cpu.system"))
-      .thenThrow(new NoSuchUniqueName("sys.cpu.system", "metric"));
-    when(metrics.getId("sys.cpu.nice")).thenReturn(new byte[] { 0, 0, 2 });
-    when(metrics.getNameAsync(new byte[] { 0, 0, 2 }))
-      .thenReturn(Deferred.fromResult("sys.cpu.nice"));
-    
-    when(tag_names.getId("host")).thenReturn(new byte[] { 0, 0, 1 });
-    when(tag_names.getIdAsync("host")).thenReturn(
-        Deferred.fromResult(new byte[] { 0, 0, 1 }));
-    when(tag_names.getNameAsync(new byte[] { 0, 0, 1 }))
-      .thenReturn(Deferred.fromResult("host"));
-    when(tag_names.getOrCreateIdAsync("host")).thenReturn(
-        Deferred.fromResult(new byte[] { 0, 0, 1 }));
-    when(tag_names.getId("dc"))
-      .thenThrow(new NoSuchUniqueName("dc", "metric"));
-    when(tag_names.getId("datacenter")).thenReturn(new byte[] { 0, 0, 2 });
-    when(tag_names.getIdAsync("datacenter"))
-      .thenReturn(Deferred.fromResult(new byte[] { 0, 0, 2 }));
-    when(tag_names.getNameAsync(new byte[] { 0, 0, 2 }))
-      .thenReturn(Deferred.fromResult("datacenter"));
-    
-    when(tag_values.getId("web01")).thenReturn(new byte[] { 0, 0, 1 });
-    when(tag_values.getIdAsync("web01")).thenReturn(
-        Deferred.fromResult(new byte[] { 0, 0, 1 }));
-    when(tag_values.getNameAsync(new byte[] { 0, 0, 1 }))
-      .thenReturn(Deferred.fromResult("web01"));
-    when(tag_values.getOrCreateIdAsync("web01")).thenReturn(
-        Deferred.fromResult(new byte[] { 0, 0, 1 }));
-    when(tag_values.getId("web02")).thenReturn(new byte[] { 0, 0, 2 });
-    when(tag_values.getIdAsync("web02")).thenReturn(
-        Deferred.fromResult(new byte[] { 0, 0, 2 }));
-    when(tag_values.getNameAsync(new byte[] { 0, 0, 2 }))
-      .thenReturn(Deferred.fromResult("web02"));
-    when(tag_values.getOrCreateIdAsync("web02")).thenReturn(
-        Deferred.fromResult(new byte[] { 0, 0, 2 }));
-    when(tag_values.getId("web03"))
-      .thenThrow(new NoSuchUniqueName("web03", "metric"));
-    when(tag_values.getId("dc01")).thenReturn(new byte[] { 0, 0, 3 });
-    when(tag_values.getIdAsync("dc01"))
-      .thenReturn(Deferred.fromResult(new byte[] { 0, 0, 3 }));
-    when(tag_values.getNameAsync(new byte[] { 0, 0, 3 }))
-      .thenReturn(Deferred.fromResult("dc01"));
-    
-    when(metrics.width()).thenReturn((short)3);
-    when(tag_names.width()).thenReturn((short)3);
-    when(tag_values.width()).thenReturn((short)3);
-  }
-  
   @Test
   public void setQuery() throws Exception {
     query = new TSUIDQuery(tsdb);
@@ -285,7 +94,7 @@ public final class TestTSUIDQuery {
     query = new TSUIDQuery(tsdb);
     query.getLastWriteTimes().joinUninterruptibly();
   }
-  
+
   @Test
   public void getTSMetasSingle() throws Exception {
     query = new TSUIDQuery(tsdb);
@@ -322,4 +131,174 @@ public final class TestTSUIDQuery {
     query.getTSMetas().joinUninterruptibly();
   }
 
+  // TODO - Need to split mockbase by table. For now it's all in the same table
+  // so these tests are cheating a bit since we're storing different column
+  // families in the same table. It'll do for now.
+  @Test
+  public void getLastPointCounterMeta() throws Exception {
+    tsdb.addPoint("sys.cpu.user", 1388534400015L, 42, tags);
+    final IncomingDataPoint dp = TSUIDQuery.getLastPoint(tsdb, TSUID, 
+        false, 0, 0).join();
+    assertEquals(1388534400015L, dp.getTimestamp());
+    assertEquals("42", dp.getValue());
+    assertNull(dp.getMetric());
+    assertNull(dp.getTags());
+  }
+  
+  @Test
+  public void getLastPointCounterMetaTwoPoints() throws Exception {
+    tsdb.addPoint("sys.cpu.user", 1388534400015L, 42, tags);
+    tsdb.addPoint("sys.cpu.user", 1388534400016L, 24, tags);
+    final IncomingDataPoint dp = TSUIDQuery.getLastPoint(tsdb, TSUID, 
+        false, 0, 0).join();
+    assertEquals(1388534400016L, dp.getTimestamp());
+    assertEquals("24", dp.getValue());
+    assertNull(dp.getMetric());
+    assertNull(dp.getTags());
+  }
+  
+  @Test
+  public void getLastPointCounterMetaCompacted() throws Exception {
+    final byte[] key = new byte[] { 0, 0, 1, 0x52, (byte) 0xC3, 0x5A, 
+        (byte) 0x80, 0, 0, 1, 0, 0, 1 };
+    storage.addColumn(key, "t".getBytes(), new byte[] { 0, 0,  0, 0x10 }, 
+        new byte[] { 0x2A, 0x18, 0 });
+    final IncomingDataPoint dp = TSUIDQuery.getLastPoint(tsdb, TSUID, 
+        false, 0, 0).join();
+    assertEquals(1388534401000L, dp.getTimestamp());
+    assertEquals("24", dp.getValue());
+    assertNull(dp.getMetric());
+    assertNull(dp.getTags());
+  }
+  
+  @Test
+  public void getLastPointCounterMetaDupeCompacted() throws Exception {
+    final byte[] key = new byte[] { 0, 0, 1, 0x52, (byte) 0xC3, 0x5A, 
+        (byte) 0x80, 0, 0, 1, 0, 0, 1 };
+    storage.addColumn(key, "t".getBytes(), new byte[] { 0, 0,  0, 0x10 }, 
+        new byte[] { 0x2A, 0x18, 0 });
+    tsdb.addPoint("sys.cpu.user", 1388534401L, 42.5, tags);
+    final IncomingDataPoint dp = TSUIDQuery.getLastPoint(tsdb, TSUID, 
+        false, 0, 0).join();
+    assertEquals(1388534401000L, dp.getTimestamp());
+    assertEquals("42.5", dp.getValue());
+    assertNull(dp.getMetric());
+    assertNull(dp.getTags());
+  }
+  
+  @Test
+  public void getLastPointCounterMetaResolve() throws Exception {
+    tsdb.addPoint("sys.cpu.user", 1388534400015L, 42, tags);
+    final IncomingDataPoint dp = TSUIDQuery.getLastPoint(tsdb, TSUID, 
+        true, 0, 0).join();
+    assertEquals(1388534400015L, dp.getTimestamp());
+    assertEquals("42", dp.getValue());
+    assertEquals("sys.cpu.user", dp.getMetric());
+    assertEquals("web01", dp.getTags().get("host"));
+  }
+  
+  @Test
+  public void getLastPointCounterMetaNoValue() throws Exception {
+    assertNull(TSUIDQuery.getLastPoint(tsdb, TSUID, false, 0, 0).join());
+  }
+  
+  @Test (expected = RuntimeException.class)
+  public void getLastPointNoSuchMetaTable() throws Exception {
+    Mockito.doThrow(new RuntimeException("Table does not exist"))
+      .when(client).get(any(GetRequest.class));
+    TSUIDQuery.getLastPoint(tsdb, TSUID, false, 0, 0).join();
+  }
+
+  @Test
+  public void getLastPointTimeGiven() throws Exception {
+    tsdb.addPoint("sys.cpu.user", 1388534400015L, 42, tags);
+    final IncomingDataPoint dp = TSUIDQuery.getLastPoint(tsdb, TSUID, 
+        false, 0, 1388534400).join();
+    assertEquals(1388534400015L, dp.getTimestamp());
+    assertEquals("42", dp.getValue());
+  }
+  
+  @Test
+  public void getLastPointCounterMetaNoCounter() throws Exception {
+    tsdb.addPoint("sys.cpu.user", 1388534400015L, 42, tags);
+    storage.flushColumn(TSUID, NAME_FAMILY, "ts_ctr".getBytes(MockBase.ASCII()));
+    assertNull(TSUIDQuery.getLastPoint(tsdb, TSUID, false, 0, 0).join());
+  }
+  
+  @Test
+  public void getLastPointMaxLookups() throws Exception {
+    PowerMockito.mockStatic(System.class);
+    PowerMockito.when(System.currentTimeMillis()).thenReturn(1388534400000L);
+    tsdb.addPoint("sys.cpu.user", 1388534400015L, 42, tags);
+    
+    final IncomingDataPoint dp = TSUIDQuery.getLastPoint(tsdb, TSUID, 
+        false, 2, 0).join();
+    assertEquals(1388534400015L, dp.getTimestamp());
+    assertEquals("42", dp.getValue());
+  }
+  
+  @Test
+  public void getLastPointMaxLookupsScanBack() throws Exception {
+    PowerMockito.mockStatic(System.class);
+    PowerMockito.when(System.currentTimeMillis()).thenReturn(1388538000000L);
+    tsdb.addPoint("sys.cpu.user", 1388534400015L, 42, tags);
+
+    final IncomingDataPoint dp = TSUIDQuery.getLastPoint(tsdb, TSUID, 
+        false, 2, 0).join();
+    assertEquals(1388534400015L, dp.getTimestamp());
+    assertEquals("42", dp.getValue());
+  }
+  
+  @Test
+  public void getLastPointMaxLookupsScanBackNotFarEnough() throws Exception {
+    PowerMockito.mockStatic(System.class);
+    PowerMockito.when(System.currentTimeMillis()).thenReturn(1388545200000L);
+    tsdb.addPoint("sys.cpu.user", 1388534400015L, 42, tags);
+
+    assertNull(TSUIDQuery.getLastPoint(tsdb, TSUID, false, 2, 0).join());
+  }
+  
+  @Test
+  public void getLastPointMaxLookupsScanBackNotFarEnoughAndTime() throws Exception {
+    // scanbacks take precedence
+    PowerMockito.mockStatic(System.class);
+    PowerMockito.when(System.currentTimeMillis()).thenReturn(1388545200000L);
+    tsdb.addPoint("sys.cpu.user", 1388534400015L, 42, tags);
+
+    assertNull(TSUIDQuery.getLastPoint(tsdb, TSUID, false, 2, 1388534400L).join());
+  }
+  
+  @Test
+  public void getLastPointMaxLookupsNothingFound() throws Exception {
+    PowerMockito.mockStatic(System.class);
+    PowerMockito.when(System.currentTimeMillis()).thenReturn(1388534400015L);
+
+    assertNull(TSUIDQuery.getLastPoint(tsdb, TSUID, false, 2, 0).join());
+  }
+
+  @Test (expected = NullPointerException.class)
+  public void getLastPointNullTSDB() throws Exception {
+    TSUIDQuery.getLastPoint(null, TSUID, false, 0, 0).join();
+  }
+  
+  @Test
+  public void getLastWriteTimes() throws Exception {
+    query = new TSUIDQuery(tsdb);
+    query.setQuery("sys.cpu.user", Collections.<String, String>emptyMap());
+    final ByteMap<Long> times = query.getLastWriteTimes().join();
+    assertEquals(2, times.size());
+    assertEquals((Long)1388534400015L, times.get(TSUID));
+    assertEquals((Long)1388534400017L, times.get(TSUID2));
+  }
+  
+  @Test
+  public void getLastWriteTimesWithTags() throws Exception {
+    query = new TSUIDQuery(tsdb);
+    final HashMap<String, String> tags = new HashMap<String, String>(1);
+    tags.put("host", "web01");
+    query.setQuery("sys.cpu.user", tags);
+    final ByteMap<Long> times = query.getLastWriteTimes().join();
+    assertEquals(1, times.size());
+    assertEquals((Long)1388534400015L, times.get(TSUID));
+  }
 }
