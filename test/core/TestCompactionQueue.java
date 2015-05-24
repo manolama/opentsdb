@@ -88,6 +88,7 @@ public final class TestCompactionQueue {
     Whitebox.setInternalState(config, "enable_compactions", true);
     Whitebox.setInternalState(config, "fix_duplicates", true);
     Whitebox.setInternalState(tsdb, "config", config);
+    when(tsdb.getConfig()).thenReturn(config);
     // Stub out the compaction thread, so it doesn't even start.
     PowerMockito.whenNew(CompactionQueue.Thrd.class).withNoArguments()
       .thenReturn(mock(CompactionQueue.Thrd.class));
