@@ -498,7 +498,9 @@ class HttpJsonSerializer extends HttpSerializer {
    * @throws JSONException if serialization failed
    */
   public ChannelBuffer formatAggregatorsV1(final Set<String> aggregators) {
-    return this.serializeJSON(aggregators);
+    final List<String> sorted = new ArrayList<String>(aggregators);
+    Collections.sort(sorted);
+    return this.serializeJSON(sorted);
   }
   
   /**
