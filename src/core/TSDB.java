@@ -140,26 +140,6 @@ public final class TSDB {
     } else {
       this.client = client;
     }
-      final org.hbase.async.Config async_config;
-      if (config.configLocation() != null && !config.configLocation().isEmpty()) {
-        try {
-          async_config = new org.hbase.async.Config(config.configLocation());
-        } catch (final IOException e) {
-          throw new RuntimeException("Failed to read the config file: " + 
-              config.configLocation(), e);
-        }
-      } else {
-        async_config = new org.hbase.async.Config();
-      }
-      
-      async_config.overrideConfig("asynchbase.zk.base_path", 
-          config.getString("tsd.storage.hbase.zk_basedir"));
-      async_config.overrideConfig("asynchbase.zk.quorum", 
-          config.getString("tsd.storage.hbase.zk_quorum"));
-      async_config.overrideConfig("hbase.rpcs.buffered_flush_interval", 
-          config.getString("tsd.storage.flush_interval"));
-      this.client = new HBaseClient(async_config);
-    }
 
     table = config.getString("tsd.storage.hbase.data_table").getBytes(CHARSET);
     uidtable = config.getString("tsd.storage.hbase.uid_table").getBytes(CHARSET);
