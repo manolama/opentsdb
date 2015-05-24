@@ -15,7 +15,6 @@ package net.opentsdb.search;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
@@ -75,7 +74,7 @@ public class TestTimeSeriesLookup {
   @Before
   public void before() throws Exception {
     PowerMockito.whenNew(HBaseClient.class)
-    .withArguments(anyString(), anyString()).thenReturn(client); 
+      .withAnyArguments().thenReturn(client);
     config = new Config(false);
     tsdb = new TSDB(config);
 
