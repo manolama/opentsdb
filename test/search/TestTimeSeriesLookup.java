@@ -37,7 +37,6 @@ import org.hbase.async.Scanner;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
@@ -73,10 +72,8 @@ public class TestTimeSeriesLookup {
   
   @Before
   public void before() throws Exception {
-    PowerMockito.whenNew(HBaseClient.class)
-      .withAnyArguments().thenReturn(client);
     config = new Config(false);
-    tsdb = new TSDB(config);
+    tsdb = new TSDB(client, config);
 
     // replace the "real" field objects with mocks
     Field met = tsdb.getClass().getDeclaredField("metrics");

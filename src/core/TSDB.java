@@ -120,9 +120,26 @@ public final class TSDB {
    */
   public TSDB(final HBaseClient client, final Config config) {
     this.config = config;
-    if (client != null) {
-      this.client = client;
+    if (client == null) {
+      final org.hbase.async.Config async_config;
+      if (config.configLocation() != null && !config.configLocation().isEmpty()) {
+        try {
+          async_config = new org.hbase.async.Config(config.configLocation());
+        } catch (final IOException e) {
+          throw new RuntimeException("Failed to read the config file: " + 
+              config.configLocation(), e);
+        }
+      } else {
+        async_config = new org.hbase.async.Config();
+      }
+      async_config.overrideConfig("asynchbase.zk.base_path", 
+          config.getString("tsd.storage.hbase.zk_basedir"));
+      async_config.overrideConfig("asynchbase.zk.quorum", 
+          config.getString("tsd.storage.hbase.zk_quorum"));
+      this.client = new HBaseClient(async_config);
     } else {
+      this.client = client;
+    }
       final org.hbase.async.Config async_config;
       if (config.configLocation() != null && !config.configLocation().isEmpty()) {
         try {
