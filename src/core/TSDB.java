@@ -12,6 +12,7 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.core;
 
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,6 +25,7 @@ import com.stumbleupon.async.DeferredGroupException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.hbase.async.AppendRequest;
 import org.hbase.async.Bytes;
 import org.hbase.async.Bytes.ByteMap;
 import org.hbase.async.ClientStats;
@@ -118,9 +120,30 @@ public final class TSDB {
    */
   public TSDB(final HBaseClient client, final Config config) {
     this.config = config;
-    this.client = client;
+    if (client != null) {
+      this.client = client;
+    } else {
+      final org.hbase.async.Config async_config;
+      if (config.configLocation() != null && !config.configLocation().isEmpty()) {
+        try {
+          async_config = new org.hbase.async.Config(config.configLocation());
+        } catch (final IOException e) {
+          throw new RuntimeException("Failed to read the config file: " + 
+              config.configLocation(), e);
+        }
+      } else {
+        async_config = new org.hbase.async.Config();
+      }
+      
+      async_config.overrideConfig("asynchbase.zk.base_path", 
+          config.getString("tsd.storage.hbase.zk_basedir"));
+      async_config.overrideConfig("asynchbase.zk.quorum", 
+          config.getString("tsd.storage.hbase.zk_quorum"));
+      async_config.overrideConfig("hbase.rpcs.buffered_flush_interval", 
+          config.getString("tsd.storage.flush_interval"));
+      this.client = new HBaseClient(async_config);
+    }
 
-    this.client.setFlushInterval(config.getShort("tsd.storage.flush_interval"));
     table = config.getString("tsd.storage.hbase.data_table").getBytes(CHARSET);
     uidtable = config.getString("tsd.storage.hbase.uid_table").getBytes(CHARSET);
     treetable = config.getString("tsd.storage.hbase.tree_table").getBytes(CHARSET);
@@ -162,9 +185,7 @@ public final class TSDB {
    * @since 2.0
    */
   public TSDB(final Config config) {
-    this(new HBaseClient(config.getString("tsd.storage.hbase.zk_quorum"),
-                         config.getString("tsd.storage.hbase.zk_basedir")),
-         config);
+    this(null, config);
   }
   
   /** @return The data point column family name */
@@ -700,12 +721,21 @@ public final class TSDB {
     Bytes.setInt(row, (int) base_time, metrics.width() + Const.SALT_WIDTH());
     RowKey.prefixKeyWithSalt(row);
     
-    scheduleForCompaction(row, (int) base_time);
-    final PutRequest point = new PutRequest(table, row, FAMILY, qualifier, value);
+    Deferred<Object> result = null;
+    if (config.enable_appends()) {
+      final AppendDataPoints kv = new AppendDataPoints(qualifier, value);
+      final AppendRequest point = new AppendRequest(table, row, FAMILY, 
+          AppendDataPoints.APPEND_COLUMN_QUALIFIER, kv.getBytes());
+      result = client.append(point);
+    } else {
+      scheduleForCompaction(row, (int) base_time);
+      final PutRequest point = new PutRequest(table, row, FAMILY, qualifier, value);
+      result = client.put(point);
+    }
     
     // TODO(tsuna): Add a callback to time the latency of HBase and store the
     // timing in a moving Histogram (once we have a class for this).
-    Deferred<Object> result = client.put(point);
+    
     if (!config.enable_realtime_ts() && !config.enable_tsuid_incrementing() && 
         !config.enable_tsuid_tracking() && rt_publisher == null) {
       return result;
