@@ -120,7 +120,7 @@ public final class TSDB {
    */
   public TSDB(final HBaseClient client, final Config config) {
     this.config = config;
-    if (client != null) {
+    if (client == null) {
       final org.hbase.async.Config async_config;
       if (config.configLocation() != null && !config.configLocation().isEmpty()) {
         try {
