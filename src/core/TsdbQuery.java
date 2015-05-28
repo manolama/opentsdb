@@ -367,6 +367,17 @@ final class TsdbQuery implements Query {
     final AtomicLong rows_with_data = new AtomicLong();
     final byte[] seen_annotations = new byte[] { 0 };
     
+    class ErrCB implements Callback<Object, Exception> {
+
+      @Override
+      public Object call(final Exception ex) throws Exception {
+        LOG.error("Unexpected scanner exception: ", ex);
+        results.callback(ex);
+        return null;
+      }
+      
+    }
+    
     /**
     * Scanner callback executed recursively each time we get rows of datapoints
     * from storage. Each time we get a set of rows, we look to see if the 
@@ -399,7 +410,7 @@ final class TsdbQuery implements Query {
        */
       @Override
       public void run() {
-        scan();
+        scan().addErrback(new ErrCB());
       }
       
       /**
@@ -468,6 +479,7 @@ final class TsdbQuery implements Query {
              return null;
            }
 
+           LOG.debug("Scann depth: " + scan_iterations);
            scan();
            return null;
          } catch (Exception e) {
@@ -479,7 +491,7 @@ final class TsdbQuery implements Query {
          }
        }
      }
-
+    
     /**
      * This is called at the end of each scanning loop. The value returned 
      * determines if we return data or launch another scan iterator in a separate
@@ -505,7 +517,7 @@ final class TsdbQuery implements Query {
        }
      }
     
-     new ScannerCB(new RecursionCB()).scan();
+     new ScannerCB(new RecursionCB()).scan().addErrback(new ErrCB());
      return results;
   }
 
@@ -642,6 +654,8 @@ final class TsdbQuery implements Query {
       createAndSetFilter(scanner);
     }
     scanner.setFamily(TSDB.FAMILY);
+//    scanner.setMaxNumKeyValues(16);
+//    scanner.setMaxNumRows(8);
     return scanner;
   }
 

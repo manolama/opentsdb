@@ -1614,7 +1614,6 @@ public final class TestTsdbQuery {
   @Test
   public void stackOverflowOKTest() throws Exception {
     setQueryStorage();
-    storage.setMaxScannerRows(1);
     // dump a bunch of rows of two metrics so that we can test filtering out
     // on the metric
     HashMap<String, String> tags = new HashMap<String, String>(1);
