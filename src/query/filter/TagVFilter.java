@@ -280,8 +280,8 @@ public abstract class TagVFilter implements Comparable<TagVFilter> {
         final Constructor<? extends TagVFilter> ctor = 
             filter.getClass().getDeclaredConstructor(String.class, String.class);
         
-        final Constructor<? extends TagVFilter> existing = 
-            tagv_filter_map.get(filter.getType()).getValue();
+        final Pair<Class<?>, Constructor<? extends TagVFilter>> existing = 
+            tagv_filter_map.get(filter.getType());
         if (existing != null) {
           LOG.warn("Overloading existing filter " + 
               existing.getClass().getCanonicalName() + 
