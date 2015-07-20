@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.TreeMap;
 
 import net.opentsdb.query.filter.TagVFilter;
+import net.opentsdb.stats.QueryStats;
 import net.opentsdb.uid.UniqueId;
 
 import org.hbase.async.KeyValue;
@@ -50,7 +51,7 @@ import com.stumbleupon.async.Deferred;
   "ch.qos.*", "org.slf4j.*",
   "com.sum.*", "org.xml.*"})
 @PrepareForTest({ TSDB.class, Scanner.class, SaltScanner.class, Span.class, 
-  Const.class, UniqueId.class })
+  Const.class, UniqueId.class, QueryStats.class })
 public class TestSaltScanner extends BaseTsdbTest {
   private final static byte[] KEY_A = { 0x00, 0x00, 0x00, 0x01, 
     0x50, (byte) 0xE2, 0x27, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01 };
@@ -76,6 +77,7 @@ public class TestSaltScanner extends BaseTsdbTest {
   
   private Scanner scanner_a;
   private Scanner scanner_b;
+  private QueryStats query_stats_a;
   
   @Before
   public void beforeLocal() {
@@ -87,66 +89,69 @@ public class TestSaltScanner extends BaseTsdbTest {
     
     spans = new TreeMap<byte[], Span>(new RowKey.SaltCmp());
     setupMockScanners(true);
+    
+    query_stats_a = mock(QueryStats.class);
   }
   
   @Test
   public void ctor() {
-    assertNotNull(new SaltScanner(tsdb, METRIC_BYTES, scanners, spans, filters));
+    assertNotNull(new SaltScanner(tsdb, METRIC_BYTES, scanners, spans, filters, 
+        query_stats_a, 0));
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void ctorSaltDisabled() {
     PowerMockito.when(Const.SALT_WIDTH()).thenReturn(0);
-    new SaltScanner(tsdb, METRIC_BYTES, scanners, spans, filters);
+    new SaltScanner(tsdb, METRIC_BYTES, scanners, spans, filters, query_stats_a, 0);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void ctorNullTSDB() {
-    new SaltScanner(null, METRIC_BYTES, scanners, spans, filters);
+    new SaltScanner(null, METRIC_BYTES, scanners, spans, filters, query_stats_a, 0);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void ctorNullMETRIC_BYTES() {
-    new SaltScanner(tsdb, null, scanners, spans, filters);
+    new SaltScanner(tsdb, null, scanners, spans, filters, query_stats_a, 0);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void ctorShortMETRIC_BYTES() {
-    new SaltScanner(tsdb, new byte[] { 0, 1 }, scanners, spans, filters);
+    new SaltScanner(tsdb, new byte[] { 0, 1 }, scanners, spans, filters, query_stats_a, 0);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void ctorNullScanners() {
-    new SaltScanner(tsdb, METRIC_BYTES, null, spans, filters);
+    new SaltScanner(tsdb, METRIC_BYTES, null, spans, filters, query_stats_a, 0);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void ctorNotEnoughScanners() {
     scanners.remove(1);
-    new SaltScanner(tsdb, METRIC_BYTES, scanners, spans, filters);
+    new SaltScanner(tsdb, METRIC_BYTES, scanners, spans, filters, query_stats_a, 0);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void ctorTooManyScanners() {
     scanners.add(mock(Scanner.class));
-    new SaltScanner(tsdb, METRIC_BYTES, scanners, spans, filters);
+    new SaltScanner(tsdb, METRIC_BYTES, scanners, spans, filters, query_stats_a, 0);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void ctorNullSpans() {
-    new SaltScanner(tsdb, METRIC_BYTES, scanners, null, filters);
+    new SaltScanner(tsdb, METRIC_BYTES, scanners, null, filters, query_stats_a, 0);
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void ctorSpansHaveData() {
     spans.put(new byte[] { 0, 0, 0, 1 }, new Span(tsdb));
-    new SaltScanner(tsdb, METRIC_BYTES, scanners, spans, filters);
+    new SaltScanner(tsdb, METRIC_BYTES, scanners, spans, filters, query_stats_a, 0);
   }
   
   @Test
   public void scanNoData() throws Exception {
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     assertTrue(spans == scanner.scan().joinUninterruptibly());
     assertTrue(spans.isEmpty());
   }
@@ -155,7 +160,7 @@ public class TestSaltScanner extends BaseTsdbTest {
   public void scan() throws Exception {
     setupMockScanners(false);
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     assertTrue(spans == scanner.scan().joinUninterruptibly());
     assertEquals(3, spans.size());
 
@@ -191,7 +196,7 @@ public class TestSaltScanner extends BaseTsdbTest {
     filters.add(TagVFilter.Builder().setType("regexp").setFilter("web.*")
         .setTagk(TAGK_STRING).build());
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     assertTrue(spans == scanner.scan().joinUninterruptibly());
     assertEquals(3, spans.size());
 
@@ -229,7 +234,7 @@ public class TestSaltScanner extends BaseTsdbTest {
     filters.add(TagVFilter.Builder().setType("wildcard").setFilter("web*")
         .setTagk(TAGK_STRING).build());
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     assertTrue(spans == scanner.scan().joinUninterruptibly());
     assertEquals(3, spans.size());
 
@@ -266,7 +271,7 @@ public class TestSaltScanner extends BaseTsdbTest {
         .setTagk(TAGK_STRING).build());
     
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     assertTrue(spans == scanner.scan().joinUninterruptibly());
     assertEquals(0, spans.size());
 
@@ -282,7 +287,7 @@ public class TestSaltScanner extends BaseTsdbTest {
     filters.add(TagVFilter.Builder().setType("wildcard").setFilter("db*")
         .setTagk(TAGK_STRING).build());
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     assertTrue(spans == scanner.scan().joinUninterruptibly());
     assertEquals(0, spans.size());
 
@@ -301,7 +306,7 @@ public class TestSaltScanner extends BaseTsdbTest {
           <ArrayList<ArrayList<KeyValue>>>fromError(e));
 
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     try {
       scanner.scan().joinUninterruptibly();
       fail("Expected a runtime exception here");
@@ -322,7 +327,7 @@ public class TestSaltScanner extends BaseTsdbTest {
           <ArrayList<ArrayList<KeyValue>>>fromError(e));
   
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     try {
       scanner.scan().joinUninterruptibly();
       fail("Expected a runtime exception here");
@@ -341,7 +346,7 @@ public class TestSaltScanner extends BaseTsdbTest {
       .thenThrow(e);
 
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     try {
       scanner.scan().joinUninterruptibly();
       fail("Expected a runtime exception here");
@@ -361,7 +366,7 @@ public class TestSaltScanner extends BaseTsdbTest {
       .thenThrow(e);
   
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     try {
       scanner.scan().joinUninterruptibly();
       fail("Expected a runtime exception here");
@@ -390,7 +395,7 @@ public class TestSaltScanner extends BaseTsdbTest {
       .thenReturn(Deferred.<ArrayList<ArrayList<KeyValue>>>fromResult(null));
 
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     scanner.scan().joinUninterruptibly();
   }
   
@@ -403,7 +408,7 @@ public class TestSaltScanner extends BaseTsdbTest {
         tsdb).compact(any(ArrayList.class), any(List.class));
     
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     scanner.scan().joinUninterruptibly();
   }
   
@@ -416,7 +421,7 @@ public class TestSaltScanner extends BaseTsdbTest {
         tsdb).compact(any(ArrayList.class), any(List.class));
     
     final SaltScanner scanner = new SaltScanner(tsdb, METRIC_BYTES, scanners, 
-        spans, filters);
+        spans, filters, query_stats_a, 0);
     scanner.scan().joinUninterruptibly();
   }
   

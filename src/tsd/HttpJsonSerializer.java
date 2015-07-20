@@ -848,6 +848,7 @@ class HttpJsonSerializer extends HttpSerializer {
           json.writeNumberField("serializationTime", stats.getTimeSerialization());
           json.writeNumberField("storageTime", stats.getTimeStorage());
           json.writeNumberField("timeTotal", stats.getTimeTotal());
+          json.writeObjectField("queryStats", stats.statsObject());
           json.writeEndObject();
           json.writeEndObject();
         }

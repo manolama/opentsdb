@@ -15,8 +15,10 @@ package net.opentsdb.stats;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
@@ -100,6 +102,13 @@ public class QueryStats {
   /** A possible exception if thrown when this query completes */
   private Throwable exception;
   
+  
+  private final Map<Integer, Map<String, Long>> stats;
+  
+  private final Map<Integer, Map<Integer, Map<String, Long>>> scanner_stats;
+  
+  private final Map<Integer, Map<Integer, String>> scanner_ids;
+  
   /**
    * Default CTor
    * @param remote_address Remote address of the client
@@ -118,6 +127,10 @@ public class QueryStats {
     this.query = query;
     executed = 1;
     query_start = DateTime.currentTimeMillis();
+    stats = new ConcurrentHashMap<Integer, Map<String, Long>>();
+    scanner_stats = new ConcurrentHashMap<Integer, 
+        Map<Integer, Map<String, Long>>>();
+    scanner_ids = new ConcurrentHashMap<Integer, Map<Integer, String>>();
     LOG.debug("New query for remote " + remote_address + " with hash " + 
         hashCode() + " on thread " + Thread.currentThread().getId());
     if (running_queries.putIfAbsent(this.hashCode(), this) != null) {
@@ -262,6 +275,7 @@ public class QueryStats {
         obj.put("timeAggregation", stats.time_aggregation);
         obj.put("timeSerialization", stats.time_serialization);
         obj.put("exception", stats.exception);
+        obj.put("queryStats", stats.statsObject());
         running.add(obj);
       }
     }
@@ -359,5 +373,90 @@ public class QueryStats {
   /** @return an exception if it was associated with this query */
   public Throwable getException() {
     return exception;
+  }
+
+  public void addStat(final int query_index, final String name, final long time) {
+    Map<String, Long> query_stats = stats.get(query_index);
+    if (query_stats == null) {
+      query_stats = new HashMap<String, Long>();
+      stats.put(query_index, query_stats);
+    }
+    query_stats.put(name, time);
+  }
+  
+  public void addScannerStat(final int query_index, final int id, 
+      final String name, final long time) {
+    Map<Integer, Map<String, Long>> query_stats = scanner_stats.get(query_index);
+    if (query_stats == null) {
+      query_stats = new ConcurrentHashMap<Integer, Map<String, Long>>();
+      scanner_stats.put(query_index, query_stats);
+    }
+    Map<String, Long> scanner_stat_map = query_stats.get(id);
+    if (scanner_stat_map == null) {
+      scanner_stat_map = new HashMap<String, Long>();
+      query_stats.put(id, scanner_stat_map);
+    }
+    scanner_stat_map.put(name, time);
+  }
+  
+  public void addScannerId(final int query_index, final int id, final String string_id) {
+    Map<Integer, String> scanners = scanner_ids.get(query_index);
+    if (scanners == null) {
+      scanners = new ConcurrentHashMap<Integer, String>();
+      scanner_ids.put(query_index, scanners);
+    }
+    scanners.put(id, string_id);
+  }
+  
+  public Map<String, Object> statsObject() {
+    final Map<String, Object> map = new HashMap<String, Object>();
+    
+    final Iterator<Entry<Integer, Map<String, Long>>> it = stats.entrySet().iterator();
+    while (it.hasNext()) {
+      final Entry<Integer, Map<String, Long>> entry = it.next();
+      final Map<Integer, String> scanners = scanner_ids.get(entry.getKey());
+      final Map<String, Object> query_map = new HashMap<String, Object>();
+      map.put("queryIdx_" + entry.getKey(), query_map);
+
+      final Iterator<Entry<String, Long>> stats_it = entry.getValue().entrySet().iterator();
+      while (stats_it.hasNext()) {
+        final Entry<String, Long> stat = stats_it.next();
+        query_map.put(stat.getKey(), ((double)stat.getValue() / (double)1000000));
+      }
+      
+      final Map<Integer, Map<String, Long>> scanner_stats_map = scanner_stats.get(entry.getKey());
+      
+      final Map<String, Object> scanner_maps = new HashMap<String, Object>();
+      query_map.put("scannerStats", scanner_maps);
+      if (scanner_stats_map != null) {
+        final Iterator<Entry<Integer, Map<String, Long>>> scanner_it = scanner_stats_map.entrySet().iterator();
+        while (scanner_it.hasNext()) {
+          final Entry<Integer, Map<String, Long>> scanner = scanner_it.next();
+          
+          final Map<String, Object> scanner_map = new HashMap<String, Object>();
+          scanner_maps.put("scannerIdx_"+ scanner.getKey(), scanner_map);
+          final String id;
+          if (scanners != null) {
+            id = scanners.get(scanner.getKey());
+          } else {
+            id = null;
+          }
+          scanner_map.put("scannerId", id);
+          final Iterator<Entry<String, Long>> scanner_stats_it = scanner.getValue().entrySet().iterator();
+          while (scanner_stats_it.hasNext()) {
+            final Entry<String, Long> scanner_stats = scanner_stats_it.next();
+            if (scanner_stats.getKey().equals("status") || 
+                scanner_stats.getKey().equals("rowsRead")) {
+              scanner_map.put(scanner_stats.getKey(), scanner_stats.getValue());
+            } else {
+              scanner_map.put(scanner_stats.getKey(), 
+                  ((double)scanner_stats.getValue() / (double)1000000));
+            }
+          }
+        }
+      }
+    }
+
+    return map;
   }
 }

@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import net.opentsdb.meta.Annotation;
 import net.opentsdb.query.filter.TagVFilter;
+import net.opentsdb.stats.QueryStats;
 import net.opentsdb.uid.UniqueId;
 
 import org.hbase.async.Bytes.ByteMap;
@@ -96,6 +97,9 @@ public class SaltScanner {
    * goes pear shaped. Make sure to synchronize on this object when checking
    * for null or assigning from a scanner's callback. */
   private volatile Exception exception;
+
+  private final QueryStats query_stats;
+  private final int query_index;
   
   /**
    * Default ctor that performs some validation. Call {@link scan} after 
@@ -111,7 +115,9 @@ public class SaltScanner {
   public SaltScanner(final TSDB tsdb, final byte[] metric, 
                                       final List<Scanner> scanners, 
                                       final TreeMap<byte[], Span> spans,
-                                      final List<TagVFilter> filters) {
+                                      final List<TagVFilter> filters,
+                                      final QueryStats query_stats,
+                                      final int query_index) {
     if (Const.SALT_WIDTH() < 1) {
       throw new IllegalArgumentException(
           "Salting is disabled. Use the regular scanner");
@@ -147,6 +153,8 @@ public class SaltScanner {
     this.metric = metric;
     this.tsdb = tsdb;
     this.filters = filters;
+    this.query_stats = query_stats;
+    this.query_index = query_index;
   }
 
   /**
@@ -158,8 +166,9 @@ public class SaltScanner {
    */
   public Deferred<TreeMap<byte[], Span>> scan() {
     start_time = System.currentTimeMillis();
+    int index = 0;
     for (final Scanner scanner: scanners) {
-      new ScannerCB(scanner).scan();
+      new ScannerCB(scanner, index++).scan();
     }
     return results; 
   }
@@ -254,14 +263,28 @@ public class SaltScanner {
   final class ScannerCB implements Callback<Object, 
     ArrayList<ArrayList<KeyValue>>> {
     private final Scanner scanner;
+    private final int index;
     private final List<KeyValue> kvs = new ArrayList<KeyValue>();
     private final ByteMap<List<Annotation>> annotations = 
             new ByteMap<List<Annotation>>();
     private final Set<String> skips = new HashSet<String>();
     private final Set<String> keepers = new HashSet<String>();
     
-    public ScannerCB(final Scanner scanner) {
+    private long rows_read = 0;
+    
+    private long scanner_start = -1;
+    private long fetch_start = 0;
+    private long fetch_time = 0;
+    private long uid_resolve_time = 0;
+    private long uids_resolved = 0;
+    private long compaction_time;
+    
+    public ScannerCB(final Scanner scanner, final int index) {
       this.scanner = scanner;
+      this.index = index;
+      if (query_stats != null) {
+        query_stats.addScannerId(query_index, index, scanner.toString());
+      }
     }
     
     /** Error callback that will capture an exception from AsyncHBase and store
@@ -284,6 +307,10 @@ public class SaltScanner {
     * found
     */
     public Object scan() {
+      if (scanner_start < 0) {
+        scanner_start = System.nanoTime();
+      }
+      fetch_start = System.nanoTime();
       return scanner.nextRows().addCallback(this).addErrback(new ErrorCb());
     }
 
@@ -295,10 +322,10 @@ public class SaltScanner {
     @Override
     public Object call(final ArrayList<ArrayList<KeyValue>> rows) 
             throws Exception {
+      fetch_time += (System.nanoTime() - fetch_start);
       try {
         if (rows == null) {
-          scanner.close();
-          validateAndTriggerCallback(kvs, annotations);
+          close(true);
           return null;
         }
 
@@ -310,7 +337,7 @@ public class SaltScanner {
         for (final ArrayList<KeyValue> row : rows) {
           final byte[] key = row.get(0).key();
           if (RowKey.rowKeyContainsMetric(metric, key) != 0) {
-            scanner.close();
+            close(false);
             handleException(new IllegalDataException(
                    "HBase returned a row that doesn't match"
                    + " our scanner (" + scanner + ")! " + row + " does not start"
@@ -333,6 +360,8 @@ public class SaltScanner {
               continue;
             }
             if (!keepers.contains(tsuid)) {
+              final long uid_start = System.nanoTime();
+              
               /** CB to called after all of the UIDs have been resolved */
               class MatchCB implements Callback<Object, ArrayList<Boolean>> {
                 @Override
@@ -357,6 +386,8 @@ public class SaltScanner {
                 @Override
                 public Deferred<ArrayList<Boolean>> call(
                     final Map<String, String> tags) throws Exception {
+                  uid_resolve_time += (System.nanoTime() - uid_start);
+                  uids_resolved += tags.size();
                   final List<Deferred<Boolean>> matches =
                       new ArrayList<Deferred<Boolean>>(filters.size());
 
@@ -378,6 +409,7 @@ public class SaltScanner {
             processRow(key, row);
           }
         }
+        rows_read += rows.size();
            
         // either we need to wait on the UID resolutions or we can go ahead
         // if we don't have filters.
@@ -394,7 +426,7 @@ public class SaltScanner {
         }
       } catch (final RuntimeException e) {
         LOG.error("Unexpected exception on scanner " + this, e);
-        scanner.close();
+        close(false);
         handleException(e);
         return null;
       }
@@ -415,10 +447,27 @@ public class SaltScanner {
       final KeyValue compacted;
       // let IllegalDataExceptions bubble up so the handler above can close
       // the scanner
+      final long compaction_start = System.nanoTime();
       compacted = tsdb.compact(row, notes);
+      compaction_time += (System.nanoTime() - compaction_start);
       if (compacted != null) { // Can be null if we ignored all KVs.
         kvs.add(compacted);
       }
+    }
+  
+    void close(final boolean ok) {
+      if (query_stats != null) {
+        query_stats.addScannerStat(query_index, index, "totalScanTime", 
+            System.nanoTime() - scanner_start);
+        query_stats.addScannerStat(query_index, index, "rowsRead", rows_read);
+        query_stats.addScannerStat(query_index, index, "status", ok ? 1 : 0);
+        query_stats.addScannerStat(query_index, index, "hbaseTime", fetch_time);
+        query_stats.addScannerStat(query_index, index, "uidResolveTime", uid_resolve_time);
+        query_stats.addScannerStat(query_index, index, "uidPairsResolved", uids_resolved);
+        query_stats.addScannerStat(query_index, index, "compactionTime", compaction_time);
+      }
+      scanner.close();
+      validateAndTriggerCallback(kvs, annotations);
     }
   }
   
