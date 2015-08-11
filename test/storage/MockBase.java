@@ -44,10 +44,8 @@ import org.hbase.async.DeleteRequest;
 import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseClient;
 import org.hbase.async.KeyValue;
-import org.hbase.async.NoSuchColumnFamilyException;
 import org.hbase.async.PutRequest;
 import org.hbase.async.Scanner;
-import org.hbase.async.TableNotFoundException;
 import org.junit.Ignore;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -137,7 +135,7 @@ public final class MockBase {
     this.tsdb = tsdb;
 
     default_family = "t".getBytes(ASCII);
-    default_table = "table".getBytes(ASCII);
+    default_table = "tsdb".getBytes(ASCII);
     setupDefaultTables();
     
     // replace the "real" field objects with mocks
@@ -242,7 +240,7 @@ public final class MockBase {
    * @param qualifier The qualifier
    * @param value The value to store
    */
-  public void addColumn(final byte[] key,final byte[] qualifier, 
+  public void addColumn(final byte[] key, final byte[] qualifier, 
       final byte[] value) {
     addColumn(default_table, key, default_family, qualifier, value, 
         current_timestamp++);
@@ -272,6 +270,21 @@ public final class MockBase {
    * @param family The column family to store the value in
    * @param qualifier The qualifier
    * @param value The value to store
+   */
+  public void addColumn(final byte[] table, final byte[] key, final byte[] family, 
+      final byte[] qualifier, final byte[] value) {
+    addColumn(table, key, family, qualifier, value, current_timestamp++);
+  }
+  
+  /**
+   * Add a column to the hash table 
+   * The proper row will be created if it doesn't exist. If the column already 
+   * exists, the original value will be overwritten with the new data
+   * @param table The table
+   * @param key The row key
+   * @param family The column family to store the value in
+   * @param qualifier The qualifier
+   * @param value The value to store
    * @param timestamp The timestamp to store
    */
   public void addColumn(final byte[] table, final byte[] key, final byte[] family, 
@@ -283,12 +296,12 @@ public final class MockBase {
     }
     final ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>> map = storage.get(table);
     if (map == null) {
-      throw (TableNotFoundException) new RuntimeException(
+      throw new RuntimeException(
           "No such table " + Bytes.pretty(table));
     }
     final ByteMap<ByteMap<TreeMap<Long, byte[]>>> cf = map.get(family);
     if (cf == null) {
-      throw (NoSuchColumnFamilyException) new RuntimeException(
+      throw new RuntimeException(
           "No such CF " + Bytes.pretty(family));
     }
     
@@ -307,6 +320,37 @@ public final class MockBase {
     column.put(timestamp, value);
   }
   
+  /**
+   * Stores an exception so that any operation on the given key will cause it
+   * to be thrown.
+   * @param key The key to go pear shaped on
+   * @param exception The exception to throw
+   */
+  public void throwException(final byte[] key, final RuntimeException exception) {
+    throwException(key, exception, true);
+  }
+  
+  /**
+   * Stores an exception so that any operation on the given key will cause it
+   * to be thrown.
+   * @param key The key to go pear shaped on
+   * @param exception The exception to throw
+   * @param as_result Whether or not to return the exception in the deferred
+   * result or throw it outright.
+   */
+  public void throwException(final byte[] key, final RuntimeException exception, 
+      final boolean as_result) {
+    if (exceptions == null) {
+      exceptions = new ByteMap<Pair<RuntimeException, Boolean>>();
+    }
+    exceptions.put(key, new Pair<RuntimeException, Boolean>(exception, as_result));
+  }
+  
+  /** Removes all exceptions from the exception list */
+  public void clearExceptions() {
+    exceptions.clear();
+  }
+  
   /** @return Total number of unique rows in the default table. Returns 0 if the 
    * default table does not exist */
   public int numRows() {
@@ -320,7 +364,7 @@ public final class MockBase {
    */
   public int numRows(final byte[] table) {
     final ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>> map = 
-        storage.get(default_table);
+        storage.get(table);
     if (map == null) {
       return 0;
     }
@@ -747,7 +791,7 @@ public final class MockBase {
     if (row == null) {
       return;
     }
-    row.remove(key);
+    row.remove(qualifier);
   }
   
   /**
@@ -870,10 +914,21 @@ public final class MockBase {
       final Object[] args = invocation.getArguments();
       final GetRequest get = (GetRequest)args[0];
       
+      if (exceptions != null) {
+        final Pair<RuntimeException, Boolean> ex = exceptions.get(get.key());
+        if (ex != null) {
+          if (ex.getValue()) {
+            return Deferred.fromError(ex.getKey());
+          } else {
+            throw ex.getKey();
+          }
+        }
+      }
+      
       final ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>> map = 
           storage.get(get.table());
       if (map == null) {
-        return Deferred.fromError((TableNotFoundException) new RuntimeException(
+        return Deferred.fromError(new RuntimeException(
           "No such table " + Bytes.pretty(get.table())));
       }
       
@@ -888,7 +943,7 @@ public final class MockBase {
       final ArrayList<KeyValue> kvs = new ArrayList<KeyValue>();
       for (final Entry<byte[], ByteMap<ByteMap<TreeMap<Long, byte[]>>>> cf : 
           map.entrySet()) {
-        if (get.family() != null) {
+        if (get.family() != null && Bytes.memcmp(get.family(), cf.getKey()) != 0) {
           continue;
         }
         
@@ -927,16 +982,27 @@ public final class MockBase {
       final Object[] args = invocation.getArguments();
       final PutRequest put = (PutRequest)args[0];
       
+      if (exceptions != null) {
+        final Pair<RuntimeException, Boolean> ex = exceptions.get(put.key());
+        if (ex != null) {
+          if (ex.getValue()) {
+            return Deferred.fromError(ex.getKey());
+          } else {
+            throw ex.getKey();
+          }
+        }
+      }
+      
       final ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>> map = 
           storage.get(put.table());
       if (map == null) {
-        return Deferred.fromError((TableNotFoundException) new RuntimeException(
+        return Deferred.fromError(new RuntimeException(
           "No such table " + Bytes.pretty(put.table())));
       }
       
       final ByteMap<ByteMap<TreeMap<Long, byte[]>>> cf = map.get(put.family());
       if (cf == null) {
-        return Deferred.fromError((NoSuchColumnFamilyException) new RuntimeException(
+        return Deferred.fromError(new RuntimeException(
             "No such CF " + Bytes.pretty(put.table()))); 
       }
       
@@ -972,16 +1038,27 @@ public final class MockBase {
       final Object[] args = invocation.getArguments();
       final AppendRequest append = (AppendRequest)args[0];
 
+      if (exceptions != null) {
+        final Pair<RuntimeException, Boolean> ex = exceptions.get(append.key());
+        if (ex != null) {
+          if (ex.getValue()) {
+            return Deferred.fromError(ex.getKey());
+          } else {
+            throw ex.getKey();
+          }
+        }
+      }
+      
       final ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>> map = 
           storage.get(append.table());
       if (map == null) {
-        return Deferred.fromError((TableNotFoundException) new RuntimeException(
+        return Deferred.fromError(new RuntimeException(
           "No such table " + Bytes.pretty(append.table())));
       }
       
       final ByteMap<ByteMap<TreeMap<Long, byte[]>>> cf = map.get(append.family());
       if (cf == null) {
-        return Deferred.fromError((NoSuchColumnFamilyException) new RuntimeException(
+        return Deferred.fromError(new RuntimeException(
             "No such CF " + Bytes.pretty(append.table()))); 
       }
       
@@ -1048,16 +1125,27 @@ public final class MockBase {
       final PutRequest put = (PutRequest)args[0];
       final byte[] expected = (byte[])args[1];
       
+      if (exceptions != null) {
+        final Pair<RuntimeException, Boolean> ex = exceptions.get(put.key());
+        if (ex != null) {
+          if (ex.getValue()) {
+            return Deferred.fromError(ex.getKey());
+          } else {
+            throw ex.getKey();
+          }
+        }
+      }
+      
       final ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>> map = 
           storage.get(put.table());
       if (map == null) {
-        return Deferred.fromError((TableNotFoundException) new RuntimeException(
+        return Deferred.fromError(new RuntimeException(
           "No such table " + Bytes.pretty(put.table())));
       }
       
       final ByteMap<ByteMap<TreeMap<Long, byte[]>>> cf = map.get(put.family());
       if (cf == null) {
-        return Deferred.fromError((NoSuchColumnFamilyException) new RuntimeException(
+        return Deferred.fromError(new RuntimeException(
             "No such CF " + Bytes.pretty(put.table()))); 
       }
       
@@ -1116,10 +1204,21 @@ public final class MockBase {
       final Object[] args = invocation.getArguments();
       final DeleteRequest delete = (DeleteRequest)args[0];
       
+      if (exceptions != null) {
+        final Pair<RuntimeException, Boolean> ex = exceptions.get(delete.key());
+        if (ex != null) {
+          if (ex.getValue()) {
+            return Deferred.fromError(ex.getKey());
+          } else {
+            throw ex.getKey();
+          }
+        }
+      }
+      
       final ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>> map = 
           storage.get(delete.table());
       if (map == null) {
-        return Deferred.fromError((TableNotFoundException) new RuntimeException(
+        return Deferred.fromError(new RuntimeException(
           "No such table " + Bytes.pretty(delete.table())));
       }
       
@@ -1137,8 +1236,8 @@ public final class MockBase {
       final byte[] family = delete.family();
       if (family != null && family.length > 0) {
         if (!map.containsKey(family)) {
-          return Deferred.fromError((NoSuchColumnFamilyException) new RuntimeException(
-              "No such CF " + Bytes.pretty(delete.table()))); 
+          return Deferred.fromError(new RuntimeException(
+              "No such CF " + Bytes.pretty(family))); 
         }
       }
       
@@ -1158,10 +1257,7 @@ public final class MockBase {
       if (family != null && qualifiers.isEmpty()) {
         final ByteMap<ByteMap<TreeMap<Long, byte[]>>> cf = map.get(delete.family());
         // cf != null validated above
-        ByteMap<TreeMap<Long, byte[]>> row = cf.get(delete.key());
-        if (row != null) {
-          row.remove(family);
-        }
+        cf.remove(delete.key());
         return Deferred.fromResult(new Object());
       }
       
@@ -1190,7 +1286,7 @@ public final class MockBase {
             if (column != null) {
               column.remove(delete.timestamp());
               if (column.isEmpty()) {
-                cf.getValue().remove(qualifier);
+                row.remove(qualifier);
               }
             }
           } else {
@@ -1206,7 +1302,7 @@ public final class MockBase {
               column.remove(ts);
             }
             if (column.isEmpty()) {
-              cf.getValue().remove(qualifier);
+              row.remove(qualifier);
             }
           }
         }
@@ -1238,8 +1334,7 @@ public final class MockBase {
    */
   private class MockScanner implements 
     Answer<Deferred<ArrayList<ArrayList<KeyValue>>>> {
-    
-    private final Scanner mock_scanner;
+
     private final byte[] table;
     private byte[] start = null;
     private byte[] stop = null;
@@ -1247,8 +1342,10 @@ public final class MockBase {
     private byte[] family = null;
     private String regex = null;
     private int max_num_rows = Scanner.DEFAULT_MAX_NUM_ROWS;
-    private Iterator<Entry<byte[], ByteMap<TreeMap<Long, byte[]>>>> 
-      cursor;
+    private ByteMap<Iterator<Entry<byte[], ByteMap<TreeMap<Long, byte[]>>>>> 
+      cursors;
+    private ByteMap<Entry<byte[], ByteMap<TreeMap<Long, byte[]>>>> cf_rows;
+    private byte[] last_row;
     
     /**
      * Default ctor
@@ -1256,7 +1353,6 @@ public final class MockBase {
      * @param table The table (confirmed to exist)
      */
     public MockScanner(final Scanner mock_scanner, final byte[] table) {
-      this.mock_scanner = mock_scanner;
       this.table = table;
 
       // capture the scanner fields when set
@@ -1336,29 +1432,41 @@ public final class MockBase {
     public Deferred<ArrayList<ArrayList<KeyValue>>> answer(
         final InvocationOnMock invocation) throws Throwable {
       
-      if (family == null || family.length < 1) {
-        return Deferred.fromError(new RuntimeException(
-            "MockBase does not support scanning multiple column families yet"));
-      }
-      
-      if (cursor == null) {
+      if (cursors == null) {
         final ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>> map = 
             storage.get(table);
         if (map == null) {
-          return Deferred.fromError( (TableNotFoundException) new RuntimeException(
+          return Deferred.fromError( new RuntimeException(
               "No such table " + Bytes.pretty(table)));
         }
-        final ByteMap<ByteMap<TreeMap<Long, byte[]>>> cf = map.get(family);
-        if (cf == null) {
-          return Deferred.fromError((NoSuchColumnFamilyException) new RuntimeException(
-          "No such CF " + Bytes.pretty(family)));
+        
+        cursors = new ByteMap<Iterator<Entry<byte[], 
+            ByteMap<TreeMap<Long, byte[]>>>>>();
+        cf_rows = new ByteMap<Entry<byte[], ByteMap<TreeMap<Long, byte[]>>>>();
+        
+        if (family == null || family.length < 1) {
+          for (final Entry<byte[], ByteMap<ByteMap<TreeMap<Long, byte[]>>>> cf : map) {
+            final Iterator<Entry<byte[], ByteMap<TreeMap<Long, byte[]>>>> 
+            cursor = cf.getValue().iterator();
+            cursors.put(cf.getKey(), cursor);
+            cf_rows.put(cf.getKey(), null);
+          }
+        } else {
+          final ByteMap<ByteMap<TreeMap<Long, byte[]>>> cf = map.get(family);
+          if (cf == null) {
+            return Deferred.fromError(new RuntimeException(
+            "No such CF " + Bytes.pretty(family)));
+          }
+          final Iterator<Entry<byte[], ByteMap<TreeMap<Long, byte[]>>>> 
+            cursor = cf.iterator();
+          cursors.put(family, cursor);
+          cf_rows.put(family, null);
         }
-        cursor = cf.iterator();
       }
-      
+
       // If we're out of rows to scan, then you HAVE to return null as the 
       // HBase client does.
-      if (!cursor.hasNext()) {
+      if (!hasNext()) {
         return Deferred.fromResult(null);
       }
       
@@ -1375,12 +1483,12 @@ public final class MockBase {
       final ArrayList<ArrayList<KeyValue>> results = 
         new ArrayList<ArrayList<KeyValue>>();
       int rows_read = 0;
-      while (cursor.hasNext()) {
-        Entry<byte[], ByteMap<TreeMap<Long, byte[]>>> row = cursor.next();
+      while (hasNext()) {
+        advance();
         
         // if it's before the start row, after the end row or doesn't
         // match the given regex, continue on to the next row
-        if (start != null && Bytes.memcmp(row.getKey(), start) < 0) {
+        if (start != null && Bytes.memcmp(last_row, start) < 0) {
           continue;
         }
         // asynchbase Scanner's logic:
@@ -1389,32 +1497,50 @@ public final class MockBase {
         //   include the key in scan result
         // - if stop key is empty, scan till the end
         if (stop != null && stop.length > 0 && 
-            Bytes.memcmp(row.getKey(), stop) >= 0 && 
+            Bytes.memcmp(last_row, stop) >= 0 && 
             Bytes.memcmp(start, stop) != 0) {
           continue;
         }
         if (pattern != null) {
-          final String from_bytes = new String(row.getKey(), MockBase.ASCII);
+          final String from_bytes = new String(last_row, MockBase.ASCII);
           if (!pattern.matcher(from_bytes).find()) {
             continue;
           }
         }
+        
+        // throws AFTER we match on a row key
+        if (exceptions != null) {
+          final Pair<RuntimeException, Boolean> ex = exceptions.get(last_row);
+          if (ex != null) {
+            if (ex.getValue()) {
+              return Deferred.fromError(ex.getKey());
+            } else {
+              throw ex.getKey();
+            }
+          }
+        }
 
-        // loop on the column families
-        final ArrayList<KeyValue> kvs = 
-          new ArrayList<KeyValue>(row.getValue().size());
-        for (Entry<byte[], TreeMap<Long, byte[]>> column : 
-          row.getValue().entrySet()) {
-
-          // if the qualifier isn't in the set, continue
-          if (scnr_qualifiers != null && 
-              !scnr_qualifiers.contains(bytesToString(column.getKey()))) {
+        // loop over the column family rows to see if they match
+        final ArrayList<KeyValue> kvs = new ArrayList<KeyValue>();
+        for (final Entry<byte[], Entry<byte[], ByteMap<TreeMap<Long, byte[]>>>> row : 
+          cf_rows.entrySet()) {
+          if (row.getValue() == null || 
+              Bytes.memcmp(last_row, row.getValue().getKey()) != 0) {
             continue;
           }
           
-          kvs.add(new KeyValue(row.getKey(), row.getKey(), column.getKey(),
-              column.getValue().firstKey(),
-              column.getValue().firstEntry().getValue()));
+          for (final Entry<byte[], TreeMap<Long, byte[]>> column : 
+            row.getValue().getValue().entrySet()) {
+            // if the qualifier isn't in the set, continue
+            if (scnr_qualifiers != null && 
+                !scnr_qualifiers.contains(bytesToString(column.getKey()))) {
+              continue;
+            }
+            
+            kvs.add(new KeyValue(row.getValue().getKey(), row.getKey(), 
+                column.getKey(), column.getValue().firstKey(),
+                column.getValue().firstEntry().getValue()));
+          }
         }
         
         if (!kvs.isEmpty()) {
@@ -1433,6 +1559,71 @@ public final class MockBase {
       }
       return Deferred.fromResult(results);
     }
+    
+    /** @return Returns true if any of the CF iterators have another value */
+    private boolean hasNext() {
+      for (final Iterator<Entry<byte[], ByteMap<TreeMap<Long, byte[]>>>> cursor : 
+          cursors.values()) {
+        if (cursor.hasNext()) {
+          return true;
+        }
+      }
+      return false;
+    }
+  
+    /** Insanely inefficient and ugly way of advancing the cursors */
+    private void advance() {
+      // first time to get the ceiling
+      if (last_row == null) {
+        for (final Entry<byte[], 
+            Iterator<Entry<byte[], ByteMap<TreeMap<Long, byte[]>>>>> iterator : 
+          cursors.entrySet()) {
+          final Entry<byte[], ByteMap<TreeMap<Long, byte[]>>> row = 
+              iterator.getValue().hasNext() ? iterator.getValue().next() : null;
+          cf_rows.put(iterator.getKey(), row);
+          if (last_row == null) {
+            last_row = row.getKey();
+          } else {
+            if (Bytes.memcmp(last_row, row.getKey()) < 0) {
+              last_row = row.getKey();
+            }
+          }
+        }
+        return;
+      }
+      
+      for (final Entry<byte[], Entry<byte[], ByteMap<TreeMap<Long, byte[]>>>> cf : 
+        cf_rows.entrySet()) {
+        final Entry<byte[], ByteMap<TreeMap<Long, byte[]>>> row = cf.getValue();
+        if (row == null) {
+          continue;
+        }
+        
+        if (Bytes.memcmp(last_row, row.getKey()) == 0) {
+          if (!cursors.get(cf.getKey()).hasNext()) {
+            cf_rows.put(cf.getKey(), null); // EX?
+          } else {
+            cf_rows.put(cf.getKey(), cursors.get(cf.getKey()).next());
+          }
+        }
+      }
+      
+      last_row = null;
+      for (final Entry<byte[], ByteMap<TreeMap<Long, byte[]>>> row : 
+        cf_rows.values()) {
+        if (row == null) {
+          continue;
+        }
+        
+        if (last_row == null) {
+          last_row = row.getKey();
+        } else {
+          if (Bytes.memcmp(last_row, row.getKey()) < 0) {
+            last_row = row.getKey();
+          }
+        }
+      }
+    }
   }
   
   /**
@@ -1448,16 +1639,27 @@ public final class MockBase {
       final AtomicIncrementRequest air = (AtomicIncrementRequest)args[0];
       final long amount = air.getAmount();
       
+      if (exceptions != null) {
+        final Pair<RuntimeException, Boolean> ex = exceptions.get(air.key());
+        if (ex != null) {
+          if (ex.getValue()) {
+            return Deferred.fromError(ex.getKey());
+          } else {
+            throw ex.getKey();
+          }
+        }
+      }
+      
       final ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>> map = 
           storage.get(air.table());
       if (map == null) {
-        return Deferred.fromError((TableNotFoundException) new RuntimeException(
+        return Deferred.fromError(new RuntimeException(
           "No such table " + Bytes.pretty(air.table())));
       }
       
       final ByteMap<ByteMap<TreeMap<Long, byte[]>>> cf = map.get(air.family());
       if (cf == null) {
-        return Deferred.fromError((NoSuchColumnFamilyException) new RuntimeException(
+        return Deferred.fromError(new RuntimeException(
             "No such CF " + Bytes.pretty(air.table()))); 
       }
       
