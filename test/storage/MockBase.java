@@ -826,11 +826,11 @@ public final class MockBase {
               new String(row.getKey(), ASCII) : bytesToString(row.getKey())));
           
           for (Map.Entry<byte[], TreeMap<Long, byte[]>> column : row.getValue().entrySet()) {
-            System.out.println("    [Qual] " + (ascii ?
+            System.out.println("      [Qual] " + (ascii ?
                 "\"" + new String(column.getKey(), ASCII) + "\""
                 : bytesToString(column.getKey())));
             for (Map.Entry<Long, byte[]> cell : column.getValue().entrySet()) {
-              System.out.println("      [TS] " + cell.getKey() + "  [Value] " + 
+              System.out.println("        [TS] " + cell.getKey() + "  [Value] " + 
                   (ascii ?  new String(cell.getValue(), ASCII) 
                   : bytesToString(cell.getValue())));
             }

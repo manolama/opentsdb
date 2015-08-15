@@ -129,12 +129,12 @@ public final class TestTSMeta {
         "\"NaN\",\"displayName\":\"Display\",\"dataType\":\"Data\"}")
         .getBytes(MockBase.ASCII()));
     storage.addColumn(META_TABLE, new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 1 },
-        NAME_FAMILY,
+        TSMeta.FAMILY,
         "ts_ctr".getBytes(MockBase.ASCII()),
         Bytes.fromLong(1L));
 
     storage.addColumn(META_TABLE, new byte[] { 0, 0, 1, 0, 0, 1, 0, 0, 2 },
-        NAME_FAMILY,
+        TSMeta.FAMILY,
         "ts_meta".getBytes(MockBase.ASCII()),
         ("{\"tsuid\":\"000001000001000002\",\"" +
         "description\":\"Description\",\"notes\":\"Notes\",\"created\":1328140800," +
