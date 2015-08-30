@@ -16,6 +16,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
@@ -70,8 +71,11 @@ public class TestQueryRpcLastDataPoint {
     when(config.getString("tsd.http.show_stack_trace")).thenReturn("true");
     when(config.enable_tsuid_incrementing()).thenReturn(true);
     when(config.enable_realtime_ts()).thenReturn(true);
-    tsdb = new TSDB(config);
     client = mock(HBaseClient.class);
+    
+    PowerMockito.whenNew(HBaseClient.class)
+      .withArguments(anyString(), anyString()).thenReturn(client);
+    tsdb = new TSDB(config);
     Whitebox.setInternalState(tsdb, "client", client);
     
     storage = new MockBase(tsdb, client, true, true, true, true);
