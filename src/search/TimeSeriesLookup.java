@@ -26,7 +26,7 @@ import net.opentsdb.core.RowKey;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Tags;
 import net.opentsdb.meta.TSMeta;
-import net.opentsdb.query.filter.QueryUtil;
+import net.opentsdb.query.QueryUtil;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueId;
