@@ -38,7 +38,7 @@ import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 import com.stumbleupon.async.DeferredGroupException;
 
-import net.opentsdb.query.QueryUtil;
+import net.opentsdb.query.filter.QueryUtil;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.uid.NoSuchUniqueId;
