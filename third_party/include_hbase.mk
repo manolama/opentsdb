@@ -15,19 +15,5 @@
 
 include third_party/base.mk
 
-include third_party/guava/include.mk
-include third_party/gwt/include.mk
-include third_party/hamcrest/include.mk
-include third_party/jackson/include.mk
-include third_party/javassist/include.mk
-include third_party/junit/include.mk
-include third_party/logback/include.mk
-include third_party/mockito/include.mk
-include third_party/netty/include.mk
-include third_party/objenesis/include.mk
-include third_party/powermock/include.mk
-include third_party/protobuf/include.mk
-include third_party/slf4j/include.mk
-include third_party/suasync/include.mk
-include third_party/validation-api/include.mk
-include third_party/apache/include.mk
+include third_party/hbase/include.mk
+include third_party/zookeeper/include.mk

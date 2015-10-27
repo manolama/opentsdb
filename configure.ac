@@ -18,9 +18,7 @@ AC_INIT([opentsdb], [2.2.0RC2-SNAPSHOT], [opentsdb@googlegroups.com])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([foreign])
 
-AC_CONFIG_FILES([
-  Makefile
-])
+AC_CONFIG_FILES([MakefileBigtable MakefileCassandra MakefileHBase])
 AC_CONFIG_FILES([opentsdb.spec])
 AC_CONFIG_FILES([build-aux/fetchdep.sh], [chmod +x build-aux/fetchdep.sh])
 
