@@ -231,7 +231,7 @@ public class TestScale {
   }
   
   @Test
-  public void evaluateFactor1QuerySeries() throws Exception {
+  public void evaluateFactor1SubQuerySeries() throws Exception {
     params.add("1");
     SeekableView view2 = SeekableViewsForTest.generator(START_TIME, INTERVAL, 
         NUM_POINTS, true, 10, 1);
