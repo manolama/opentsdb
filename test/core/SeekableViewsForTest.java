@@ -45,7 +45,7 @@ public class SeekableViewsForTest {
                                        final int num_data_points,
                                        final boolean is_integer) {
     return generator(start_time, sample_period, num_data_points,
-                                  is_integer, 1, 1);
+                                  is_integer, 0, 1);
   }
   
   /**
