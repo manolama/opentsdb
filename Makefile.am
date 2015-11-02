@@ -77,6 +77,7 @@ tsdb_SRC := \
 	src/query/expression/Absolute.java	\
 	src/query/expression/ExpressionFactory.java	\
 	src/query/expression/ExpressionReader.java	\
+	src/query/expression/Expressions.java	\
 	src/query/expression/ExpressionTree.java	\
 	src/query/expression/HighestCurrent.java	\
 	src/query/expression/HighestMax.java	\
@@ -230,6 +231,7 @@ test_SRC := \
 	test/query/expression/TestAbsolute.java	\
 	test/query/expression/TestExpressionFactory.java	\
 	test/query/expression/TestExpressionReader.java	\
+	test/query/expression/TestExpressions.java	\
 	test/query/expression/TestExpressionTree.java	\
 	test/query/expression/TestHighestCurrent.java	\
 	test/query/expression/TestHighestMax.java	\
