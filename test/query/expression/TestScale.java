@@ -14,7 +14,7 @@ package net.opentsdb.query.expression;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -41,7 +41,8 @@ import org.powermock.modules.junit4.PowerMockRunner;
   "ch.qos.*", "org.slf4j.*",
   "com.sum.*", "org.xml.*"})
 @PrepareForTest({ TSQuery.class })
-public class TestMovingAverage {
+public class TestScale {
+
   private static long START_TIME = 1356998400000L;
   private static int INTERVAL = 60000;
   private static int NUM_POINTS = 5;
@@ -53,7 +54,7 @@ public class TestMovingAverage {
   private DataPoints[] group_bys;
   private List<DataPoints[]> query_results;
   private List<String> params;
-  private MovingAverage func;
+  private Scale func;
   
   @Before
   public void before() throws Exception {
@@ -73,210 +74,11 @@ public class TestMovingAverage {
     query_results.add(group_bys);
     
     params = new ArrayList<String>(1);
-    func = new MovingAverage();
+    func = new Scale();
   }
   
   @Test
-  public void evaluateWindow1dps() throws Exception {
-    params.add("1");
-    
-    final DataPoints[] results = func.evaluate(data_query, query_results, params);
-    
-    assertEquals(1, results.length);
-    assertEquals(METRIC, results[0].metricName());
-    
-    long ts = START_TIME;
-    double v = 1;
-    for (DataPoint dp : results[0]) {
-      assertEquals(ts, dp.timestamp());
-      assertFalse(dp.isInteger());
-      assertEquals(v, dp.doubleValue(), 0.001);
-      ts += INTERVAL;
-      v += 1;
-    }
-  }
-  
-  @Test
-  public void evaluateWindow2dps() throws Exception {
-    params.add("2");
-    
-    final DataPoints[] results = func.evaluate(data_query, query_results, params);
-    
-    assertEquals(1, results.length);
-    assertEquals(METRIC, results[0].metricName());
-    
-    long ts = START_TIME;
-    double v = 0;
-    for (DataPoint dp : results[0]) {
-      assertEquals(ts, dp.timestamp());
-      assertFalse(dp.isInteger());
-      assertEquals(v, dp.doubleValue(), 0.001);
-      ts += INTERVAL;
-      if (v < 1) {
-        v = 1.5;
-      } else {
-        v += 1;
-      }
-    }
-  }
-
-  @Test
-  public void evaluateWindow5dps() throws Exception {
-    params.add("5");
-    
-    final DataPoints[] results = func.evaluate(data_query, query_results, params);
-    
-    assertEquals(1, results.length);
-    assertEquals(METRIC, results[0].metricName());
-    
-    long ts = START_TIME;
-    double v = 0;
-    for (DataPoint dp : results[0]) {
-      assertEquals(ts, dp.timestamp());
-      assertFalse(dp.isInteger());
-      assertEquals(v, dp.doubleValue(), 0.001);
-      ts += INTERVAL;
-      if (ts == 1356998640000L) {
-        v = 3.0;
-      }
-    }
-  }
-  
-  @Test
-  public void evaluateWindow6dps() throws Exception {
-    params.add("6");
-    
-    final DataPoints[] results = func.evaluate(data_query, query_results, params);
-    
-    assertEquals(1, results.length);
-    assertEquals(METRIC, results[0].metricName());
-    
-    long ts = START_TIME;
-    double v = 0;
-    for (DataPoint dp : results[0]) {
-      assertEquals(ts, dp.timestamp());
-      assertFalse(dp.isInteger());
-      assertEquals(v, dp.doubleValue(), 0.001);
-      ts += INTERVAL;
-    }
-  }
-
-  @Test
-  public void evaluateWindow1min() throws Exception {
-    params.add("'1min'");
-    
-    final DataPoints[] results = func.evaluate(data_query, query_results, params);
-    
-    assertEquals(1, results.length);
-    assertEquals(METRIC, results[0].metricName());
-    
-    long ts = START_TIME;
-    double v = 0;
-    for (DataPoint dp : results[0]) {
-      assertEquals(ts, dp.timestamp());
-      assertFalse(dp.isInteger());
-      assertEquals(v, dp.doubleValue(), 0.001);
-      ts += INTERVAL;
-      if (v < 1) {
-        v = 2;
-      } else {
-        v += 1;
-      }
-    }
-  }
-  
-  @Test
-  public void evaluateWindow2min() throws Exception {
-    params.add("'2min'");
-    
-    final DataPoints[] results = func.evaluate(data_query, query_results, params);
-    
-    assertEquals(1, results.length);
-    assertEquals(METRIC, results[0].metricName());
-    
-    long ts = START_TIME;
-    double v = 0;
-    for (DataPoint dp : results[0]) {
-      assertEquals(ts, dp.timestamp());
-      assertFalse(dp.isInteger());
-      assertEquals(v, dp.doubleValue(), 0.001);
-      ts += INTERVAL;
-      if (ts == 1356998520000L) {
-        v = 2.5;
-      } else if (v > 0) {
-        v += 1;
-      }
-    }
-  }
-  
-  @Test
-  public void evaluateWindow3min() throws Exception {
-    params.add("'3min'");
-    
-    final DataPoints[] results = func.evaluate(data_query, query_results, params);
-    
-    assertEquals(1, results.length);
-    assertEquals(METRIC, results[0].metricName());
-    
-    long ts = START_TIME;
-    double v = 0;
-    for (DataPoint dp : results[0]) {
-      System.out.println(dp.timestamp() + " : " + dp.doubleValue());
-      assertEquals(ts, dp.timestamp());
-      assertFalse(dp.isInteger());
-      assertEquals(v, dp.doubleValue(), 0.001);
-      ts += INTERVAL;
-      if (ts == 1356998580000L) {
-        v = 3;
-      } else if (v > 0) {
-        v += 1;
-      }
-    }
-  }
-  
-  @Test
-  public void evaluateWindow4min() throws Exception {
-    params.add("'4min'");
-    
-    final DataPoints[] results = func.evaluate(data_query, query_results, params);
-    
-    assertEquals(1, results.length);
-    assertEquals(METRIC, results[0].metricName());
-    
-    long ts = START_TIME;
-    double v = 0;
-    for (DataPoint dp : results[0]) {
-      assertEquals(ts, dp.timestamp());
-      assertFalse(dp.isInteger());
-      assertEquals(v, dp.doubleValue(), 0.001);
-      ts += INTERVAL;
-      if (ts == 1356998640000L) {
-        v = 3.5;
-      }
-    }
-  }
-  
-  @Test
-  public void evaluateWindow5min() throws Exception {
-    params.add("'5min'");
-    
-    final DataPoints[] results = func.evaluate(data_query, query_results, params);
-    
-    assertEquals(1, results.length);
-    assertEquals(METRIC, results[0].metricName());
-    
-    long ts = START_TIME;
-    double v = 0;
-    for (DataPoint dp : results[0]) {
-      assertEquals(ts, dp.timestamp());
-      assertFalse(dp.isInteger());
-      assertEquals(v, dp.doubleValue(), 0.001);
-      ts += INTERVAL;
-    }
-  }
-
-  @Test
-  public void evaluateGroupBy() throws Exception {
+  public void evaluateFactor1GroupByLong() throws Exception {
     params.add("1");
     SeekableView view2 = SeekableViewsForTest.generator(START_TIME, INTERVAL, 
         NUM_POINTS, true, 10, 1);
@@ -294,37 +96,36 @@ public class TestMovingAverage {
     assertEquals("sys.mem", results[1].metricName());
     
     long ts = START_TIME;
-    double v = 1;
+    long v = 1;
     for (DataPoint dp : results[0]) {
       assertEquals(ts, dp.timestamp());
-      assertFalse(dp.isInteger());
-      assertEquals(v, dp.doubleValue(), 0.001);
+      assertTrue(dp.isInteger());
+      assertEquals(v, dp.longValue());
       ts += INTERVAL;
       v += 1;
     }
-    
     ts = START_TIME;
     v = 10;
     for (DataPoint dp : results[1]) {
       assertEquals(ts, dp.timestamp());
-      assertFalse(dp.isInteger());
-      assertEquals(v, dp.doubleValue(), 0.001);
+      assertTrue(dp.isInteger());
+      assertEquals(v, dp.longValue());
       ts += INTERVAL;
       v += 1;
     }
   }
   
   @Test
-  public void evaluateSubQuery() throws Exception {
+  public void evaluateFactor1GroupByDouble() throws Exception {
     params.add("1");
-    
     SeekableView view2 = SeekableViewsForTest.generator(START_TIME, INTERVAL, 
-        NUM_POINTS, true, 10, 1);
+        NUM_POINTS, false, 10, 1.5);
     DataPoints dps2 = PowerMockito.mock(DataPoints.class);
     when(dps2.iterator()).thenReturn(view2);
     when(dps2.metricName()).thenReturn("sys.mem");
-    DataPoints[] group_bys2 = new DataPoints[] { dps2 };
-    query_results.add(group_bys2);
+    group_bys = new DataPoints[] { dps, dps2 };
+    query_results.clear();
+    query_results.add(group_bys);
     
     final DataPoints[] results = func.evaluate(data_query, query_results, params);
     
@@ -336,12 +137,11 @@ public class TestMovingAverage {
     double v = 1;
     for (DataPoint dp : results[0]) {
       assertEquals(ts, dp.timestamp());
-      assertFalse(dp.isInteger());
-      assertEquals(v, dp.doubleValue(), 0.001);
+      assertTrue(dp.isInteger());
+      assertEquals((long)v, dp.longValue());
       ts += INTERVAL;
       v += 1;
     }
-    
     ts = START_TIME;
     v = 10;
     for (DataPoint dp : results[1]) {
@@ -349,7 +149,194 @@ public class TestMovingAverage {
       assertFalse(dp.isInteger());
       assertEquals(v, dp.doubleValue(), 0.001);
       ts += INTERVAL;
+      v += 1.5;
+    }
+  }
+  
+  @Test
+  public void evaluateFactor1point5GroupBy() throws Exception {
+    params.add("1.5");
+    SeekableView view2 = SeekableViewsForTest.generator(START_TIME, INTERVAL, 
+        NUM_POINTS, true, 10, 1);
+    DataPoints dps2 = PowerMockito.mock(DataPoints.class);
+    when(dps2.iterator()).thenReturn(view2);
+    when(dps2.metricName()).thenReturn("sys.mem");
+    group_bys = new DataPoints[] { dps, dps2 };
+    query_results.clear();
+    query_results.add(group_bys);
+    
+    final DataPoints[] results = func.evaluate(data_query, query_results, params);
+    
+    assertEquals(2, results.length);
+    assertEquals(METRIC, results[0].metricName());
+    assertEquals("sys.mem", results[1].metricName());
+    
+    long ts = START_TIME;
+    double v = 1.5;
+    for (DataPoint dp : results[0]) {
+      System.out.println(dp.timestamp() + " : " + dp.toDouble());
+      assertEquals(ts, dp.timestamp());
+      assertFalse(dp.isInteger());
+      assertEquals(v, dp.doubleValue(), 0.001);
+      ts += INTERVAL;
+      v += 1.5;
+    }
+    ts = START_TIME;
+    v = 15;
+    for (DataPoint dp : results[1]) {
+      assertEquals(ts, dp.timestamp());
+      assertFalse(dp.isInteger());
+      assertEquals(v, dp.doubleValue(), 0.001);
+      ts += INTERVAL;
+      v += 1.5;
+    }
+  }
+  
+  @Test
+  public void evaluateFactor1024GroupBy() throws Exception {
+    params.add("1024");
+    SeekableView view2 = SeekableViewsForTest.generator(START_TIME, INTERVAL, 
+        NUM_POINTS, true, 10, 1);
+    DataPoints dps2 = PowerMockito.mock(DataPoints.class);
+    when(dps2.iterator()).thenReturn(view2);
+    when(dps2.metricName()).thenReturn("sys.mem");
+    group_bys = new DataPoints[] { dps, dps2 };
+    query_results.clear();
+    query_results.add(group_bys);
+    
+    final DataPoints[] results = func.evaluate(data_query, query_results, params);
+    
+    assertEquals(2, results.length);
+    assertEquals(METRIC, results[0].metricName());
+    assertEquals("sys.mem", results[1].metricName());
+    
+    long ts = START_TIME;
+    long v = 1024;
+    for (DataPoint dp : results[0]) {
+      assertEquals(ts, dp.timestamp());
+      assertTrue(dp.isInteger());
+      assertEquals(v, dp.longValue());
+      ts += INTERVAL;
+      v += 1024;
+    }
+    ts = START_TIME;
+    v = 10240;
+    for (DataPoint dp : results[1]) {
+      assertEquals(ts, dp.timestamp());
+      assertTrue(dp.isInteger());
+      assertEquals(v, dp.longValue());
+      ts += INTERVAL;
+      v += 1024;
+    }
+  }
+  
+  @Test
+  public void evaluateFactor1SubQuerySeries() throws Exception {
+    params.add("1");
+    SeekableView view2 = SeekableViewsForTest.generator(START_TIME, INTERVAL, 
+        NUM_POINTS, true, 10, 1);
+    DataPoints dps2 = PowerMockito.mock(DataPoints.class);
+    when(dps2.iterator()).thenReturn(view2);
+    when(dps2.metricName()).thenReturn("sys.mem");
+    group_bys = new DataPoints[] { dps, dps2 };
+    query_results.clear();
+    query_results.add(group_bys);
+    
+    final DataPoints[] results = func.evaluate(data_query, query_results, params);
+    
+    assertEquals(2, results.length);
+    assertEquals(METRIC, results[0].metricName());
+    assertEquals("sys.mem", results[1].metricName());
+    
+    long ts = START_TIME;
+    long v = 1;
+    for (DataPoint dp : results[0]) {
+      assertEquals(ts, dp.timestamp());
+      assertTrue(dp.isInteger());
+      assertEquals(v, dp.longValue());
+      ts += INTERVAL;
       v += 1;
+    }
+    ts = START_TIME;
+    v = 10;
+    for (DataPoint dp : results[1]) {
+      assertEquals(ts, dp.timestamp());
+      assertTrue(dp.isInteger());
+      assertEquals(v, dp.longValue());
+      ts += INTERVAL;
+      v += 1;
+    }
+  }
+  
+  @Test
+  public void evaluateFactor0GroupByLong() throws Exception {
+    params.add("0");
+    SeekableView view2 = SeekableViewsForTest.generator(START_TIME, INTERVAL, 
+        NUM_POINTS, true, 10, 1);
+    DataPoints dps2 = PowerMockito.mock(DataPoints.class);
+    when(dps2.iterator()).thenReturn(view2);
+    when(dps2.metricName()).thenReturn("sys.mem");
+    group_bys = new DataPoints[] { dps, dps2 };
+    query_results.clear();
+    query_results.add(group_bys);
+    
+    final DataPoints[] results = func.evaluate(data_query, query_results, params);
+    
+    assertEquals(2, results.length);
+    assertEquals(METRIC, results[0].metricName());
+    assertEquals("sys.mem", results[1].metricName());
+    
+    long ts = START_TIME;
+    for (DataPoint dp : results[0]) {
+      assertEquals(ts, dp.timestamp());
+      assertTrue(dp.isInteger());
+      assertEquals(0, dp.longValue());
+      ts += INTERVAL;
+    }
+    ts = START_TIME;
+    for (DataPoint dp : results[1]) {
+      assertEquals(ts, dp.timestamp());
+      assertTrue(dp.isInteger());
+      assertEquals(0, dp.longValue());
+      ts += INTERVAL;
+    }
+  }
+  
+  @Test
+  public void evaluateFactorNegative1GroupByLong() throws Exception {
+    params.add("-1");
+    SeekableView view2 = SeekableViewsForTest.generator(START_TIME, INTERVAL, 
+        NUM_POINTS, true, 10, 1);
+    DataPoints dps2 = PowerMockito.mock(DataPoints.class);
+    when(dps2.iterator()).thenReturn(view2);
+    when(dps2.metricName()).thenReturn("sys.mem");
+    group_bys = new DataPoints[] { dps, dps2 };
+    query_results.clear();
+    query_results.add(group_bys);
+    
+    final DataPoints[] results = func.evaluate(data_query, query_results, params);
+    
+    assertEquals(2, results.length);
+    assertEquals(METRIC, results[0].metricName());
+    assertEquals("sys.mem", results[1].metricName());
+    
+    long ts = START_TIME;
+    long v = -1;
+    for (DataPoint dp : results[0]) {
+      assertEquals(ts, dp.timestamp());
+      assertTrue(dp.isInteger());
+      assertEquals(v, dp.longValue());
+      ts += INTERVAL;
+      v -= 1;
+    }
+    ts = START_TIME;
+    v = -10;
+    for (DataPoint dp : results[1]) {
+      assertEquals(ts, dp.timestamp());
+      assertTrue(dp.isInteger());
+      assertEquals(v, dp.longValue());
+      ts += INTERVAL;
+      v -= 1;
     }
   }
   
@@ -385,132 +372,31 @@ public class TestMovingAverage {
   }
   
   @Test (expected = IllegalArgumentException.class)
-  public void evaluateWindowIsZeroDataPoints() throws Exception {
-    params.add("0");
-    func.evaluate(data_query, query_results, params);
-  }
-  
-  @Test (expected = IllegalArgumentException.class)
-  public void evaluateWindowIsZeroTime() throws Exception {
-    params.add("'0sec'");
-    func.evaluate(data_query, query_results, params);
-  }
-
-  @Test (expected = IllegalArgumentException.class)
-  public void evaluateWindowTimedMissingQuotes() throws Exception {
-    params.add("60sec");
-    func.evaluate(data_query, query_results, params);
-  }
-  
-  @Test (expected = IllegalArgumentException.class)
-  public void evaluateWindowNull() throws Exception {
+  public void evaluateScaleNull() throws Exception {
     params.add(null);
     func.evaluate(data_query, query_results, params);
   }
   
   @Test (expected = IllegalArgumentException.class)
-  public void evaluateWindowEmpty() throws Exception {
+  public void evaluateScaleEmpty() throws Exception {
     params.add("");
     func.evaluate(data_query, query_results, params);
   }
   
   @Test (expected = IllegalArgumentException.class)
-  public void evaluateWindowUnknown() throws Exception {
-    params.add("somethingelse");
-    func.evaluate(data_query, query_results, params);
-  }
-  
-  @Test (expected = IllegalArgumentException.class)
-  public void evaluateWindowNotFirstParam() throws Exception {
-    params.add("somethingelse");
-    params.add("60");
+  public void evaluateScaleNotaNumber() throws Exception {
+    params.add("not a number");
     func.evaluate(data_query, query_results, params);
   }
   
   @Test
   public void writeStringField() throws Exception {
     params.add("1");
-    assertEquals("movingAverage(inner_expression)", 
+    assertEquals("scale(inner_expression)", 
         func.writeStringField(params, "inner_expression"));
-    assertEquals("movingAverage(null)", func.writeStringField(params, null));
-    assertEquals("movingAverage()", func.writeStringField(params, ""));
-    assertEquals("movingAverage(inner_expression)", 
+    assertEquals("scale(null)", func.writeStringField(params, null));
+    assertEquals("scale()", func.writeStringField(params, ""));
+    assertEquals("scale(inner_expression)", 
         func.writeStringField(null, "inner_expression"));
-  }
-
-  @Test
-  public void parseParam() throws Exception {
-    // second
-    assertEquals(1000, func.parseParam("'1sec'"));
-    assertEquals(1000, func.parseParam("'1s'"));
-    assertEquals(5000, func.parseParam("'5sec'"));
-    assertEquals(5000, func.parseParam("'5s'"));
-    
-    // minute
-    assertEquals(60000, func.parseParam("'1min'"));
-    assertEquals(60000, func.parseParam("'1m'"));
-    assertEquals(300000, func.parseParam("'5min'"));
-    assertEquals(300000, func.parseParam("'5m'"));
-    
-    // hour
-    assertEquals(3600000, func.parseParam("'1hr"));
-    assertEquals(3600000, func.parseParam("'1h'"));
-    assertEquals(3600000, func.parseParam("'1hour'"));
-    assertEquals(18000000, func.parseParam("'5hr'"));
-    assertEquals(18000000, func.parseParam("'5h'"));
-    assertEquals(18000000, func.parseParam("'5hour'"));
-    
-    // day
-    assertEquals(86400000, func.parseParam("'1day'"));
-    assertEquals(86400000, func.parseParam("'1d'"));
-    assertEquals(432000000, func.parseParam("'5day'"));
-    assertEquals(432000000, func.parseParam("'5d'"));
-    
-    // TODO - fix it, closing with a 1 seems to work instead of a '
-    assertEquals(1000, func.parseParam("'1sec1"));
-    
-    // missing quotes
-    try {
-      func.parseParam("'1sec");
-      fail("Expected an IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    try {
-      func.parseParam("1sec'");
-      fail("Expected an IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    try {
-      func.parseParam("1sec");
-      fail("Expected an IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    // no numbers or units
-    try {
-      func.parseParam("'sec'");
-      fail("Expected an IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    try {
-      func.parseParam("'60'");
-      fail("Expected an IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    // null or empty or short
-    try {
-      func.parseParam(null);
-      fail("Expected an IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    try {
-      func.parseParam("");
-      fail("Expected an IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    try {
-      func.parseParam("'");
-      fail("Expected an IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    // floating point
-    try {
-      func.parseParam("'1.5sec'");
-      fail("Expected an IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
   }
 }
