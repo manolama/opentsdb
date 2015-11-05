@@ -84,6 +84,7 @@ tsdb_SRC := \
 	src/query/expression/HighestMax.java	\
 	src/query/expression/ITimeSyncedIterator.java	\
 	src/query/expression/NumericFillPolicy.java	\
+	src/query/expression/NumericFillPolicy.java	\
 	src/query/expression/MovingAverage.java	\
 	src/query/expression/PostAggregatedDataPoints.java	\
 	src/query/expression/Scale.java	\
