@@ -78,23 +78,36 @@ tsdb_SRC := \
 	src/query/expression/Expression.java	\
 	src/query/expression/ExpressionDataPoint.java	\
 	src/query/expression/ExpressionFactory.java	\
+	src/query/expression/ExpressionIterator.java	\
 	src/query/expression/ExpressionReader.java	\
 	src/query/expression/Expressions.java	\
 	src/query/expression/ExpressionTree.java	\
 	src/query/expression/HighestCurrent.java	\
 	src/query/expression/HighestMax.java	\
+	src/query/expression/IntersectionIterator.java	\
 	src/query/expression/ITimeSyncedIterator.java	\
 	src/query/expression/NumericFillPolicy.java	\
 	src/query/expression/MovingAverage.java	\
 	src/query/expression/PostAggregatedDataPoints.java	\
 	src/query/expression/Scale.java	\
 	src/query/expression/TimeSyncedIterator.java	\
+	src/query/expression/UnionIterator.java	\
+	src/query/expression/VariableIterator.java	\
 	src/query/filter/TagVFilter.java	\
 	src/query/filter/TagVLiteralOrFilter.java	\
 	src/query/filter/TagVNotKeyFilter.java	\
 	src/query/filter/TagVNotLiteralOrFilter.java	\
 	src/query/filter/TagVRegexFilter.java	\
 	src/query/filter/TagVWildcardFilter.java	\
+	src/query/pojo/Downsampler.java	\
+	src/query/pojo/Expression.java	\
+	src/query/pojo/Filter.java	\
+	src/query/pojo/Join.java	\
+	src/query/pojo/Metric.java	\
+	src/query/pojo/Output.java	\
+	src/query/pojo/Query.java	\
+	src/query/pojo/Timespan.java	\
+	src/query/pojo/Validatable.java	\
 	src/search/SearchPlugin.java	\
 	src/search/SearchQuery.java	\
 	src/search/TimeSeriesLookup.java	\
@@ -136,6 +149,7 @@ tsdb_SRC := \
 	src/tsd/LogsRpc.java	\
 	src/tsd/PipelineFactory.java	\
 	src/tsd/PutDataPointRpc.java	\
+	src/tsd/QueryExecutor.java	\
 	src/tsd/QueryRpc.java	\
 	src/tsd/RpcHandler.java	\
 	src/tsd/RpcPlugin.java	\
@@ -169,6 +183,7 @@ tsdb_SRC := \
 	src/utils/Threads.java
 
 tsdb_DEPS = \
+	$(COMMONS_LOGGING)	\
 	$(GUAVA)	\
 	$(LOG4J_OVER_SLF4J)	\
 	$(LOGBACK_CLASSIC)	\
@@ -177,6 +192,8 @@ tsdb_DEPS = \
 	$(JACKSON_CORE)	\
 	$(JACKSON_DATABIND)	\
 	$(JAVACC)	\
+	$(JEXL)	\
+	$(JGRAPHT)	\
 	$(NETTY)	\
 	$(SLF4J_API)	\
 	$(SUASYNC)	\
@@ -248,22 +265,33 @@ test_SRC := \
 	test/query/expression/BaseTimeSyncedIteratorTest.java	\
 	test/query/expression/TestAbsolute.java	\
 	test/query/expression/TestExpressionFactory.java	\
+	test/query/expression/TestExpressionIterator.java	\
 	test/query/expression/TestExpressionReader.java	\
 	test/query/expression/TestExpressions.java	\
 	test/query/expression/TestExpressionTree.java	\
 	test/query/expression/TestHighestCurrent.java	\
 	test/query/expression/TestHighestMax.java	\
+	test/query/expression/TestIntersectionIterator.java	\
 	test/query/expression/TestNumericFillPolicy.java	\
 	test/query/expression/TestMovingAverage.java	\
 	test/query/expression/TestPostAggregatedDataPoints.java	\
 	test/query/expression/TestScale.java	\
 	test/query/expression/TestTimeSyncedIterator.java	\
+	test/query/expression/TestUnionIterator.java	\
 	test/query/filter/TestTagVFilter.java	\
 	test/query/filter/TestTagVLiteralOrFilter.java	\
 	test/query/filter/TestTagVNotKeyFilter.java	\
 	test/query/filter/TestTagVNotLiteralOrFilter.java	\
 	test/query/filter/TestTagVRegexFilter.java	\
 	test/query/filter/TestTagVWildcardFilter.java	\
+	test/query/pojo/TestDownsampler.java	\
+	test/query/pojo/TestExpression.java	\
+	test/query/pojo/TestFilter.java	\
+	test/query/pojo/TestJoin.java	\
+	test/query/pojo/TestMetric.java	\
+	test/query/pojo/TestOutput.java	\
+	test/query/pojo/TestQuery.java	\
+	test/query/pojo/TestTimespan.java	\
 	test/search/TestSearchPlugin.java	\
 	test/search/TestSearchQuery.java	\
 	test/search/TestTimeSeriesLookup.java	\
@@ -289,6 +317,7 @@ test_SRC := \
 	test/tsd/TestHttpQuery.java	\
 	test/tsd/TestHttpRpcPluginQuery.java	\
 	test/tsd/TestPutRpc.java	\
+	test/tsd/TestQueryExecutor.java	\
 	test/tsd/TestQueryRpc.java	\
 	test/tsd/TestQueryRpcLastDataPoint.java	\
 	test/tsd/TestRpcHandler.java	\
@@ -412,7 +441,7 @@ printdeps:
 # This is kind of a hack, but I couldn't find a better way to adjust the paths
 # in the script before it gets installed...
 install-exec-hook:
-	script=tsdb; pkgdatadir='$(pkgdatadir)'; configdir='$(pkgdatadir)/etc/opentsdb'; \
+	script=tsdb; pkgdatadir='$(pkgdatadir)'; configdir='$(sysconfigdir)/etc/opentsdb'; \
           abs_srcdir=''; abs_builddir=''; $(edit_tsdb_script)
 	cat tsdb.tmp >"$(DESTDIR)$(bindir)/tsdb"
 	rm -f tsdb.tmp
@@ -472,7 +501,7 @@ gwtc: .gwtc-stamp
 	@$(mkdir_p) gwt
 	{ cd $(srcdir) && cat $(httpui_SRC); } | $(MD5) >"$@-t"
 	cmp -s "$@" "$@-t" && exit 0; \
-        $(JAVA) $(GWTC_JVM_ARGS) -cp $(GWT_CLASSPATH) com.google.gwt.dev.Compiler \
+        $(JAVA) -Djava.util.prefs.userRoot=$(HOME) $(GWTC_JVM_ARGS) -cp $(GWT_CLASSPATH) com.google.gwt.dev.Compiler \
             $(GWTC_ARGS) -war gwt tsd.QueryUi
 	@mv "$@-t" "$@"
 
@@ -747,6 +776,8 @@ pom.xml: pom.xml.in Makefile
 	    -e 's/@SUASYNC_VERSION@/$(SUASYNC_VERSION)/' \
 	    -e 's/@ZOOKEEPER_VERSION@/$(ZOOKEEPER_VERSION)/' \
 	    -e 's/@APACHE_MATH_VERSION@/$(APACHE_MATH_VERSION)/' \
+	    -e 's/@JEXL_VERSION@/$(JEXL_VERSION)/' \
+	    -e 's/@JGRAPHT_VERSION@/$(JGRAPHT_VERSION)/' \
 	    -e 's/@spec_title@/$(spec_title)/' \
 	    -e 's/@spec_vendor@/$(spec_vendor)/' \
 	    -e 's/@spec_version@/$(PACKAGE_VERSION)/' \
