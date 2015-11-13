@@ -13,7 +13,6 @@
 package net.opentsdb.query.expression;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -35,13 +34,11 @@ import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
-import com.sun.java_cup.internal.runtime.Scanner;
-
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore({"javax.management.*", "javax.xml.*",
   "ch.qos.*", "org.slf4j.*",
   "com.sum.*", "org.xml.*"})
-@PrepareForTest({ TSQuery.class, Scanner.class })
+@PrepareForTest({ TSQuery.class })
 public class TestDivideSeries extends BaseTimeSyncedIteratorTest {
 
   private static long START_TIME = 1356998400000L;
@@ -94,34 +91,15 @@ public class TestDivideSeries extends BaseTimeSyncedIteratorTest {
     assertEquals(1, results.length);
     assertEquals(METRIC_STRING, results[0].metricName());
     
+    double[] vals= new double[] { 0.1, 0.181, 0.25, 0.307, 0.357 };
+    
     long ts = START_TIME;
-    final SeekableView iterator = results[0].iterator();
-    DataPoint dp = iterator.next();
-    assertEquals(ts, dp.timestamp());
-    assertEquals(0.1, dp.toDouble(), 0.001);
-    ts += INTERVAL;
-    
-    dp = iterator.next();
-    assertEquals(ts, dp.timestamp());
-    assertEquals(0.181, dp.toDouble(), 0.001);
-    ts += INTERVAL;
-    
-    dp = iterator.next();
-    assertEquals(ts, dp.timestamp());
-    assertEquals(0.25, dp.toDouble(), 0.001);
-    ts += INTERVAL;
-    
-    dp = iterator.next();
-    assertEquals(ts, dp.timestamp());
-    assertEquals(0.307, dp.toDouble(), 0.001);
-    ts += INTERVAL;
-    
-    dp = iterator.next();
-    assertEquals(ts, dp.timestamp());
-    assertEquals(0.357, dp.toDouble(), 0.001);
-    ts += INTERVAL;
-    
-    assertFalse(iterator.hasNext());
+    int i = 0;
+    for (final DataPoint dp : results[0]) {
+      assertEquals(ts, dp.timestamp());
+      assertEquals(vals[i++], dp.toDouble(), 0.001);
+      ts += INTERVAL;
+    }
   }
   
   @Test
@@ -172,15 +150,11 @@ public class TestDivideSeries extends BaseTimeSyncedIteratorTest {
     when(dps2.metricUID()).thenReturn(new byte[] {0,0,2});
     group_bys = new DataPoints[] { dps2 };
     query_results.add(group_bys);
+    // doesn't matter what they are
+    for (int i = 0; i < 100; i++) {
+      query_results.add(group_bys);
+    }
     
-    SeekableView view3 = SeekableViewsForTest.generator(START_TIME, INTERVAL, 
-        NUM_POINTS, true, 20, 1);
-    DataPoints dps3 = PowerMockito.mock(DataPoints.class);
-    when(dps3.iterator()).thenReturn(view3);
-    when(dps3.metricName()).thenReturn("sys.net");
-    when(dps3.metricUID()).thenReturn(new byte[] {0,0,5});
-    group_bys = new DataPoints[] { dps3 };
-    query_results.add(group_bys);
     func.evaluate(data_query, query_results, params);
   }
   

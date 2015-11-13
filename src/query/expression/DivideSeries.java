@@ -15,14 +15,13 @@ package net.opentsdb.query.expression;
 import java.util.List;
 
 import net.opentsdb.core.DataPoints;
-import net.opentsdb.core.FillPolicy;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSQuery;
 import net.opentsdb.query.expression.VariableIterator.SetOperator;
 
 /**
- * Performs a UNION set join on two metric query results (two and only two)
- * and returns the results.
+ * Performs a UNION set join on up to 26 metric query results and returns the 
+ * quotient.
  */
 public class DivideSeries implements Expression {
   /** The TSDB used for UID to name lookups */
@@ -46,22 +45,29 @@ public class DivideSeries implements Expression {
       return new DataPoints[]{};
     }
     
-    // I guess we really do expect two series
-    if (query_results.size() != 2) {
-      throw new IllegalArgumentException("Expected two series, got " + 
+    if (query_results.size() < 2 || query_results.size() > 26) {
+      throw new IllegalArgumentException("Must have 2 to 26 series, got " + 
           query_results.size() + " instead");
     }
-    
-    final TimeSyncedIterator dividend = new TimeSyncedIterator("a", 
-        null, query_results.get(0));
-    final TimeSyncedIterator divisor = new TimeSyncedIterator("b", 
-        null, query_results.get(1));
-    divisor.setFillPolicy(new NumericFillPolicy(FillPolicy.NOT_A_NUMBER));
+        
+    final StringBuilder buf = new StringBuilder();
+    char v = 'a';
+    for (int i = 0; i < query_results.size(); i++) {
+      buf.append(v++);
+      if (i < query_results.size() - 1) {
+        buf.append(" / ");
+      }
+    }
     
     final ExpressionIterator expression = new ExpressionIterator("divideSeries", 
-        "a / b", SetOperator.UNION, false, false);
-    expression.addResults(dividend.getId(), dividend);
-    expression.addResults(divisor.getId(), divisor);
+        buf.toString(), SetOperator.UNION, false, false);
+    v = 'a';
+    
+    for (final DataPoints[] dps : query_results) {
+      final TimeSyncedIterator it = new TimeSyncedIterator(
+          Character.toString(v++), null, dps);
+      expression.addResults(it.getId(), it);
+    }
     expression.compile();
     
     final DataPoints[] results = new DataPoints[expression.values().length];
