@@ -76,6 +76,10 @@ tsdb_SRC := \
 	src/query/QueryUtil.java	\
 	src/query/expression/Absolute.java	\
 	src/query/expression/Expression.java	\
+	src/query/expression/DiffSeries.java	\
+	src/query/expression/DivideSeries.java	\
+	src/query/expression/EDPtoDPS.java	\
+	src/query/expression/Expression.java	\
 	src/query/expression/ExpressionDataPoint.java	\
 	src/query/expression/ExpressionFactory.java	\
 	src/query/expression/ExpressionIterator.java	\
@@ -88,8 +92,10 @@ tsdb_SRC := \
 	src/query/expression/ITimeSyncedIterator.java	\
 	src/query/expression/NumericFillPolicy.java	\
 	src/query/expression/MovingAverage.java	\
+	src/query/expression/MultiplySeries.java	\
 	src/query/expression/PostAggregatedDataPoints.java	\
 	src/query/expression/Scale.java	\
+	src/query/expression/SumSeries.java	\
 	src/query/expression/TimeSyncedIterator.java	\
 	src/query/expression/UnionIterator.java	\
 	src/query/expression/VariableIterator.java	\
@@ -264,6 +270,8 @@ test_SRC := \
 	test/meta/TestUIDMeta.java	\
 	test/query/expression/BaseTimeSyncedIteratorTest.java	\
 	test/query/expression/TestAbsolute.java	\
+	test/query/expression/TestDiffSeries.java	\
+	test/query/expression/TestDivideSeries.java	\
 	test/query/expression/TestExpressionFactory.java	\
 	test/query/expression/TestExpressionIterator.java	\
 	test/query/expression/TestExpressionReader.java	\
@@ -274,8 +282,10 @@ test_SRC := \
 	test/query/expression/TestIntersectionIterator.java	\
 	test/query/expression/TestNumericFillPolicy.java	\
 	test/query/expression/TestMovingAverage.java	\
+	test/query/expression/TestMultiplySeries.java	\
 	test/query/expression/TestPostAggregatedDataPoints.java	\
 	test/query/expression/TestScale.java	\
+	test/query/expression/TestSumSeries.java	\
 	test/query/expression/TestTimeSyncedIterator.java	\
 	test/query/expression/TestUnionIterator.java	\
 	test/query/filter/TestTagVFilter.java	\
