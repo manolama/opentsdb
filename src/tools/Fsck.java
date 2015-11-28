@@ -34,6 +34,7 @@ import org.hbase.async.Scanner;
 
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.core.AppendDataPoints;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.IllegalDataException;
 import net.opentsdb.core.Internal;
@@ -92,6 +93,8 @@ final class Fsck {
   final AtomicLong rows_processed = new AtomicLong();
   final AtomicLong valid_datapoints = new AtomicLong();
   final AtomicLong annotations = new AtomicLong();
+  final AtomicLong append_dps = new AtomicLong();
+  final AtomicLong append_dps_fixed = new AtomicLong();
   final AtomicLong bad_key = new AtomicLong();
   final AtomicLong bad_key_fixed = new AtomicLong();
   final AtomicLong duplicates = new AtomicLong();
@@ -114,11 +117,11 @@ final class Fsck {
   final AtomicLong vle_fixed = new AtomicLong();
   
   /** Length of the metric + timestamp for key validation */
-  private static int key_prefix_length = Const.SALT_WIDTH() + 
+  private int key_prefix_length = Const.SALT_WIDTH() +
       TSDB.metrics_width() + Const.TIMESTAMP_BYTES;
   
   /** Length of a tagk + tagv pair for key validation */
-  private static int key_tags_length = TSDB.tagk_width() + TSDB.tagv_width();
+  private int key_tags_length = TSDB.tagk_width() + TSDB.tagv_width();
   
   /** How often to report progress */
   private static long report_rows = 10000;
@@ -381,6 +384,18 @@ final class Fsck {
           // TODO - perform validation of the annotation
           if (qual[0] == Annotation.PREFIX()) {
             annotations.getAndIncrement();
+            continue;
+          } else if (qual[0] == AppendDataPoints.APPEND_COLUMN_PREFIX) {
+            append_dps.getAndIncrement();
+            try {
+              final AppendDataPoints adps = new AppendDataPoints();
+              adps.parseKeyValue(tsdb, kv);
+              if (adps.repairedDeferred() != null) {
+                append_dps_fixed.incrementAndGet();
+              }
+            } catch (RuntimeException e) {
+              LOG.error("Unexpected exception processing append data point: " + kv, e);
+            }
             continue;
           }
           LOG.warn("Found an object possibly from a future version of OpenTSDB\n\t"
