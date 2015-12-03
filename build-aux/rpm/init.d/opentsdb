@@ -36,6 +36,7 @@ NAME=opentsdb
 PROG=/usr/bin/tsdb
 HOSTNAME=$(hostname --fqdn)
 USER=root
+KILL_TIMEOUT=30
 
 # Default directories
 LOG_DIR=/var/log/opentsdb
@@ -104,7 +105,7 @@ start() {
 
 stop() {
   echo -n "Stopping ${NAME}: "
-  killproc -p $PID_FILE $NAME
+  killproc -p $PID_FILE $NAME -t$KILL_TIMEOUT
   retval=$?
   echo
   # Non-root users don't have enough permission to remove pid and lock files.
