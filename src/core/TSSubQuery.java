@@ -71,6 +71,9 @@ public final class TSSubQuery {
    * tags map. In the future we'll have special JSON objects for them. */
   private List<TagVFilter> filters;
   
+  /** Index of the sub query */
+  private int index;
+  
   /**
    * Default constructor necessary for POJO de/serialization
    */
@@ -271,7 +274,8 @@ public final class TSSubQuery {
     if (filters == null) {
       filters = new ArrayList<TagVFilter>();
     }
-    return filters;
+    // send a copy so ordering doesn't mess up the hash code
+    return new ArrayList<TagVFilter>(filters);
   }
   
   /** @return the unique set of tagks from the filters. May be null if no filters
@@ -287,6 +291,12 @@ public final class TSSubQuery {
       tagks.add(filter.getTagkBytes());
     }
     return tagks;
+  }
+  
+  /** @return the index of the sub query
+   * @since 2.3 */
+  public int getIndex() {
+    return index;
   }
   
   /** @param aggregator the name of an aggregation function */
@@ -335,6 +345,12 @@ public final class TSSubQuery {
    * @since 2.2 */
   public void setFilters(List<TagVFilter> filters) {
     this.filters = filters;
+  }
+  
+  /** @param index the index of the sub query
+   * @since 2.3 */
+  public void setIndex(final int index) {
+    this.index = index;
   }
   
 }

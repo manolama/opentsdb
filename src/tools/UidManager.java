@@ -127,6 +127,7 @@ final class UidManager {
       rc = runCommand(tsdb, table, idwidth, ignorecase, args);
     } finally {
       try {
+        LOG.info("Shutting down TSD....");
         tsdb.getClient().shutdown().joinUninterruptibly();
         LOG.info("Gracefully shutdown the TSD");
       } catch (Exception e) {
@@ -361,7 +362,7 @@ final class UidManager {
                             final short idwidth,
                             final String[] args) {
     boolean randomize = false;
-    if (UniqueIdType.valueOf(args[1]) == UniqueIdType.METRIC) {
+    if (UniqueId.stringToUniqueIdType(args[1]) == UniqueIdType.METRIC) {
       randomize = tsdb.getConfig().getBoolean("tsd.core.uid.random_metrics");
     }
     final UniqueId uid = new UniqueId(tsdb.getClient(), table, args[1], 
@@ -1026,7 +1027,7 @@ final class UidManager {
       thread.join();
       LOG.info("Thread [" + thread + "] Finished");
     }
-    
+    LOG.info("All metasync threads have completed");
     // make sure buffered data is flushed to storage before exiting
     tsdb.flush().joinUninterruptibly();
     
