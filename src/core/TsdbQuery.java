@@ -95,6 +95,9 @@ final class TsdbQuery implements Query {
   /** Row key regex to pass to HBase if we have tags or TSUIDs */
   private String regex;
   
+  /** Whether or not to enable the fuzzy row filter for Hbase */
+  private boolean enable_fuzzy_filter;
+  
   /**
    * Tags by which we must group the results.
    * Each element is a tag ID.
@@ -139,11 +142,14 @@ final class TsdbQuery implements Query {
   
   /** An object for storing stats in regarding the query. May be null */
   private QueryStats query_stats;
+  /** Whether or not to match series with ONLY the given tags */
+  private boolean explicit_tags;
   
   /** Constructor. */
   public TsdbQuery(final TSDB tsdb) {
     this.tsdb = tsdb;
-    
+    enable_fuzzy_filter = tsdb.getConfig()
+        .getBoolean("tsd.query.enable_fuzzy_filter");
     // By default, we should interpolate.
     fill_policy = DownsamplingSpecification.DEFAULT_FILL_POLICY;
   }
@@ -334,6 +340,7 @@ final class TsdbQuery implements Query {
     sample_interval_ms = sub_query.downsampleInterval();
     fill_policy = sub_query.fillPolicy();
     filters = sub_query.getFilters();
+    explicit_tags = sub_query.getExplicitTags();
     
     // if we have tsuids set, that takes precedence
     if (sub_query.getTsuids() != null && !sub_query.getTsuids().isEmpty()) {
@@ -1042,13 +1049,18 @@ final class TsdbQuery implements Query {
    * @param scanner The scanner on which to add the filter.
    */
   private void createAndSetFilter(final Scanner scanner) {
-    if (regex == null) {
-      regex = QueryUtil.getRowKeyUIDRegex(group_bys, row_key_literals);
-    }
-    scanner.setKeyRegexp(regex, CHARSET);
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Scanner regex: " + QueryUtil.byteRegexToString(regex));
-    }
+//    if (regex == null) {
+//      regex = QueryUtil.getRowKeyUIDRegex(group_bys, row_key_literals);
+//    }
+//    scanner.setKeyRegexp(regex, CHARSET);
+//    if (LOG.isDebugEnabled()) {
+//      LOG.debug("Scanner regex: " + QueryUtil.byteRegexToString(regex));
+//    }
+    QueryUtil.setDataTableScanFilter(scanner, group_bys, row_key_literals, 
+        explicit_tags, enable_fuzzy_filter, 
+        (end_time == UNSET
+        ? -1  // Will scan until the end (0xFFF...).
+        : (int) getScanEndTimeSeconds()));
   }
   
   /**
