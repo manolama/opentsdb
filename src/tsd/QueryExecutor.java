@@ -208,6 +208,7 @@ public class QueryExecutor {
     final QueryStats query_stats = 
         new QueryStats(query.getRemoteAddress(), ts_query, query.getHeaders());
     ts_query.setQueryStats(query_stats);
+    query.setStats(query_stats);
 
     final long start = DateTime.currentTimeMillis();
 
