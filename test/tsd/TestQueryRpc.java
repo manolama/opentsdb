@@ -533,6 +533,7 @@ public final class TestQueryRpc {
   public void deleteDatapointsBadRequest() throws Exception {
     HttpQuery query = NettyMocks.deleteQuery(tsdb,
       "/api/query?start=1356998400&m=sum:sys.cpu.user", "");
+    NettyMocks.mockChannelFuture(query);
     rpc.execute(tsdb, query);
     assertEquals(HttpResponseStatus.BAD_REQUEST, query.response().getStatus());
     final String json =
@@ -549,8 +550,9 @@ public final class TestQueryRpc {
     
     final HttpQuery query = NettyMocks.getQuery(tsdb, 
         "/api/query/gexp?start=1h-ago&exp=scale(sum:sys.cpu.user,1)");
+    NettyMocks.mockChannelFuture(query);
     rpc.execute(tsdb, query);
-    assertEquals(query.response().getStatus(), HttpResponseStatus.OK);
+    assertEquals(HttpResponseStatus.OK, query.response().getStatus());
     final String json = 
         query.response().getContent().toString(Charset.forName("UTF-8"));
     assertTrue(json.contains("\"metric\":\"system.cpu.user\""));
@@ -565,6 +567,7 @@ public final class TestQueryRpc {
     
     final HttpQuery query = NettyMocks.getQuery(tsdb, 
         "/api/query/gexp?start=1h-ago&exp=scale(sum:sys.cpu.user,notanumber)");
+    NettyMocks.mockChannelFuture(query);
     rpc.execute(tsdb, query);
     assertEquals(query.response().getStatus(), HttpResponseStatus.BAD_REQUEST);
     final String json = 
