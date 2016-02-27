@@ -314,6 +314,14 @@ final class TsdbQuery implements Query {
     this.rate_options = rate_options;
   }
   
+  /**
+   * @param explicit_tags Whether or not to match only on the given tags
+   * @since 2.3
+   */
+  public void setExplicitTags(final boolean explicit_tags) {
+    this.explicit_tags = explicit_tags;
+  }
+  
   public Deferred<Object> configureFromQuery(final TSQuery query, 
       final int index) {
     if (query.getQueries() == null || query.getQueries().isEmpty()) {

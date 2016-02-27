@@ -33,7 +33,9 @@ import java.util.regex.PatternSyntaxException;
 
 import javax.xml.bind.DatatypeConverter;
 
+import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.storage.MockBase.MockScanner;
 import net.opentsdb.utils.Pair;
 
 import org.hbase.async.AtomicIncrementRequest;
@@ -41,10 +43,13 @@ import org.hbase.async.Bytes;
 import org.hbase.async.Bytes.ByteMap;
 import org.hbase.async.AppendRequest;
 import org.hbase.async.DeleteRequest;
+import org.hbase.async.FilterList;
 import org.hbase.async.GetRequest;
 import org.hbase.async.HBaseClient;
+import org.hbase.async.KeyRegexpFilter;
 import org.hbase.async.KeyValue;
 import org.hbase.async.PutRequest;
+import org.hbase.async.ScanFilter;
 import org.hbase.async.Scanner;
 import org.junit.Ignore;
 import org.mockito.invocation.InvocationOnMock;
@@ -630,6 +635,11 @@ public final class MockBase {
       }
     }
     return unique_rows.keySet();
+  }
+  
+  /** @return The set of scanners configured by the caller */
+  public HashSet<MockScanner> getScanners() {
+    return scanners;
   }
   
   /**
@@ -1332,15 +1342,16 @@ public final class MockBase {
    * The KeyRegexp can be set and it will run against the hex value of the 
    * row key. In testing it seems to work nicely even with byte patterns.
    */
-  private class MockScanner implements 
+  public class MockScanner implements 
     Answer<Deferred<ArrayList<ArrayList<KeyValue>>>> {
 
+    private final Scanner mock_scanner;
     private final byte[] table;
     private byte[] start = null;
     private byte[] stop = null;
     private HashSet<String> scnr_qualifiers = null;
     private byte[] family = null;
-    private String regex = null;
+    private ScanFilter filter = null;
     private int max_num_rows = Scanner.DEFAULT_MAX_NUM_ROWS;
     private ByteMap<Iterator<Entry<byte[], ByteMap<TreeMap<Long, byte[]>>>>> 
       cursors;
@@ -1353,6 +1364,7 @@ public final class MockBase {
      * @param table The table (confirmed to exist)
      */
     public MockScanner(final Scanner mock_scanner, final byte[] table) {
+      this.mock_scanner = mock_scanner;
       this.table = table;
 
       // capture the scanner fields when set
@@ -1360,7 +1372,7 @@ public final class MockBase {
         @Override
         public Object answer(InvocationOnMock invocation) throws Throwable {
           final Object[] args = invocation.getArguments();
-          regex = (String)args[0];
+          filter = new KeyRegexpFilter((String)args[0], Const.ASCII_CHARSET);
           return null;
         }
       }).when(mock_scanner).setKeyRegexp(anyString());
@@ -1369,11 +1381,20 @@ public final class MockBase {
         @Override
         public Object answer(InvocationOnMock invocation) throws Throwable {
           final Object[] args = invocation.getArguments();
-          regex = (String)args[0];
+          filter = new KeyRegexpFilter((String)args[0], (Charset)args[1]);
           return null;
         }
       }).when(mock_scanner).setKeyRegexp(anyString(), (Charset)any());
       
+      doAnswer(new Answer<Object>() {
+        @Override
+        public Object answer(InvocationOnMock invocation) throws Throwable {
+          final Object[] args = invocation.getArguments();
+          filter = (ScanFilter)args[0];
+          return null;
+        }
+      }).when(mock_scanner).setFilter(any(ScanFilter.class));
+
       doAnswer(new Answer<Object>() {
         @Override
         public Object answer(InvocationOnMock invocation) throws Throwable {
@@ -1424,6 +1445,13 @@ public final class MockBase {
         }      
       }).when(mock_scanner).setQualifiers((byte[][])any());
       
+      doAnswer(new Answer<byte[]>() {
+        @Override
+        public byte[] answer(InvocationOnMock invocation) throws Throwable {
+          return start;
+        }
+      }).when(mock_scanner).getCurrentKey();
+      
       when(mock_scanner.nextRows()).thenAnswer(this);
       
     }
@@ -1470,12 +1498,33 @@ public final class MockBase {
         return Deferred.fromResult(null);
       }
       
+      // TODO - fuzzy filter support
       Pattern pattern = null;
-      if (regex != null && !regex.isEmpty()) {
-        try {
-          pattern = Pattern.compile(regex);
-        } catch (PatternSyntaxException e) {
-          e.printStackTrace();
+      if (filter != null) {
+        KeyRegexpFilter regex_filter = null;
+        
+        if (filter instanceof KeyRegexpFilter) {
+          regex_filter = (KeyRegexpFilter)filter;
+        } else if (filter instanceof FilterList) {
+          final List<ScanFilter> filters = 
+              Whitebox.getInternalState(filter, "filters");
+          for (final ScanFilter f : filters) {
+            if (f instanceof KeyRegexpFilter) {
+              regex_filter = (KeyRegexpFilter)f;
+            }
+          }
+        }
+        
+        if (regex_filter != null) {
+          try {
+            pattern = Pattern.compile(new String(
+                (byte[])Whitebox.getInternalState(regex_filter, "regexp"), 
+                Charset.forName(new String(
+                    (byte[])Whitebox.getInternalState(regex_filter, "charset")))));
+          } catch (PatternSyntaxException e) {
+            e.printStackTrace();
+            return Deferred.fromError(e);
+          }
         }
       }
       
@@ -1623,6 +1672,16 @@ public final class MockBase {
           }
         }
       }
+    }
+    
+    /** @return The scanner for this mock */
+    public Scanner getScanner() {
+      return mock_scanner;
+    }
+  
+    /** @return The filter for this mock */
+    public ScanFilter getFilter() {
+      return filter;
     }
   }
   
