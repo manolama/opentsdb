@@ -142,6 +142,7 @@ final class TsdbQuery implements Query {
   
   /** An object for storing stats in regarding the query. May be null */
   private QueryStats query_stats;
+  
   /** Whether or not to match series with ONLY the given tags */
   private boolean explicit_tags;
   
@@ -562,8 +563,11 @@ final class TsdbQuery implements Query {
           delete, query_stats, query_index).scan();
     }
     
-    scan_start_time = DateTime.nanoTime();    
+    scan_start_time = DateTime.nanoTime();
     final Scanner scanner = getScanner();
+    if (query_stats != null) {
+      query_stats.addScannerId(query_index, 0, scanner.toString());
+    }
     final Deferred<TreeMap<byte[], Span>> results =
       new Deferred<TreeMap<byte[], Span>>();
     
@@ -1049,13 +1053,6 @@ final class TsdbQuery implements Query {
    * @param scanner The scanner on which to add the filter.
    */
   private void createAndSetFilter(final Scanner scanner) {
-//    if (regex == null) {
-//      regex = QueryUtil.getRowKeyUIDRegex(group_bys, row_key_literals);
-//    }
-//    scanner.setKeyRegexp(regex, CHARSET);
-//    if (LOG.isDebugEnabled()) {
-//      LOG.debug("Scanner regex: " + QueryUtil.byteRegexToString(regex));
-//    }
     QueryUtil.setDataTableScanFilter(scanner, group_bys, row_key_literals, 
         explicit_tags, enable_fuzzy_filter, 
         (end_time == UNSET

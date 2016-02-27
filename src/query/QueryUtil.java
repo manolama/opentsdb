@@ -56,11 +56,29 @@ public class QueryUtil {
    */
   public static String getRowKeyUIDRegex(final List<byte[]> group_bys, 
       final ByteMap<byte[][]> row_key_literals) {
-    return getRowKeyUIDRegex(group_bys, row_key_literals, false, null);
+    return getRowKeyUIDRegex(group_bys, row_key_literals, false, null, null);
   }
   
-  public static String getRowKeyUIDRegex(final List<byte[]> group_bys, 
-      final ByteMap<byte[][]> row_key_literals, final boolean explicit_tags,
+  /**
+   * Crafts a regular expression for scanning over data table rows and filtering
+   * time series that the user doesn't want. Also fills in an optional fuzzy
+   * mask and key as it builds the regex if configured to do so.
+   * @param group_bys An optional list of tag keys that we want to group on. May
+   * be null.
+   * @param row_key_literals An optional list of key value pairs to filter on.
+   * May be null.
+   * @param explicit_tags Whether or not explicit tags are enabled so that the
+   * regex only picks out series with the specified tags
+   * @param fuzzy_key An optional fuzzy filter row key
+   * @param fuzzy_mask An optional fuzzy filter mask
+   * @return A regular expression string to pass to the storage layer.
+   * @since 2.3
+   */
+  public static String getRowKeyUIDRegex(
+      final List<byte[]> group_bys, 
+      final ByteMap<byte[][]> row_key_literals, 
+      final boolean explicit_tags,
+      final byte[] fuzzy_key, 
       final byte[] fuzzy_mask) {
     if (group_bys != null) {
       Collections.sort(group_bys, Bytes.MEMCMP);
@@ -89,8 +107,9 @@ public class QueryUtil {
 
     final Iterator<Entry<byte[], byte[][]>> it = row_key_literals == null ? 
         new ByteMap<byte[][]>().iterator() : row_key_literals.iterator();
-    int fuzzy_offset = 0;
+    int fuzzy_offset = Const.SALT_WIDTH() + TSDB.metrics_width();
     if (fuzzy_mask != null) {
+      // make sure to skip the timestamp when scanning
       while (fuzzy_offset < prefix_width) {
         fuzzy_mask[fuzzy_offset++] = 1;
       }
@@ -112,6 +131,8 @@ public class QueryUtil {
         // setting explicit tag values whenever we can. In testing there was
         // a conflict between the row key regex and fuzzy filter that prevented
         // results from returning properly.
+        System.arraycopy(entry.getKey(), 0, fuzzy_key, fuzzy_offset, name_width);
+        fuzzy_offset += name_width;
         for (int i = 0; i < value_width; i++) {
           fuzzy_mask[fuzzy_offset++] = 1;
         }
@@ -150,10 +171,28 @@ public class QueryUtil {
     if (!explicit_tags) {
       buf.append("(?:.{").append(tagsize).append("})*");
     }
+    buf.append("$");
     return buf.toString();
   }
   
-  public static void setDataTableScanFilter(final Scanner scanner, 
+  /**
+   * Sets a filter or filter list on the scanner based on whether or not the
+   * query had tags it needed to match.
+   * @param scanner The scanner to modify.
+   * @param group_bys An optional list of tag keys that we want to group on. May
+   * be null.
+   * @param row_key_literals An optional list of key value pairs to filter on.
+   * May be null.
+   * @param explicit_tag sWhether or not explicit tags are enabled so that the
+   * regex only picks out series with the specified tags
+   * @param enable_fuzzy_filter Whether or not a fuzzy filter should be used
+   * in combination with the explicit tags param. If explicit tags is disabled
+   * then this param is ignored. 
+   * @param end_time The end of the query time so the fuzzy filter knows when
+   * to stop scanning.
+   */
+  public static void setDataTableScanFilter(
+      final Scanner scanner, 
       final List<byte[]> group_bys, 
       final ByteMap<byte[][]> row_key_literals,
       final boolean explicit_tags,
@@ -183,7 +222,7 @@ public class QueryUtil {
     }
     
     final String regex = getRowKeyUIDRegex(group_bys, row_key_literals, 
-        explicit_tags, fuzzy_mask);
+        explicit_tags, fuzzy_key, fuzzy_mask);
     final KeyRegexpFilter regex_filter = new KeyRegexpFilter(
         regex.toString(), Const.ASCII_CHARSET);
     if (LOG.isDebugEnabled()) {
