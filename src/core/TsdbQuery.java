@@ -95,6 +95,9 @@ final class TsdbQuery implements Query {
   /** Row key regex to pass to HBase if we have tags or TSUIDs */
   private String regex;
   
+  /** Whether or not to enable the fuzzy row filter for Hbase */
+  private boolean enable_fuzzy_filter;
+  
   /**
    * Tags by which we must group the results.
    * Each element is a tag ID.
@@ -140,10 +143,14 @@ final class TsdbQuery implements Query {
   /** An object for storing stats in regarding the query. May be null */
   private QueryStats query_stats;
   
+  /** Whether or not to match series with ONLY the given tags */
+  private boolean explicit_tags;
+  
   /** Constructor. */
   public TsdbQuery(final TSDB tsdb) {
     this.tsdb = tsdb;
-    
+    enable_fuzzy_filter = tsdb.getConfig()
+        .getBoolean("tsd.query.enable_fuzzy_filter");
     // By default, we should interpolate.
     fill_policy = DownsamplingSpecification.DEFAULT_FILL_POLICY;
   }
@@ -307,6 +314,14 @@ final class TsdbQuery implements Query {
     this.rate_options = rate_options;
   }
   
+  /**
+   * @param explicit_tags Whether or not to match only on the given tags
+   * @since 2.3
+   */
+  public void setExplicitTags(final boolean explicit_tags) {
+    this.explicit_tags = explicit_tags;
+  }
+  
   public Deferred<Object> configureFromQuery(final TSQuery query, 
       final int index) {
     if (query.getQueries() == null || query.getQueries().isEmpty()) {
@@ -334,6 +349,7 @@ final class TsdbQuery implements Query {
     sample_interval_ms = sub_query.downsampleInterval();
     fill_policy = sub_query.fillPolicy();
     filters = sub_query.getFilters();
+    explicit_tags = sub_query.getExplicitTags();
     
     // if we have tsuids set, that takes precedence
     if (sub_query.getTsuids() != null && !sub_query.getTsuids().isEmpty()) {
@@ -411,6 +427,10 @@ final class TsdbQuery implements Query {
    */
   @Override
   public void downsample(final long interval, final Aggregator downsampler) {
+    if (downsampler == Aggregators.NONE) {
+      throw new IllegalArgumentException("cannot use the NONE "
+          + "aggregator for downsampling");
+    }
     downsample(interval, downsampler, FillPolicy.NONE);
   }
 
@@ -555,8 +575,11 @@ final class TsdbQuery implements Query {
           delete, query_stats, query_index).scan();
     }
     
-    scan_start_time = DateTime.nanoTime();    
+    scan_start_time = DateTime.nanoTime();
     final Scanner scanner = getScanner();
+    if (query_stats != null) {
+      query_stats.addScannerId(query_index, 0, scanner.toString());
+    }
     final Deferred<TreeMap<byte[], Span>> results =
       new Deferred<TreeMap<byte[], Span>>();
     
@@ -831,6 +854,23 @@ final class TsdbQuery implements Query {
         }
         return NO_RESULT;
       }
+      
+      // The raw aggregator skips group bys and ignores downsampling
+      if (aggregator == Aggregators.NONE) {
+        final SpanGroup[] groups = new SpanGroup[spans.size()];
+        int i = 0;
+        for (final Span span : spans.values()) {
+          final SpanGroup group = new SpanGroup(tsdb, getScanStartTimeSeconds(),
+              getScanEndTimeSeconds(),
+              null, rate, rate_options, aggregator,
+              sample_interval_ms, downsampler, query_index, 
+              fill_policy);
+          group.add(span);
+          groups[i++] = group;
+        }
+        return groups;
+      }
+      
       if (group_bys == null) {
         // We haven't been asked to find groups, so let's put all the spans
         // together in the same group.
@@ -1042,13 +1082,11 @@ final class TsdbQuery implements Query {
    * @param scanner The scanner on which to add the filter.
    */
   private void createAndSetFilter(final Scanner scanner) {
-    if (regex == null) {
-      regex = QueryUtil.getRowKeyUIDRegex(group_bys, row_key_literals);
-    }
-    scanner.setKeyRegexp(regex, CHARSET);
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Scanner regex: " + QueryUtil.byteRegexToString(regex));
-    }
+    QueryUtil.setDataTableScanFilter(scanner, group_bys, row_key_literals, 
+        explicit_tags, enable_fuzzy_filter, 
+        (end_time == UNSET
+        ? -1  // Will scan until the end (0xFFF...).
+        : (int) getScanEndTimeSeconds()));
   }
   
   /**
