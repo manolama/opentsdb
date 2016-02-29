@@ -44,7 +44,7 @@ public class TestDownsamplingSpecification {
   @Test
   public void testToString() {
     assertEquals("DownsamplingSpecification{interval=4532019, function=zimsum, "
-        + "fillPolicy=NOT_A_NUMBER}",
+        + "fillPolicy=NOT_A_NUMBER, stringInterval=null}",
       new DownsamplingSpecification(
         4532019L,
         Aggregators.ZIMSUM,
@@ -64,6 +64,11 @@ public class TestDownsamplingSpecification {
   @Test(expected = RuntimeException.class)
   public void testBadFillPolicy() {
     new DownsamplingSpecification("10m-avg-max");
+  }
+
+  @Test (expected = IllegalArgumentException.class)
+  public void testNoneAgg() {
+    new DownsamplingSpecification("1m-none-lerp");
   }
 }
 
