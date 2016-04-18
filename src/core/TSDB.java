@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
@@ -44,6 +45,7 @@ import org.jboss.netty.util.Timer;
 import net.opentsdb.tree.TreeBuilder;
 import net.opentsdb.tsd.RTPublisher;
 import net.opentsdb.tsd.StorageExceptionHandler;
+import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
@@ -52,12 +54,14 @@ import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.PluginLoader;
 import net.opentsdb.utils.Threads;
 import net.opentsdb.meta.Annotation;
+import net.opentsdb.meta.MetaDataCache;
 import net.opentsdb.meta.TSMeta;
 import net.opentsdb.meta.UIDMeta;
 import net.opentsdb.query.expression.ExpressionFactory;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.search.SearchPlugin;
 import net.opentsdb.search.SearchQuery;
+import net.opentsdb.tools.StartupPlugin;
 import net.opentsdb.stats.Histogram;
 import net.opentsdb.stats.QueryStats;
 import net.opentsdb.stats.StatsCollector;
@@ -117,13 +121,22 @@ public final class TSDB {
 
   /** Search indexer to use if configure */
   private SearchPlugin search = null;
-  
+
+  /** Optional Startup Plugin to use if configured */
+  private StartupPlugin startup = null;
+
   /** Optional real time pulblisher plugin to use if configured */
   private RTPublisher rt_publisher = null;
   
+  /** Optional plugin for handling meta data caching and updating */
+  private MetaDataCache meta_cache = null;
+  
   /** Plugin for dealing with data points that can't be stored */
   private StorageExceptionHandler storage_exception_handler = null;
-  
+
+  /** Datapoints Added */
+  private static final AtomicLong datapoints_added = new AtomicLong();
+
   /**
    * Constructor
    * @param client An initialized HBase client object
@@ -229,7 +242,22 @@ public final class TSDB {
   public static byte[] FAMILY() {
     return FAMILY;
   }
-  
+
+  /**
+   * Called by initializePlugins, also used to load startup plugins.
+   * @since 2.3
+   */
+  public static void loadPluginPath(final String plugin_path) throws RuntimeException {
+    if (plugin_path != null && !plugin_path.isEmpty()) {
+      try {
+        PluginLoader.loadJARs(plugin_path);
+      } catch (Exception e) {
+        throw new RuntimeException("Error loading plugins from plugin path: " +
+                plugin_path, e);
+      }
+    }
+  }
+
   /**
    * Should be called immediately after construction to initialize plugins and
    * objects that rely on such. It also moves most of the potential exception
@@ -240,18 +268,14 @@ public final class TSDB {
    * @throws IllegalArgumentException if a plugin could not be initialized
    * @since 2.0
    */
-  public void initializePlugins(final boolean init_rpcs) {
+  public void initializePlugins(final boolean init_rpcs) throws RuntimeException {
     final String plugin_path = config.getString("tsd.core.plugin_path");
-    if (plugin_path != null && !plugin_path.isEmpty()) {
-      try {
-        PluginLoader.loadJARs(plugin_path);
-      } catch (Exception e) {
-        LOG.error("Error loading plugins from plugin path: " + plugin_path, e);
-        throw new RuntimeException("Error loading plugins from plugin path: " + 
-            plugin_path, e);
-      }
+    try {
+      loadPluginPath(plugin_path);
+    } catch (RuntimeException e) {
+      throw e;
     }
-    
+
     try {
       TagVFilter.initializeFilterMap(this);
       // @#$@%$%#$ing typed exceptions
@@ -313,6 +337,26 @@ public final class TSDB {
       rt_publisher = null;
     }
     
+    // load the meta cache plugin if enabled
+    if (config.getBoolean("tsd.core.meta.cache.enable")) {
+      meta_cache = PluginLoader.loadSpecificPlugin(
+          config.getString("tsd.core.meta.cache.plugin"), MetaDataCache.class);
+      if (meta_cache == null) {
+        throw new IllegalArgumentException(
+            "Unable to locate meta cache plugin: " + 
+            config.getString("tsd.core.meta.cache.plugin"));
+      }
+      try {
+        meta_cache.initialize(this);
+      } catch (Exception e) {
+        throw new RuntimeException(
+            "Failed to initialize meta cache plugin", e);
+      }
+      LOG.info("Successfully initialized meta cache plugin [" + 
+          meta_cache.getClass().getCanonicalName() + "] version: " 
+          + meta_cache.version());
+    }
+    
     // load the storage exception plugin if enabled
     if (config.getBoolean("tsd.core.storage_exception_handler.enable")) {
       storage_exception_handler = PluginLoader.loadSpecificPlugin(
@@ -343,8 +387,21 @@ public final class TSDB {
   public final HBaseClient getClient() {
     return this.client;
   }
-  
-  /** 
+
+  /**
+   * Sets the startup plugin so that it can be shutdown properly.
+   * @param startup
+   * @since 2.3
+   */
+  public final void setStartup(StartupPlugin startup) { this.startup = startup; }
+  /**
+   * Getter that returns the startup plugin object
+   * @return The StartupPlugin object
+   * @since 2.3
+   */
+  public final StartupPlugin getStartup() { return this.startup; }
+
+  /**
    * Getter that returns the configuration object
    * @return The configuration object
    * @since 2.0 
@@ -536,6 +593,13 @@ public final class TSDB {
       collector.clearExtraTag("class");
     }
 
+    collector.addExtraTag("class", "TSDB");
+    try {
+      collector.record("datapoints.added", datapoints_added, "type=all");
+    } finally {
+      collector.clearExtraTag("class");
+    }
+
     collector.addExtraTag("class", "TsdbQuery");
     try {
       collector.record("hbase.latency", TsdbQuery.scanlatency, "method=scan");
@@ -571,6 +635,14 @@ public final class TSDB {
 
     compactionq.collectStats(collector);
     // Collect Stats from Plugins
+    if (startup != null) {
+      try {
+        collector.addExtraTag("plugin", "startup");
+        startup.collectStats(collector);
+      } finally {
+        collector.clearExtraTag("plugin");
+      }
+    }
     if (rt_publisher != null) {
       try {
         collector.addExtraTag("plugin", "publish");
@@ -698,6 +770,7 @@ public final class TSDB {
     } else {
       v = Bytes.fromLong(value);
     }
+
     final short flags = (short) (v.length - 1);  // Just the length.
     return addPointInternal(metric, timestamp, v, tags, flags);
   }
@@ -803,7 +876,7 @@ public final class TSDB {
     
     Bytes.setInt(row, (int) base_time, metrics.width() + Const.SALT_WIDTH());
     RowKey.prefixKeyWithSalt(row);
-    
+
     Deferred<Object> result = null;
     if (config.enable_appends()) {
       final AppendDataPoints kv = new AppendDataPoints(qualifier, value);
@@ -815,7 +888,11 @@ public final class TSDB {
       final PutRequest point = new PutRequest(table, row, FAMILY, qualifier, value);
       result = client.put(point);
     }
-    
+
+    // Count all added datapoints, not just those that came in through PUT rpc
+    // Will there be others? Well, something could call addPoint programatically right?
+    datapoints_added.incrementAndGet();
+
     // TODO(tsuna): Add a callback to time the latency of HBase and store the
     // timing in a moving Histogram (once we have a class for this).
     
@@ -827,17 +904,24 @@ public final class TSDB {
     final byte[] tsuid = UniqueId.getTSUIDFromKey(row, METRICS_WIDTH, 
         Const.TIMESTAMP_BYTES);
     
-    // for busy TSDs we may only enable TSUID tracking, storing a 1 in the
-    // counter field for a TSUID with the proper timestamp. If the user would
-    // rather have TSUID incrementing enabled, that will trump the PUT
-    if (config.enable_tsuid_tracking() && !config.enable_tsuid_incrementing()) {
-      final PutRequest tracking = new PutRequest(meta_table, tsuid, 
-          TSMeta.FAMILY(), TSMeta.COUNTER_QUALIFIER(), Bytes.fromLong(1));
-      client.put(tracking);
-    } else if (config.enable_tsuid_incrementing() || config.enable_realtime_ts()) {
-      TSMeta.incrementAndGetCounter(TSDB.this, tsuid);
+    // if the meta cache plugin is instantiated then tracking goes through it
+    if (meta_cache != null) {
+      meta_cache.increment(tsuid);
+    } else {
+      // for busy TSDs we may only enable TSUID tracking, storing a 1 in the
+      // counter field for a TSUID with the proper timestamp. If the user would
+      // rather have TSUID incrementing enabled, that will trump the PUT
+      if (config.enable_tsuid_tracking() && !config.enable_tsuid_incrementing()) {
+        final PutRequest tracking = new PutRequest(meta_table, tsuid, 
+            TSMeta.FAMILY(), TSMeta.COUNTER_QUALIFIER(), Bytes.fromLong(1));
+        client.put(tracking);
+      } else if (config.enable_tsuid_incrementing() && config.enable_realtime_ts()) {
+        TSMeta.incrementAndGetCounter(TSDB.this, tsuid);
+      } else if (!config.enable_tsuid_incrementing() && config.enable_realtime_ts()) {
+        TSMeta.storeIfNecessary(TSDB.this, tsuid);
+      }
     }
-    
+
     if (rt_publisher != null) {
       rt_publisher.sinkDataPoint(metric, timestamp, value, tags, tsuid, flags);
     }
@@ -964,6 +1048,11 @@ public final class TSDB {
       LOG.info("Flushing compaction queue");
       deferreds.add(compactionq.flush().addCallback(new CompactCB()));
     }
+    if (startup != null) {
+      LOG.info("Shutting down startup plugin: " +
+              startup.getClass().getCanonicalName());
+      deferreds.add(startup.shutdown());
+    }
     if (search != null) {
       LOG.info("Shutting down search plugin: " + 
           search.getClass().getCanonicalName());
@@ -973,6 +1062,11 @@ public final class TSDB {
       LOG.info("Shutting down RT plugin: " + 
           rt_publisher.getClass().getCanonicalName());
       deferreds.add(rt_publisher.shutdown());
+    }
+    if (meta_cache != null) {
+      LOG.info("Shutting down meta cache plugin: " + 
+          meta_cache.getClass().getCanonicalName());
+      deferreds.add(meta_cache.shutdown());
     }
     if (storage_exception_handler != null) {
       LOG.info("Shutting down storage exception handler plugin: " + 
@@ -1122,6 +1216,52 @@ public final class TSDB {
     }
   }
   
+  /**
+   * Attempts to rename a UID from existing name to the given name
+   * Used by the UniqueIdRpc call to rename name of existing metrics, tagks or
+   * tagvs. The name must pass validation. If the UID doesn't exist, the method
+   * will throw an error. Chained IllegalArgumentException is directly exposed
+   * to caller. If the rename was successful, this method returns.
+   * @param type The type of uid to rename, one of metric, tagk and tagv
+   * @param oldname The existing name of the uid object
+   * @param newname The new name to be used on the uid object
+   * @throws IllegalArgumentException if error happened
+   * @since 2.2
+   */
+  public void renameUid(final String type, final String oldname,
+      final String newname) {
+    Tags.validateString(type, oldname);
+    Tags.validateString(type, newname);
+    if (type.toLowerCase().equals("metric")) {
+      try {
+        this.metrics.getId(oldname);
+        this.metrics.rename(oldname, newname);
+      } catch (NoSuchUniqueName nsue) {
+        throw new IllegalArgumentException("Name(\"" + oldname +
+            "\") does not exist");
+      }
+    } else if (type.toLowerCase().equals("tagk")) {
+      try {
+        this.tag_names.getId(oldname);
+        this.tag_names.rename(oldname, newname);
+      } catch (NoSuchUniqueName nsue) {
+        throw new IllegalArgumentException("Name(\"" + oldname +
+            "\") does not exist");
+      }
+    } else if (type.toLowerCase().equals("tagv")) {
+      try {
+        this.tag_values.getId(oldname);
+        this.tag_values.rename(oldname, newname);
+      } catch (NoSuchUniqueName nsue) {
+        throw new IllegalArgumentException("Name(\"" + oldname +
+            "\") does not exist");
+      }
+    } else {
+      LOG.warn("Unknown type name: " + type);
+      throw new IllegalArgumentException("Unknown type name");
+    }
+  }
+
   /** @return the name of the UID table as a byte array for client requests */
   public byte[] uidTable() {
     return this.uidtable;

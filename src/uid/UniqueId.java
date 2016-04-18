@@ -15,11 +15,15 @@ package net.opentsdb.uid;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 import javax.xml.bind.DatatypeConverter;
 
@@ -53,6 +57,13 @@ import net.opentsdb.meta.UIDMeta;
  */
 @SuppressWarnings("deprecation")  // Dunno why even with this, compiler warns.
 public final class UniqueId implements UniqueIdInterface {
+  /** Whether or not to check new UID against configured whitelists **/
+  private Boolean useWhitelist = false;
+  /** Whitelists for various uid types **/
+  private String auto_metric_patterns = ".*";
+  private String auto_tagk_patterns = ".*";
+  private String auto_tagv_patterns = ".*";
+
   private static final Logger LOG = LoggerFactory.getLogger(UniqueId.class);
 
   /** Enumerator for different types of UIDS @since 2.0 */
@@ -104,6 +115,9 @@ public final class UniqueId implements UniqueIdInterface {
   /** Map of pending UID assignments */
   private final HashMap<String, Deferred<byte[]>> pending_assignments =
     new HashMap<String, Deferred<byte[]>>();
+  /** Set of UID rename */
+  private final Set<String> renaming_id_names =
+    Collections.synchronizedSet(new HashSet<String>());
 
   /** Number of times we avoided reading from HBase thanks to the cache. */
   private volatile int cache_hits;
@@ -188,6 +202,10 @@ public final class UniqueId implements UniqueIdInterface {
   /** @param tsdb Whether or not to track new UIDMeta objects */
   public void setTSDB(final TSDB tsdb) {
     this.tsdb = tsdb;
+    this.useWhitelist = tsdb.getConfig().auto_whitelist();
+    this.auto_metric_patterns = tsdb.getConfig().auto_metric_patterns();
+    this.auto_tagk_patterns =  tsdb.getConfig().auto_tagk_patterns();
+    this.auto_tagv_patterns = tsdb.getConfig().auto_tagv_patterns();
   }
   
   /** The largest possible ID given the number of bytes the IDs are 
@@ -631,6 +649,10 @@ public final class UniqueId implements UniqueIdInterface {
     try {
       return getIdAsync(name).joinUninterruptibly();
     } catch (NoSuchUniqueName e) {
+      if (this.useWhitelist && !checkNameIsValid(name)) {
+        LOG.info("UID cannot be assigned, name is not acceptable because it fails to match the whitelist: " + name);
+        throw new RuntimeException("UID cannot be assigned, name is not acceptable because it fails to match the whitelist: " + name);
+      }
       Deferred<byte[]> assignment = null;
       boolean pending = false;
       synchronized (pending_assignments) {
@@ -675,6 +697,47 @@ public final class UniqueId implements UniqueIdInterface {
       return uid;
     } catch (Exception e) {
       throw new RuntimeException("Should never be here", e);
+    }
+  }
+
+  /**
+   * Checks to see if the provided string matches the acceptable
+   * patterns from the configuration.
+   * <p>
+   *
+   * @param name The name to compare to the acceptable name regexes
+   * @return
+     */
+  public Boolean checkNameIsValid(final String name) throws RuntimeException {
+    final List<Pattern> rxs = new ArrayList();
+    try {
+      String uid_patterns;
+      switch (type) {
+        case METRIC: uid_patterns = this.auto_metric_patterns;
+          break;
+        case TAGK: uid_patterns = this.auto_tagk_patterns;
+          break;
+        case TAGV: uid_patterns = this.auto_tagv_patterns;
+          break;
+        default:
+          throw new RuntimeException("Should never be here");
+      }
+      String[] patterns = uid_patterns.split(",");
+
+      for (String pattern : patterns) {
+        rxs.add(Pattern.compile(pattern));
+      }
+
+      for (Pattern rx : rxs) {
+        if (rx.matcher(name).matches()) {
+          LOG.debug("Accepted name for UID: " + name + " based on '" + rx.toString() + "'");
+          return true;
+        }
+      }
+      LOG.debug("Rejected name for UID: " + name);
+      return false;
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to check name (" + name + ") against patterns.", e);
     }
   }
 
@@ -869,6 +932,7 @@ public final class UniqueId implements UniqueIdInterface {
    */
   public void rename(final String oldname, final String newname) {
     final byte[] row = getId(oldname);
+    final String row_string = fromBytes(row);
     {
       byte[] id = null;
       try {
@@ -882,6 +946,15 @@ public final class UniqueId implements UniqueIdInterface {
           + " assigned ID=" + Arrays.toString(id));
       }
     }
+
+    if (renaming_id_names.contains(row_string)
+        || renaming_id_names.contains(newname)) {
+      throw new IllegalArgumentException("Ongoing rename on the same ID(\""
+        + Arrays.toString(row) + "\") or an identical new name(\"" + newname
+        + "\")");
+    }
+    renaming_id_names.add(row_string);
+    renaming_id_names.add(newname);
 
     final byte[] newnameb = toBytes(newname);
 
@@ -898,6 +971,8 @@ public final class UniqueId implements UniqueIdInterface {
       LOG.error("When trying rename(\"" + oldname
         + "\", \"" + newname + "\") on " + this + ": Failed to update reverse"
         + " mapping for ID=" + Arrays.toString(row), e);
+      renaming_id_names.remove(row_string);
+      renaming_id_names.remove(newname);
       throw e;
     }
 
@@ -911,6 +986,8 @@ public final class UniqueId implements UniqueIdInterface {
       LOG.error("When trying rename(\"" + oldname
         + "\", \"" + newname + "\") on " + this + ": Failed to create the"
         + " new forward mapping with ID=" + Arrays.toString(row), e);
+      renaming_id_names.remove(row_string);
+      renaming_id_names.remove(newname);
       throw e;
     }
 
@@ -935,6 +1012,9 @@ public final class UniqueId implements UniqueIdInterface {
         + " old forward mapping for ID=" + Arrays.toString(row);
       LOG.error("WTF?  " + msg, e);
       throw new RuntimeException(msg, e);
+    } finally {
+      renaming_id_names.remove(row_string);
+      renaming_id_names.remove(newname);
     }
     // Success!
   }

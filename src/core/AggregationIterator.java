@@ -15,7 +15,6 @@ package net.opentsdb.core;
 import java.util.Arrays;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.TimeZone;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -130,7 +129,7 @@ public class AggregationIterator implements SeekableView, DataPoint,
    * possibly store, provided that the most significant bit is reserved by
    * FLAG_FLOAT.
    */
-  private static final long TIME_MASK  = 0x7FFFFFFFFFFFFFFFL;
+  protected static final long TIME_MASK  = 0x7FFFFFFFFFFFFFFFL;
 
   /** Aggregator to use to aggregate data points from different Spans. */
   private final Aggregator aggregator;
@@ -149,13 +148,13 @@ public class AggregationIterator implements SeekableView, DataPoint,
    * Once we reach the end of a Span, we'll null out its iterator from this
    * array.
    */
-  private final SeekableView[] iterators;
+  protected final SeekableView[] iterators;
 
   /** Start time (UNIX timestamp in seconds or ms) on 32 bits ("unsigned" int). */
-  private final long start_time;
+  protected final long start_time;
 
   /** End time (UNIX timestamp in seconds or ms) on 32 bits ("unsigned" int). */
-  private final long end_time;
+  protected final long end_time;
 
   /**
    * The current and previous timestamps for the data points being used.
@@ -179,7 +178,7 @@ public class AggregationIterator implements SeekableView, DataPoint,
    * linear interpolation anymore.</li>
    * </ul>
    */
-  private final long[] timestamps; // 32 bit unsigned + flag
+  protected final long[] timestamps; // 32 bit unsigned + flag
 
   /**
    * The current and next values for the data points being used.
@@ -187,7 +186,7 @@ public class AggregationIterator implements SeekableView, DataPoint,
    * This array is also used to store floating point values, in which case
    * their binary representation just happens to be stored in a {@code long}.
    */
-  private final long[] values;
+  protected final long[] values;
 
   /** The index in {@link #iterators} of the current Span being used. */
   private int current;
@@ -305,8 +304,6 @@ public class AggregationIterator implements SeekableView, DataPoint,
       final DownsamplingSpecification downsampler,
       final long query_start,
       final long query_end,
-      final TimeZone timezone,
-      final boolean use_calendar,
       final boolean rate,
       final RateOptions rate_options) {
     final int size = spans.size();
@@ -318,7 +315,7 @@ public class AggregationIterator implements SeekableView, DataPoint,
         it = spans.get(i).spanIterator();
       } else {
         it = spans.get(i).downsampler(start_time, end_time, downsampler, 
-            query_start, query_end, timezone, use_calendar);
+            query_start, query_end);
       }
       if (rate) {
         it = new RateSpan(it, rate_options);

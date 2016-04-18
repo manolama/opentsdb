@@ -69,7 +69,20 @@ public class Config {
   
   /** tsd.core.auto_create_tagv */
   private boolean auto_tagv = true;
-  
+
+  /** tsd.core.auto_create_whitelist */
+  private boolean auto_whitelist = false;
+
+  /** tsd.core.auto_create_metrics_patterns */
+  private String auto_metric_patterns = ".*";
+
+  /** tsd.core.auto_create_tagk_patterns */
+  private String auto_tagk_patterns = ".*";
+
+  /** tsd.core.auto_create_tagv_patterns */
+  private String auto_tagv_patterns = ".*";
+
+
   /** tsd.storage.enable_compaction */
   private boolean enable_compactions = true;
   
@@ -93,6 +106,10 @@ public class Config {
   
   /** tsd.http.request.enable_chunked */
   private boolean enable_chunked_requests = false;
+  
+  /** tsd.core.stats_with_port */
+  private boolean stats_with_port = false;
+  
   
   /** tsd.storage.fix_duplicates */
   private boolean fix_duplicates = false;
@@ -179,7 +196,25 @@ public class Config {
   public boolean auto_tagv() {
     return auto_tagv;
   }
-  
+
+  /** @return the auto_whitelist value */
+  public boolean auto_whitelist() { return auto_whitelist; }
+
+  /** @return the auto_metric value */
+  public String auto_metric_patterns() {
+    return auto_metric_patterns;
+  }
+
+  /** @return the auto_tagk value */
+  public String auto_tagk_patterns() {
+    return auto_tagk_patterns;
+  }
+
+  /** @return the auto_tagv value */
+  public String auto_tagv_patterns() {
+    return auto_tagv_patterns;
+  }
+
   /** @param auto_metric whether or not to auto create metrics */
   public void setAutoMetric(boolean auto_metric) {
     this.auto_metric = auto_metric;
@@ -231,6 +266,11 @@ public class Config {
   /** @return whether or not chunked requests are supported */
   public boolean enable_chunked_requests() {
     return enable_chunked_requests;
+  }
+  
+  /** @return whether or not rpc stats should be broken out by port */
+  public boolean rpc_stats_withport() {
+    return stats_with_port;
   }
   
   /** @return max incoming chunk size in bytes */
@@ -487,10 +527,16 @@ public class Config {
     default_map.put("tsd.core.auto_create_metrics", "false");
     default_map.put("tsd.core.auto_create_tagks", "true");
     default_map.put("tsd.core.auto_create_tagvs", "true");
+    default_map.put("tsd.core.auto_create_whitelist", "false");
+    default_map.put("tsd.core.auto_create_metrics_patterns", ".*");
+    default_map.put("tsd.core.auto_create_tagk_patterns", ".*");
+    default_map.put("tsd.core.auto_create_tagv_patterns", ".*");
+    default_map.put("tsd.core.connections.limit", "0");
     default_map.put("tsd.core.meta.enable_realtime_ts", "false");
     default_map.put("tsd.core.meta.enable_realtime_uid", "false");
     default_map.put("tsd.core.meta.enable_tsuid_incrementing", "false");
     default_map.put("tsd.core.meta.enable_tsuid_tracking", "false");
+    default_map.put("tsd.core.meta.cache.enable", "false");
     default_map.put("tsd.core.plugin_path", "");
     default_map.put("tsd.core.socket.timeout", "0");
     default_map.put("tsd.core.tree.enable_processing", "false");
@@ -507,6 +553,8 @@ public class Config {
     default_map.put("tsd.search.enable", "false");
     default_map.put("tsd.search.plugin", "");
     default_map.put("tsd.stats.canonical", "false");
+    default_map.put("tsd.startup.enable", "false");
+    default_map.put("tsd.startup.plugin", "");
     default_map.put("tsd.storage.hbase.scanner.maxNumRows", "128");
     default_map.put("tsd.storage.fix_duplicates", "false");
     default_map.put("tsd.storage.flush_interval", "1000");
@@ -524,6 +572,7 @@ public class Config {
     default_map.put("tsd.storage.compaction.min_flush_threshold", "100");
     default_map.put("tsd.storage.compaction.max_concurrent_flushes", "10000");
     default_map.put("tsd.storage.compaction.flush_speed", "2");
+    default_map.put("tsd.core.stats_with_port", "false");    
     default_map.put("tsd.http.show_stack_trace", "true");
     default_map.put("tsd.http.query.allow_delete", "false");
     default_map.put("tsd.http.request.enable_chunked", "false");
@@ -630,6 +679,10 @@ public class Config {
     auto_metric = this.getBoolean("tsd.core.auto_create_metrics");
     auto_tagk = this.getBoolean("tsd.core.auto_create_tagks");
     auto_tagv = this.getBoolean("tsd.core.auto_create_tagvs");
+    auto_whitelist = this.getBoolean("tsd.core.auto_create_whitelist");
+    auto_metric_patterns = this.getString("tsdb.core.auto_create_metrics_patterns");
+    auto_tagk_patterns = this.getString("tsdb.core.auto_create_tagk_patterns");
+    auto_tagv_patterns = this.getString("tsdb.core.auto_create_tagv_patterns");
     enable_compactions = this.getBoolean("tsd.storage.enable_compaction");
     enable_appends = this.getBoolean("tsd.storage.enable_appends");
     repair_appends = this.getBoolean("tsd.storage.repair_appends");
@@ -646,6 +699,7 @@ public class Config {
     enable_tree_processing = this.getBoolean("tsd.core.tree.enable_processing");
     fix_duplicates = this.getBoolean("tsd.storage.fix_duplicates");
     scanner_max_num_rows = this.getInt("tsd.storage.hbase.scanner.maxNumRows");
+    stats_with_port = this.getBoolean("tsd.core.stats_with_port");
 
   }
   

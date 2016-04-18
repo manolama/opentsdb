@@ -70,6 +70,7 @@ tsdb_SRC := \
 	src/core/WritableDataPoints.java	\
 	src/graph/Plot.java	\
 	src/meta/Annotation.java	\
+	src/meta/MetaDataCache.java	\
 	src/meta/TSMeta.java	\
 	src/meta/TSUIDQuery.java	\
 	src/meta/UIDMeta.java	\
@@ -96,6 +97,7 @@ tsdb_SRC := \
 	src/query/expression/PostAggregatedDataPoints.java	\
 	src/query/expression/Scale.java	\
 	src/query/expression/SumSeries.java	\
+  src/query/expression/TimeShift.java \
 	src/query/expression/TimeSyncedIterator.java	\
 	src/query/expression/UnionIterator.java	\
 	src/query/expression/VariableIterator.java	\
@@ -130,7 +132,9 @@ tsdb_SRC := \
 	src/tools/MetaPurge.java	\
 	src/tools/MetaSync.java	\
 	src/tools/Search.java	\
+  src/tools/StartupPlugin.java \
 	src/tools/TSDMain.java	\
+	src/tools/TSDPort.java	\
 	src/tools/TextImporter.java	\
 	src/tools/TreeSync.java	\
 	src/tools/UidManager.java	\
@@ -340,6 +344,7 @@ test_SRC := \
 	test/tsd/TestSuggestRpc.java	\
 	test/tsd/TestTreeRpc.java	\
 	test/tsd/TestUniqueIdRpc.java	\
+	test/tsd/TestStatsWithPort.java	\
 	test/uid/TestNoSuchUniqueId.java	\
 	test/uid/TestRandomUniqueId.java	\
 	test/uid/TestUniqueId.java \
@@ -560,7 +565,7 @@ install-data-local: staticroot install-data-lib install-data-tools \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
           dstdir=`dirname "$(DESTDIR)$(staticdir)/$$p"`; \
           if test -d "$$dstdir"; then :; else \
-            echo " $(mkdir_p) '$$dstdir'"; $(mkdir_p) "$$dstdir"; fi; \
+            echo " $(mkdir_p) '$$dstdir'"; ../$(mkdir_p) "$$dstdir"; fi; \
 	  echo " $(INSTALL_DATA) '$$d$$p' '$(DESTDIR)$(staticdir)/$$p'"; \
 	  $(INSTALL_DATA) "$$d$$p" "$(DESTDIR)$(staticdir)/$$p"; \
 	done
@@ -713,7 +718,7 @@ manifest: .javac-stamp .git/HEAD
           echo "Implementation-Version: $(git_version)"; \
           echo "Implementation-Vendor: $(spec_vendor)"; } >"$@"
 
-$(jar): manifest .javac-stamp $(classes)
+$(jar): manifest .javac-stamp
 	$(JAR) cfm `basename $(jar)` manifest $(classes_with_nested_classes) $(get_expr_classes) \
          || { rv=$$? && rm -f `basename $(jar)` && exit $$rv; }
 #                       ^^^^^^^^^^^^^^^^^^^^^^^
