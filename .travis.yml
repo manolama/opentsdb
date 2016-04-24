@@ -2,7 +2,8 @@ language: java
 before_script: ./build.sh pom.xml
 script: export MAVEN_OPTS="-Xmx1024m" && mvn test --quiet
 jdk:
+  - oraclejdk8
   - oraclejdk7
-  - openjdk6
+  - openjdk7
 notifications:
     email: false
