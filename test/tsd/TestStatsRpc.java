@@ -19,6 +19,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.net.InetAddress;
 import java.nio.charset.Charset;
 
 import net.opentsdb.core.TSDB;
@@ -30,12 +31,14 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({HttpJsonSerializer.class, TSDB.class, Config.class, 
-  HttpQuery.class, Thread.class, HBaseClient.class })
+  HttpQuery.class, Thread.class, HBaseClient.class, InetAddress.class,
+  StatsCollector.class })
 public class TestStatsRpc {
   private TSDB tsdb;
   private HBaseClient client;
@@ -45,10 +48,15 @@ public class TestStatsRpc {
     tsdb = NettyMocks.getMockedHTTPTSDB();
     client = mock(HBaseClient.class);
     when(tsdb.getClient()).thenReturn(client);
+    PowerMockito.mockStatic(InetAddress.class);
+    when(InetAddress.getLocalHost().getCanonicalHostName()).thenReturn("UnitTest");
+    when(InetAddress.getLocalHost().getHostName()).thenReturn("UnitTest");
   }
 
   @Test
   public void statsWithOutPort() throws Exception {
+    when(tsdb.getConfig().getBoolean("tsd.core.stats_with_port"))
+    .thenReturn(false);
     final StatsRpc rpc = new StatsRpc();
     HttpQuery query = NettyMocks.getQuery(tsdb, "/api/stats");
     rpc.execute(tsdb, query);
