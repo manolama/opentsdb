@@ -226,7 +226,7 @@ public final class TestUniqueIdRpc {
     assertEquals(HttpResponseStatus.BAD_REQUEST, query.response().getStatus());
     final String json = query.response().getContent()
         .toString(Charset.forName("UTF-8"));
-    assertTrue(json.contains("{\"tagv_errors\":{\"myserver\":\"Name already "
+    assertTrue(json.contains("\"tagv_errors\":{\"myserver\":\"Name already "
         + "exists with UID: 000002\"}"));
   }
   
