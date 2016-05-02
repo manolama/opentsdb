@@ -1,6 +1,6 @@
 OpenTSDB - User visible changes.
 
-* Version 2.3.0 RC1 (2016-05-01)
+* Version 2.3.0 RC1 (2016-05-02)
 
 Noteworthy Changes:
   - Introduced option --max-connection/tsd.core.connections.limit to set the maximum number
