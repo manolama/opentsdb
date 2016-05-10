@@ -300,6 +300,7 @@ public final class RpcManager {
         http.put("api/annotations", annotation_rpc);
         http.put("api/config", new ShowConfig());
         http.put("api/dropcaches", dropcaches);
+      http.put("api/blacklist", new BlacklistRpc());
         http.put("api/query", new QueryRpc());
         http.put("api/search", new SearchRpc());
         http.put("api/serializers", new Serializers());

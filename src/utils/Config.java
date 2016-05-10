@@ -571,6 +571,9 @@ public class Config {
     default_map.put("tsd.query.timeout", "0");
     default_map.put("tsd.core.mul_get_batch_size", "1024");
     default_map.put("tsd.core.mul_get_cocurrency_number", "20");
+    default_map.put("tsd.blacklist.reactive.enabled", "false");
+    default_map.put("tsd.blacklist.reactive.row_count", "100000");
+    default_map.put("tsd.blacklist.reactive.block_time_seconds", "600");
 
     for (Map.Entry<String, String> entry : default_map.entrySet()) {
       if (!properties.containsKey(entry.getKey()))
