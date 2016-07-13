@@ -372,8 +372,6 @@ final class HttpQuery extends AbstractHttpQuery {
       HttpQuery.escapeJson(pretty_exc, buf);
       buf.append("\"}");
       sendReply(HttpResponseStatus.INTERNAL_SERVER_ERROR, buf);
-    } else if (hasQueryStringParam("png")) {
-      sendAsPNG(HttpResponseStatus.INTERNAL_SERVER_ERROR, pretty_exc, 30);
     } else {
       sendReply(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                 makePage("Internal Server Error", "Houston, we have a problem",
@@ -421,8 +419,6 @@ final class HttpQuery extends AbstractHttpQuery {
       HttpQuery.escapeJson(exception.getMessage(), buf);
       buf.append("\"}");
       sendReply(HttpResponseStatus.BAD_REQUEST, buf);
-    } else if (hasQueryStringParam("png")) {
-      sendAsPNG(HttpResponseStatus.BAD_REQUEST, exception.getMessage(), 3600);
     } else {
       sendReply(HttpResponseStatus.BAD_REQUEST,
                 makePage("Bad Request", "Looks like it's your fault this time",
@@ -456,8 +452,6 @@ final class HttpQuery extends AbstractHttpQuery {
     if (hasQueryStringParam("json")) {
       sendReply(HttpResponseStatus.NOT_FOUND,
                 new StringBuilder("{\"err\":\"Page Not Found\"}"));
-    } else if (hasQueryStringParam("png")) {
-      sendAsPNG(HttpResponseStatus.NOT_FOUND, "Page Not Found", 3600);
     } else {
       sendReply(HttpResponseStatus.NOT_FOUND, PAGE_NOT_FOUND);
     }

@@ -809,6 +809,22 @@ public final class TestHttpQuery {
   }
   
   @Test
+  public void internalErrorDeprecatedPNG() {
+    HttpQuery query = NettyMocks.getQuery(tsdb, "/?png");
+    try {
+      throw new Exception("Internal Error");
+    } catch (Exception e) {
+      query.internalError(e);
+    }
+    assertEquals(HttpResponseStatus.INTERNAL_SERVER_ERROR, 
+        query.response().getStatus());
+    assertEquals(
+        "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">", 
+        query.response().getContent().toString(Charset.forName("UTF-8"))
+        .substring(0, 63));
+  }
+  
+  @Test
   public void internalErrorDefaultSerializer() {
     HttpQuery query = NettyMocks.getQuery(tsdb, "/api/error");
     query.getQueryBaseRoute();
@@ -938,6 +954,16 @@ public final class TestHttpQuery {
   }
   
   @Test
+  public void badRequestDeprecatedPNGString() {
+    HttpQuery query = NettyMocks.getQuery(tsdb, "/?png");
+    query.badRequest("Bad user error");
+    assertEquals(HttpResponseStatus.BAD_REQUEST, query.response().getStatus());  
+    assertEquals(
+        "{\"err\":\"Bad user error\"}", 
+        query.response().getContent().toString(Charset.forName("UTF-8")));
+  }
+  
+  @Test
   public void badRequestDefaultSerializerString() {
     HttpQuery query = NettyMocks.getQuery(tsdb, "/api/error");
     query.getQueryBaseRoute();
@@ -976,6 +1002,17 @@ public final class TestHttpQuery {
     assertEquals(
         "{\"err\":\"Page Not Found\"}", 
         query.response().getContent().toString(Charset.forName("UTF-8")));
+  }
+  
+  @Test
+  public void notFoundDeprecatedPNG() {
+    HttpQuery query = NettyMocks.getQuery(tsdb, "/?png");
+    query.notFound();
+    assertEquals(HttpResponseStatus.NOT_FOUND, query.response().getStatus());    
+    assertEquals(
+        "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">", 
+        query.response().getContent().toString(Charset.forName("UTF-8"))
+        .substring(0, 63));
   }
   
   @Test
