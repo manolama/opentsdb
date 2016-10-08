@@ -121,10 +121,14 @@ public class DateTime {
     } else {
       try {
         long time;
-        Boolean containsDot = datetime.contains(".");
-        Boolean containsTwoDots =  datetime.matches(".*\\..*\\..*");
-        if (containsDot) {
-          if (datetime.charAt(10) != '.' || datetime.length() != 14 || containsTwoDots) {
+        final boolean contains_dot = datetime.contains(".");
+        // [0-9]{10} ten digits
+        // \\. a dot
+        // [0-9]{1,3} one to three digits
+        final boolean valid_dotted_ms = 
+            datetime.matches("^[0-9]{10}\\.[0-9]{1,3}$");
+        if (contains_dot) {
+          if (!valid_dotted_ms) {
             throw new IllegalArgumentException("Invalid time: " + datetime  
                 + ". Millisecond timestamps must be in the format "
                 + "<seconds>.<ms> where the milliseconds are limited to 3 digits");
@@ -139,8 +143,9 @@ public class DateTime {
         }
         // this is a nasty hack to determine if the incoming request is
         // in seconds or milliseconds. This will work until November 2286
-        if (datetime.length() <= 10)
+        if (datetime.length() <= 10) {
           time *= 1000;
+        }
         return time;
       } catch (NumberFormatException e) {
         throw new IllegalArgumentException("Invalid time: " + datetime  
