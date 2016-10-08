@@ -22,6 +22,7 @@ import java.util.NoSuchElementException;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.utils.ByteSet;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
 
@@ -42,6 +43,7 @@ import com.google.common.collect.ImmutableMap;
  * {@code agg} and {@code downsample_specifier} fields.
  * @since 2.0
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public final class TSSubQuery {
   /** User given name of an aggregation function to use */
   private String aggregator;
@@ -71,6 +73,9 @@ public final class TSSubQuery {
    * tags map. In the future we'll have special JSON objects for them. */
   private List<TagVFilter> filters;
   
+  /** Whether or not to match series with ONLY the given tags */
+  private boolean explicit_tags;
+  
   /** Index of the sub query */
   private int index;
   
@@ -87,7 +92,7 @@ public final class TSSubQuery {
     // NOTE: Do not add any non-user submitted variables to the hash. We don't
     // want the hash to change after validation.
     return Objects.hashCode(aggregator, metric, tsuids, downsample, rate, 
-        rate_options, filters);
+        rate_options, filters, explicit_tags);
   }
   
   @Override
@@ -111,7 +116,8 @@ public final class TSSubQuery {
         && Objects.equal(downsample, query.downsample)
         && Objects.equal(rate, query.rate)
         && Objects.equal(rate_options, query.rate_options)
-        && Objects.equal(filters, query.filters);
+        && Objects.equal(filters, query.filters) 
+        && Objects.equal(explicit_tags, query.explicit_tags);
   }
   
   public String toString() {
@@ -149,8 +155,12 @@ public final class TSSubQuery {
       .append(", rate=")
       .append(rate)
       .append(", rate_options=")
-      .append(rate_options);
-    buf.append(")");
+      .append(rate_options)
+      .append(", explicit_tags=")
+      .append("explicit_tags")
+      .append(", index=")
+      .append(index)
+      .append(")");
     return buf.toString();
   }
   
@@ -201,14 +211,22 @@ public final class TSSubQuery {
     return this.agg;
   }
   
-  /** @return the parsed downsampler aggregation function */
+  /** @return the parsed downsampler aggregation function
+   * @deprecated use {@link #downsamplingSpecification()} instead */
   public Aggregator downsampler() {
     return downsample_specifier.getFunction();
   }
   
-  /** @return the parsed downsample interval in seconds */
+  /** @return the parsed downsample interval in seconds
+   * @deprecated use {@link #downsamplingSpecification()} instead */
   public long downsampleInterval() {
     return downsample_specifier.getInterval();
+  }
+  
+  /** @return The downsampling specification for more options 
+   * @since 2.3 */
+  public DownsamplingSpecification downsamplingSpecification() {
+    return downsample_specifier;
   }
   
   /**
@@ -288,9 +306,17 @@ public final class TSSubQuery {
     }
     final ByteSet tagks = new ByteSet();
     for (final TagVFilter filter : filters) {
-      tagks.add(filter.getTagkBytes());
+      if (filter != null && filter.getTagkBytes() != null) {
+        tagks.add(filter.getTagkBytes());
+      }
     }
     return tagks;
+  }
+  
+  /** @return whether or not to match series with ONLY the given tags 
+   * @since 2.3 */
+  public boolean getExplicitTags() {
+    return explicit_tags;
   }
   
   /** @return the index of the sub query
@@ -345,6 +371,12 @@ public final class TSSubQuery {
    * @since 2.2 */
   public void setFilters(List<TagVFilter> filters) {
     this.filters = filters;
+  }
+  
+  /** @param whether or not to match series with ONLY the given tags 
+   * @since 2.3 */
+  public void setExplicitTags(final boolean explicit_tags) {
+    this.explicit_tags = explicit_tags;
   }
   
   /** @param index the index of the sub query
