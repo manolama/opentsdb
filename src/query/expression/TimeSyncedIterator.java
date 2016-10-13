@@ -237,7 +237,7 @@ public class TimeSyncedIterator implements ITimeSyncedIterator {
       iterators[i] = dps[i].iterator();
       if (!iterators[i].hasNext()) {
         current_values[i] = null;
-        emitter_values[i] = null;
+        emitter_values[i] = new ExpressionDataPoint();
       } else {
         current_values[i] = iterators[i].next();
         emitter_values[i] = new ExpressionDataPoint(dps[i]);
