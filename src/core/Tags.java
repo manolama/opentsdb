@@ -825,4 +825,18 @@ public final class Tags {
   static boolean isAllowSpecialChars(char character) {
     return allowSpecialChars.indexOf(character) != -1;
   }
+
+  /**
+   * Returns true if the given string can fit into a float.
+   * @param value The String holding the float value.
+   * @return true if the value can fit into a float, false otherwise.
+   * @throws NumberFormatException if the value is not numeric.
+   * @since 2.4
+   */
+  public static boolean fitsInFloat(final String value) {
+    // TODO - probably still a better way to do this and we could save a lot
+    // of space by dropping useless precision, but for now this should help. 
+    final double d = Double.parseDouble(value);
+    return ((float) d) == d;
+  }
 }
