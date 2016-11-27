@@ -21,11 +21,8 @@ import net.opentsdb.rollup.RollUpDataPoint;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.utils.Config;
 
-import org.jboss.netty.channel.Channel;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -38,7 +35,6 @@ import java.util.List;
  */
 class RollupDataPointRpc extends PutDataPointRpc 
   implements TelnetRpc, HttpRpc {
-  private static final Logger LOG = LoggerFactory.getLogger(RollupDataPointRpc.class);
   
   private enum TelnetIndex {
     COMMAND,
@@ -96,7 +92,7 @@ class RollupDataPointRpc extends PutDataPointRpc
   @Override
   protected Deferred<Object> importDataPoint(final TSDB tsdb, 
       final String[] words) {
-    words[TelnetIndex.COMMAND.ordinal()] = null; // Ditch the "rollup string".
+    words[TelnetIndex.COMMAND.ordinal()] = null; // Ditch the "rollup" string.
     if (words.length < TelnetIndex.TAGS.ordinal() + 1) {
       throw new IllegalArgumentException("not enough arguments"
               + " (need least 7, got " + (words.length - 1) + ')');
@@ -159,13 +155,16 @@ class RollupDataPointRpc extends PutDataPointRpc
     
     if (Tags.looksLikeInteger(value)) {
       return tsdb.addAggregatePoint(metric, timestamp, Tags.parseLong(value),
-          tags, spatial_agg != null ? true : false, interval, temporal_agg);
+          tags, spatial_agg != null ? true : false, interval, temporal_agg,
+              spatial_agg);
     } else if (Tags.fitsInFloat(value)) {  // floating point value
       return tsdb.addAggregatePoint(metric, timestamp, Float.parseFloat(value),
-          tags, spatial_agg != null ? true : false, interval, temporal_agg);
+          tags, spatial_agg != null ? true : false, interval, temporal_agg,
+              spatial_agg);
     } else {
       return tsdb.addAggregatePoint(metric, timestamp, Double.parseDouble(value),
-          tags, spatial_agg != null ? true : false, interval, temporal_agg);
+          tags, spatial_agg != null ? true : false, interval, temporal_agg,
+              spatial_agg);
     }
   }
   
@@ -201,7 +200,7 @@ class RollupDataPointRpc extends PutDataPointRpc
     }
     dp.setInterval(interval);
     dp.setAggregator(temporal_agg);
-    // TODO - spatial agg
+    dp.setGroupByAggregator(spatial_agg);
     
     dp.setMetric(words[TelnetIndex.METRIC.ordinal()]);
     

@@ -160,6 +160,13 @@ public class Config {
     setDefaults();
   }
 
+  /**
+   * Creates a new empty Config
+   */
+  public Config() {
+    
+  }
+  
   /** @return The file that generated this config. May be null */
   public String configLocation() {
     return config_location;
@@ -484,7 +491,6 @@ public class Config {
     default_map.put("tsd.network.tcp_no_delay", "true");
     default_map.put("tsd.network.keep_alive", "true");
     default_map.put("tsd.network.reuse_address", "true");
-    default_map.put("tsd.core.agg_tag", "_aggregate");
     default_map.put("tsd.core.auto_create_metrics", "false");
     default_map.put("tsd.core.auto_create_tagks", "true");
     default_map.put("tsd.core.auto_create_tagvs", "true");
@@ -509,7 +515,12 @@ public class Config {
     default_map.put("tsd.query.allow_simultaneous_duplicates", "true");
     default_map.put("tsd.query.enable_fuzzy_filter", "true");
     default_map.put("tsd.rpc.telnet.return_errors", "true");
+    // Rollup related settings
     default_map.put("tsd.rollups.enable", "false");
+    default_map.put("tsd.rollups.tag_raw", "false");
+    default_map.put("tsd.rollups.agg_tag_key", "_aggregate");
+    default_map.put("tsd.rollups.raw_agg_tag_value", "RAW");
+    default_map.put("tsd.rollups.block_derived", "true");
     default_map.put("tsd.rtpublisher.enable", "false");
     default_map.put("tsd.rtpublisher.plugin", "");
     default_map.put("tsd.search.enable", "false");
@@ -639,7 +650,7 @@ public class Config {
    * Loads the static class variables for values that are called often. This
    * should be called any time the configuration changes.
    */
-  protected void loadStaticVariables() {
+  public void loadStaticVariables() {
     auto_metric = this.getBoolean("tsd.core.auto_create_metrics");
     auto_tagk = this.getBoolean("tsd.core.auto_create_tagks");
     auto_tagv = this.getBoolean("tsd.core.auto_create_tagvs");
