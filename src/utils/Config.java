@@ -568,6 +568,7 @@ public class Config {
     default_map.put("tsd.http.request.cors_headers", "Authorization, "
       + "Content-Type, Accept, Origin, User-Agent, DNT, Cache-Control, "
       + "X-Mx-ReqToken, Keep-Alive, X-Requested-With, If-Modified-Since");
+    default_map.put("tsd.http.webroot", "/");
     default_map.put("tsd.query.timeout", "0");
     default_map.put("tsd.core.mul_get_batch_size", "1024");
     default_map.put("tsd.core.mul_get_cocurrency_number", "20");

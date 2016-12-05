@@ -68,7 +68,7 @@ public final class TestRpcHandler {
   public void before() throws Exception {
     final Config config = new Config(false);
     tsdb = new TSDB(client, config);
-    rpc_manager = RpcManager.instance(tsdb, null);
+    rpc_manager = RpcManager.instance(tsdb);
   }
   
   @After
@@ -78,14 +78,14 @@ public final class TestRpcHandler {
   
   @Test
   public void ctorDefaults() {
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     assertNotNull(rpc);
   }
   
   @Test
   public void ctorCORSPublic() {
     tsdb.getConfig().overrideConfig("tsd.http.request.cors_domains", "*");
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     assertNotNull(rpc);
   }
   
@@ -93,7 +93,7 @@ public final class TestRpcHandler {
   public void ctorCORSSeparated() {
     tsdb.getConfig().overrideConfig("tsd.http.request.cors_domains", 
         "aurther.com,dent.net,beeblebrox.org");
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     assertNotNull(rpc);
   }
   
@@ -101,7 +101,7 @@ public final class TestRpcHandler {
   public void ctorCORSPublicAndDomains() {
     tsdb.getConfig().overrideConfig("tsd.http.request.cors_domains", 
         "*,aurther.com,dent.net,beeblebrox.org");
-    new RpcHandler(tsdb, null, rpc_manager);
+    new RpcHandler(tsdb, rpc_manager);
   }
   
   @Test
@@ -123,7 +123,7 @@ public final class TestRpcHandler {
       }
     );
     
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     rpc.messageReceived(ctx, message);
   }
   
@@ -148,7 +148,7 @@ public final class TestRpcHandler {
     );
     
     tsdb.getConfig().overrideConfig("tsd.http.request.cors_domains", "*");
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     rpc.messageReceived(ctx, message);
   }
   
@@ -174,7 +174,7 @@ public final class TestRpcHandler {
     
     tsdb.getConfig().overrideConfig("tsd.http.request.cors_domains", 
         "aurther.com,dent.net,42.com,beeblebrox.org");
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     rpc.messageReceived(ctx, message);
   }
   
@@ -199,7 +199,7 @@ public final class TestRpcHandler {
     
     tsdb.getConfig().overrideConfig("tsd.http.request.cors_domains", 
         "aurther.com,dent.net,beeblebrox.org");
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     rpc.messageReceived(ctx, message);
   }
   
@@ -221,7 +221,7 @@ public final class TestRpcHandler {
       }
     );
     
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     rpc.messageReceived(ctx, message);
   }
   
@@ -244,7 +244,7 @@ public final class TestRpcHandler {
       }
     );
     
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     rpc.messageReceived(ctx, message);
   }
   
@@ -269,7 +269,7 @@ public final class TestRpcHandler {
     );
     
     tsdb.getConfig().overrideConfig("tsd.http.request.cors_domains", "*");
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     rpc.messageReceived(ctx, message);
   }
   
@@ -295,7 +295,7 @@ public final class TestRpcHandler {
     
     tsdb.getConfig().overrideConfig("tsd.http.request.cors_domains", 
       "aurther.com,dent.net,42.com,beeblebrox.org");
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     rpc.messageReceived(ctx, message);
   }
   
@@ -320,13 +320,13 @@ public final class TestRpcHandler {
     
     tsdb.getConfig().overrideConfig("tsd.http.request.cors_domains", 
       "aurther.com,dent.net,beeblebrox.org");
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     rpc.messageReceived(ctx, message);
   }
   
   @Test
   public void createQueryInstanceForBuiltin() throws Exception {
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     final Channel mockChan = NettyMocks.fakeChannel();
     final Method meth = Whitebox.getMethod(RpcHandler.class, "createQueryInstance", 
         TSDB.class, HttpRequest.class, Channel.class);
@@ -357,7 +357,7 @@ public final class TestRpcHandler {
   
   @Test(expected=BadRequestException.class)
   public void createQueryInstanceEmptyRequestInvalid() throws Exception {
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     final Channel mockChan = NettyMocks.fakeChannel();
     final Method meth = Whitebox.getMethod(RpcHandler.class, "createQueryInstance", 
         TSDB.class, HttpRequest.class, Channel.class);
@@ -384,7 +384,7 @@ public final class TestRpcHandler {
       }
     );
     
-    final RpcHandler rpc = new RpcHandler(tsdb, null, rpc_manager);
+    final RpcHandler rpc = new RpcHandler(tsdb, rpc_manager);
     Whitebox.invokeMethod(rpc, "handleHttpQuery", tsdb, mockChan, req);
   }
   

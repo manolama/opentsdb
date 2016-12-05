@@ -70,7 +70,7 @@ public final class PipelineFactory implements ChannelPipelineFactory {
    * serializers
    */
   public PipelineFactory(final TSDB tsdb) {
-    this(tsdb, null, RpcManager.instance(tsdb, null), 
+    this(tsdb, RpcManager.instance(tsdb), 
         tsdb.getConfig().getInt("tsd.core.connections.limit"));
   }
 
@@ -83,7 +83,7 @@ public final class PipelineFactory implements ChannelPipelineFactory {
    * @throws Exception if the HttpQuery handler is unable to load serializers
    */
   public PipelineFactory(final TSDB tsdb, final RpcManager manager) {
-    this(tsdb, null, RpcManager.instance(tsdb, null), 
+    this(tsdb, RpcManager.instance(tsdb), 
         tsdb.getConfig().getInt("tsd.core.connections.limit"));
   }
   
@@ -98,13 +98,13 @@ public final class PipelineFactory implements ChannelPipelineFactory {
    * @throws Exception if the HttpQuery handler is unable to load serializers
    * @since 2.3
    */
-  public PipelineFactory(final TSDB tsdb, final String webRoot, final RpcManager manager, 
+  public PipelineFactory(final TSDB tsdb, final RpcManager manager, 
       final int connections_limit) {
     this.tsdb = tsdb;
     socketTimeout = tsdb.getConfig().getInt("tsd.core.socket.timeout");
     timer = tsdb.getTimer();
     timeoutHandler = new IdleStateHandler(timer, 0, 0, socketTimeout);
-    rpchandler = new RpcHandler(tsdb, webRoot, manager);
+    rpchandler = new RpcHandler(tsdb, manager);
     connmgr = new ConnectionManager(connections_limit);
     try {
       HttpQuery.initializeSerializerMaps(tsdb);

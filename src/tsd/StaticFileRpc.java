@@ -25,11 +25,11 @@ final class StaticFileRpc implements HttpRpc {
   /**
    * Constructor.
    */
-  public StaticFileRpc(final String webRoot) {
-    if (webRoot == null || webRoot.isEmpty()) {
+  public StaticFileRpc(final String web_root) {
+    if (web_root == null || web_root.isEmpty()) {
       uriPrefixLength = 3;
     } else {
-      uriPrefixLength = webRoot.length() + 3;
+      uriPrefixLength = web_root.length() + 3;
     }
   }
 

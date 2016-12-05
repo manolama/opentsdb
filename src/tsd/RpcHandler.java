@@ -67,7 +67,7 @@ final class RpcHandler extends IdleStateAwareChannelUpstreamHandler {
   private final TSDB tsdb;
   
   /** Cached webroot */
-  private final String webRoot;
+  private final String web_root;
   
   /**
    * Constructor that loads the CORS domain list and prepares for
@@ -78,7 +78,7 @@ final class RpcHandler extends IdleStateAwareChannelUpstreamHandler {
    * list
    */
   public RpcHandler(final TSDB tsdb) {
-    this(tsdb, null, RpcManager.instance(tsdb, null));
+    this(tsdb, RpcManager.instance(tsdb));
   }
   
   /**
@@ -89,9 +89,9 @@ final class RpcHandler extends IdleStateAwareChannelUpstreamHandler {
    * @throws IllegalArgumentException if there was an error with the CORS domain
    * list
    */
-  public RpcHandler(final TSDB tsdb, final String webRoot, final RpcManager manager) {
+  public RpcHandler(final TSDB tsdb, final RpcManager manager) {
     this.tsdb = tsdb;
-    this.webRoot = webRoot;
+    this.web_root = tsdb.getConfig().getDirectoryName("tsd.http.webroot");
     this.rpc_manager = manager;
 
     final String cors = tsdb.getConfig().getString("tsd.http.request.cors_domains");
@@ -183,11 +183,11 @@ final class RpcHandler extends IdleStateAwareChannelUpstreamHandler {
     final String absoluteUri = request.getUri();
     // Strip web root
     final String uri;
-    if (webRoot != null && webRoot.length() > 0) {
-      if (!absoluteUri.startsWith(webRoot)) {
+    if (web_root != null && web_root.length() > 0) {
+      if (!absoluteUri.startsWith(web_root)) {
         return null; // will trigger a 404
       }
-      uri = absoluteUri.substring(webRoot.length() - 1);
+      uri = absoluteUri.substring(web_root.length() - 1);
     } else {
       uri = absoluteUri;
     }
