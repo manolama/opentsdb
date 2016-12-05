@@ -31,6 +31,7 @@ import java.util.Map.Entry;
 import net.opentsdb.graph.Plot;
 
 import com.google.gwt.core.client.EntryPoint;
+import com.google.gwt.core.client.GWT;
 import com.google.gwt.dom.client.Style;
 import com.google.gwt.dom.client.Style.Cursor;
 import com.google.gwt.event.dom.client.ClickEvent;
@@ -999,7 +1000,7 @@ public class QueryUi implements EntryPoint, HistoryListener {
             msg += "Cache hit (" + cachehit.isString().stringValue() + "). ";
           }
           if (nplotted != null && nplotted.isNumber().doubleValue() > 0) {
-            graph.setUrl(uri + "&png");
+            graph.setUrl(addWebRoot(uri) + "&png");
             graph.setVisible(true);
 
             msg += result.get("points").isNumber() + " points retrieved, "
@@ -1068,6 +1069,11 @@ public class QueryUi implements EntryPoint, HistoryListener {
       }
     });
   }
+  
+  static String addWebRoot(final String url) {
+    // URLs passed to this method always begin with a slash
+    return GWT.getHostPageBaseURL() + url.substring(1);
+  }
 
   private boolean addAllMetrics(final StringBuilder url) {
     boolean found_metric = false;
@@ -1085,7 +1091,7 @@ public class QueryUi implements EntryPoint, HistoryListener {
   }
 
   private void asyncGetJson(final String url, final GotJsonCallback callback) {
-    final RequestBuilder builder = new RequestBuilder(RequestBuilder.GET, url);
+    final RequestBuilder builder = new RequestBuilder(RequestBuilder.GET, addWebRoot(url));
     try {
       builder.sendRequest(null, new RequestCallback() {
         public void onError(final Request request, final Throwable e) {

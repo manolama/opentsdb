@@ -66,6 +66,9 @@ final class RpcHandler extends IdleStateAwareChannelUpstreamHandler {
   /** The TSDB to use. */
   private final TSDB tsdb;
   
+  /** Cached webroot */
+  private final String webRoot;
+  
   /**
    * Constructor that loads the CORS domain list and prepares for
    * handling requests. This constructor creates its own {@link RpcManager}.
@@ -75,7 +78,7 @@ final class RpcHandler extends IdleStateAwareChannelUpstreamHandler {
    * list
    */
   public RpcHandler(final TSDB tsdb) {
-    this(tsdb, RpcManager.instance(tsdb));
+    this(tsdb, null, RpcManager.instance(tsdb, null));
   }
   
   /**
@@ -86,8 +89,9 @@ final class RpcHandler extends IdleStateAwareChannelUpstreamHandler {
    * @throws IllegalArgumentException if there was an error with the CORS domain
    * list
    */
-  public RpcHandler(final TSDB tsdb, final RpcManager manager) {
+  public RpcHandler(final TSDB tsdb, final String webRoot, final RpcManager manager) {
     this.tsdb = tsdb;
+    this.webRoot = webRoot;
     this.rpc_manager = manager;
 
     final String cors = tsdb.getConfig().getString("tsd.http.request.cors_domains");
@@ -176,11 +180,22 @@ final class RpcHandler extends IdleStateAwareChannelUpstreamHandler {
         final HttpRequest request,
         final Channel chan) 
             throws BadRequestException {
-    final String uri = request.getUri();
+    final String absoluteUri = request.getUri();
+    // Strip web root
+    final String uri;
+    if (webRoot != null && webRoot.length() > 0) {
+      if (!absoluteUri.startsWith(webRoot)) {
+        return null; // will trigger a 404
+      }
+      uri = absoluteUri.substring(webRoot.length() - 1);
+    } else {
+      uri = absoluteUri;
+    }
+    
     if (Strings.isNullOrEmpty(uri)) {
       throw new BadRequestException("Request URI is empty");
     } else if (uri.charAt(0) != '/') {
-      throw new BadRequestException("Request URI doesn't start with a slash");
+      throw new BadRequestException("Request URI doesn't start with a slash: " + uri);
     } else if (rpc_manager.isHttpRpcPluginPath(uri)) {
       http_plugin_rpcs_received.incrementAndGet();
       return new HttpRpcPluginQuery(tsdb, request, chan);

@@ -82,7 +82,7 @@ public class TestRpcManager {
     when(tsdb.getConfig()).thenReturn(config);
     
     PluginLoader.loadJAR("plugin_test.jar");
-    mgr_under_test = RpcManager.instance(tsdb);
+    mgr_under_test = RpcManager.instance(tsdb, null);
     
     HttpRpcPlugin plugin = mgr_under_test.lookupHttpRpcPlugin("dummy/test");
     assertNotNull(plugin);
@@ -112,14 +112,14 @@ public class TestRpcManager {
     when(tsdb.getConfig()).thenReturn(config);
     
     PluginLoader.loadJAR("plugin_test.jar");
-    mgr_under_test= RpcManager.instance(tsdb);
+    mgr_under_test= RpcManager.instance(tsdb, null);
     
     assertFalse(mgr_under_test.getRpcPlugins().isEmpty());
   }
   
   @Test
   public void isHttpRpcPluginPathValid() {
-    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins);
+    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins, null);
     assertTrue(mgr_under_test.isHttpRpcPluginPath("/plugin/my/http/plugin"));
     assertTrue(mgr_under_test.isHttpRpcPluginPath("plugin/my/http/plugin"));
     assertTrue(mgr_under_test.isHttpRpcPluginPath("/plugin/my?hey=hi&howdy=ho"));
@@ -129,7 +129,7 @@ public class TestRpcManager {
   
   @Test
   public void isHttpRpcPluginPathInvalid() {
-    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins);
+    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins, null);
     assertFalse(mgr_under_test.isHttpRpcPluginPath("/plugin/"));
     assertFalse(mgr_under_test.isHttpRpcPluginPath("plugin/"));
     assertFalse(mgr_under_test.isHttpRpcPluginPath("plugin"));
@@ -141,7 +141,7 @@ public class TestRpcManager {
   
   @Test
   public void validateHttpRpcPluginPathValid() {
-    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins);
+    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins, null);
     mgr_under_test.validateHttpRpcPluginPath("/my/test/path");
     mgr_under_test.validateHttpRpcPluginPath("my/test/path");
     mgr_under_test.validateHttpRpcPluginPath("my/test/path");
@@ -150,7 +150,7 @@ public class TestRpcManager {
   
   @Test
   public void validateHttpRpcPluginPathInvalid() {
-    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins);
+    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins, null);
     try {
       mgr_under_test.validateHttpRpcPluginPath("/plugin/my/test");
       assertTrue(false);
@@ -179,7 +179,7 @@ public class TestRpcManager {
   
   @Test
   public void canonicalizePluginPathsValid() throws Exception {
-    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins);
+    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins, null);
     assertEquals("my/test/path",
         mgr_under_test.canonicalizePluginPath("/my/test/path"));
     assertEquals("my/test/path", 
@@ -199,14 +199,14 @@ public class TestRpcManager {
   
   @Test(expected=IllegalArgumentException.class)
   public void canonicalizePluginPathIsRoot() {
-    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins);
+    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins, null);
     assertEquals(RpcManager.PLUGIN_BASE_WEBPATH + "/", 
         mgr_under_test.canonicalizePluginPath(""));
   }
   
   @Test
   public void validHttpPathEndToEnd() {
-    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins);
+    mgr_under_test = RpcManager.instance(mock_tsdb_no_plugins, null);
     mgr_under_test.validateHttpRpcPluginPath("myplugin");
     assertEquals("myplugin", mgr_under_test.canonicalizePluginPath("myplugin"));
     mgr_under_test.validateHttpRpcPluginPath("/myplugin");

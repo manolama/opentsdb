@@ -110,13 +110,17 @@ public final class RpcManager {
 
   /** The TSDB that owns us. */
   private TSDB tsdb;
+  
+  /** Cached webroot */
+  private final String webRoot;
 
   /**
    * Constructor used by singleton factory method.
    * @param tsdb the owning TSDB instance.
    */
-  private RpcManager(final TSDB tsdb) {
+  private RpcManager(final TSDB tsdb, final String webRoot) {
     this.tsdb = tsdb;
+    this.webRoot = webRoot;
   }
 
   /**
@@ -125,13 +129,13 @@ public final class RpcManager {
    * @return the shared instance of {@link RpcManager}. It's okay to
    * hold this reference once obtained.
    */
-  public static synchronized RpcManager instance(final TSDB tsdb) {
+  public static synchronized RpcManager instance(final TSDB tsdb, final String webRoot) {
     final RpcManager existing = INSTANCE.get();
     if (existing != null) {
       return existing;
     }
 
-    final RpcManager manager = new RpcManager(tsdb);
+    final RpcManager manager = new RpcManager(tsdb, webRoot);
     final String mode = Strings.nullToEmpty(tsdb.getConfig().getString("tsd.mode"));
 
     // Load any plugins that are enabled via Config.  Fail if any plugin cannot be loaded.
@@ -267,7 +271,7 @@ public final class RpcManager {
     }
 
     if (mode.equals("rw") || mode.equals("ro")) {
-      final StaticFileRpc staticfile = new StaticFileRpc();
+      final StaticFileRpc staticfile = new StaticFileRpc(webRoot);
       final StatsRpc stats = new StatsRpc();
       final DropCachesRpc dropcaches = new DropCachesRpc();
       final ListAggregators aggregators = new ListAggregators();

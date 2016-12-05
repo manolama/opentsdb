@@ -106,6 +106,7 @@ final class TSDMain {
                    "Maximum time for which a new data point can be buffered"
                    + " (default: " + DEFAULT_FLUSH_INTERVAL + ").");
     argp.addOption("--statswport", "Force all stats to include the port");
+    argp.addOption("--webroot", "WEBROOT", "Web root path for all requests.");
     CliOptions.addAutoMetricFlag(argp);
     args = CliOptions.parse(argp, args);
     args = null; // free().
@@ -132,6 +133,13 @@ final class TSDMain {
       config.getInt("tsd.network.port");
     } catch (NumberFormatException nfe) {
       usage(argp, "Invalid network port setting", 1);
+    }
+    String webRoot = argp.get("--webroot", "");
+    if (webRoot.length() > 0 && !webRoot.matches("^(/[a-zA-Z0-9_-]+)+$")) {
+      usage(argp, "Invalid webroot: " + webRoot, 3);
+    }
+    if (webRoot == null || webRoot.isEmpty()) {
+      webRoot = "/";
     }
 
     // validate the cache and staticroot directories
@@ -199,9 +207,9 @@ final class TSDMain {
       
       // This manager is capable of lazy init, but we force an init
       // here to fail fast.
-      final RpcManager manager = RpcManager.instance(tsdb);
+      final RpcManager manager = RpcManager.instance(tsdb, webRoot);
 
-      server.setPipelineFactory(new PipelineFactory(tsdb, manager, connections_limit));
+      server.setPipelineFactory(new PipelineFactory(tsdb, webRoot, manager, connections_limit));
       if (config.hasProperty("tsd.network.backlog")) {
         server.setOption("backlog", config.getInt("tsd.network.backlog")); 
       }
@@ -288,7 +296,7 @@ final class TSDMain {
           if (RpcManager.isInitialized()) {
             // Check that its actually been initialized.  We don't want to
             // create a new instance only to shutdown!
-            RpcManager.instance(tsdb).shutdown().join();
+            RpcManager.instance(tsdb, null).shutdown().join();
           }
           if (tsdb != null) {
             tsdb.shutdown().join();
