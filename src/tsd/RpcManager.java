@@ -252,11 +252,12 @@ public final class RpcManager {
         final ImmutableMap.Builder<String, TelnetRpc> telnet,
         final ImmutableMap.Builder<String, HttpRpc> http) {
 
-    final Boolean enableApi = tsdb.getConfig().getString("tsd.core.enable_api").equals("true");
-    final Boolean enableUi = tsdb.getConfig().getString("tsd.core.enable_ui").equals("true");
-    final Boolean enableDieDieDie = tsdb.getConfig().getString("tsd.no_diediedie").equals("false");
+    final boolean enableApi = tsdb.getConfig().getBoolean("tsd.core.enable_api");
+    final boolean enableUi = tsdb.getConfig().getBoolean("tsd.core.enable_ui");
+    final boolean enableDieDieDie = tsdb.getConfig().getBoolean("tsd.no_diediedie");
 
-    LOG.info("Mode: {}, HTTP UI Enabled: {}, HTTP API Enabled: {}", mode, enableUi, enableApi);
+    LOG.info("Mode: {}, HTTP UI Enabled: {}, HTTP API Enabled: {}", mode, 
+        enableUi, enableApi);
 
     if (mode.equals("rw") || mode.equals("wo")) {
       final PutDataPointRpc put = new PutDataPointRpc();
