@@ -960,28 +960,24 @@ public final class TSDB {
           + " to metric=" + metric + ", tags=" + tags);
     }
     IncomingDataPoints.checkMetricAndTags(metric, tags);
-    final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);
-    final long base_time;
-    final byte[] qualifier = Internal.buildQualifier(timestamp, flags);
     
-    if ((timestamp & Const.SECOND_MASK) != 0) {
-      // drop the ms timestamp to seconds to calculate the base timestamp
-      base_time = ((timestamp / 1000) - 
-          ((timestamp / 1000) % Const.MAX_TIMESPAN));
-    } else {
-      base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
-    }
     
-    /** Callback executed for chaining filter calls to see if the value
-     * should be written or not. */
-    final class WriteCB implements Callback<Deferred<Object>, Boolean> {
+    class TemplateCallback implements Callback<Deferred<Object>, byte[]> {
+
       @Override
-      public Deferred<Object> call(final Boolean allowed) throws Exception {
-        if (!allowed) {
-          rejected_dps.incrementAndGet();
-          return Deferred.fromResult(null);
+      public Deferred<Object> call(final byte[] row) throws Exception {
+        final long base_time;
+        final byte[] qualifier = Internal.buildQualifier(timestamp, flags);
+        
+        if ((timestamp & Const.SECOND_MASK) != 0) {
+          // drop the ms timestamp to seconds to calculate the base timestamp
+          base_time = ((timestamp / 1000) - 
+              ((timestamp / 1000) % Const.MAX_TIMESPAN));
+        } else {
+          base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
         }
         
+
         Bytes.setInt(row, (int) base_time, metrics.width() + Const.SALT_WIDTH());
         RowKey.prefixKeyWithSalt(row);
 
@@ -1036,6 +1032,21 @@ public final class TSDB {
         }
         return result;
       }
+      
+    }
+    
+    /** Callback executed for chaining filter calls to see if the value
+     * should be written or not. */
+    final class WriteCB implements Callback<Deferred<Object>, Boolean> {
+      @Override
+      public Deferred<Object> call(final Boolean allowed) throws Exception {
+        if (!allowed) {
+          rejected_dps.incrementAndGet();
+          return Deferred.fromResult(null);
+        }
+        return IncomingDataPoints.rowKeyTemplateAsync(TSDB.this, metric, tags)
+            .addCallbackDeferring(new TemplateCallback());
+      }
       @Override
       public String toString() {
         return "addPointInternal Write Callback";
@@ -1046,7 +1057,8 @@ public final class TSDB {
       return ts_filter.allowDataPoint(metric, timestamp, value, tags, flags)
           .addCallbackDeferring(new WriteCB());
     }
-    return Deferred.fromResult(true).addCallbackDeferring(new WriteCB());
+    return IncomingDataPoints.rowKeyTemplateAsync(TSDB.this, metric, tags)
+        .addCallbackDeferring(new TemplateCallback());
   }
 
   /**
