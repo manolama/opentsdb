@@ -768,8 +768,15 @@ public final class UniqueId implements UniqueIdInterface {
    * wrong number of bytes.
    * @since 2.3
    */
+  RandomUniqueId rnd = new RandomUniqueId();
+  
   public Deferred<byte[]> getOrCreateIdAsync(final String name, 
       final String metric, final Map<String, String> tags) {
+    if (true) {
+      byte[] row = Bytes.fromLong(rnd.getRandomUID(id_width));
+      return Deferred.fromResult(Arrays.copyOfRange(row, row.length - id_width, row.length));
+    }
+    
     // Look in the cache first.
     final byte[] id = getIdFromCache(name);
     if (id != null) {
