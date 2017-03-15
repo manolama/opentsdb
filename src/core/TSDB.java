@@ -621,40 +621,40 @@ public final class TSDB {
         TAG_NAME_QUAL.getBytes(CHARSET), 
         TAG_VALUE_QUAL.getBytes(CHARSET) 
       };
-    try {
-      final Map<String, Long> used_uids = UniqueId.getUsedUIDs(this, kinds)
-        .joinUninterruptibly();
-      
-      collectUidStats(metrics, collector);
-      if (config.getBoolean("tsd.core.uid.random_metrics")) {
-        collector.record("uid.ids-used", 0, "kind=" + METRICS_QUAL);
-        collector.record("uid.ids-available", 0, "kind=" + METRICS_QUAL);
-      } else {
-        collector.record("uid.ids-used", used_uids.get(METRICS_QUAL), 
-            "kind=" + METRICS_QUAL);
-        collector.record("uid.ids-available", 
-            (Internal.getMaxUnsignedValueOnBytes(metrics.width()) - 
-                used_uids.get(METRICS_QUAL)), "kind=" + METRICS_QUAL);
-      }
-      
-      collectUidStats(tag_names, collector);
-      collector.record("uid.ids-used", used_uids.get(TAG_NAME_QUAL), 
-          "kind=" + TAG_NAME_QUAL);
-      collector.record("uid.ids-available", 
-          (Internal.getMaxUnsignedValueOnBytes(tag_names.width()) - 
-              used_uids.get(TAG_NAME_QUAL)), 
-          "kind=" + TAG_NAME_QUAL);
-      
-      collectUidStats(tag_values, collector);
-      collector.record("uid.ids-used", used_uids.get(TAG_VALUE_QUAL), 
-          "kind=" + TAG_VALUE_QUAL);
-      collector.record("uid.ids-available", 
-          (Internal.getMaxUnsignedValueOnBytes(tag_values.width()) - 
-              used_uids.get(TAG_VALUE_QUAL)), "kind=" + TAG_VALUE_QUAL);
-      
-    } catch (Exception e) {
-      throw new RuntimeException("Shouldn't be here", e);
-    }
+//    try {
+//      final Map<String, Long> used_uids = UniqueId.getUsedUIDs(this, kinds)
+//        .joinUninterruptibly();
+//      
+//      collectUidStats(metrics, collector);
+//      if (config.getBoolean("tsd.core.uid.random_metrics")) {
+//        collector.record("uid.ids-used", 0, "kind=" + METRICS_QUAL);
+//        collector.record("uid.ids-available", 0, "kind=" + METRICS_QUAL);
+//      } else {
+//        collector.record("uid.ids-used", used_uids.get(METRICS_QUAL), 
+//            "kind=" + METRICS_QUAL);
+//        collector.record("uid.ids-available", 
+//            (Internal.getMaxUnsignedValueOnBytes(metrics.width()) - 
+//                used_uids.get(METRICS_QUAL)), "kind=" + METRICS_QUAL);
+//      }
+//      
+//      collectUidStats(tag_names, collector);
+//      collector.record("uid.ids-used", used_uids.get(TAG_NAME_QUAL), 
+//          "kind=" + TAG_NAME_QUAL);
+//      collector.record("uid.ids-available", 
+//          (Internal.getMaxUnsignedValueOnBytes(tag_names.width()) - 
+//              used_uids.get(TAG_NAME_QUAL)), 
+//          "kind=" + TAG_NAME_QUAL);
+//      
+//      collectUidStats(tag_values, collector);
+//      collector.record("uid.ids-used", used_uids.get(TAG_VALUE_QUAL), 
+//          "kind=" + TAG_VALUE_QUAL);
+//      collector.record("uid.ids-available", 
+//          (Internal.getMaxUnsignedValueOnBytes(tag_values.width()) - 
+//              used_uids.get(TAG_VALUE_QUAL)), "kind=" + TAG_VALUE_QUAL);
+//      
+//    } catch (Exception e) {
+//      throw new RuntimeException("Shouldn't be here", e);
+//    }
     
     collector.record("uid.filter.rejected", rejected_dps.get(), "kind=raw");
     collector.record("uid.filter.rejected", rejected_aggregate_dps.get(), 

@@ -374,6 +374,10 @@ public final class UniqueId implements UniqueIdInterface {
   }
 
   private Deferred<byte[]> getIdFromHBase(final String name) {
+    if (true) {
+      byte[] row = Bytes.fromLong(rnd.getRandomUID(id_width));
+      return Deferred.fromResult(Arrays.copyOfRange(row, row.length - id_width, row.length));
+    }
     return hbaseGet(toBytes(name), ID_FAMILY);
   }
 
