@@ -119,6 +119,8 @@ public class Config {
   /** If set to true, the maximum value will be returned, minimum */
   private boolean use_max_value = true;
 
+  private String hist_decoder_name;
+  
   /**
    * The list of properties configured to their defaults or modified by users
    */
@@ -287,6 +289,11 @@ public class Config {
 
   public boolean use_max_value() {
     return use_max_value;
+  }
+  
+  /** @return The full class name of the decoder for histogram data points */
+  public String hist_decoder_name() {
+    return hist_decoder_name;
   }
   
   /**
@@ -528,6 +535,7 @@ public class Config {
     default_map.put("tsd.core.connections.limit", "0");
     default_map.put("tsd.core.enable_api", "true");
     default_map.put("tsd.core.enable_ui", "true");
+    default_map.put("tsd.core.hist_decoder", "net.opentsdb.core.SimpleHistogramDecoder");
     default_map.put("tsd.core.meta.enable_realtime_ts", "false");
     default_map.put("tsd.core.meta.enable_realtime_uid", "false");
     default_map.put("tsd.core.meta.enable_tsuid_incrementing", "false");
@@ -709,6 +717,7 @@ public class Config {
     mul_get_cocurrency_number = this.getInt("tsd.core.mul_get_cocurrency_number");
     use_otsdb_timestamp = this.getBoolean("tsd.storage.use_otsdb_timestamp");
     use_max_value = this.getBoolean("tsd.storage.use_max_value");
+    hist_decoder_name = this.getString("tsd.core.hist_decoder");
   }
 
   /**

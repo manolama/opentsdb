@@ -91,6 +91,7 @@ public final class TSDB {
   private static short TAG_NAME_WIDTH = 3;
   private static final String TAG_VALUE_QUAL = "tagv";
   private static short TAG_VALUE_WIDTH = 3;
+  private static final int MIN_HISTOGRAM_BYTES = 1;
 
   /** Client for the HBase cluster to use.  */
   final HBaseClient client;
@@ -166,6 +167,11 @@ public final class TSDB {
   
   /** Whether or not to block writing of derived rollups/pre-ags */
   private final boolean rollups_block_derived;
+  
+  /** An optional histogram manger used when the TSD will be dealing with
+   * histograms and sketches. Instantiated ONLY if 
+   * {@link #initializePlugins(boolean)} was called.*/
+  private HistogramCodecManager histogram_manager;
   
   /** Writes rejected by the filter */
   private final AtomicLong rejected_dps = new AtomicLong();
@@ -294,7 +300,7 @@ public final class TSDB {
 
     // set any extra tags from the config for stats
     StatsCollector.setGlobalTags(config);
-
+    
     LOG.debug(config.dumpConfiguration());
   }
 
@@ -499,6 +505,13 @@ public final class TSDB {
       LOG.info("Successfully initialized UID filter plugin [" +
           uid_filter.getClass().getCanonicalName() + "] version: "
           + uid_filter.version());
+    }
+    
+    // finally load the histo manager after plugins have been loaded.
+    if (config.hasProperty("tsd.core.histograms.config")) {
+      histogram_manager = new HistogramCodecManager(this);
+    } else {
+      histogram_manager = null;
     }
   }
 
@@ -1045,23 +1058,66 @@ public final class TSDB {
                             tags, flags);
   }
 
-  Deferred<Object> addPointInternal(final String metric,
+  /**
+   * Adds an encoded Histogram data point in the TSDB.
+   * @param metric A non-empty string.
+   * @param timestamp The timestamp associated with the value.
+   * @param raw_data The encoded data blob of the Histogram point.
+   * @param tags The tags on this series.  This map must be non-empty.
+   * @return A deferred object that indicates the completion of the request.
+   * The {@link Object} has not special meaning and can be {@code null} (think
+   * of it as {@code Deferred<Void>}). But you probably want to attach at
+   * least an errback to this {@code Deferred} to handle failures.
+   * @throws IllegalArgumentException if the timestamp is less than or equal
+   * to the previous timestamp added or 0 for the first timestamp, or if the
+   * difference with the previous timestamp is too large.
+   * @throws IllegalArgumentException if the metric name is empty or contains
+   * illegal characters.
+   * @throws IllegalArgumentException if the tags list is empty or one of the
+   * elements contains illegal characters.
+   * @throws HBaseException (deferred) if there was a problem while persisting
+   * data.
+   */
+  public Deferred<Object> addHistogramPoint(final String metric,
                                             final long timestamp,
-                                            final byte[] value,
-                                            final Map<String, String> tags,
-                                            final short flags) {
-    // we only accept positive unix epoch timestamps in seconds or milliseconds
-    if (timestamp < 0 || ((timestamp & Const.SECOND_MASK) != 0 &&
-        timestamp > 9999999999999L)) {
-      throw new IllegalArgumentException((timestamp < 0 ? "negative " : "bad")
-          + " timestamp=" + timestamp
-          + " when trying to add value=" + Arrays.toString(value) + '/' + flags
-          + " to metric=" + metric + ", tags=" + tags);
+                                            final byte[] raw_data,
+                                            final Map<String, String> tags) {
+    if (raw_data == null || raw_data.length < MIN_HISTOGRAM_BYTES) {
+      return Deferred.fromError(new IllegalArgumentException(
+          "The histogram raw data is invalid: " + Bytes.pretty(raw_data)));
     }
-    IncomingDataPoints.checkMetricAndTags(metric, tags);
+    
+    checkTimestampAndTags(metric, timestamp, raw_data, tags, (short) 0);
     final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);
-    final long base_time;
+
+    final byte[] qualifier = Internal.getQualifier(timestamp, 
+        HistogramDataPoint.PREFIX);
+    
+    return storeIntoDB(metric, timestamp, raw_data, tags, (short) 0, row, qualifier);
+  }
+  
+  final Deferred<Object> addPointInternal(final String metric,
+      final long timestamp,
+      final byte[] value,
+      final Map<String, String> tags,
+      final short flags) {
+
+    checkTimestampAndTags(metric, timestamp, value, tags, flags);
+    final byte[] row = IncomingDataPoints.rowKeyTemplate(this, metric, tags);
+    
     final byte[] qualifier = Internal.buildQualifier(timestamp, flags);
+
+    return storeIntoDB(metric, timestamp, value, tags, flags, row, qualifier);
+  }
+  
+  private final Deferred<Object> storeIntoDB(final String metric, 
+                                             final long timestamp, 
+                                             final byte[] value,
+                                             final Map<String, String> tags, 
+                                             final short flags,
+                                             final byte[] row, 
+                                             final byte[] qualifier) {
+    final long base_time;
 
     if ((timestamp & Const.SECOND_MASK) != 0) {
       // drop the ms timestamp to seconds to calculate the base timestamp
@@ -1085,7 +1141,7 @@ public final class TSDB {
         RowKey.prefixKeyWithSalt(row);
 
         Deferred<Object> result = null;
-        if (config.enable_appends()) {
+        if (!isHistogram(qualifier) && config.enable_appends()) {
           if(config.use_otsdb_timestamp()) {
               LOG.error("Cannot use Date Tiered Compaction with AppendPoints. Please turn off either of them.");
           }
@@ -1093,10 +1149,14 @@ public final class TSDB {
           final AppendRequest point = new AppendRequest(table, row, FAMILY,
                   AppendDataPoints.APPEND_COLUMN_QUALIFIER, kv.getBytes());
           result = client.append(point);
-        } else {
+        } else if (!isHistogram(qualifier)) {
           scheduleForCompaction(row, (int) base_time);
           final PutRequest point = RequestBuilder.buildPutRequest(config, table, row, FAMILY, qualifier, value, timestamp);
           result = client.put(point);
+        } else {
+          scheduleForCompaction(row, (int) base_time);
+          final PutRequest histo_point = new PutRequest(table, row, FAMILY, qualifier, value);
+          result = client.put(histo_point);
         }
 
         // Count all added datapoints, not just those that came in through PUT rpc
@@ -1134,7 +1194,11 @@ public final class TSDB {
         }
 
         if (rt_publisher != null) {
-          rt_publisher.sinkDataPoint(metric, timestamp, value, tags, tsuid, flags);
+          if (isHistogram(qualifier)) {
+            rt_publisher.publishHistogramPoint(metric, timestamp, value, tags, tsuid);
+          } else {
+            rt_publisher.sinkDataPoint(metric, timestamp, value, tags, tsuid, flags);
+          }
         }
         return result;
       }
@@ -1145,10 +1209,30 @@ public final class TSDB {
     }
 
     if (ts_filter != null && ts_filter.filterDataPoints()) {
-      return ts_filter.allowDataPoint(metric, timestamp, value, tags, flags)
-          .addCallbackDeferring(new WriteCB());
+      if (isHistogram(qualifier)) {
+        return ts_filter.allowHistogramPoint(metric, timestamp, value, tags)
+                .addCallbackDeferring(new WriteCB());
+      } else {
+        return ts_filter.allowDataPoint(metric, timestamp, value, tags, flags)
+                .addCallbackDeferring(new WriteCB());
+      }
     }
     return Deferred.fromResult(true).addCallbackDeferring(new WriteCB());
+  }
+  
+  private final void checkTimestampAndTags(final String metric, final long timestamp,
+                                              final byte[] value,
+                                              final Map<String, String> tags, final short flags) {
+    // we only accept positive unix epoch timestamps in seconds or milliseconds
+    if (timestamp < 0 || ((timestamp & Const.SECOND_MASK) != 0 &&
+        timestamp > 9999999999999L)) {
+      throw new IllegalArgumentException((timestamp < 0 ? "negative " : "bad")
+          + " timestamp=" + timestamp
+          + " when trying to add value=" + Arrays.toString(value) + '/' + flags
+          + " to metric=" + metric + ", tags=" + tags);
+    }
+
+    IncomingDataPoints.checkMetricAndTags(metric, tags);
   }
 
   /**
@@ -1988,13 +2072,24 @@ public final class TSDB {
     return raw_agg_tag_value;
   }
 
+  /** @return The optional histogram manager registered to this TSD. 
+   * @since 2.4 */
+  public HistogramCodecManager histogramManager() {
+    return histogram_manager;
+  }
+  
+  private final boolean isHistogram(final byte[] qualifier) {
+    return (qualifier.length & 0x1) == 1;
+  }
+  
   // ------------------ //
   // Compaction helpers //
   // ------------------ //
 
   final KeyValue compact(final ArrayList<KeyValue> row,
-      List<Annotation> annotations) {
-    return compactionq.compact(row, annotations);
+      List<Annotation> annotations,
+      List<HistogramDataPoint> histograms) {
+    return compactionq.compact(row, annotations, histograms);
   }
 
   /**

@@ -986,4 +986,98 @@ public final class Internal {
 
     return true;
   }
+
+  /**
+   * Calculates and returns the column qualifier. The qualifier is the offset
+   * of the {@code #timestamp} from the row key's base time stamp in seconds
+   * with a prefix of {@code #PREFIX}. Thus if the offset is 0 and the prefix is
+   * 1 and the timestamp is in seconds, the qualifier would be [1, 0, 0].
+   * Millisecond timestamps will have a 5 byte qualifier.
+   * @param timestamp The base timestamp.
+   * @param prefix The prefix to set at the start of the array.
+   * @return The column qualifier as a byte array
+   * @throws IllegalArgumentException if the start_time has not been set
+   * @since 2.4
+   */
+  public static byte[] getQualifier(final long timestamp, final byte prefix) {
+    if (timestamp < 1) {
+      throw new IllegalArgumentException("The start timestamp has not been set");
+    }
+
+    final long base_time;
+    final byte[] qualifier;
+    if ((timestamp & Const.SECOND_MASK) != 0) {
+      // drop the ms timestamp to seconds to calculate the base timestamp
+      base_time = ((timestamp / 1000) -
+              ((timestamp / 1000) % Const.MAX_TIMESPAN));
+      qualifier = new byte[5];
+      final int offset = (int) (timestamp - (base_time * 1000));
+      System.arraycopy(Bytes.fromInt(offset), 0, qualifier, 1, 4);
+    } else {
+      base_time = (timestamp - (timestamp % Const.MAX_TIMESPAN));
+      qualifier = new byte[3];
+      final short offset = (short) (timestamp - base_time);
+      System.arraycopy(Bytes.fromShort(offset), 0, qualifier, 1, 2);
+    }
+    qualifier[0] = prefix;
+    return qualifier;
+  }
+  
+  /**
+   * Get timestamp from base time and quantifier for non datapoints. The returned time
+   * will always be in ms.
+   * @param base_time the base time of the point
+   * @param quantifier the quantifier of the point, it is expected to be either length of
+   *                   3 or length of 5 (the first byte represents the type of the point)
+   * @return The timestamp in ms
+   */
+  public static long getTimeStampFromNonDP(final long base_time, byte[] quantifier) {
+    long ret = base_time;
+    if (quantifier.length == 3) {
+      ret += quantifier[1] << 8 | (quantifier[2] & 0xFF);
+      ret *= 1000;
+    } else if (quantifier.length == 5) {
+      ret *= 1000;
+      ret += (quantifier[1] & 0xFF) << 24 | (quantifier[2] & 0xFF) << 16
+              | (quantifier[3] & 0xFF) << 8 | quantifier[4] & 0xFF;
+    } else {
+      throw new IllegalArgumentException("Quantifier is not valid: " + Bytes.pretty(quantifier));
+    }
+
+    return ret;
+
+  }
+
+  /**
+   * Decode the histogram point from the given key value
+   * @param kv the key value that contains a histogram
+   * @param config config object of TSDB, will use {@code "tsd.core.hist_decoder"}
+   *               to get the decoder
+   * @return the decoded {@code HistogramDataPoint}
+     */
+  public static HistogramDataPoint decodeHistogramDataPoint(final TSDB tsdb,
+                                                            final KeyValue kv) {
+    long timestamp = Internal.baseTime(kv.key());
+    return decodeHistogramDataPoint(tsdb, timestamp, kv.qualifier(), kv.value());
+  }
+
+  /**
+   * Decode the histogram point from the given key and values
+   * @param tsdb The TSDB to use when fetching the decoder manager.
+   * @param base_time the base time of the histogram
+   * @param qualifier the qualifier used to store the histogram
+   * @param value the encoded value of the histogram
+   * @return the decoded {@code HistogramDataPoint}
+   */
+  public static HistogramDataPoint decodeHistogramDataPoint(final TSDB tsdb,
+                                                            final long base_time, 
+                                                            final byte[] qualifier,
+                                                            final byte[] value) {
+    final HistogramDataPointCodec decoder =
+            tsdb.histogramManager().getCodec((int) value[0]);
+    long timestamp = getTimeStampFromNonDP(base_time, qualifier);
+    final Histogram histogram = decoder.decode(value, true);
+    return new SimpleHistogramDataPointAdapter(histogram, timestamp);
+  }
+
 }
