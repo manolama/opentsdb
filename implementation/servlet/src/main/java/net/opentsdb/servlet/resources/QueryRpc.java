@@ -51,7 +51,9 @@ import jersey.repackaged.com.google.common.collect.ImmutableMap;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Tags;
 import net.opentsdb.core.TsdbPlugin;
+import net.opentsdb.data.iterators.IteratorGroup;
 import net.opentsdb.data.iterators.IteratorGroups;
+import net.opentsdb.data.iterators.TimeSeriesIterator;
 import net.opentsdb.exceptions.QueryExecutionException;
 import net.opentsdb.query.TSQuery;
 import net.opentsdb.query.TSSubQuery;
@@ -65,6 +67,8 @@ import net.opentsdb.query.execution.serdes.JsonV2QuerySerdesOptions;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.query.pojo.RateOptions;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
+import net.opentsdb.query.processor.groupby.GroupBy;
+import net.opentsdb.query.processor.groupby.GroupByConfig;
 import net.opentsdb.servlet.applications.OpenTSDBApplication;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.stats.TsdbTrace;
@@ -411,6 +415,23 @@ final public class QueryRpc {
       trace = null;
     }
     
+    GroupByConfig gbc = (GroupByConfig) GroupByConfig.newBuilder().setQuery(query).build();
+    final GroupBy gb = new GroupBy(null, gbc);
+    for (final IteratorGroup group : groups.groups()) {
+      for (final TimeSeriesIterator<?> it : group.flattenedIterators()) {
+        gb.addSeries(group.id(), it);
+      }
+    }
+    try {
+      gb.initialize().join();
+    } catch (InterruptedException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    } catch (Exception e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
+    
     final TSQuery ts_query = (TSQuery) request.getAttribute(V2_QUERY_KEY);
     final JsonV2QuerySerdesOptions options = JsonV2QuerySerdesOptions.newBuilder()
         .setMsResolution(ts_query.getMsResolution())
@@ -435,7 +456,7 @@ final public class QueryRpc {
         json.writeStartArray();
         
         final JsonV2QuerySerdes serdes = new JsonV2QuerySerdes(json);
-        serdes.serialize(query, options, output, groups);
+        serdes.serialize(query, options, output, gb.iterators());
         
         if (options.showSummary()) {
           json.writeObjectFieldStart("summary");

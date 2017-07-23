@@ -190,7 +190,9 @@ public class SlicedTimeSeriesIterator<T extends TimeSeriesDataType>
     }
     for (final TimeSeriesIterator<T> iterator : iterators) {
       iterator.setContext(context);
-      context.register(this, iterator);
+      if (context != null) {
+        context.register(this, iterator);
+      }
     }
   }
   
