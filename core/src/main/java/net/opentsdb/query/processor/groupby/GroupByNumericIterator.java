@@ -128,7 +128,7 @@ public class GroupByNumericIterator extends TimeSeriesIterator<NumericType> {
   public TimeSeriesValue<NumericType> next() {
     int reals = 0;
     DoubleAccumulator doubles = null;
-    LongAccumulator longs = null;
+    //LongAccumulator longs = null;
     
     final TimeStamp next = new MillisecondTimeStamp(0L);
     next.setMax();
@@ -144,25 +144,25 @@ public class GroupByNumericIterator extends TimeSeriesIterator<NumericType> {
         continue;
       }
       
-      if (longs == null && doubles == null) {
-       if (values[i].value().isInteger()) {   
-          longs = new LongAccumulator();
-        } else if (i == 0) {
-          doubles = new DoubleAccumulator();
-        }
-      }
-      
-      if (!values[i].value().isInteger() && longs != null) {
-        doubles = new DoubleAccumulator();
-        doubles.move(longs);
-        longs = null;
-      }
-      
-      if (longs != null) {
-        longs.longs.add(values[i].value().longValue());
-      } else {
+//      if (longs == null && doubles == null) {
+//       if (values[i].value().isInteger()) {   
+//          longs = new LongAccumulator();
+//        } else if (i == 0) {
+//          doubles = new DoubleAccumulator();
+//        }
+//      }
+//      
+//      if (!values[i].value().isInteger() && longs != null) {
+//        doubles = new DoubleAccumulator();
+//        doubles.move(longs);
+//        longs = null;
+//      }
+//      
+//      if (longs != null) {
+//        longs.longs.add(values[i].value().longValue());
+//      } else {
         doubles.doubles.add(values[i].value().toDouble());
-      }
+      //}
       reals += values[i].realCount();
       
       if (iterators.get(i).status() == IteratorStatus.HAS_DATA) {
@@ -173,13 +173,13 @@ public class GroupByNumericIterator extends TimeSeriesIterator<NumericType> {
       }
     }
     
-    if (doubles != null) {
+    //if (doubles != null) {
       dp.reset(ts, aggregator.runDouble(doubles), reals);
-    } else if (longs != null) {
-      dp.reset(ts, aggregator.runLong(longs), reals);
-    } else {
-      throw new IllegalStateException("WTF??? Nulls for both?");
-    }
+    //} else if (longs != null) {
+    //  dp.reset(ts, aggregator.runLong(longs), reals);
+    //} else {
+    //  throw new IllegalStateException("WTF??? Nulls for both?");
+    //}
     
     ts.update(next);
     return dp;
