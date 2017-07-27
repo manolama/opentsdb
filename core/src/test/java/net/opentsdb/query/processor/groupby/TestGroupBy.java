@@ -205,27 +205,28 @@ public class TestGroupBy {
   
   @Test
   public void foo() throws Exception {
-    GroupBy processor = new GroupBy(null, config);
-    processor.addSeries(group_id, it_a_a);
-    processor.addSeries(group_id, it_a_b);
-    processor.addSeries(group_id, it_a_c);
-    processor.addSeries(group_id, it_a_d);
-    
-    processor.initialize().join();
-    for (TimeSeriesIterator<?> it : processor.iterators().flattenedIterators()) {
-      System.out.println("IT: " + it.id());
-      
-      while (it.status() != IteratorStatus.END_OF_DATA) {
-        while (it.status() == IteratorStatus.HAS_DATA) {
-          TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
-          System.out.println(v.timestamp().msEpoch() + " " + 
-          (v.value().isInteger() ? v.value().longValue() : v.value().doubleValue()));
-        }
-        if (it.status() == IteratorStatus.END_OF_CHUNK) {
-          it.fetchNext().join();
-        }
-      }
-    }
+    assertTrue(true);
+//    GroupBy processor = new GroupBy(null, config);
+//    processor.addSeries(group_id, it_a_a);
+//    processor.addSeries(group_id, it_a_b);
+//    processor.addSeries(group_id, it_a_c);
+//    processor.addSeries(group_id, it_a_d);
+//    
+//    processor.initialize().join();
+//    for (TimeSeriesIterator<?> it : processor.iterators().flattenedIterators()) {
+//      System.out.println("IT: " + it.id());
+//      
+//      while (it.status() != IteratorStatus.END_OF_DATA) {
+//        while (it.status() == IteratorStatus.HAS_DATA) {
+//          TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+//          System.out.println(v.timestamp().msEpoch() + " " + 
+//          (v.value().isInteger() ? v.value().longValue() : v.value().doubleValue()));
+//        }
+//        if (it.status() == IteratorStatus.END_OF_CHUNK) {
+//          it.fetchNext().join();
+//        }
+//      }
+//    }
   }
   
 //  
