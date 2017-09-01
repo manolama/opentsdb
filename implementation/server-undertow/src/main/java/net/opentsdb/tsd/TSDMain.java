@@ -134,6 +134,7 @@ public class TSDMain {
     registerShutdownHook();
     
     final DeploymentInfo servletBuilder = Servlets.deployment()
+        .setIgnoreFlush(false)
         .setClassLoader(TSDMain.class.getClassLoader())
         .setContextPath(root)
         .setDeploymentName("tsd.war") // just a name
