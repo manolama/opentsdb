@@ -19,11 +19,14 @@ import java.util.Map.Entry;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 
+import net.opentsdb.data.TimeSeriesGroupId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp.TimeStampComparator;
+import net.opentsdb.data.iterators.IteratorGroup;
 import net.opentsdb.data.iterators.IteratorGroups;
 import net.opentsdb.data.iterators.IteratorStatus;
 import net.opentsdb.data.iterators.TimeSeriesIterator;
+import net.opentsdb.data.iterators.TimeSeriesIterators;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
 
@@ -75,51 +78,55 @@ public class JsonV2QuerySerdes implements TimeSeriesSerdes<IteratorGroups> {
       opts = null;
     }
     try {
-      for (final TimeSeriesIterator<?> it : data.flattenedIterators()) {
-        json.writeStartObject();
-        
-        json.writeStringField("metric", new String(it.id().metrics().get(0)));
-        json.writeObjectFieldStart("tags");
-        for (final Entry<byte[], byte[]> entry : it.id().tags().entrySet()) {
-          json.writeStringField(
-              new String(entry.getKey()), new String(entry.getValue()));
-        }
-        json.writeArrayFieldStart("aggregateTags");
-        for (final byte[] tag : it.id().aggregatedTags()) {
-          json.writeString(new String(tag));
-        }
-        json.writeEndArray();
-        json.writeEndObject();
-        json.writeObjectFieldStart("dps");
-        
-        long ts = 0;
-        while (it.status() == IteratorStatus.HAS_DATA) {
-          final TimeSeriesValue<NumericType> v = 
-              (TimeSeriesValue<NumericType>) it.next();
-          if (v.timestamp().compare(TimeStampComparator.LT, query.getTime().startTime()) || 
-              v.timestamp().compare(TimeStampComparator.GT, query.getTime().endTime())) {
-            continue;
+      for (final Entry<TimeSeriesGroupId, IteratorGroup> group : data) {
+        for (final TimeSeriesIterators types : group.getValue()) {
+          for (final TimeSeriesIterator<?> it :types) {
+            json.writeStartObject();
+            
+            json.writeStringField("metric", new String(it.id().metrics().get(0)));
+            json.writeObjectFieldStart("tags");
+            for (final Entry<byte[], byte[]> entry : it.id().tags().entrySet()) {
+              json.writeStringField(
+                  new String(entry.getKey()), new String(entry.getValue()));
+            }
+            json.writeArrayFieldStart("aggregateTags");
+            for (final byte[] tag : it.id().aggregatedTags()) {
+              json.writeString(new String(tag));
+            }
+            json.writeEndArray();
+            json.writeEndObject();
+            json.writeObjectFieldStart("dps");
+            
+            long ts = 0;
+            while (it.status() == IteratorStatus.HAS_DATA) {
+              final TimeSeriesValue<NumericType> v = 
+                  (TimeSeriesValue<NumericType>) it.next();
+              if (v.timestamp().compare(TimeStampComparator.LT, query.getTime().startTime()) || 
+                  v.timestamp().compare(TimeStampComparator.GT, query.getTime().endTime())) {
+                continue;
+              }
+              
+              ts = (opts != null && opts.msResolution()) 
+                  ? v.timestamp().msEpoch() 
+                  : v.timestamp().msEpoch() / 1000;
+              
+              if (v.value().isInteger()) {
+                json.writeNumberField(Long.toString(ts), 
+                    v.value().longValue());
+              } else {
+                json.writeNumberField(Long.toString(ts), 
+                    v.value().doubleValue());
+              }
+            }
+            
+            json.writeEndObject();
+            json.writeEndObject();
+            json.flush();
           }
           
-          ts = (opts != null && opts.msResolution()) 
-              ? v.timestamp().msEpoch() 
-              : v.timestamp().msEpoch() / 1000;
-          
-          if (v.value().isInteger()) {
-            json.writeNumberField(Long.toString(ts), 
-                v.value().longValue());
-          } else {
-            json.writeNumberField(Long.toString(ts), 
-                v.value().doubleValue());
-          }
+          json.flush();          
         }
-        
-        json.writeEndObject();
-        json.writeEndObject();
-        json.flush();
       }
-      
-      json.flush();
     } catch (IOException e) {
       throw new RuntimeException("Unexpected exception serializing: " + data);
     }
