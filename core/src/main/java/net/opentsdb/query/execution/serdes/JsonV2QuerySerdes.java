@@ -89,12 +89,12 @@ public class JsonV2QuerySerdes implements TimeSeriesSerdes<IteratorGroups> {
               json.writeStringField(
                   new String(entry.getKey()), new String(entry.getValue()));
             }
+            json.writeEndObject();
             json.writeArrayFieldStart("aggregateTags");
             for (final byte[] tag : it.id().aggregatedTags()) {
               json.writeString(new String(tag));
             }
             json.writeEndArray();
-            json.writeEndObject();
             json.writeObjectFieldStart("dps");
             
             long ts = 0;
