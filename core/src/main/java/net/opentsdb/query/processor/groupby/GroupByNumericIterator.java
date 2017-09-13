@@ -127,7 +127,7 @@ public class GroupByNumericIterator extends TimeSeriesIterator<NumericType> {
   @Override
   public TimeSeriesValue<NumericType> next() {
     int reals = 0;
-    DoubleAccumulator doubles = null;
+    DoubleAccumulator doubles = new DoubleAccumulator();
     //LongAccumulator longs = null;
     
     final TimeStamp next = new MillisecondTimeStamp(0L);
@@ -161,7 +161,10 @@ public class GroupByNumericIterator extends TimeSeriesIterator<NumericType> {
 //      if (longs != null) {
 //        longs.longs.add(values[i].value().longValue());
 //      } else {
-        doubles.doubles.add(values[i].value().toDouble());
+        doubles.doubles
+               .add(values[i]
+                   .value()
+                   .toDouble());
       //}
       reals += values[i].realCount();
       
@@ -170,6 +173,8 @@ public class GroupByNumericIterator extends TimeSeriesIterator<NumericType> {
         if (values[i].timestamp().compare(TimeStampComparator.LT, next)) {
           next.update(values[i].timestamp());
         }
+      } else {
+        values[i] = null;
       }
     }
     

@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.servlet.AsyncContext;
@@ -51,9 +52,11 @@ import jersey.repackaged.com.google.common.collect.ImmutableMap;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Tags;
 import net.opentsdb.core.TsdbPlugin;
+import net.opentsdb.data.TimeSeriesGroupId;
 import net.opentsdb.data.iterators.IteratorGroup;
 import net.opentsdb.data.iterators.IteratorGroups;
 import net.opentsdb.data.iterators.TimeSeriesIterator;
+import net.opentsdb.data.iterators.TimeSeriesIterators;
 import net.opentsdb.exceptions.QueryExecutionException;
 import net.opentsdb.query.TSQuery;
 import net.opentsdb.query.TSSubQuery;
@@ -415,21 +418,31 @@ final public class QueryRpc {
       trace = null;
     }
     
-    GroupByConfig gbc = (GroupByConfig) GroupByConfig.newBuilder().setQuery(query).build();
-    final GroupBy gb = new GroupBy(null, gbc);
-    for (final IteratorGroup group : groups.groups()) {
-      for (final TimeSeriesIterator<?> it : group.flattenedIterators()) {
-        gb.addSeries(group.id(), it);
+    
+    final IteratorGroups to_serialize;
+    if (!query.getMetrics().get(0).getAggregator().equals("none")) {
+      GroupByConfig gbc = (GroupByConfig) GroupByConfig.newBuilder().setQuery(query).build();
+      final GroupBy gb = new GroupBy(null, gbc);
+      for (final Entry<TimeSeriesGroupId, IteratorGroup> group : groups) {
+        for (final TimeSeriesIterators types : group.getValue()) {
+          for (final TimeSeriesIterator<?> it :types) {
+            gb.addSeries(group.getKey(), it);
+          }
+        }
       }
-    }
-    try {
-      gb.initialize().join();
-    } catch (InterruptedException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    } catch (Exception e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
+      try {
+        gb.initialize().join();
+        LOG.info("INITIALIZED the group by iterator");
+      } catch (InterruptedException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      } catch (Exception e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
+      to_serialize = gb.iterators();
+    } else {
+      to_serialize = groups;
     }
     
     final TSQuery ts_query = (TSQuery) request.getAttribute(V2_QUERY_KEY);
@@ -456,7 +469,8 @@ final public class QueryRpc {
         json.writeStartArray();
         
         final JsonV2QuerySerdes serdes = new JsonV2QuerySerdes(json);
-        serdes.serialize(query, options, output, gb.iterators());
+        //serdes.serialize(query, options, output, gb.iterators());
+        serdes.serialize(query, options, output, to_serialize);
         
         if (options.showSummary()) {
           json.writeObjectFieldStart("summary");
