@@ -333,7 +333,6 @@ public class MockDataStore extends TimeSeriesDataStore {
             }
           }
         }
-
       }
     }
   }

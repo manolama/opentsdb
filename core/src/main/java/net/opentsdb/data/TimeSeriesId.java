@@ -47,6 +47,8 @@ import net.opentsdb.utils.Bytes.ByteMap;
  * @since 3.0
  */
 public abstract class TimeSeriesId implements Comparable<TimeSeriesId> {
+  protected int cached_hash;
+  protected boolean hash_cached = false;
   
   /** An optional alias. */
   protected byte[] alias;
@@ -221,7 +223,11 @@ public abstract class TimeSeriesId implements Comparable<TimeSeriesId> {
   
   @Override
   public int hashCode() {
-    return buildHashCode().asInt();
+    if (!hash_cached) {
+      cached_hash = buildHashCode().asInt();
+      hash_cached = true;
+    }
+    return cached_hash;
   }
   
   /** @return A HashCode object for deterministic, non-secure hashing */
