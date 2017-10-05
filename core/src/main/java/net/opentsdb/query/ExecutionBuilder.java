@@ -57,10 +57,6 @@ public class ExecutionBuilder {
       ctx = new PerMetricQueryPipelineContext(query, this, sink);
       downstream = executor.executeQuery(ctx);
       
-      if (mode == QueryMode.SINGLE && ctx.parallelQueries() > 0) {
-        downstream = new SingleAccumulator(downstream);
-      }
-      
       boolean gby = false;
       for (Filter f : query.getFilters()) {
         for (TagVFilter v : f.getTags()) {
@@ -74,6 +70,10 @@ public class ExecutionBuilder {
       if (gby) {
         System.out.println("ADDING GROUP BY");
         downstream = new GroupBy(downstream, sink);
+      }
+      
+      if (mode == QueryMode.SINGLE && ctx.parallelQueries() > 0) {
+        downstream = new SingleAccumulator(downstream);
       }
     }
     
