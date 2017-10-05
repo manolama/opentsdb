@@ -19,6 +19,8 @@ package net.opentsdb.query;
  */
 public interface QueryPipeline {
 
+  public QueryPipelineContext context();
+  
   /**
    * Sets the listener for this pipeline. NOTE: If an existing listener has
    * been applied it will be orphaned.

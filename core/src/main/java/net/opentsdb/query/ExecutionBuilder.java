@@ -8,6 +8,9 @@ import com.google.common.collect.Lists;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.query.execution.QueryExecutor2;
+import net.opentsdb.query.filter.TagVFilter;
+import net.opentsdb.query.pojo.Filter;
+import net.opentsdb.query.processor.GroupBy;
 
 public class ExecutionBuilder {
 
@@ -52,10 +55,26 @@ public class ExecutionBuilder {
       this.query = query;
       this.mode = mode;
       ctx = new PerMetricQueryPipelineContext(query, this, sink);
-      if (mode == QueryMode.SINGLE && ctx.parallelQueries() > 0) {
-        ctx.setListener(new SingleAccumulator());
-      }
       downstream = executor.executeQuery(ctx);
+      
+      if (mode == QueryMode.SINGLE && ctx.parallelQueries() > 0) {
+        downstream = new SingleAccumulator(downstream);
+      }
+      
+      boolean gby = false;
+      for (Filter f : query.getFilters()) {
+        for (TagVFilter v : f.getTags()) {
+          if (v.isGroupBy()) {
+            gby = true;
+            break;
+          }
+        }
+      }
+      
+      if (gby) {
+        System.out.println("ADDING GROUP BY");
+        downstream = new GroupBy(downstream, sink);
+      }
     }
     
     @Override
@@ -85,12 +104,20 @@ public class ExecutionBuilder {
       downstream.close();
     }
     
-    class SingleAccumulator implements QueryListener, QueryResult {
+    class SingleAccumulator implements QueryPipeline, QueryListener, QueryResult {
       List<TimeSeries> series;
       boolean[] results = new boolean[ctx.parallelQueries()];
+      QueryListener listener;
+      QueryPipeline downstream;
+      
+      SingleAccumulator(QueryPipeline downstream) {
+        listener = sink;
+        this.downstream = downstream;
+        this.downstream.setListener(this);
+      }
       @Override
       public void onComplete() {
-        sink.onComplete();
+        listener.onComplete();
       }
 
       @Override
@@ -112,14 +139,16 @@ public class ExecutionBuilder {
         }
         
         if (complete) {
-          sink.onNext(this);
-          sink.onComplete();
+          System.out.println("ACUM Sending upstream");
+          listener.onNext(this);
+          System.out.println("ACUME marking complete");
+          listener.onComplete();
         }
       }
 
       @Override
       public void onError(Throwable t) {
-        sink.onError(t);
+        listener.onError(t);
       }
 
       @Override
@@ -146,6 +175,50 @@ public class ExecutionBuilder {
       @Override
       public int parallelism() {
         return query.subQueries().size();
+      }
+
+      @Override
+      public QueryPipelineContext context() {
+        return ctx;
+      }
+
+      @Override
+      public void setListener(QueryListener listener) {
+        this.listener = listener;
+      }
+
+      @Override
+      public QueryListener getListener() {
+        return listener;
+      }
+
+      @Override
+      public void fetchNext(int parallel_id) {
+        downstream.fetchNext(parallel_id);
+      }
+
+      @Override
+      public QueryPipeline getMultiPassClone(QueryListener listener,
+          boolean cache) {
+        // TODO Auto-generated method stub
+        return null;
+      }
+
+      @Override
+      public void addAfter(QueryPipeline pipeline) {
+        // TODO Auto-generated method stub
+        
+      }
+
+      @Override
+      public void addBefore(QueryPipeline pipeline) {
+        // TODO Auto-generated method stub
+        
+      }
+
+      @Override
+      public void close() {
+        downstream.close();
       }
       
     }

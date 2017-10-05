@@ -20,6 +20,11 @@ public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext 
   public TimeSeriesQuery getQuery(int parallel_id) {
     return plan.subQueries().get(parallel_id);
   }
+  
+  @Override
+  public TimeSeriesQuery getQuery() {
+    return original_query;
+  }
 
   @Override
   public int parallelQueries() {

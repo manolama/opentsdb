@@ -6,6 +6,7 @@ import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.QueryListener;
 import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.execution.QueryExecutorConfig;
 import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
@@ -70,5 +71,11 @@ public class QueryContext2 extends AbstractQueryPipeline implements QueryContext
   public void fetchNext(final int parallel_id) {
     // TODO Auto-generated method stub
     
+  }
+
+  @Override
+  public QueryPipelineContext context() {
+    // TODO Auto-generated method stub
+    return null;
   }
 }

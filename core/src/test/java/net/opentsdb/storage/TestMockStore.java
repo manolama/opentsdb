@@ -83,9 +83,10 @@ public class TestMockStore {
         .addFilter(Filter.newBuilder()
             .setId("f1")
             .addFilter(TagVFilter.newBuilder()
-                .setFilter("web01")
-                .setType("literal_or")
-                .setTagk("host")
+                .setFilter("*")
+                .setType("wildcard")
+                .setTagk("dc")
+                .setGroupBy(true)
                 )
             )
         .build();
@@ -128,7 +129,7 @@ public class TestMockStore {
     TestListener listener = new TestListener();
     QueryContext ctx = new ExecutionBuilder()
         .setQuery(query)
-        .setMode(QueryMode.SERVER_SYNC_STREAM)
+        .setMode(QueryMode.SINGLE)
         .setExecutor(mds)
         .setQueryListener(listener)
         .build();

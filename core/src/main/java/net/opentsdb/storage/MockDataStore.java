@@ -311,7 +311,7 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
         return;
       }
       
-      System.out.println("QUERIES: " + context.parallelQueries() + " PID: " + parallel_id + " SID: " + sequence_ids[parallel_id]);
+      //System.out.println("QUERIES: " + context.parallelQueries() + " PID: " + parallel_id + " SID: " + sequence_ids[parallel_id]);
       LocalResult result;
       synchronized(this) {
         result = new LocalResult(context, 
@@ -357,6 +357,11 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
         LOG.debug("Closing pipeline.");
       }
       listener.onComplete();
+    }
+
+    @Override
+    public QueryPipelineContext context() {
+      return context;
     }
     
   }
@@ -413,7 +418,7 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
           query.getTime().endTime().msEpoch() : 
             query.getTime().endTime().msEpoch() - (sequence_id * ROW_WIDTH);
       
-      System.out.println("START: " + start_ts + "  END: " + end_ts);
+      //System.out.println("START: " + start_ts + "  END: " + end_ts);
       if (end_ts <= query.getTime().startTime().msEpoch()) {
         if (pipeline.completed.compareAndSet(false, true)) {
           pipeline.getListener().onComplete();
@@ -471,7 +476,6 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
             if (row.base_timestamp >= start_ts && 
                 row.base_timestamp < end_ts) {
               ++rows;
-              System.out.println("ADDING: " + row.base_timestamp);
               if (context.getContext().mode() == QueryMode.SINGLE) {
                 ((SlicedTimeSeries) iterator).addSource(row);  
               } else {

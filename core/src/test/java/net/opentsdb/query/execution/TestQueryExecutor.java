@@ -18,6 +18,7 @@ import net.opentsdb.exceptions.QueryExecutionCanceled;
 import net.opentsdb.query.AbstractQueryPipeline;
 import net.opentsdb.query.QueryListener;
 import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
 
@@ -65,6 +66,12 @@ public class TestQueryExecutor {
       }
       listener.onComplete();
       closed++;
+    }
+
+    @Override
+    public QueryPipelineContext context() {
+      // TODO Auto-generated method stub
+      return null;
     }
     
   }

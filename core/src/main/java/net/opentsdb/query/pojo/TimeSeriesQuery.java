@@ -23,6 +23,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Ordering;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
@@ -34,6 +35,7 @@ import net.opentsdb.utils.JSON;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -54,6 +56,7 @@ public class TimeSeriesQuery extends Validatable implements Comparable<TimeSerie
   
   /** A list of filters */
   private List<Filter> filters;
+  private Map<String, Filter> filter_map;
   
   /** A list of metrics */
   private List<Metric> metrics;
@@ -86,6 +89,13 @@ public class TimeSeriesQuery extends Validatable implements Comparable<TimeSerie
     this.expressions = builder.expressions;
     this.outputs = builder.outputs;
     this.order = builder.order;
+    
+    if (this.filters != null && !this.filters.isEmpty()) {
+      filter_map = Maps.newHashMapWithExpectedSize(filters.size());
+      for (final Filter filter : filters) {
+        filter_map.put(filter.getId(), filter);
+      }
+    }
   }
 
   /** @return an optional name for the query */
@@ -414,6 +424,11 @@ public class TimeSeriesQuery extends Validatable implements Comparable<TimeSerie
   public List<TimeSeriesQuery> subQueries() {
     return sub_queries == null ? Collections.<TimeSeriesQuery>emptyList() :
       Collections.unmodifiableList(sub_queries);
+  }
+  
+  @JsonIgnore
+  public Filter getFilter(final String id) {
+    return filter_map != null ? filter_map.get(id) : null;
   }
   
   /**
