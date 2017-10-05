@@ -21,22 +21,19 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.Ordering;
 import com.google.common.hash.HashCode;
-import com.stumbleupon.async.Callback;
 
-import io.opentracing.Span;
 import net.opentsdb.core.Const;
-import net.opentsdb.query.context.QueryContext;
+import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryPipelineContext;
+import net.opentsdb.query.context.QueryContext2;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
-import net.opentsdb.query.pojo.TimeSeriesQuery;
 import net.opentsdb.storage.TimeSeriesDataStore;
 
 /**
  * An executor that calls a Storage plugin to execute the query. Simple 
  * pass-through implementation that tracks the outstanding executions.
- * 
- * @param <T> The return type of data.
  */
-public class StorageQueryExecutor<T> extends QueryExecutor<T>  {
+public class StorageQueryExecutor extends AbstractQueryExecutor {
   /** The data store to work with. */
   private TimeSeriesDataStore data_store;
   
@@ -64,31 +61,16 @@ public class StorageQueryExecutor<T> extends QueryExecutor<T>  {
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Override
-  public QueryExecution<T> executeQuery(final QueryContext context,
-                                        final TimeSeriesQuery query, 
-                                        final Span upstream_span) {
-    
-    class Cleanup implements Callback<T, T> {
-      private final QueryExecution<T> execution;
-      public Cleanup(final QueryExecution<T> execution) {
-        this.execution = execution;
-      }
-      @Override
-      public T call(final T arg) throws Exception {
-        outstanding_executions.remove(execution);
-        return arg;
-      }
-    }
-    
-    final QueryExecution<T> execution = 
-        (QueryExecution<T>) data_store.runTimeSeriesQuery(context, query, upstream_span);
-    outstanding_executions.add(execution);
-    execution.deferred().addBoth(new Cleanup(execution));
-    return execution;
+  public QueryPipeline executeQuery(final QueryPipelineContext context) {
+    final CleanupListener cleanup = new CleanupListener();
+    cleanup.pipeline = data_store.executeQuery(context);
+    cleanup.pipeline.setListener(cleanup);
+    cleanup.upstream = context.getListener();
+    outstanding_pipelines.add(cleanup.pipeline);
+    return cleanup.pipeline;
   }
-
+  
   /** The configuration class for this executor. */
   @JsonInclude(Include.NON_NULL)
   @JsonDeserialize(builder = Config.Builder.class)

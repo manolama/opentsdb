@@ -15,16 +15,29 @@ package net.opentsdb.data.iterators;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Optional;
+
 import org.junit.Ignore;
+
+import com.google.common.collect.Lists;
+import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.SimpleStringGroupId;
+import net.opentsdb.data.TimeSeries;
+import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.BaseTimeSeriesId;
 import net.opentsdb.data.TimeSeriesGroupId;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSeriesValue;
+import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.types.numeric.NumericMillisecondShard;
+import net.opentsdb.data.types.numeric.NumericMillisecondShard2;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.query.QueryResult;
 
 /**
  * A helper class with static utilities for working with iterators in unit
@@ -33,7 +46,7 @@ import net.opentsdb.data.types.numeric.NumericType;
 @Ignore
 public class IteratorTestUtils {
 
-  public static  TimeSeriesId ID_A = BaseTimeSeriesId.newBuilder()
+  public static TimeSeriesId ID_A = BaseTimeSeriesId.newBuilder()
       .addMetric("system.cpu.user")
       .build();
   public static TimeSeriesId ID_B = BaseTimeSeriesId.newBuilder()
@@ -78,10 +91,89 @@ public class IteratorTestUtils {
     
     return groups;
   }
+  
+  public static QueryResult generateData(final long start, final long end, final long interval) {
+    class Result implements QueryResult {
+
+      @Override
+      public TimeSpecification timeSpecification() {
+        // TODO Auto-generated method stub
+        return null;
+      }
+
+      @Override
+      public Collection<TimeSeries> timeSeries() {
+        
+        class TS implements TimeSeries {
+          final TimeSeriesId id;
+          final NumericMillisecondShard2 shard;
+          public TS(final TimeSeriesId id) {
+            this.id = id;
+            shard = new NumericMillisecondShard2(
+                new MillisecondTimeStamp(start), new MillisecondTimeStamp(end));
+            for (long ts = start; ts <= end; ts += interval) {
+              shard.add(ts, ts);
+            }
+          }
+          
+          @Override
+          public TimeSeriesId id() {
+            return id;
+          }
+
+          @Override
+          public Optional<Iterator<TimeSeriesValue<? extends TimeSeriesDataType>>> iterator(
+              final TypeToken<?> type) {
+            if (type == NumericType.TYPE) {
+              return Optional.of(shard.iterator());
+            }
+            return Optional.empty();
+          }
+
+          @Override
+          public Collection<Iterator<TimeSeriesValue<? extends TimeSeriesDataType>>> iterators() {
+            return Lists.newArrayList(shard.iterator());
+          }
+
+          @Override
+          public Collection<TypeToken<?>> types() {
+            return Lists.newArrayList(NumericType.TYPE);
+          }
+
+          @Override
+          public void close() {
+            // TODO Auto-generated method stub
+            
+          }
+          
+        }
+        
+        final List<TimeSeries> series = Lists.newArrayListWithCapacity(2);
+        series.add(new TS(ID_A));
+        series.add(new TS(ID_B));
+        return series;
+      }
+
+      @Override
+      public int parallelId() {
+        // TODO Auto-generated method stub
+        return 0;
+      }
+
+      @Override
+      public int sequenceId() {
+        // TODO Auto-generated method stub
+        return 0;
+      }
+      
+    }
+    return new Result();
+  }
 
   @SuppressWarnings("unchecked")
   public static void validateData(final IteratorGroups results, 
-                                  final long start, final long end,  
+                                  final long start, 
+                                  final long end,  
                                   final int order, 
                                   final long interval) {
     assertEquals(4, results.flattenedIterators().size());
@@ -148,6 +240,47 @@ public class IteratorTestUtils {
     count = 0;
     while (iterator.status() == IteratorStatus.HAS_DATA) {
       TimeSeriesValue<NumericType> v = iterator.next();
+      assertEquals(ts, v.timestamp().msEpoch());
+      assertEquals(ts, v.value().longValue());
+      ts += interval;
+      ++count;
+    }
+    assertEquals(((end - start) / interval) + 1, count);
+  }
+  
+  @SuppressWarnings("unchecked")
+  public static void validateData(final QueryResult results, 
+                                  final long start, 
+                                  final long end,  
+                                  final int order, 
+                                  final long interval) {
+    assertEquals(2, results.timeSeries().size());
+    
+    final Iterator<TimeSeries> series_iterator = results.timeSeries().iterator();
+    TimeSeries series = series_iterator.next();
+    assertSame(IteratorTestUtils.ID_A, series.id());
+    
+    long ts = start;
+    int count = 0;
+    Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> it = 
+        series.iterator(NumericType.TYPE).get();
+    while (it.hasNext()) {
+      TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+      assertEquals(ts, v.timestamp().msEpoch());
+      assertEquals(ts, v.value().longValue());
+      ts += interval;
+      ++count;
+    }
+    assertEquals(((end - start) / interval) + 1, count);
+    
+    series = series_iterator.next();
+    assertSame(IteratorTestUtils.ID_B, series.id());
+    
+    ts = start;
+    count = 0;
+    it = series.iterator(NumericType.TYPE).get();
+    while (it.hasNext()) {
+      TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
       assertEquals(ts, v.timestamp().msEpoch());
       assertEquals(ts, v.value().longValue());
       ts += interval;

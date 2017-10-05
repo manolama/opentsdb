@@ -15,32 +15,26 @@ package net.opentsdb.query.execution;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.Before;
 import org.junit.Test;
 
-import com.stumbleupon.async.TimeoutException;
-
-import net.opentsdb.data.TimeSeriesValue;
-import net.opentsdb.data.iterators.IteratorGroup;
-import net.opentsdb.data.iterators.IteratorGroups;
-import net.opentsdb.data.iterators.IteratorStatus;
 import net.opentsdb.data.iterators.IteratorTestUtils;
-import net.opentsdb.data.iterators.TimeSeriesIterator;
-import net.opentsdb.data.types.numeric.NumericType;
-import net.opentsdb.exceptions.QueryExecutionCanceled;
-import net.opentsdb.query.context.QueryContext;
+import net.opentsdb.query.QueryListener;
+import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryPipelineContext;
+import net.opentsdb.query.QueryResult;
+import net.opentsdb.query.context.QueryContext2;
 import net.opentsdb.query.execution.StorageQueryExecutor.Config;
-import net.opentsdb.query.execution.TestQueryExecutor.MockDownstream;
+import net.opentsdb.query.execution.TestQueryExecutor.MockPipeline;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.query.pojo.Filter;
@@ -52,10 +46,9 @@ import net.opentsdb.utils.JSON;
 
 public class TestStorageQueryExecutor extends BaseExecutorTest {
   
-  private MockDownstream<IteratorGroups> execution;
+  private MockPipeline execution;
   private TimeSeriesDataStore store;
-  private TimeSeriesQuery query;
-  private QueryContext context;
+  private QueryPipelineContext context;
   private Config config;
   private long ts_start;
   private long ts_end;
@@ -64,7 +57,7 @@ public class TestStorageQueryExecutor extends BaseExecutorTest {
   public void beforeLocal() {
     node = mock(ExecutionGraphNode.class);
     store = mock(TimeSeriesDataStore.class);
-    context = mock(QueryContext.class);
+    context = mock(QueryPipelineContext.class);
     config = (Config) Config.newBuilder()
         .setStorageId("MockStore")
         .setExecutorId("LocalStore")
@@ -100,21 +93,21 @@ public class TestStorageQueryExecutor extends BaseExecutorTest {
                 )
             )
         .build();
-    execution = new MockDownstream<IteratorGroups>(query);
-    when(store.runTimeSeriesQuery(context, query, span)).thenReturn(execution);
+    execution = new MockPipeline();
+    when(store.executeQuery(context)).thenReturn(execution);
   }
   
   @Test
   public void ctor() throws Exception {
     try {
-      new StorageQueryExecutor<IteratorGroups>(null);
+      new StorageQueryExecutor(null);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
     // no default config
     node = mock(ExecutionGraphNode.class);
     try {
-      new StorageQueryExecutor<IteratorGroups>(null);
+      new StorageQueryExecutor(null);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
@@ -124,176 +117,149 @@ public class TestStorageQueryExecutor extends BaseExecutorTest {
     when(registry.getPlugin(eq(TimeSeriesDataStore.class), anyString()))
       .thenReturn(null);
     try {
-      new StorageQueryExecutor<IteratorGroups>(null);
+      new StorageQueryExecutor(null);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
   }
   
-  @SuppressWarnings("unchecked")
   @Test
   public void executeGoodQuery() throws Exception {
-    final StorageQueryExecutor<IteratorGroups> executor = 
-        new StorageQueryExecutor<IteratorGroups>(node);
-    final QueryExecution<IteratorGroups> exec = 
-        executor.executeQuery(context, query, span);
+    final StorageQueryExecutor executor = new StorageQueryExecutor(node);
     
-    try {
-      exec.deferred().join(1);
-      fail("Expected TimeoutException");
-    } catch (TimeoutException e) { }
-    assertEquals(1, executor.outstandingRequests().size());
-    
-    final IteratorGroups data = 
-        IteratorTestUtils.generateData(ts_start, ts_end, 0, 300000);
-    execution.callback(data);
-    
-    final IteratorGroups results = exec.deferred().join(1);
-    assertEquals(4, results.flattenedIterators().size());
-    
-    IteratorGroup group = results.group(IteratorTestUtils.GROUP_A);
-    assertEquals(2, group.flattenedIterators().size());
-    assertSame(IteratorTestUtils.ID_A, group.flattenedIterators().get(0).id());
-    assertSame(IteratorTestUtils.ID_B, group.flattenedIterators().get(1).id());
-    
-    TimeSeriesIterator<NumericType> iterator = 
-        (TimeSeriesIterator<NumericType>) group.flattenedIterators().get(0);
-    assertEquals(ts_start, iterator.startTime().msEpoch());
-    assertEquals(ts_end, iterator.endTime().msEpoch());
-    long ts = ts_start;
-    int count = 0;
-    while (iterator.status() == IteratorStatus.HAS_DATA) {
-      TimeSeriesValue<NumericType> v = iterator.next();
-      assertEquals(ts, v.timestamp().msEpoch());
-      assertEquals(ts, v.value().longValue());
-      ts += 300000;
-      ++count;
+    AtomicBoolean completed = new AtomicBoolean();
+    AtomicBoolean fetched = new AtomicBoolean();
+    class TestListener implements QueryListener {
+
+      @Override
+      public void onComplete() {
+        completed.set(true);
+      }
+
+      @Override
+      public void onNext(QueryResult next) {
+        IteratorTestUtils.validateData(next, ts_start, ts_end, 0, 1000);
+        fetched.set(true);
+      }
+
+      @Override
+      public void onError(Throwable t) { }
+      
     }
-    assertEquals(25, count);
     
-    iterator = 
-        (TimeSeriesIterator<NumericType>) group.flattenedIterators().get(1);
-    assertEquals(ts_start, iterator.startTime().msEpoch());
-    assertEquals(ts_end, iterator.endTime().msEpoch());
-    ts = ts_start;
-    count = 0;
-    while (iterator.status() == IteratorStatus.HAS_DATA) {
-      TimeSeriesValue<NumericType> v = iterator.next();
-      assertEquals(ts, v.timestamp().msEpoch());
-      assertEquals(ts, v.value().longValue());
-      ts += 300000;
-      ++count;
-    }
-    assertEquals(25, count);
+    TestListener listener = new TestListener();
+    when(context.getListener()).thenReturn(listener);
     
-    group = results.group(IteratorTestUtils.GROUP_B);
-    assertEquals(2, group.flattenedIterators().size());
-    assertSame(IteratorTestUtils.ID_A, group.flattenedIterators().get(0).id());
-    assertSame(IteratorTestUtils.ID_B, group.flattenedIterators().get(1).id());
+    final QueryPipeline exec = executor.executeQuery(context);
+    assertEquals(1, executor.outstandingPipelines().size());
+    assertEquals(0, execution.fetched_next);
+    assertEquals(0, execution.closed);
+    assertFalse(completed.get());
+    assertFalse(fetched.get());
     
-    iterator = 
-        (TimeSeriesIterator<NumericType>) group.flattenedIterators().get(0);
-    assertEquals(ts_start, iterator.startTime().msEpoch());
-    assertEquals(ts_end, iterator.endTime().msEpoch());
-    ts = ts_start;
-    count = 0;
-    while (iterator.status() == IteratorStatus.HAS_DATA) {
-      TimeSeriesValue<NumericType> v = iterator.next();
-      assertEquals(ts, v.timestamp().msEpoch());
-      assertEquals(ts, v.value().longValue());
-      ts += 300000;
-      ++count;
-    }
-    assertEquals(25, count);
+    exec.fetchNext(0);
+    assertEquals(1, executor.outstandingPipelines().size());
+    assertEquals(1, execution.fetched_next);
+    assertEquals(0, execution.closed);
+    assertFalse(completed.get());
+    assertFalse(fetched.get());
     
-    iterator = 
-        (TimeSeriesIterator<NumericType>) group.flattenedIterators().get(1);
-    assertEquals(ts_start, iterator.startTime().msEpoch());
-    assertEquals(ts_end, iterator.endTime().msEpoch());
-    ts = ts_start;
-    count = 0;
-    while (iterator.status() == IteratorStatus.HAS_DATA) {
-      TimeSeriesValue<NumericType> v = iterator.next();
-      assertEquals(ts, v.timestamp().msEpoch());
-      assertEquals(ts, v.value().longValue());
-      ts += 300000;
-      ++count;
-    }
-    assertEquals(25, count);
+    execution.getListener().onNext(IteratorTestUtils.generateData(ts_start, ts_end, 1000));
+    assertEquals(1, executor.outstandingPipelines().size());
+    assertEquals(1, execution.fetched_next);
+    assertEquals(0, execution.closed);
+    assertFalse(completed.get());
+    assertTrue(fetched.get());
     
-    verify(store, times(1)).runTimeSeriesQuery(context, query, span);
-    assertFalse(execution.cancelled);
-    assertEquals(0, executor.outstandingRequests().size());
+    exec.fetchNext(0);
+    execution.getListener().onComplete();
+    assertEquals(0, executor.outstandingPipelines().size());
+    assertEquals(2, execution.fetched_next);
+    assertEquals(0, execution.closed);
+    assertTrue(completed.get());
+    assertTrue(fetched.get());
   }
   
   @Test
   public void executeException() throws Exception {
-    final StorageQueryExecutor<IteratorGroups> executor = 
-        new StorageQueryExecutor<IteratorGroups>(node);
-    final QueryExecution<IteratorGroups> exec = 
-        executor.executeQuery(context, query, span);
+    final StorageQueryExecutor executor = new StorageQueryExecutor(node);
+    AtomicBoolean completed = new AtomicBoolean();
+    AtomicBoolean fetched = new AtomicBoolean();
+    class TestListener implements QueryListener {
+      Throwable t;
+      
+      @Override
+      public void onComplete() {
+        completed.set(true);
+      }
+
+      @Override
+      public void onNext(QueryResult next) {
+        fetched.set(true);
+      }
+
+      @Override
+      public void onError(Throwable t) { 
+        this.t = t;
+      }
+      
+    }
     
-    try {
-      exec.deferred().join(1);
-      fail("Expected TimeoutException");
-    } catch (TimeoutException e) { }
-    assertEquals(1, executor.outstandingRequests().size());
+    TestListener listener = new TestListener();
+    when(context.getListener()).thenReturn(listener);
     
-    execution.callback(new IllegalStateException("Boo!"));
+    executor.executeQuery(context);
+    assertEquals(1, executor.outstandingPipelines().size());
+    assertEquals(0, execution.fetched_next);
+    assertEquals(0, execution.closed);
+    assertFalse(completed.get());
+    assertFalse(fetched.get());
     
-    try {
-      exec.deferred().join(1);
-      fail("Expected IllegalStateException");
-    } catch (IllegalStateException e) { }
-        
-    verify(store, times(1)).runTimeSeriesQuery(context, query, span);
-    assertFalse(execution.cancelled);
-    assertEquals(0, executor.outstandingRequests().size());
-  }
-  
-  @Test
-  public void executeCancel() throws Exception {
-    final StorageQueryExecutor<IteratorGroups> executor = 
-        new StorageQueryExecutor<IteratorGroups>(node);
-    final QueryExecution<IteratorGroups> exec = 
-        executor.executeQuery(context, query, span);
-    
-    try {
-      exec.deferred().join(1);
-      fail("Expected TimeoutException");
-    } catch (TimeoutException e) { }
-    assertEquals(1, executor.outstandingRequests().size());
-    
-    execution.cancel();
-    
-    try {
-      exec.deferred().join(1);
-      fail("Expected QueryExecutionCanceled");
-    } catch (QueryExecutionCanceled e) { }
-        
-    verify(store, times(1)).runTimeSeriesQuery(context, query, span);
-    assertTrue(execution.cancelled);
-    assertEquals(0, executor.outstandingRequests().size());
+    execution.getListener().onError(new IllegalStateException("Boo!"));
+    assertEquals(0, executor.outstandingPipelines().size());
+    assertEquals(0, execution.fetched_next);
+    assertEquals(0, execution.closed);
+    assertFalse(completed.get());
+    assertFalse(fetched.get());
+    assertTrue(listener.t instanceof IllegalStateException);
   }
   
   @Test
   public void executeClose() throws Exception {
-    final StorageQueryExecutor<IteratorGroups> executor = 
-        new StorageQueryExecutor<IteratorGroups>(node);
-    final QueryExecution<IteratorGroups> exec = 
-        executor.executeQuery(context, query, span);
-    
-    try {
-      exec.deferred().join(1);
-      fail("Expected TimeoutException");
-    } catch (TimeoutException e) { }
-    assertEquals(1, executor.outstandingRequests().size());
-    
-    executor.close().join();
-    
+    final StorageQueryExecutor executor = new StorageQueryExecutor(node);
+    AtomicBoolean completed = new AtomicBoolean();
+    AtomicBoolean fetched = new AtomicBoolean();
+    class TestListener implements QueryListener {
+      
+      @Override
+      public void onComplete() {
+        completed.set(true);
+      }
 
-    verify(store, times(1)).runTimeSeriesQuery(context, query, span);
-    assertTrue(execution.cancelled);
-    assertEquals(0, executor.outstandingRequests().size());
+      @Override
+      public void onNext(QueryResult next) {
+        fetched.set(true);
+      }
+
+      @Override
+      public void onError(Throwable t) { }
+      
+    }
+    
+    TestListener listener = new TestListener();
+    when(context.getListener()).thenReturn(listener);
+    final QueryPipeline exec = executor.executeQuery(context);
+    assertEquals(1, executor.outstandingPipelines().size());
+    assertEquals(0, execution.fetched_next);
+    assertEquals(0, execution.closed);
+    assertFalse(completed.get());
+    assertFalse(fetched.get());
+    
+    exec.close();
+    assertEquals(0, executor.outstandingPipelines().size());
+    assertEquals(0, execution.fetched_next);
+    assertEquals(1, execution.closed);
+    assertTrue(completed.get());
+    assertFalse(fetched.get());
   }
   
   @Test

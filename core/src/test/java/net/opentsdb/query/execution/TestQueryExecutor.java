@@ -15,6 +15,10 @@ package net.opentsdb.query.execution;
 import org.junit.Ignore;
 
 import net.opentsdb.exceptions.QueryExecutionCanceled;
+import net.opentsdb.query.AbstractQueryPipeline;
+import net.opentsdb.query.QueryListener;
+import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
 
 @Ignore
@@ -34,6 +38,33 @@ public class TestQueryExecutor {
         cancelled = true;
         callback(new QueryExecutionCanceled("Cancelled!", 0));
       }
+    }
+    
+  }
+  
+  public static class MockPipeline extends AbstractQueryPipeline {
+    public int fetched_next = 0;
+    public int closed = 0;
+    
+    @Override
+    public void fetchNext(final int parallel_id) {
+      fetched_next++;
+    }
+
+    @Override
+    public QueryPipeline getMultiPassClone(final QueryListener listener,
+                                           final boolean cache) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public void close() {
+      if (downstream != null) {
+        downstream.close();
+      }
+      listener.onComplete();
+      closed++;
     }
     
   }

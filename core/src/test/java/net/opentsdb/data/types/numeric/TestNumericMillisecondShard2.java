@@ -1,0 +1,267 @@
+// This file is part of OpenTSDB.
+// Copyright (C) 2017  The OpenTSDB Authors.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 2.1 of the License, or (at your
+// option) any later version.  This program is distributed in the hope that it
+// will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser
+// General Public License for more details.  You should have received a copy
+// of the GNU Lesser General Public License along with this program.  If not,
+// see <http://www.gnu.org/licenses/>.
+package net.opentsdb.data.types.numeric;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import net.opentsdb.data.MillisecondTimeStamp;
+import net.opentsdb.data.TimeSeriesValue;
+import net.opentsdb.data.TimeStamp;
+import net.opentsdb.data.types.numeric.NumericType;
+
+public class TestNumericMillisecondShard2 {
+
+  private TimeStamp start;
+  private TimeStamp end;
+  
+  @Before
+  public void before() throws Exception {
+    start = new MillisecondTimeStamp(0L);
+    end = new MillisecondTimeStamp(3600000);
+  }
+  
+  @Test
+  public void ctor() throws Exception {
+    NumericMillisecondShard2 shard = new NumericMillisecondShard2(start, end);
+    assertEquals(4, shard.encodeOn());
+    assertEquals(4, shard.offsets().length);
+    assertEquals(4, shard.values().length);
+    assertEquals(0L, shard.startTime().msEpoch());
+    assertEquals(3600000, shard.endTime().msEpoch());
+    assertEquals(-1, shard.order());
+    try {
+      shard.iterator().next();
+      fail("Expected NoSuchElementException");
+    } catch (NoSuchElementException e) { }
+    
+    shard = new NumericMillisecondShard2(start, end, 42);
+    assertEquals(4, shard.encodeOn());
+    assertEquals(4, shard.offsets().length);
+    assertEquals(4, shard.values().length);
+    assertEquals(0L, shard.startTime().msEpoch());
+    assertEquals(3600000, shard.endTime().msEpoch());
+    assertEquals(42, shard.order());
+    try {
+      shard.iterator().next();
+      fail("Expected NoSuchElementException");
+    } catch (NoSuchElementException e) { }
+    
+    shard = new NumericMillisecondShard2(start, end, 42, 100);
+    assertEquals(4, shard.encodeOn());
+    assertEquals(400, shard.offsets().length);
+    assertEquals(400, shard.values().length);
+    assertEquals(0L, shard.startTime().msEpoch());
+    assertEquals(3600000, shard.endTime().msEpoch());
+    assertEquals(42, shard.order());
+    try {
+      shard.iterator().next();
+      fail("Expected NoSuchElementException");
+    } catch (NoSuchElementException e) { }
+    
+    end = new MillisecondTimeStamp(1L);
+    shard = new NumericMillisecondShard2(start, end, 42, 0);
+    end = new MillisecondTimeStamp(86400000L);
+    assertEquals(1, shard.encodeOn());
+    assertEquals(0, shard.offsets().length);
+    assertEquals(0, shard.values().length);
+    assertEquals(0L, shard.startTime().msEpoch());
+    assertEquals(1L, shard.endTime().msEpoch());
+    assertEquals(42, shard.order());
+    try {
+      shard.iterator().next();
+      fail("Expected NoSuchElementException");
+    } catch (NoSuchElementException e) { }
+    
+    try {
+      shard = new NumericMillisecondShard2(null, end, 42, 100);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    try {
+      shard = new NumericMillisecondShard2(start, null, 42, 100);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    try {
+      shard = new NumericMillisecondShard2(start, end, 42, -1);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+  }
+ 
+  @Test
+  public void add() throws Exception {
+    start = new MillisecondTimeStamp(1486045800000L);
+    end = new MillisecondTimeStamp(1486045900000L);
+    NumericMillisecondShard2 shard = new NumericMillisecondShard2(start, end);
+    assertEquals(3, shard.encodeOn());
+    assertEquals(3, shard.offsets().length);
+    assertEquals(4, shard.values().length);
+    assertEquals(1486045800000L, shard.startTime().msEpoch());
+    assertEquals(1486045900000L, shard.endTime().msEpoch());
+    
+    assertArrayEquals(new byte[] { 0, 0, 0 }, shard.offsets());
+    assertArrayEquals(new byte[] { 0, 0, 0, 0 }, shard.values());
+    
+    shard.add(1486045801000L, 42);
+    assertEquals(6, shard.offsets().length); // expanded
+    assertEquals(4, shard.values().length);
+    assertArrayEquals(new byte[] { 1, -12, 0, 0, 0, 0 }, shard.offsets());
+    assertArrayEquals(new byte[] { 42, 0, 0, 0 }, shard.values());
+    
+    shard.add(1486045871000L, 9866.854);
+    assertEquals(12, shard.offsets().length); // expanded
+    assertEquals(16, shard.values().length);
+    assertArrayEquals(new byte[] { 1, -12, 0, -118, -84, 15, 0, 0, 0, 0, 0, 0 }, 
+        shard.offsets());
+    assertArrayEquals(new byte[] { 42, 64, -61, 69, 109, 79, -33, 59, 
+        100, 0, 0, 0, 0, 0, 0, 0 }, shard.values());
+    
+    // less than not allowed
+    try {
+      shard.add(1486045800000L, 1);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+
+    // same not allowed
+    try {
+      shard.add(1486045871000L, 9866.854);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    // too late
+    try {
+      shard.add(1486045900001L, 1);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    // too early
+    shard = new NumericMillisecondShard2(start, end);
+    try {
+      shard.add(1486045799999L, 1);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    // Ugly to test, so use the next() tests for more checks.
+  }
+  
+  @Test
+  public void iterators() throws Exception {
+    start = new MillisecondTimeStamp(1486045800000L);
+    end = new MillisecondTimeStamp(1486046000000L);
+    NumericMillisecondShard2 shard = new NumericMillisecondShard2(start, end);
+    shard.add(1486045801000L, 42);
+    shard.add(1486045871000L, 9866.854);
+    shard.add(1486045881000L, -128);
+    
+    Iterator<TimeSeriesValue<?>> iterator = shard.iterator();
+    TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045801000L, v.timestamp().msEpoch());
+    assertTrue(v.value().isInteger());
+    assertEquals(42, v.value().longValue());
+    
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045871000L, v.timestamp().msEpoch());
+    assertFalse(v.value().isInteger());
+    assertEquals(9866.854, v.value().doubleValue(), 0.00001);
+    
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045881000L, v.timestamp().msEpoch());
+    assertTrue(v.value().isInteger());
+    assertEquals(-128, v.value().longValue());
+    
+    // add after is ok BUT we need a new iterator!
+    shard.add(1486045891000L, Long.MAX_VALUE);
+    assertFalse(iterator.hasNext());
+    
+    // add more of diff values for testing
+    shard.add(1486045891050L, Long.MIN_VALUE);
+    shard.add(1486045901571L, Double.MAX_VALUE);
+    shard.add(1486045901572L, Double.MIN_VALUE);
+    shard.add(1486045902000L, 0);
+    shard.add(1486045903000L, 0f);
+    shard.add(1486045904000L, Double.POSITIVE_INFINITY);
+    shard.add(1486045905000L, Double.NaN);
+    
+    iterator = shard.iterator();
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045801000L, v.timestamp().msEpoch());
+    assertTrue(v.value().isInteger());
+    assertEquals(42, v.value().longValue());
+    
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045871000L, v.timestamp().msEpoch());
+    assertFalse(v.value().isInteger());
+    assertEquals(9866.854, v.value().doubleValue(), 0.00001);
+    
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045881000L, v.timestamp().msEpoch());
+    assertTrue(v.value().isInteger());
+    assertEquals(-128, v.value().longValue());
+    
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045891000L, v.timestamp().msEpoch());
+    assertTrue(v.value().isInteger());
+    assertEquals(Long.MAX_VALUE, v.value().longValue());
+        
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045891050L, v.timestamp().msEpoch());
+    assertTrue(v.value().isInteger());
+    assertEquals(Long.MIN_VALUE, v.value().longValue());
+        
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045901571L, v.timestamp().msEpoch());
+    assertFalse(v.value().isInteger());
+    assertEquals(Double.MAX_VALUE, v.value().doubleValue(), 0.00001);
+        
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045901572L, v.timestamp().msEpoch());
+    assertFalse(v.value().isInteger());
+    assertEquals(Double.MIN_NORMAL, v.value().doubleValue(), 0.00001);
+        
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045902000L, v.timestamp().msEpoch());
+    assertTrue(v.value().isInteger());
+    assertEquals(0, v.value().longValue());
+        
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045903000L, v.timestamp().msEpoch());
+    assertFalse(v.value().isInteger());
+    assertEquals(0, v.value().doubleValue(), 0.0001);
+        
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045904000L, v.timestamp().msEpoch());
+    assertFalse(v.value().isInteger());
+    assertTrue(Double.isInfinite(v.value().doubleValue()));
+        
+    v = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1486045905000L, v.timestamp().msEpoch());
+    assertFalse(v.value().isInteger());
+    assertTrue(Double.isNaN(v.value().doubleValue()));
+    
+    try {
+      v = (TimeSeriesValue<NumericType>) iterator.next();
+      fail("Expected NoSuchElementException");
+    } catch (NoSuchElementException e) { }
+  }
+
+}

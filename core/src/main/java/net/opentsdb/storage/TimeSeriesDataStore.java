@@ -18,10 +18,8 @@ import io.opentracing.Span;
 import net.opentsdb.core.TsdbPlugin;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSeriesValue;
-import net.opentsdb.data.iterators.IteratorGroups;
-import net.opentsdb.query.context.QueryContext;
-import net.opentsdb.query.execution.QueryExecution;
-import net.opentsdb.query.pojo.TimeSeriesQuery;
+import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.stats.TsdbTrace;
 
 /**
@@ -55,17 +53,5 @@ public abstract class TimeSeriesDataStore extends TsdbPlugin {
                                          final TsdbTrace trace, 
                                          final Span upstream_span);
   
-  /**
-   * Executes the given query against the data store.
-   * @param context A non-null query context.
-   * @param query A non-null query to execute.
-   * @param upstream_span An optional tracer span.
-   * @return A query execution with a deferred containing the results or an
-   * exception.
-   */
-  public abstract QueryExecution<IteratorGroups> runTimeSeriesQuery(
-      final QueryContext context,
-      final TimeSeriesQuery query,
-      final Span upstream_span);
-  
+  public abstract QueryPipeline executeQuery(final QueryPipelineContext context); 
 }

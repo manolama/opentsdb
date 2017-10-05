@@ -43,7 +43,9 @@ import java.util.Set;
 @JsonInclude(Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonDeserialize(builder = TimeSeriesQuery.Builder.class)
-public class TimeSeriesQuery extends Validatable implements Comparable<TimeSeriesQuery> {
+public class TimeSeriesQuery extends Validatable implements Comparable<TimeSeriesQuery>, 
+  net.opentsdb.query.TimeSeriesQuery {
+  
   /** An optional name for the query */
   private String name;
   

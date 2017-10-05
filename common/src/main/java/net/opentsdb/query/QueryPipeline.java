@@ -33,10 +33,11 @@ public interface QueryPipeline {
   public QueryListener getListener();
   
   /**
-   * Travels downstream the pipeline to fetch the next set of results. 
+   * Travels downstream the pipeline to fetch the next set of results.
+   * @param parallel_id TODO. 
    * @throws IllegalStateException if no listener was set on this component.
    */
-  public void fetchNext();
+  public void fetchNext(final int parallel_id);
   
   /**
    * Returns a clone of all downstream components for multi-pass operations.
@@ -45,6 +46,10 @@ public interface QueryPipeline {
    * @return A cloned downstream pipeline.
    */
   public QueryPipeline getMultiPassClone(final QueryListener listener, final boolean cache);
+  
+  public void addAfter(final QueryPipeline pipeline);
+  
+  public void addBefore(final QueryPipeline pipeline);
   
   /**
    * Closes the pipeline and releases all resources.

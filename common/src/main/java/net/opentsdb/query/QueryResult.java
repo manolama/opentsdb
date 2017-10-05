@@ -39,4 +39,10 @@ public interface QueryResult {
    * @return A collection of zero or more time series.
    */
   public Collection<TimeSeries> timeSeries();
+  
+  public int parallelId();
+  
+  public int sequenceId();
+  
+  // TODO meta about the results
 }

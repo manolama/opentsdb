@@ -35,6 +35,7 @@ import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.data.DataMerger;
 import net.opentsdb.data.DataShardMerger;
+import net.opentsdb.data.TimeSeriesSerDes;
 import net.opentsdb.data.iterators.IteratorGroups;
 import net.opentsdb.data.types.numeric.NumericMergeLargest;
 import net.opentsdb.query.execution.CachingQueryExecutor;
@@ -394,6 +395,10 @@ public class Registry {
   
   public TimeSeriesSerdes<?> getSerdes(final String id) {
     return serdes.get(id);
+  }
+  
+  public TimeSeriesSerDes getSerdes2(final String id) {
+    throw new UnsupportedOperationException("Not implemented yet");
   }
   
   /**

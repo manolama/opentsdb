@@ -42,6 +42,7 @@ import com.stumbleupon.async.Deferred;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.query.execution.QueryExecutor;
+import net.opentsdb.query.execution.QueryExecutor2;
 import net.opentsdb.query.execution.QueryExecutorFactory;
 
 /**
@@ -283,6 +284,10 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
     DefaultEdge target = downstream.iterator().next();
     String exec = graph.getEdgeTarget(target);
     return executors.get(exec);
+  }
+  
+  public QueryExecutor2 getDownstreamExecutor2(final String executor_id) {
+    throw new UnsupportedOperationException("Not implemented yet");
   }
   
   /** The TSDB this graph belongs to. */
