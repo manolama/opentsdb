@@ -5,6 +5,7 @@ import net.opentsdb.query.plan.SplitMetricPlanner;
 public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext {
 
   net.opentsdb.query.pojo.TimeSeriesQuery plan;
+  int parallel_id = 0;
   
   public PerMetricQueryPipelineContext(TimeSeriesQuery original_query,
       QueryContext context, QueryListener sink) {
@@ -23,6 +24,14 @@ public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext 
   @Override
   public int parallelQueries() {
     return plan.subQueries().size();
+  }
+  
+  @Override
+  public synchronized int nextParallelId() {
+    if (parallel_id >= plan.subQueries().size()) {
+      parallel_id = 0;
+    }
+    return parallel_id++;
   }
 
   @Override

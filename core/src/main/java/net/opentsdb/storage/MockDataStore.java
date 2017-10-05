@@ -398,6 +398,11 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
     }
 
     @Override
+    public int parallelism() {
+      return context.parallelQueries();
+    }
+    
+    @Override
     public void run() {
       final net.opentsdb.query.pojo.TimeSeriesQuery query = 
           ((net.opentsdb.query.pojo.TimeSeriesQuery) context.getQuery(parallel_id));
@@ -494,17 +499,13 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
         break;
       case CLIENT_STREAM_PARALLEL:
         if (parallel_id < context.parallelQueries() - 1) {
-          pipeline.fetchNext(parallel_id + 1);
+          pipeline.fetchNext(context.nextParallelId());
         }
         break;
       case SERVER_SYNC_STREAM:
       case SERVER_SYNC_STREAM_PARALLEL:
       case SERVER_ASYNC_STREAM:
-        if (parallel_id < context.parallelQueries() - 1) {
-          pipeline.fetchNext(parallel_id + 1);
-        } else {
-          pipeline.fetchNext(0);
-        }
+        pipeline.fetchNext(context.nextParallelId());
       }
     }
     

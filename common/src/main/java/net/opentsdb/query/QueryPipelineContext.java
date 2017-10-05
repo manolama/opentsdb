@@ -12,6 +12,8 @@ public interface QueryPipelineContext {
   
   public int parallelQueries();
   
+  public int nextParallelId();
+  
   public void close();
   
 }

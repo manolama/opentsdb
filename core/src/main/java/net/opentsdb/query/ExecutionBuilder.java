@@ -45,7 +45,6 @@ public class ExecutionBuilder {
     private net.opentsdb.query.pojo.TimeSeriesQuery query;
     private QueryMode mode;
     private QueryPipelineContext ctx;
-    private int parallel_idx;
     private QueryPipeline downstream;
     
     LocalContext(final QueryListener sink, net.opentsdb.query.pojo.TimeSeriesQuery query, QueryMode mode, QueryExecutor2 executor) {
@@ -70,17 +69,13 @@ public class ExecutionBuilder {
     }
 
     @Override
-    public void fetchNext() {
-      if (parallel_idx >= ctx.parallelQueries() && mode != QueryMode.SINGLE) {
-        parallel_idx = 0;
-      }
-      
+    public void fetchNext() {      
       if (mode == QueryMode.SINGLE && ctx.parallelQueries() > 0) {
         for (int i = 0; i < ctx.parallelQueries(); i++) {
           downstream.fetchNext(i);
         }
       } else {
-        downstream.fetchNext(parallel_idx++);
+        downstream.fetchNext(ctx.nextParallelId());
       }
     }
 
@@ -146,6 +141,11 @@ public class ExecutionBuilder {
       @Override
       public int sequenceId() {
         return 0;
+      }
+
+      @Override
+      public int parallelism() {
+        return query.subQueries().size();
       }
       
     }

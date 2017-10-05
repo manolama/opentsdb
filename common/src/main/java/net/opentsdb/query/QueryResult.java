@@ -40,6 +40,8 @@ public interface QueryResult {
    */
   public Collection<TimeSeries> timeSeries();
   
+  public int parallelism();
+  
   public int parallelId();
   
   public int sequenceId();

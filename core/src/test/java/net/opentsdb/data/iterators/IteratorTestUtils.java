@@ -165,6 +165,12 @@ public class IteratorTestUtils {
         // TODO Auto-generated method stub
         return 0;
       }
+
+      @Override
+      public int parallelism() {
+        // TODO Auto-generated method stub
+        return 0;
+      }
       
     }
     return new Result();
