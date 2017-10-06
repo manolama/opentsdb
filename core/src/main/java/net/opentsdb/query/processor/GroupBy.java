@@ -47,10 +47,8 @@ public class GroupBy implements net.opentsdb.query.TimeSeriesProcessor, QueryLis
         (net.opentsdb.query.pojo.TimeSeriesQuery) 
         downstream.context().getQuery();
     
-    metric_keys = 
-        Maps.newHashMapWithExpectedSize(query.getMetrics().size());
+    metric_keys = Maps.newHashMapWithExpectedSize(query.getMetrics().size());
     
-    // TODO - this can be optimized by making the filters a map
     for (final Metric metric : query.getMetrics()) {
       Filter filter_set = query.getFilter(metric.getFilter());
       
@@ -295,7 +293,7 @@ public class GroupBy implements net.opentsdb.query.TimeSeriesProcessor, QueryLis
           
           long next_next_ts = Long.MAX_VALUE;
           long sum = 0;
-          for (int i = 0; i < sources.size(); i++) {
+          for (int i = 0; i < iterator_max; i++) {
             if (values[i] == null) {
               // TODO - fill
               continue;

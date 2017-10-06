@@ -11,6 +11,7 @@ import net.opentsdb.query.execution.QueryExecutor2;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.query.pojo.Filter;
 import net.opentsdb.query.processor.GroupBy;
+import net.opentsdb.query.processor.JexlExpression;
 
 public class ExecutionBuilder {
 
@@ -67,14 +68,19 @@ public class ExecutionBuilder {
         }
       }
       
-      if (gby) {
-        System.out.println("ADDING GROUP BY");
-        downstream = new GroupBy(downstream, sink);
+      if (query.getExpressions() != null && query.getExpressions().size() > 0) {
+        System.out.println("ADDING EXP");
+        downstream = new JexlExpression(downstream, sink);
       }
+//      
+//      if (gby) {
+//        System.out.println("ADDING GROUP BY");
+//        downstream = new GroupBy(downstream, sink);
+//      }
       
-      if (mode == QueryMode.SINGLE && ctx.parallelQueries() > 0) {
-        downstream = new SingleAccumulator(downstream);
-      }
+//      if (mode == QueryMode.SINGLE && ctx.parallelQueries() > 0) {
+//        downstream = new SingleAccumulator(downstream);
+//      }
     }
     
     @Override

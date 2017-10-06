@@ -18,11 +18,18 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map.Entry;
+import java.util.Set;
 
+import org.jgrapht.EdgeFactory;
+import org.jgrapht.experimental.dag.DirectedAcyclicGraph;
+import org.jgrapht.graph.DefaultEdge;
+import org.jgrapht.traverse.DepthFirstIterator;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.google.common.collect.Lists;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
@@ -40,6 +47,7 @@ import net.opentsdb.query.QueryListener;
 import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.filter.TagVFilter;
+import net.opentsdb.query.pojo.Expression;
 import net.opentsdb.query.pojo.Filter;
 import net.opentsdb.query.pojo.Metric;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
@@ -71,7 +79,8 @@ public class TestMockStore {
     TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
         .setTime(Timespan.newBuilder()
             .setStart("1483228800000")
-            .setEnd("1483236000000"))
+            .setEnd("1483236000000")
+            .setAggregator("sum"))
         .addMetric(Metric.newBuilder()
             .setMetric("sys.cpu.user")
             .setFilter("f1")
@@ -80,6 +89,9 @@ public class TestMockStore {
             .setMetric("web.requests")
             .setFilter("f1")
             .setId("m2"))
+        .addExpression(Expression.newBuilder()
+            .setExpression("m1 / m2")
+            .setId("e1"))
         .addFilter(Filter.newBuilder()
             .setId("f1")
             .addFilter(TagVFilter.newBuilder()
@@ -90,6 +102,7 @@ public class TestMockStore {
                 )
             )
         .build();
+    query.validate();
     
     class TestListener implements QueryListener {
       QueryContext ctx;
@@ -120,8 +133,7 @@ public class TestMockStore {
 
       @Override
       public void onError(Throwable t) {
-        // TODO Auto-generated method stub
-        
+        t.printStackTrace();
       }
       
     }
@@ -136,8 +148,61 @@ public class TestMockStore {
     listener.ctx = ctx;
     ctx.fetchNext();
     
-    listener.completed.join();
+    listener.completed.join(1000);
     mds.shutdown().join();
+  }
+  
+  @Test
+  public void bar() throws Exception {
+    class ExpVert {
+      String id;
+      List<Integer> sources = Lists.newArrayList();
+      
+      public ExpVert(String id, int... is) { 
+        this.id = id;
+        for (int i = 0; i < is.length; i++) {
+          sources.add(is[i]);
+          System.out.println("Storing " + is[i] + " for " + id);
+        }
+      }
+      
+      @Override
+      public int hashCode() {
+        return id.hashCode();
+      }
+      
+      @Override
+      public boolean equals(final Object obj) {
+        return ((ExpVert) obj).id.equals(id);
+      }
+    }
+    
+    DirectedAcyclicGraph<ExpVert, DefaultEdge> graph = 
+        new DirectedAcyclicGraph<ExpVert, DefaultEdge>(DefaultEdge.class);
+    graph.addVertex(new ExpVert("a", 1, 2));  // 1 + 2
+    graph.addVertex(new ExpVert("b", 3, 4));  // 3 + 4
+    graph.addVertex(new ExpVert("c", 5, 6));  // 5 + 6
+    graph.addVertex(new ExpVert("e1"));
+    graph.addVertex(new ExpVert("e2"));
+    
+    graph.addEdge(new ExpVert("e1"), new ExpVert("a"));
+    graph.addEdge(new ExpVert("e1"), new ExpVert("b"));
+    graph.addEdge(new ExpVert("e2"), new ExpVert("c"));
+    graph.addEdge(new ExpVert("e2"), new ExpVert("e1"));
+    
+    Set<DefaultEdge> ex = graph.incomingEdgesOf(new ExpVert("a"));
+    System.out.println(graph.getEdgeTarget(ex.iterator().next()).id);
+    
+    final DepthFirstIterator<ExpVert, DefaultEdge> df_iterator = 
+        new DepthFirstIterator<ExpVert, DefaultEdge>(graph);
+    while (df_iterator.hasNext()) {
+      final ExpVert vertex = df_iterator.next();
+      final Set<DefaultEdge> oeo = graph.incomingEdgesOf(vertex);
+      for (DefaultEdge e : oeo) {
+        System.out.println("Vert: " + vertex.id + " " + vertex.sources + "  EDGE: " + graph.getEdgeSource(e).id + " -> " + 
+            graph.getEdgeTarget(e).id);
+      }
+    }
   }
   
   @Test
