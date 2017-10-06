@@ -162,8 +162,8 @@ public class GroupBy implements net.opentsdb.query.TimeSeriesProcessor, QueryLis
     void group() {
       for (final TimeSeries series : next.timeSeries()) {
         final StringBuilder buf = new StringBuilder()
-            .append(series.id().metrics().get(0));
-        final List<String> keys = metric_keys.get(series.id().metrics().get(0));
+            .append(series.id().metric());
+        final List<String> keys = metric_keys.get(series.id().metric());
         
         boolean matched = true;
         for (final String key : keys) {

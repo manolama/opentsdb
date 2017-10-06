@@ -392,7 +392,7 @@ public class TestJoiner {
     Joiner joiner = new Joiner(config);
     
     final TimeSeriesId id = BaseTimeSeriesId.newBuilder()
-        .addMetric("sys.cpu.user")
+        .setMetric("sys.cpu.user")
         .build();
     
     assertEquals("", joiner.joinKey(id));

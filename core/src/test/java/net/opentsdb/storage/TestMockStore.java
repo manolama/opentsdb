@@ -113,9 +113,9 @@ public class TestMockStore {
           }
         }
         System.out.println("------------------------------");
-        //if (next.parallelId() + 1 >= next.parallelism()) {
-        //  ctx.fetchNext();
-        //}
+        if (next.parallelId() + 1 >= next.parallelism()) {
+          ctx.fetchNext();
+        }
       }
 
       @Override
@@ -129,7 +129,7 @@ public class TestMockStore {
     TestListener listener = new TestListener();
     QueryContext ctx = new ExecutionBuilder()
         .setQuery(query)
-        .setMode(QueryMode.SINGLE)
+        .setMode(QueryMode.CLIENT_STREAM_PARALLEL)
         .setExecutor(mds)
         .setQueryListener(listener)
         .build();
@@ -183,7 +183,7 @@ public class TestMockStore {
           long timestamp = start_ts;
           int values = 0;
           
-          assertEquals("sys.cpu.user", ts.id().metrics().get(0));
+          assertEquals("sys.cpu.user", ts.id().metric());
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
             TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
@@ -267,9 +267,9 @@ public class TestMockStore {
           int values = 0;
           
           if (i > 3) {
-            assertEquals("web.requests", ts.id().metrics().get(0));
+            assertEquals("web.requests", ts.id().metric());
           } else {
-            assertEquals("sys.cpu.user", ts.id().metrics().get(0));
+            assertEquals("sys.cpu.user", ts.id().metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -356,9 +356,9 @@ public class TestMockStore {
           int values = 0;
           
           if (next.parallelId() % 2 == 0) {
-            assertEquals("sys.cpu.user", ts.id().metrics().get(0));
+            assertEquals("sys.cpu.user", ts.id().metric());
           } else {
-            assertEquals("web.requests", ts.id().metrics().get(0));
+            assertEquals("web.requests", ts.id().metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -450,9 +450,9 @@ public class TestMockStore {
           int values = 0;
           
           if (on_next % 2 == 0) {
-            assertEquals("sys.cpu.user", ts.id().metrics().get(0));
+            assertEquals("sys.cpu.user", ts.id().metric());
           } else {
-            assertEquals("web.requests", ts.id().metrics().get(0));
+            assertEquals("web.requests", ts.id().metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -545,9 +545,9 @@ public class TestMockStore {
           int values = 0;
           
           if (on_next % 2 == 0) {
-            assertEquals("sys.cpu.user", ts.id().metrics().get(0));
+            assertEquals("sys.cpu.user", ts.id().metric());
           } else {
-            assertEquals("web.requests", ts.id().metrics().get(0));
+            assertEquals("web.requests", ts.id().metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -636,9 +636,9 @@ public class TestMockStore {
           int values = 0;
           
           if (on_next % 2 == 0) {
-            assertEquals("sys.cpu.user", ts.id().metrics().get(0));
+            assertEquals("sys.cpu.user", ts.id().metric());
           } else {
-            assertEquals("web.requests", ts.id().metrics().get(0));
+            assertEquals("web.requests", ts.id().metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -727,9 +727,9 @@ public class TestMockStore {
           int values = 0;
           
           if (on_next % 2 == 0) {
-            assertEquals("sys.cpu.user", ts.id().metrics().get(0));
+            assertEquals("sys.cpu.user", ts.id().metric());
           } else {
-            assertEquals("web.requests", ts.id().metrics().get(0));
+            assertEquals("web.requests", ts.id().metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -798,7 +798,7 @@ public class TestMockStore {
     assertEquals(4 * 4 * 4, mds.getDatabase().size());
     
     TimeSeriesId id = BaseTimeSeriesId.newBuilder()
-        .addMetric("unit.test")
+        .setMetric("unit.test")
         .addTags("dc", "lga")
         .addTags("host", "db01")
         .build();
