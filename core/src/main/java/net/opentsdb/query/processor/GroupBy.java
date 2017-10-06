@@ -25,20 +25,20 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.types.numeric.MutableNumericType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryListener;
-import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.query.pojo.Filter;
 import net.opentsdb.query.pojo.Metric;
 
-public class GroupBy implements net.opentsdb.query.TimeSeriesProcessor, QueryListener, QueryPipeline {
+public class GroupBy implements net.opentsdb.query.TimeSeriesProcessor, QueryListener, QueryNode {
 
   private QueryListener upstream;
-  private QueryPipeline downstream;
+  private QueryNode downstream;
   private final Map<String, List<String>> metric_keys;
   
-  public GroupBy(QueryPipeline downstream, QueryListener sink) {
+  public GroupBy(QueryNode downstream, QueryListener sink) {
     downstream.setListener(this);
     this.downstream = downstream;
     upstream = sink;
@@ -79,24 +79,12 @@ public class GroupBy implements net.opentsdb.query.TimeSeriesProcessor, QueryLis
   }
 
   @Override
-  public QueryPipeline getMultiPassClone(QueryListener listener,
+  public QueryNode getMultiPassClone(QueryListener listener,
       boolean cache) {
     // TODO Auto-generated method stub
     return null;
   }
-
-  @Override
-  public void addAfter(QueryPipeline pipeline) {
-    // TODO Auto-generated method stub
-    
-  }
-
-  @Override
-  public void addBefore(QueryPipeline pipeline) {
-    // TODO Auto-generated method stub
-    
-  }
-
+  
   @Override
   public void close() {
     downstream.close();

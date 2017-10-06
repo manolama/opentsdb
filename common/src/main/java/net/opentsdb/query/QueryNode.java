@@ -13,11 +13,11 @@
 package net.opentsdb.query;
 
 /**
- * The entry point or a component in a query pipeline.
+ * TODO 
  * 
  * @since 3.0
  */
-public interface QueryPipeline {
+public interface QueryNode {
 
   public QueryPipelineContext context();
   
@@ -47,11 +47,7 @@ public interface QueryPipeline {
    * @param cache Whether or not the downstream clone should cache it's results.
    * @return A cloned downstream pipeline.
    */
-  public QueryPipeline getMultiPassClone(final QueryListener listener, final boolean cache);
-  
-  public void addAfter(final QueryPipeline pipeline);
-  
-  public void addBefore(final QueryPipeline pipeline);
+  public QueryNode getMultiPassClone(final QueryListener listener, final boolean cache);
   
   /**
    * Closes the pipeline and releases all resources.

@@ -15,9 +15,9 @@ package net.opentsdb.query.execution;
 import org.junit.Ignore;
 
 import net.opentsdb.exceptions.QueryExecutionCanceled;
-import net.opentsdb.query.AbstractQueryPipeline;
+import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryListener;
-import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
@@ -43,7 +43,7 @@ public class TestQueryExecutor {
     
   }
   
-  public static class MockPipeline extends AbstractQueryPipeline {
+  public static class MockPipeline extends AbstractQueryNode {
     public int fetched_next = 0;
     public int closed = 0;
     
@@ -53,7 +53,7 @@ public class TestQueryExecutor {
     }
 
     @Override
-    public QueryPipeline getMultiPassClone(final QueryListener listener,
+    public QueryNode getMultiPassClone(final QueryListener listener,
                                            final boolean cache) {
       // TODO Auto-generated method stub
       return null;

@@ -12,7 +12,7 @@ import com.google.common.collect.Sets;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.query.QueryListener;
-import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
 import net.opentsdb.utils.Deferreds;
@@ -22,7 +22,7 @@ public abstract class AbstractQueryExecutor implements QueryExecutor2 {
   
   protected final ExecutionGraphNode node;
   
-  protected final Set<QueryPipeline> outstanding_pipelines;
+  protected final Set<QueryNode> outstanding_pipelines;
   
   protected final List<QueryExecutor2> downstream_executors;
   
@@ -67,7 +67,7 @@ public abstract class AbstractQueryExecutor implements QueryExecutor2 {
   }
 
   protected void cancelOutstanding() {
-    for (final QueryPipeline pipeline: outstanding_pipelines) {
+    for (final QueryNode pipeline: outstanding_pipelines) {
       try {
         pipeline.close();
       } catch (Exception e) {
@@ -81,13 +81,13 @@ public abstract class AbstractQueryExecutor implements QueryExecutor2 {
   }
   
   @Override
-  public Collection<QueryPipeline> outstandingPipelines() {
+  public Collection<QueryNode> outstandingPipelines() {
     return outstanding_pipelines;
   }
   
   class CleanupListener implements QueryListener {
     protected QueryListener upstream;
-    protected QueryPipeline pipeline;
+    protected QueryNode pipeline;
     
     @Override
     public void onComplete() {

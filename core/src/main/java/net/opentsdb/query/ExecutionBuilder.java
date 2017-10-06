@@ -49,7 +49,7 @@ public class ExecutionBuilder {
     private net.opentsdb.query.pojo.TimeSeriesQuery query;
     private QueryMode mode;
     private QueryPipelineContext ctx;
-    private QueryPipeline downstream;
+    private QueryNode downstream;
     
     LocalContext(final QueryListener sink, net.opentsdb.query.pojo.TimeSeriesQuery query, QueryMode mode, QueryExecutor2 executor) {
       this.sink = sink;
@@ -110,13 +110,13 @@ public class ExecutionBuilder {
       downstream.close();
     }
     
-    class SingleAccumulator implements QueryPipeline, QueryListener, QueryResult {
+    class SingleAccumulator implements QueryNode, QueryListener, QueryResult {
       List<TimeSeries> series;
       boolean[] results = new boolean[ctx.parallelQueries()];
       QueryListener listener;
-      QueryPipeline downstream;
+      QueryNode downstream;
       
-      SingleAccumulator(QueryPipeline downstream) {
+      SingleAccumulator(QueryNode downstream) {
         listener = sink;
         this.downstream = downstream;
         this.downstream.setListener(this);
@@ -204,24 +204,12 @@ public class ExecutionBuilder {
       }
 
       @Override
-      public QueryPipeline getMultiPassClone(QueryListener listener,
+      public QueryNode getMultiPassClone(QueryListener listener,
           boolean cache) {
         // TODO Auto-generated method stub
         return null;
       }
-
-      @Override
-      public void addAfter(QueryPipeline pipeline) {
-        // TODO Auto-generated method stub
-        
-      }
-
-      @Override
-      public void addBefore(QueryPipeline pipeline) {
-        // TODO Auto-generated method stub
-        
-      }
-
+      
       @Override
       public void close() {
         downstream.close();

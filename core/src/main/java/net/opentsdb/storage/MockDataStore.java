@@ -48,9 +48,9 @@ import net.opentsdb.data.iterators.SlicedTimeSeries;
 import net.opentsdb.data.types.numeric.MutableNumericType;
 import net.opentsdb.data.types.numeric.NumericMillisecondShard2;
 import net.opentsdb.data.types.numeric.NumericType;
-import net.opentsdb.query.AbstractQueryPipeline;
+import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryMode;
-import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.execution.QueryExecutor2;
@@ -289,11 +289,11 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
   }
 
   @Override
-  public QueryPipeline executeQuery(final QueryPipelineContext context) {
+  public QueryNode executeQuery(final QueryPipelineContext context) {
     return new MyPipeline(context);
   }
   
-  class MyPipeline extends AbstractQueryPipeline {
+  class MyPipeline extends AbstractQueryNode {
     private final QueryPipelineContext context;
     int[] sequence_ids;
     AtomicBoolean completed = new AtomicBoolean();
@@ -521,7 +521,7 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
   }
 
   @Override
-  public Collection<QueryPipeline> outstandingPipelines() {
+  public Collection<QueryNode> outstandingPipelines() {
     // TODO Auto-generated method stub
     return null;
   }

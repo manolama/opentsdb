@@ -18,7 +18,7 @@ import io.opentracing.Span;
 import net.opentsdb.core.TsdbPlugin;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSeriesValue;
-import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.stats.TsdbTrace;
 
@@ -53,5 +53,5 @@ public abstract class TimeSeriesDataStore extends TsdbPlugin {
                                          final TsdbTrace trace, 
                                          final Span upstream_span);
   
-  public abstract QueryPipeline executeQuery(final QueryPipelineContext context); 
+  public abstract QueryNode executeQuery(final QueryPipelineContext context); 
 }

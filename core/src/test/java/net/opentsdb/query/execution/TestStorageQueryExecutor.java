@@ -29,7 +29,7 @@ import org.junit.Test;
 
 import net.opentsdb.data.iterators.IteratorTestUtils;
 import net.opentsdb.query.QueryListener;
-import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.context.QueryContext2;
@@ -149,7 +149,7 @@ public class TestStorageQueryExecutor extends BaseExecutorTest {
     TestListener listener = new TestListener();
     when(context.getListener()).thenReturn(listener);
     
-    final QueryPipeline exec = executor.executeQuery(context);
+    final QueryNode exec = executor.executeQuery(context);
     assertEquals(1, executor.outstandingPipelines().size());
     assertEquals(0, execution.fetched_next);
     assertEquals(0, execution.closed);
@@ -247,7 +247,7 @@ public class TestStorageQueryExecutor extends BaseExecutorTest {
     
     TestListener listener = new TestListener();
     when(context.getListener()).thenReturn(listener);
-    final QueryPipeline exec = executor.executeQuery(context);
+    final QueryNode exec = executor.executeQuery(context);
     assertEquals(1, executor.outstandingPipelines().size());
     assertEquals(0, execution.fetched_next);
     assertEquals(0, execution.closed);

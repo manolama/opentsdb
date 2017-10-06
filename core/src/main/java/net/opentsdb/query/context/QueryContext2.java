@@ -1,17 +1,17 @@
 package net.opentsdb.query.context;
 
 import net.opentsdb.core.TSDB;
-import net.opentsdb.query.AbstractQueryPipeline;
+import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.QueryListener;
 import net.opentsdb.query.QueryMode;
-import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.execution.QueryExecutorConfig;
 import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
 
-public class QueryContext2 extends AbstractQueryPipeline implements QueryContext {
+public class QueryContext2 extends AbstractQueryNode implements QueryContext {
 
   /** The TSDB to which we belong. */
   protected final TSDB tsdb;
@@ -38,7 +38,7 @@ public class QueryContext2 extends AbstractQueryPipeline implements QueryContext
   }
 
   @Override
-  public QueryPipeline getMultiPassClone(final QueryListener listener,
+  public QueryNode getMultiPassClone(final QueryListener listener,
                                          final boolean cache) {
     final QueryContext2 clone = new QueryContext2(tsdb, query);
     clone.setListener(listener);
@@ -59,7 +59,7 @@ public class QueryContext2 extends AbstractQueryPipeline implements QueryContext
     return QueryMode.SINGLE;
   }
   
-  public QueryPipeline upstream() {
+  public QueryNode upstream() {
     return null;
   }
 

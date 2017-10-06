@@ -33,20 +33,20 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.types.numeric.MutableNumericType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryListener;
-import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.pojo.Expression;
 import net.opentsdb.query.pojo.Metric;
 
-public class JexlExpression implements net.opentsdb.query.TimeSeriesProcessor, QueryListener, QueryPipeline {
+public class JexlExpression implements net.opentsdb.query.TimeSeriesProcessor, QueryListener, QueryNode {
   private QueryListener upstream;
-  private QueryPipeline downstream;
+  private QueryNode downstream;
   private Map<String, String> metric_to_ids; 
  
   Map<Integer, QueryResult[]> results;
   
-  public JexlExpression(QueryPipeline downstream, QueryListener sink) {
+  public JexlExpression(QueryNode downstream, QueryListener sink) {
     downstream.setListener(this);
     this.downstream = downstream;
     upstream = sink;
@@ -84,24 +84,12 @@ public class JexlExpression implements net.opentsdb.query.TimeSeriesProcessor, Q
   }
 
   @Override
-  public QueryPipeline getMultiPassClone(QueryListener listener,
+  public QueryNode getMultiPassClone(QueryListener listener,
       boolean cache) {
     // TODO Auto-generated method stub
     return null;
   }
-
-  @Override
-  public void addAfter(QueryPipeline pipeline) {
-    // TODO Auto-generated method stub
-    
-  }
-
-  @Override
-  public void addBefore(QueryPipeline pipeline) {
-    // TODO Auto-generated method stub
-    
-  }
-
+  
   @Override
   public void close() {
     // TODO Auto-generated method stub

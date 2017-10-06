@@ -23,7 +23,7 @@ import com.google.common.collect.Ordering;
 import com.google.common.hash.HashCode;
 
 import net.opentsdb.core.Const;
-import net.opentsdb.query.QueryPipeline;
+import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.context.QueryContext2;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
@@ -62,7 +62,7 @@ public class StorageQueryExecutor extends AbstractQueryExecutor {
   }
 
   @Override
-  public QueryPipeline executeQuery(final QueryPipelineContext context) {
+  public QueryNode executeQuery(final QueryPipelineContext context) {
     final CleanupListener cleanup = new CleanupListener();
     cleanup.pipeline = data_store.executeQuery(context);
     cleanup.pipeline.setListener(cleanup);
