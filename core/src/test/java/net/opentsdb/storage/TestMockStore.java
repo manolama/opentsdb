@@ -17,6 +17,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.text.DecimalFormat;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
@@ -202,6 +203,41 @@ public class TestMockStore {
         System.out.println("Vert: " + vertex.id + " " + vertex.sources + "  EDGE: " + graph.getEdgeSource(e).id + " -> " + 
             graph.getEdgeTarget(e).id);
       }
+    }
+  }
+  
+  @Test
+  public void timeit() throws Exception {
+    double ts = 1483315200.000000000;
+    final long prefix = 1483315200;
+    long suffix = 0;
+    int range = 1000000000;
+    range = 1000 - 1;
+    
+    System.out.println("INT max: " + Integer.MAX_VALUE);
+    for (int i = 0; i < range; i++) {
+      double converted = Double.parseDouble(Long.toString(prefix) + "." + String.format("%09d", suffix));
+      String formatted = String.format("%.9f", converted);
+      String[] splits = formatted.split("\\.");
+      try{
+      assertEquals(prefix, Long.parseLong(splits[0]));
+      assertEquals(suffix, Long.parseLong(splits[1]));
+      } catch (AssertionError e) {
+        System.out.println("[" + i + "] Failed on " + String.format("%.9f", converted) + " != " + formatted + " [" + Long.toString(prefix) + "." + String.format("%09d", suffix) + "]");
+        throw e;
+      }
+//      try {
+//        assertEquals(ts, converted, 0.0000000001);
+//      } catch (AssertionError e) {
+//        System.out.println("[" + i + "] Failed on " + String.format("%.3f", ts) + " != " + Long.toString(prefix) + "." + String.format("%03d",suffix) + " => " + String.format("%.3f", converted));
+//        throw e;
+//      }
+//      
+//      System.out.println("[" + i + "] " + String.format("%.3f", ts) + " != " + Long.toString(prefix) + "." + String.format("%03d",suffix) + " => " + String.format("%.3f", converted));
+//      ts = ts + 0.000000001D;
+//      suffix += 000000001;
+//      ts = ts + 0.001D;
+      suffix++;
     }
   }
   
