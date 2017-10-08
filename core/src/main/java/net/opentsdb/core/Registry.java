@@ -38,6 +38,10 @@ import net.opentsdb.data.DataShardMerger;
 import net.opentsdb.data.TimeSeriesSerDes;
 import net.opentsdb.data.iterators.IteratorGroups;
 import net.opentsdb.data.types.numeric.NumericMergeLargest;
+import net.opentsdb.query.QueryNode;
+import net.opentsdb.query.QueryNodeConfig;
+import net.opentsdb.query.QueryNodeFactory;
+import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.execution.CachingQueryExecutor;
 import net.opentsdb.query.execution.DefaultQueryExecutorFactory;
 import net.opentsdb.query.execution.MetricShardingExecutor;
@@ -430,6 +434,19 @@ public class Registry {
     }
     
     return plugins.initialize(tsdb);
+  }
+  
+  Map<String, QueryNodeFactory> node_facs = Maps.newHashMap();
+  public void registerNodeFactory(final String name, final QueryNodeFactory fac) {
+    node_facs.put(name, fac);
+  }
+  public QueryNode newNode(final String name, 
+      final QueryPipelineContext context, final QueryNodeConfig config) {
+    QueryNodeFactory f = node_facs.get(name);
+    if (f == null) {
+      return null;
+    }
+    return f.newNode(context, config);
   }
   
   /** @return Package private shutdown returning the deferred to wait on. */

@@ -24,91 +24,83 @@ import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.types.numeric.MutableNumericType;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryListener;
 import net.opentsdb.query.QueryNode;
+import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.query.pojo.Filter;
 import net.opentsdb.query.pojo.Metric;
+import net.opentsdb.query.processor.GroupByFactory.GBConfig;
 
-public class GroupBy implements net.opentsdb.query.TimeSeriesProcessor, QueryListener, QueryNode {
+public class GroupBy extends AbstractQueryNode implements net.opentsdb.query.TimeSeriesProcessor {
 
-  private QueryListener upstream;
-  private QueryNode downstream;
-  private final Map<String, List<String>> metric_keys;
+//  private QueryListener upstream;
+//  private QueryNode downstream;
+  //private final Map<String, List<String>> metric_keys;
+  QueryPipelineContext context;
+  GBConfig config;
+    
+  public GroupBy(QueryPipelineContext context,
+      GBConfig config) {
+    super(context);
+    this.config = config;
+  }
   
-  public GroupBy(QueryNode downstream, QueryListener sink) {
-    downstream.setListener(this);
-    this.downstream = downstream;
-    upstream = sink;
-    
-    final net.opentsdb.query.pojo.TimeSeriesQuery query = 
-        (net.opentsdb.query.pojo.TimeSeriesQuery) 
-        downstream.context().getQuery();
-    
-    metric_keys = Maps.newHashMapWithExpectedSize(query.getMetrics().size());
-    
-    for (final Metric metric : query.getMetrics()) {
-      Filter filter_set = query.getFilter(metric.getFilter());
-      
-      final List<String> keys = Lists.newArrayList();
-      for (final TagVFilter filter : filter_set.getTags()) {
-        if (filter.isGroupBy()) {
-          keys.add(filter.getTagk());
-        }
-      }
-      Collections.sort(keys);
-      metric_keys.put(metric.getMetric(), keys);
-    }
-  }
-
-  @Override
-  public void setListener(QueryListener listener) {
-    upstream = listener;
-  }
-
-  @Override
-  public QueryListener getListener() {
-    return upstream;
-  }
-
   @Override
   public void fetchNext(int parallel_id) {
-    downstream.fetchNext(parallel_id);
-  }
-
-  @Override
-  public QueryNode getMultiPassClone(QueryListener listener,
-      boolean cache) {
-    // TODO Auto-generated method stub
-    return null;
+    synchronized(this) {
+      if (downstream == null) {
+        downstream = context.downstream(this);
+      }
+    }
+    for (QueryNode ds : downstream) {
+      ds.fetchNext(parallel_id);
+    }
   }
   
   @Override
   public void close() {
-    downstream.close();
+    //downstream.close();
   }
 
   @Override
   public void onComplete() {
     System.out.println("GB IS complete");
-    upstream.onComplete();
+    for (final QueryListener us : upstream) {
+      us.onComplete();
+    }
   }
 
   @Override
   public void onNext(QueryResult next) {
-    upstream.onNext(new LocalResult(next));
+    synchronized(this) {
+      if (upstream == null) {
+        upstream = context.upstream(this);
+      }
+    }
+    for (final QueryListener us : upstream) {
+      us.onNext(new LocalResult(next));
+    }
   }
 
   @Override
   public void onError(Throwable t) {
-    upstream.onError(t);
+    synchronized(this) {
+      if (upstream == null) {
+        upstream = context.upstream(this);
+      }
+    }
+    for (final QueryListener us : upstream) {
+      us.onError(t);
+    }
   }
 
   @Override
   public QueryPipelineContext context() {
-    return downstream.context();
+    return context;
   }
   
   class LocalResult implements QueryResult {
@@ -149,10 +141,10 @@ public class GroupBy implements net.opentsdb.query.TimeSeriesProcessor, QueryLis
       for (final TimeSeries series : next.timeSeries()) {
         final StringBuilder buf = new StringBuilder()
             .append(series.id().metric());
-        final List<String> keys = metric_keys.get(series.id().metric());
+        //final List<String> keys = metric_keys.get(series.id().metric());
         
         boolean matched = true;
-        for (final String key : keys) {
+        for (final String key : config.tag_keys) {
           final String tagv = series.id().tags().get(key);
           if (tagv == null) {
             System.out.println("DROPPING: " + series.id());
@@ -327,5 +319,11 @@ public class GroupBy implements net.opentsdb.query.TimeSeriesProcessor, QueryLis
       }
       
     }
+  }
+
+  @Override
+  public String id() {
+    // TODO Auto-generated method stub
+    return null;
   }
 }

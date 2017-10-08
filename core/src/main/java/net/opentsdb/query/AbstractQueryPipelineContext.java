@@ -1,18 +1,36 @@
 package net.opentsdb.query;
 
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.jgrapht.experimental.dag.DirectedAcyclicGraph;
+import org.jgrapht.graph.DefaultEdge;
+import org.jgrapht.traverse.DepthFirstIterator;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+
 public abstract class AbstractQueryPipelineContext implements QueryPipelineContext {
 
-  protected TimeSeriesQuery original_query;
-  
+  protected TimeSeriesQuery query;
   protected QueryContext context;
-  
-  protected QueryListener sink;
+  protected DirectedAcyclicGraph<QueryNode, DefaultEdge> graph;
+  protected Map<String, QueryNode> vertices;
+  protected Set<QueryListener> sinks;
+  protected Set<QueryNode> roots;
   
   public AbstractQueryPipelineContext(TimeSeriesQuery original_query, 
-      QueryContext context, QueryListener sink) {
-    this.original_query = original_query;
+                                      QueryContext context) {
+    this.query = original_query;
     this.context = context;
-    this.sink = sink;
+    graph = new DirectedAcyclicGraph<QueryNode, DefaultEdge>(DefaultEdge.class);
+    vertices = Maps.newHashMap();
+    sinks = Sets.newHashSet();
+    roots = Sets.newHashSet();
   }
   
   @Override
@@ -21,12 +39,49 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   }
   
   @Override
-  public void setListener(final QueryListener listener) {
-    sink = listener;
+  public Collection<QueryListener> upstream(final QueryNode node) {
+    System.out.println("fetching upstream of: " + node);
+    Set<DefaultEdge> upstream = graph.incomingEdgesOf(node);
+    if (upstream.isEmpty()) {
+      System.out.println("  roots, so returning sinks");
+      return sinks;
+    }
+    List<QueryListener> listeners = Lists.newArrayListWithCapacity(upstream.size());
+    for (final DefaultEdge e : upstream) {
+      listeners.add(graph.getEdgeSource(e));
+    }
+    System.out.println("Listeners: " + listeners);
+    return listeners;
   }
   
   @Override
-  public QueryListener getListener() {
-    return sink;
+  public Collection<QueryNode> downstream(final QueryNode node) {
+    Set<DefaultEdge> downstream = graph.outgoingEdgesOf(node);
+    if (downstream.isEmpty()) {
+      return Collections.emptyList();
+    }
+    List<QueryNode> downstreams = Lists.newArrayListWithCapacity(downstream.size());
+    for (final DefaultEdge e : downstream) {
+      downstreams.add(graph.getEdgeTarget(e));
+    }
+    return downstreams;
+  }
+  
+  @Override
+  public Collection<QueryListener> sinks() {
+    return sinks;
+  }
+  
+  @Override
+  public Collection<QueryNode> roots() {
+    return roots;
+  }
+  
+  void initializeNodes() {
+    final DepthFirstIterator<QueryNode, DefaultEdge> df_iterator = 
+      new DepthFirstIterator<QueryNode, DefaultEdge>(graph);
+    while (df_iterator.hasNext()) {
+      df_iterator.next().initialize();
+    }
   }
 }

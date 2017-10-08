@@ -44,6 +44,11 @@ public class TestQueryExecutor {
   }
   
   public static class MockPipeline extends AbstractQueryNode {
+    public MockPipeline(QueryPipelineContext context) {
+      super(context);
+      // TODO Auto-generated constructor stub
+    }
+
     public int fetched_next = 0;
     public int closed = 0;
     
@@ -51,20 +56,9 @@ public class TestQueryExecutor {
     public void fetchNext(final int parallel_id) {
       fetched_next++;
     }
-
-    @Override
-    public QueryNode getMultiPassClone(final QueryListener listener,
-                                           final boolean cache) {
-      // TODO Auto-generated method stub
-      return null;
-    }
-
+    
     @Override
     public void close() {
-      if (downstream != null) {
-        downstream.close();
-      }
-      listener.onComplete();
       closed++;
     }
 
@@ -72,6 +66,30 @@ public class TestQueryExecutor {
     public QueryPipelineContext context() {
       // TODO Auto-generated method stub
       return null;
+    }
+
+    @Override
+    public String id() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public void onComplete() {
+      // TODO Auto-generated method stub
+      
+    }
+
+    @Override
+    public void onNext(QueryResult next) {
+      // TODO Auto-generated method stub
+      
+    }
+
+    @Override
+    public void onError(Throwable t) {
+      // TODO Auto-generated method stub
+      
     }
     
   }

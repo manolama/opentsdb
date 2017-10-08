@@ -52,177 +52,177 @@ public class TestStorageQueryExecutor extends BaseExecutorTest {
   private Config config;
   private long ts_start;
   private long ts_end;
-  
-  @Before
-  public void beforeLocal() {
-    node = mock(ExecutionGraphNode.class);
-    store = mock(TimeSeriesDataStore.class);
-    context = mock(QueryPipelineContext.class);
-    config = (Config) Config.newBuilder()
-        .setStorageId("MockStore")
-        .setExecutorId("LocalStore")
-        .setExecutorType("StorageQueryExecutor")
-        .build();
-    
-    when(node.getDefaultConfig()).thenReturn(config);
-    when(node.graph()).thenReturn(graph);
-    when(registry.getPlugin(eq(TimeSeriesDataStore.class), anyString()))
-      .thenReturn(store);
-    
-    ts_start = 1483228800000L;
-    ts_end = 1483236000000L;
-    query = TimeSeriesQuery.newBuilder()
-        .setTime(Timespan.newBuilder()
-            .setStart(Long.toString(ts_start))
-            .setEnd(Long.toString(ts_end)))
-        .addMetric(Metric.newBuilder()
-            .setMetric("sys.cpu.user")
-            .setFilter("f1")
-            .setId("m1"))
-        .addFilter(Filter.newBuilder()
-            .setId("f1")
-            .addFilter(TagVFilter.newBuilder()
-                .setFilter("web01")
-                .setType("literal_or")
-                .setTagk("host")
-                )
-            .addFilter(TagVFilter.newBuilder()
-                .setFilter("PHX")
-                .setType("literal_or")
-                .setTagk("dc")
-                )
-            )
-        .build();
-    execution = new MockPipeline();
-    when(store.executeQuery(context)).thenReturn(execution);
-  }
-  
-  @Test
-  public void ctor() throws Exception {
-    try {
-      new StorageQueryExecutor(null);
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    // no default config
-    node = mock(ExecutionGraphNode.class);
-    try {
-      new StorageQueryExecutor(null);
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    // no such store
-    node = mock(ExecutionGraphNode.class);
-    when(node.getDefaultConfig()).thenReturn(config);
-    when(registry.getPlugin(eq(TimeSeriesDataStore.class), anyString()))
-      .thenReturn(null);
-    try {
-      new StorageQueryExecutor(null);
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-  }
-  
-  @Test
-  public void executeGoodQuery() throws Exception {
-    final StorageQueryExecutor executor = new StorageQueryExecutor(node);
-    
-    AtomicBoolean completed = new AtomicBoolean();
-    AtomicBoolean fetched = new AtomicBoolean();
-    class TestListener implements QueryListener {
-
-      @Override
-      public void onComplete() {
-        completed.set(true);
-      }
-
-      @Override
-      public void onNext(QueryResult next) {
-        IteratorTestUtils.validateData(next, ts_start, ts_end, 0, 1000);
-        fetched.set(true);
-      }
-
-      @Override
-      public void onError(Throwable t) { }
-      
-    }
-    
-    TestListener listener = new TestListener();
-    when(context.getListener()).thenReturn(listener);
-    
-    final QueryNode exec = executor.executeQuery(context);
-    assertEquals(1, executor.outstandingPipelines().size());
-    assertEquals(0, execution.fetched_next);
-    assertEquals(0, execution.closed);
-    assertFalse(completed.get());
-    assertFalse(fetched.get());
-    
-    exec.fetchNext(0);
-    assertEquals(1, executor.outstandingPipelines().size());
-    assertEquals(1, execution.fetched_next);
-    assertEquals(0, execution.closed);
-    assertFalse(completed.get());
-    assertFalse(fetched.get());
-    
-    execution.getListener().onNext(IteratorTestUtils.generateData(ts_start, ts_end, 1000));
-    assertEquals(1, executor.outstandingPipelines().size());
-    assertEquals(1, execution.fetched_next);
-    assertEquals(0, execution.closed);
-    assertFalse(completed.get());
-    assertTrue(fetched.get());
-    
-    exec.fetchNext(0);
-    execution.getListener().onComplete();
-    assertEquals(0, executor.outstandingPipelines().size());
-    assertEquals(2, execution.fetched_next);
-    assertEquals(0, execution.closed);
-    assertTrue(completed.get());
-    assertTrue(fetched.get());
-  }
-  
-  @Test
-  public void executeException() throws Exception {
-    final StorageQueryExecutor executor = new StorageQueryExecutor(node);
-    AtomicBoolean completed = new AtomicBoolean();
-    AtomicBoolean fetched = new AtomicBoolean();
-    class TestListener implements QueryListener {
-      Throwable t;
-      
-      @Override
-      public void onComplete() {
-        completed.set(true);
-      }
-
-      @Override
-      public void onNext(QueryResult next) {
-        fetched.set(true);
-      }
-
-      @Override
-      public void onError(Throwable t) { 
-        this.t = t;
-      }
-      
-    }
-    
-    TestListener listener = new TestListener();
-    when(context.getListener()).thenReturn(listener);
-    
-    executor.executeQuery(context);
-    assertEquals(1, executor.outstandingPipelines().size());
-    assertEquals(0, execution.fetched_next);
-    assertEquals(0, execution.closed);
-    assertFalse(completed.get());
-    assertFalse(fetched.get());
-    
-    execution.getListener().onError(new IllegalStateException("Boo!"));
-    assertEquals(0, executor.outstandingPipelines().size());
-    assertEquals(0, execution.fetched_next);
-    assertEquals(0, execution.closed);
-    assertFalse(completed.get());
-    assertFalse(fetched.get());
-    assertTrue(listener.t instanceof IllegalStateException);
-  }
-  
+//  
+//  @Before
+//  public void beforeLocal() {
+//    node = mock(ExecutionGraphNode.class);
+//    store = mock(TimeSeriesDataStore.class);
+//    context = mock(QueryPipelineContext.class);
+//    config = (Config) Config.newBuilder()
+//        .setStorageId("MockStore")
+//        .setExecutorId("LocalStore")
+//        .setExecutorType("StorageQueryExecutor")
+//        .build();
+//    
+//    when(node.getDefaultConfig()).thenReturn(config);
+//    when(node.graph()).thenReturn(graph);
+//    when(registry.getPlugin(eq(TimeSeriesDataStore.class), anyString()))
+//      .thenReturn(store);
+//    
+//    ts_start = 1483228800000L;
+//    ts_end = 1483236000000L;
+//    query = TimeSeriesQuery.newBuilder()
+//        .setTime(Timespan.newBuilder()
+//            .setStart(Long.toString(ts_start))
+//            .setEnd(Long.toString(ts_end)))
+//        .addMetric(Metric.newBuilder()
+//            .setMetric("sys.cpu.user")
+//            .setFilter("f1")
+//            .setId("m1"))
+//        .addFilter(Filter.newBuilder()
+//            .setId("f1")
+//            .addFilter(TagVFilter.newBuilder()
+//                .setFilter("web01")
+//                .setType("literal_or")
+//                .setTagk("host")
+//                )
+//            .addFilter(TagVFilter.newBuilder()
+//                .setFilter("PHX")
+//                .setType("literal_or")
+//                .setTagk("dc")
+//                )
+//            )
+//        .build();
+//    execution = new MockPipeline();
+//    when(store.executeQuery(context)).thenReturn(execution);
+//  }
+//  
+//  @Test
+//  public void ctor() throws Exception {
+//    try {
+//      new StorageQueryExecutor(null);
+//      fail("Expected IllegalArgumentException");
+//    } catch (IllegalArgumentException e) { }
+//    
+//    // no default config
+//    node = mock(ExecutionGraphNode.class);
+//    try {
+//      new StorageQueryExecutor(null);
+//      fail("Expected IllegalArgumentException");
+//    } catch (IllegalArgumentException e) { }
+//    
+//    // no such store
+//    node = mock(ExecutionGraphNode.class);
+//    when(node.getDefaultConfig()).thenReturn(config);
+//    when(registry.getPlugin(eq(TimeSeriesDataStore.class), anyString()))
+//      .thenReturn(null);
+//    try {
+//      new StorageQueryExecutor(null);
+//      fail("Expected IllegalArgumentException");
+//    } catch (IllegalArgumentException e) { }
+//  }
+//  
+//  @Test
+//  public void executeGoodQuery() throws Exception {
+//    final StorageQueryExecutor executor = new StorageQueryExecutor(node);
+//    
+//    AtomicBoolean completed = new AtomicBoolean();
+//    AtomicBoolean fetched = new AtomicBoolean();
+//    class TestListener implements QueryListener {
+//
+//      @Override
+//      public void onComplete() {
+//        completed.set(true);
+//      }
+//
+//      @Override
+//      public void onNext(QueryResult next) {
+//        IteratorTestUtils.validateData(next, ts_start, ts_end, 0, 1000);
+//        fetched.set(true);
+//      }
+//
+//      @Override
+//      public void onError(Throwable t) { }
+//      
+//    }
+//    
+//    TestListener listener = new TestListener();
+//    when(context.getListener()).thenReturn(listener);
+//    
+//    final QueryNode exec = executor.executeQuery(context);
+//    assertEquals(1, executor.outstandingPipelines().size());
+//    assertEquals(0, execution.fetched_next);
+//    assertEquals(0, execution.closed);
+//    assertFalse(completed.get());
+//    assertFalse(fetched.get());
+//    
+//    exec.fetchNext(0);
+//    assertEquals(1, executor.outstandingPipelines().size());
+//    assertEquals(1, execution.fetched_next);
+//    assertEquals(0, execution.closed);
+//    assertFalse(completed.get());
+//    assertFalse(fetched.get());
+//    
+//    execution.getListener().onNext(IteratorTestUtils.generateData(ts_start, ts_end, 1000));
+//    assertEquals(1, executor.outstandingPipelines().size());
+//    assertEquals(1, execution.fetched_next);
+//    assertEquals(0, execution.closed);
+//    assertFalse(completed.get());
+//    assertTrue(fetched.get());
+//    
+//    exec.fetchNext(0);
+//    execution.getListener().onComplete();
+//    assertEquals(0, executor.outstandingPipelines().size());
+//    assertEquals(2, execution.fetched_next);
+//    assertEquals(0, execution.closed);
+//    assertTrue(completed.get());
+//    assertTrue(fetched.get());
+//  }
+//  
+//  @Test
+//  public void executeException() throws Exception {
+//    final StorageQueryExecutor executor = new StorageQueryExecutor(node);
+//    AtomicBoolean completed = new AtomicBoolean();
+//    AtomicBoolean fetched = new AtomicBoolean();
+//    class TestListener implements QueryListener {
+//      Throwable t;
+//      
+//      @Override
+//      public void onComplete() {
+//        completed.set(true);
+//      }
+//
+//      @Override
+//      public void onNext(QueryResult next) {
+//        fetched.set(true);
+//      }
+//
+//      @Override
+//      public void onError(Throwable t) { 
+//        this.t = t;
+//      }
+//      
+//    }
+//    
+//    TestListener listener = new TestListener();
+//    when(context.getListener()).thenReturn(listener);
+//    
+//    executor.executeQuery(context);
+//    assertEquals(1, executor.outstandingPipelines().size());
+//    assertEquals(0, execution.fetched_next);
+//    assertEquals(0, execution.closed);
+//    assertFalse(completed.get());
+//    assertFalse(fetched.get());
+//    
+//    execution.getListener().onError(new IllegalStateException("Boo!"));
+//    assertEquals(0, executor.outstandingPipelines().size());
+//    assertEquals(0, execution.fetched_next);
+//    assertEquals(0, execution.closed);
+//    assertFalse(completed.get());
+//    assertFalse(fetched.get());
+//    assertTrue(listener.t instanceof IllegalStateException);
+//  }
+//  
   @Test
   public void executeClose() throws Exception {
     final StorageQueryExecutor executor = new StorageQueryExecutor(node);

@@ -2,23 +2,31 @@ package net.opentsdb.query;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
+import org.jgrapht.experimental.dag.DirectedAcyclicGraph;
+import org.jgrapht.graph.DefaultEdge;
+
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.query.execution.QueryExecutor2;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.query.pojo.Filter;
+import net.opentsdb.query.pojo.Metric;
 import net.opentsdb.query.processor.GroupBy;
-import net.opentsdb.query.processor.JexlExpression;
+import net.opentsdb.storage.MockDataStore;
+import net.opentsdb.storage.MockDataStore.MDSConfig;
 
 public class ExecutionBuilder {
 
   private QueryListener listener;
   private net.opentsdb.query.pojo.TimeSeriesQuery query;
   private QueryMode mode;
-  private QueryExecutor2 executor;
+  private MockDataStore executor;
   
   public ExecutionBuilder setQueryListener(final QueryListener listener) {
     this.listener = listener;
@@ -35,7 +43,7 @@ public class ExecutionBuilder {
     return this;
   }
   
-  public ExecutionBuilder setExecutor(final QueryExecutor2 executor) {
+  public ExecutionBuilder setExecutor(final MockDataStore executor) {
     this.executor = executor;
     return this;
   }
@@ -49,38 +57,16 @@ public class ExecutionBuilder {
     private net.opentsdb.query.pojo.TimeSeriesQuery query;
     private QueryMode mode;
     private QueryPipelineContext ctx;
-    private QueryNode downstream;
+    //private QueryNode downstream;
     
-    LocalContext(final QueryListener sink, net.opentsdb.query.pojo.TimeSeriesQuery query, QueryMode mode, QueryExecutor2 executor) {
+    LocalContext(final QueryListener sink, net.opentsdb.query.pojo.TimeSeriesQuery query, QueryMode mode, MockDataStore executor) {
       this.sink = sink;
       this.query = query;
       this.mode = mode;
-      ctx = new PerMetricQueryPipelineContext(query, this, sink);
-      downstream = executor.executeQuery(ctx);
+      ctx = new PerMetricQueryPipelineContext(query, this, executor, Lists.newArrayList(sink));
+      //downstream = executor.executeQuery(ctx);
       
-      boolean gby = false;
-      for (Filter f : query.getFilters()) {
-        for (TagVFilter v : f.getTags()) {
-          if (v.isGroupBy()) {
-            gby = true;
-            break;
-          }
-        }
-      }
-      
-      if (query.getExpressions() != null && query.getExpressions().size() > 0) {
-        System.out.println("ADDING EXP");
-        downstream = new JexlExpression(downstream, sink);
-      }
-//      
-//      if (gby) {
-//        System.out.println("ADDING GROUP BY");
-//        downstream = new GroupBy(downstream, sink);
-//      }
-      
-//      if (mode == QueryMode.SINGLE && ctx.parallelQueries() > 0) {
-//        downstream = new SingleAccumulator(downstream);
-//      }
+      ctx.initialize();
     }
     
     @Override
@@ -94,127 +80,118 @@ public class ExecutionBuilder {
     }
 
     @Override
-    public void fetchNext() {      
-      if (mode == QueryMode.SINGLE && ctx.parallelQueries() > 0) {
-        for (int i = 0; i < ctx.parallelQueries(); i++) {
-          downstream.fetchNext(i);
-        }
-      } else {
-        downstream.fetchNext(ctx.nextParallelId());
+    public void fetchNext() {
+      for (final QueryNode root : ctx.roots()) {
+        root.fetchNext(0);
+//        if (mode == QueryMode.SINGLE /*&& ctx.parallelQueries() > 0*/) {
+//          //for (int i = 0; i < ctx.parallelQueries(); i++) {
+//            root.fetchNext(0);
+//          //}
+//        } else {
+//          root.fetchNext(ctx.nextParallelId());
+//        }
       }
     }
 
     @Override
     public void close() {
       ctx.close();
-      downstream.close();
+      //downstream.close();
     }
     
-    class SingleAccumulator implements QueryNode, QueryListener, QueryResult {
-      List<TimeSeries> series;
-      boolean[] results = new boolean[ctx.parallelQueries()];
-      QueryListener listener;
-      QueryNode downstream;
-      
-      SingleAccumulator(QueryNode downstream) {
-        listener = sink;
-        this.downstream = downstream;
-        this.downstream.setListener(this);
-      }
-      @Override
-      public void onComplete() {
-        listener.onComplete();
-      }
-
-      @Override
-      public void onNext(QueryResult next) {
-        boolean complete = true;
-        synchronized (this) {
-          if (series == null) {
-            series = Lists.newArrayListWithCapacity(next.timeSeries().size());
-          }
-          series.addAll(next.timeSeries());
-          results[next.parallelId()] = true;
-          
-          for (final boolean result : results) {
-            if (!result) {
-              complete = false;
-              break;
-            }
-          }
-        }
-        
-        if (complete) {
-          System.out.println("ACUM Sending upstream");
-          listener.onNext(this);
-          System.out.println("ACUME marking complete");
-          listener.onComplete();
-        }
-      }
-
-      @Override
-      public void onError(Throwable t) {
-        listener.onError(t);
-      }
-
-      @Override
-      public TimeSpecification timeSpecification() {
-        // TODO Auto-generated method stub
-        return null;
-      }
-
-      @Override
-      public Collection<TimeSeries> timeSeries() {
-        return series;
-      }
-
-      @Override
-      public int parallelId() {
-        return 0;
-      }
-
-      @Override
-      public int sequenceId() {
-        return 0;
-      }
-
-      @Override
-      public int parallelism() {
-        return query.subQueries().size();
-      }
-
-      @Override
-      public QueryPipelineContext context() {
-        return ctx;
-      }
-
-      @Override
-      public void setListener(QueryListener listener) {
-        this.listener = listener;
-      }
-
-      @Override
-      public QueryListener getListener() {
-        return listener;
-      }
-
-      @Override
-      public void fetchNext(int parallel_id) {
-        downstream.fetchNext(parallel_id);
-      }
-
-      @Override
-      public QueryNode getMultiPassClone(QueryListener listener,
-          boolean cache) {
-        // TODO Auto-generated method stub
-        return null;
-      }
-      
-      @Override
-      public void close() {
-        downstream.close();
-      }
-      
-    }
+//    class SingleAccumulator implements QueryNode, QueryListener, QueryResult {
+//      List<TimeSeries> series;
+//      boolean[] results = new boolean[ctx.parallelQueries()];
+//      QueryListener listener;
+//      QueryNode downstream;
+//      
+//      SingleAccumulator(QueryNode downstream) {
+//        listener = sink;
+//        this.downstream = downstream;
+//        this.downstream.setListener(this);
+//      }
+//      @Override
+//      public void onComplete() {
+//        listener.onComplete();
+//      }
+//
+//      @Override
+//      public void onNext(QueryResult next) {
+//        boolean complete = true;
+//        synchronized (this) {
+//          if (series == null) {
+//            series = Lists.newArrayListWithCapacity(next.timeSeries().size());
+//          }
+//          series.addAll(next.timeSeries());
+//          results[next.parallelId()] = true;
+//          
+//          for (final boolean result : results) {
+//            if (!result) {
+//              complete = false;
+//              break;
+//            }
+//          }
+//        }
+//        
+//        if (complete) {
+//          System.out.println("ACUM Sending upstream");
+//          listener.onNext(this);
+//          System.out.println("ACUME marking complete");
+//          listener.onComplete();
+//        }
+//      }
+//
+//      @Override
+//      public void onError(Throwable t) {
+//        listener.onError(t);
+//      }
+//
+//      @Override
+//      public TimeSpecification timeSpecification() {
+//        // TODO Auto-generated method stub
+//        return null;
+//      }
+//
+//      @Override
+//      public Collection<TimeSeries> timeSeries() {
+//        return series;
+//      }
+//
+//      @Override
+//      public int parallelId() {
+//        return 0;
+//      }
+//
+//      @Override
+//      public int sequenceId() {
+//        return 0;
+//      }
+//
+//      @Override
+//      public int parallelism() {
+//        return query.subQueries().size();
+//      }
+//
+//      @Override
+//      public QueryPipelineContext context() {
+//        return ctx;
+//      }
+//
+//      @Override
+//      public void fetchNext(int parallel_id) {
+//        downstream.fetchNext(parallel_id);
+//      }
+//
+//      @Override
+//      public void close() {
+//        downstream.close();
+//      }
+//      @Override
+//      public String id() {
+//        // TODO Auto-generated method stub
+//        return null;
+//      }
+//      
+//    }
   }
 }

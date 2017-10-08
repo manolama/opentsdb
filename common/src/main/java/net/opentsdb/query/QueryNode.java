@@ -17,22 +17,11 @@ package net.opentsdb.query;
  * 
  * @since 3.0
  */
-public interface QueryNode {
+public interface QueryNode extends QueryListener {
 
   public QueryPipelineContext context();
   
-  /**
-   * Sets the listener for this pipeline. NOTE: If an existing listener has
-   * been applied it will be orphaned.
-   * @param listener A non-null listener to call back with results.
-   */
-  public void setListener(final QueryListener listener);
-  
-  /**
-   * Returns the current listener for this component.
-   * @return The listener if set, null if no listener has been set.
-   */
-  public QueryListener getListener();
+  public void initialize();
   
   /**
    * Travels downstream the pipeline to fetch the next set of results.
@@ -41,13 +30,15 @@ public interface QueryNode {
    */
   public void fetchNext(final int parallel_id);
   
-  /**
-   * Returns a clone of all downstream components for multi-pass operations.
-   * @param listener A non-null listener to use as the sink for the clone.
-   * @param cache Whether or not the downstream clone should cache it's results.
-   * @return A cloned downstream pipeline.
-   */
-  public QueryNode getMultiPassClone(final QueryListener listener, final boolean cache);
+//  /**
+//   * Returns a clone of all downstream components for multi-pass operations.
+//   * @param listener A non-null listener to use as the sink for the clone.
+//   * @param cache Whether or not the downstream clone should cache it's results.
+//   * @return A cloned downstream pipeline.
+//   */
+//  public QueryNode getMultiPassClone(final QueryListener listener, final boolean cache);
+  
+  public String id();
   
   /**
    * Closes the pipeline and releases all resources.

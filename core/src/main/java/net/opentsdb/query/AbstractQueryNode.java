@@ -1,33 +1,32 @@
 package net.opentsdb.query;
 
+import java.util.Collection;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public abstract class AbstractQueryNode implements QueryNode {
 
-  protected QueryListener listener;
+  protected QueryPipelineContext context;
   
-  protected QueryNode downstream;
+  protected Collection<QueryListener> upstream;
+  
+  protected Collection<QueryNode> downstream;
   
   protected AtomicBoolean closed;
   
-  public AbstractQueryNode() {
+  public AbstractQueryNode(QueryPipelineContext context) {
+    this.context = context;
     closed = new AtomicBoolean();
   }
   
   @Override
-  public void setListener(final QueryListener listener) {
-    this.listener = listener;
-  }
-
-  @Override
-  public QueryListener getListener() {
-    return listener;
+  public void initialize() {
+    upstream = context.upstream(this);
+    downstream = context.downstream(this);
+    System.out.println(this + " us: " + upstream + "  ds: " + downstream);
   }
   
   @Override
-  public QueryNode getMultiPassClone(QueryListener listener,
-      boolean cache) {
-    throw new UnsupportedOperationException("Not implemented yet.");
+  public QueryPipelineContext context() {
+    return context;
   }
- 
 }

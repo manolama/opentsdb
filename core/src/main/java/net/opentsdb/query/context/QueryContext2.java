@@ -7,6 +7,7 @@ import net.opentsdb.query.QueryListener;
 import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
+import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.execution.QueryExecutorConfig;
 import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
@@ -21,6 +22,7 @@ public class QueryContext2 extends AbstractQueryNode implements QueryContext {
   protected ExecutionGraph graph;
   
   public QueryContext2(final TSDB tsdb, final TimeSeriesQuery query) {
+    super(null);
     this.tsdb = tsdb;
     this.query = query;
   }
@@ -37,13 +39,13 @@ public class QueryContext2 extends AbstractQueryNode implements QueryContext {
     }
   }
 
-  @Override
-  public QueryNode getMultiPassClone(final QueryListener listener,
-                                         final boolean cache) {
-    final QueryContext2 clone = new QueryContext2(tsdb, query);
-    clone.setListener(listener);
-    return clone;
-  }
+//  @Override
+//  public QueryNode getMultiPassClone(final QueryListener listener,
+//                                         final boolean cache) {
+//    final QueryContext2 clone = new QueryContext2(tsdb, query);
+//    clone.setListener(listener);
+//    return clone;
+//  }
 
   public TimeSeriesQuery query() {
     return query;
@@ -75,6 +77,36 @@ public class QueryContext2 extends AbstractQueryNode implements QueryContext {
 
   @Override
   public QueryPipelineContext context() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public String id() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public void onComplete() {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public void onNext(QueryResult next) {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public void onError(Throwable t) {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public QueryListener getListener() {
     // TODO Auto-generated method stub
     return null;
   }

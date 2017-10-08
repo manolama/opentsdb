@@ -65,7 +65,7 @@ public class StorageQueryExecutor extends AbstractQueryExecutor {
   public QueryNode executeQuery(final QueryPipelineContext context) {
     final CleanupListener cleanup = new CleanupListener();
     cleanup.pipeline = data_store.executeQuery(context);
-    cleanup.pipeline.setListener(cleanup);
+    //cleanup.pipeline.setListener(cleanup);
     cleanup.upstream = context.getListener();
     outstanding_pipelines.add(cleanup.pipeline);
     return cleanup.pipeline;

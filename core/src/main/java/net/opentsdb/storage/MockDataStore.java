@@ -49,8 +49,11 @@ import net.opentsdb.data.types.numeric.MutableNumericType;
 import net.opentsdb.data.types.numeric.NumericMillisecondShard2;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.AbstractQueryNode;
+import net.opentsdb.query.QueryListener;
 import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryNode;
+import net.opentsdb.query.QueryNodeConfig;
+import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.execution.QueryExecutor2;
@@ -68,7 +71,7 @@ import net.opentsdb.utils.JSON;
  * 
  * @since 3.0
  */
-public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2 {
+public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2, QueryNodeFactory {
   private static final Logger LOG = LoggerFactory.getLogger(MockDataStore.class);
   
   public static final long ROW_WIDTH = 3600000;
@@ -84,6 +87,12 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
   private Map<TimeSeriesId, MockSpan> database;
   
   private ExecutorService thread_pool;
+  
+  @Override
+  public QueryNode newNode(QueryPipelineContext context,
+      QueryNodeConfig config) {
+    return new MyPipeline(context, (MDSConfig) config);
+  }
   
   @Override
   public Deferred<Object> initialize(final TSDB tsdb) {
@@ -290,65 +299,81 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
 
   @Override
   public QueryNode executeQuery(final QueryPipelineContext context) {
-    return new MyPipeline(context);
+    return new MyPipeline(context, null);
   }
   
   class MyPipeline extends AbstractQueryNode {
-    private final QueryPipelineContext context;
     int[] sequence_ids;
     AtomicBoolean completed = new AtomicBoolean();
+    MDSConfig config;
     
-    public MyPipeline(final QueryPipelineContext context) {
-      this.context = context;
-      listener = context.getListener();
-      sequence_ids = new int[context.parallelQueries()];
+    public MyPipeline(final QueryPipelineContext context, MDSConfig config) {
+      super(context);
+      //listener = context.getListener();
+      sequence_ids = new int[1];
+      this.config = config;
     }
     
     @Override
     public void fetchNext(int parallel_id) {
-      if (context.getContext().mode() == QueryMode.SINGLE && parallel_id >= context.parallelQueries()) {
-        listener.onComplete();
-        return;
-      }
-      
-      //System.out.println("QUERIES: " + context.parallelQueries() + " PID: " + parallel_id + " SID: " + sequence_ids[parallel_id]);
-      LocalResult result;
-      synchronized(this) {
-        result = new LocalResult(context, 
-            this, parallel_id, sequence_ids[parallel_id]++);
-      }
-      
-      switch(context.getContext().mode()) {
-      case SINGLE:
-        if (parallel_id >= context.parallelQueries()) {
-          listener.onComplete();
-        } else {
-          result.run();
+      try {
+        
+        System.out.println("FETCH NEXT: " + parallel_id);
+        if (context.getContext().mode() == QueryMode.SINGLE && sequence_ids[0] > 0/* && parallel_id >= context.parallelQueries()*/) {
+          for (final QueryListener node : upstream) {
+            node.onComplete();
+          }
+          return;
         }
-        break;
-      case CLIENT_STREAM:
-        result.run();
-        break;
-      case CLIENT_STREAM_PARALLEL:
-        if (parallel_id >= context.parallelQueries()) {
+        
+        //System.out.println("QUERIES: " + context.parallelQueries() + " PID: " + parallel_id + " SID: " + sequence_ids[parallel_id]);
+        LocalResult result;
+        synchronized(this) {
+          result = new LocalResult(context, 
+              this, parallel_id, sequence_ids[0]++);
+        }
+        
+        switch(context.getContext().mode()) {
+        case SINGLE:
+  //        if (parallel_id >= context.parallelQueries()) {
+  //          for (final QueryListener node : upstream) {
+  //            node.onComplete();
+  //          }
+  //        } else {
+            result.run();
+  //        }
+          break;
+        case CLIENT_STREAM:
           result.run();
-        } else {
+          break;
+        case CLIENT_STREAM_PARALLEL:
+          if (parallel_id >= context.parallelQueries()) {
+            result.run();
+          } else {
+            thread_pool.submit(result);
+          }
+          break;
+        case SERVER_SYNC_STREAM:
+          result.run();
+          break;
+        case SERVER_SYNC_STREAM_PARALLEL:
+          if (parallel_id >= context.parallelQueries()) {
+            result.run();
+          } else {
+            thread_pool.submit(result);
+          }
+          break;
+        case SERVER_ASYNC_STREAM:
           thread_pool.submit(result);
         }
-        break;
-      case SERVER_SYNC_STREAM:
-        result.run();
-        break;
-      case SERVER_SYNC_STREAM_PARALLEL:
-        if (parallel_id >= context.parallelQueries()) {
-          result.run();
-        } else {
-          thread_pool.submit(result);
-        }
-        break;
-      case SERVER_ASYNC_STREAM:
-        thread_pool.submit(result);
+      } catch (Exception e) {
+        e.printStackTrace();
       }
+    }
+    
+    @Override
+    public String id() {
+      return config != null ? config.id : null;
     }
     
     @Override
@@ -356,7 +381,9 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
       if (LOG.isDebugEnabled()) {
         LOG.debug("Closing pipeline.");
       }
-      listener.onComplete();
+      for (final QueryListener node : upstream) {
+        node.onComplete();
+      }
     }
 
     @Override
@@ -364,6 +391,27 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
       return context;
     }
     
+    Collection<QueryListener> upstream() {
+      return upstream;
+    }
+    
+    @Override
+    public void onComplete() {
+      // TODO Auto-generated method stub
+      
+    }
+
+    @Override
+    public void onNext(QueryResult next) {
+      // TODO Auto-generated method stub
+      
+    }
+
+    @Override
+    public void onError(Throwable t) {
+      // TODO Auto-generated method stub
+      
+    }
   }
   
   class LocalResult implements QueryResult, Runnable {
@@ -409,6 +457,7 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
     
     @Override
     public void run() {
+      try {
       final net.opentsdb.query.pojo.TimeSeriesQuery query = 
           ((net.opentsdb.query.pojo.TimeSeriesQuery) context.getQuery(parallel_id));
       long start_ts = context.getContext().mode() == QueryMode.SINGLE ? 
@@ -420,12 +469,15 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
       
       //System.out.println("START: " + start_ts + "  END: " + end_ts);
       if (end_ts <= query.getTime().startTime().msEpoch()) {
+        System.out.println("Over the end time. done");
         if (pipeline.completed.compareAndSet(false, true)) {
-          pipeline.getListener().onComplete();
+          for (QueryListener node : pipeline.upstream()) {
+            node.onComplete();
+          }
         }
         return;
       }
-      
+      System.out.println("Running the filter: " + query);
       for (final Entry<TimeSeriesId, MockSpan> entry : database.entrySet()) {
         for (Metric m : query.getMetrics()) {
           if (!m.getMetric().equals(entry.getKey().metric())) {
@@ -491,10 +543,18 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
         }
       }
       
-      if (matched_series.isEmpty()) {
-        pipeline.getListener().onComplete();
-      } else {
-        pipeline.getListener().onNext(this);
+      System.out.println("DONE with filtering.");
+      
+      Collection<QueryListener> listeners = pipeline.upstream();
+      System.out.println("LISTNERS: " + listeners);
+      for (QueryListener node : pipeline.upstream()) {
+        if (matched_series.isEmpty()) {
+          System.out.println("Nothing matched, done.");
+          node.onComplete();
+        } else {
+          System.out.println("Sending upstream...");
+          node.onNext(this);
+        }
       }
       
       switch(context.getContext().mode()) {
@@ -511,6 +571,9 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
       case SERVER_ASYNC_STREAM:
         pipeline.fetchNext(context.nextParallelId());
       }
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
     }
     
   }
@@ -525,4 +588,17 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
     // TODO Auto-generated method stub
     return null;
   }
+
+
+  public static class MDSConfig implements QueryNodeConfig {
+    public String id;
+    public Filter filter;
+    public Metric metric;
+    
+    @Override
+    public String id() {
+      return id;
+    }
+  }
+  
 }
