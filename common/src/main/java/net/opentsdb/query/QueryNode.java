@@ -23,12 +23,9 @@ public interface QueryNode extends QueryListener {
   
   public void initialize();
   
-  /**
-   * Travels downstream the pipeline to fetch the next set of results.
-   * @param parallel_id TODO. 
-   * @throws IllegalStateException if no listener was set on this component.
-   */
-  public void fetchNext(final int parallel_id);
+  public void fetchNext();
+  
+  public QueryNodeConfig config();
   
 //  /**
 //   * Returns a clone of all downstream components for multi-pass operations.

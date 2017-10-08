@@ -86,13 +86,13 @@ public class TestMockStore {
             .setMetric("sys.cpu.user")
             .setFilter("f1")
             .setId("m1"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("web.requests")
-//            .setFilter("f1")
-//            .setId("m2"))
-//        .addExpression(Expression.newBuilder()
-//            .setExpression("m1 / m2")
-//            .setId("e1"))
+        .addMetric(Metric.newBuilder()
+            .setMetric("web.requests")
+            .setFilter("f1")
+            .setId("m2"))
+        .addExpression(Expression.newBuilder()
+            .setExpression("m1 / m2")
+            .setId("e1"))
         .addFilter(Filter.newBuilder()
             .setId("f1")
             .addFilter(TagVFilter.newBuilder()
@@ -127,9 +127,7 @@ public class TestMockStore {
           }
         }
         System.out.println("------------------------------");
-        if (next.parallelId() + 1 >= next.parallelism()) {
-          ctx.fetchNext();
-        }
+        ctx.fetchNext();
       }
 
       @Override
@@ -407,465 +405,465 @@ public class TestMockStore {
     mds.shutdown().join();
   }
   
-  @Test
-  public void queryClientStream() throws Exception {
-    MockDataStore mds = new MockDataStore();
-    mds.initialize(tsdb).join();
-    
-    long start_ts = 1483228800000L;
-    long end_ts = 1483236000000l;
-    
-    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-        .setTime(Timespan.newBuilder()
-            .setStart(Long.toString(start_ts))
-            .setEnd(Long.toString(end_ts)))
-        .addMetric(Metric.newBuilder()
-            .setMetric("sys.cpu.user")
-            .setFilter("f1")
-            .setId("m1"))
-        .addMetric(Metric.newBuilder()
-            .setMetric("web.requests")
-            .setFilter("f1")
-            .setId("m2"))
-        .addFilter(Filter.newBuilder()
-            .setId("f1")
-            .addFilter(TagVFilter.newBuilder()
-                .setFilter("web01")
-                .setType("literal_or")
-                .setTagk("host")
-                )
-            )
-        .build();
-    
-    class TestListener implements QueryListener {
-      int on_next = 0;
-      int on_error = 0;
-      int offset = 0;
-      QueryContext ctx;
-      Deferred<Object> completed = new Deferred<Object>();
-      
-      @Override
-      public void onComplete() {
-        completed.callback(null);
-      }
-
-      @Override
-      public void onNext(QueryResult next) {
-        assertEquals(4, next.timeSeries().size());
-        for (TimeSeries ts : next.timeSeries()) {
-          long timestamp = end_ts - ((next.sequenceId() + 1) * MockDataStore.ROW_WIDTH);
-          int values = 0;
-          
-          if (next.parallelId() % 2 == 0) {
-            assertEquals("sys.cpu.user", ts.id().metric());
-          } else {
-            assertEquals("web.requests", ts.id().metric());
-          }
-          Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
-          while (it.hasNext()) {
-            TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
-            assertEquals(timestamp, v.timestamp().msEpoch());
-            timestamp += MockDataStore.INTERVAL;
-            values++;
-          }
-          assertEquals(MockDataStore.ROW_WIDTH / MockDataStore.INTERVAL, values);
-        }
-        on_next++;
-        ctx.fetchNext();
-      }
-
-      @Override
-      public void onError(Throwable t) {
-        on_error++;
-      }
-      
-    }
-    
-    TestListener listener = new TestListener();
-    QueryContext ctx = new ExecutionBuilder()
-        .setQuery(query)
-        .setMode(QueryMode.CLIENT_STREAM)
-        .setExecutor(mds)
-        .setQueryListener(listener)
-        .build();
-    listener.ctx = ctx;
-    ctx.fetchNext();
-    
-    listener.completed.join();
-    assertEquals(4, listener.on_next);
-    assertEquals(0, listener.on_error);
-    mds.shutdown().join();
-  }
-  
-  @Test
-  public void queryClientStreamParallel() throws Exception {
-    config.overrideConfig("MockDataStore.threadpool.enable", "true");
-    MockDataStore mds = new MockDataStore();
-    mds.initialize(tsdb).join();
-    
-    long start_ts = 1483228800000L;
-    long end_ts = 1483236000000l;
-    
-    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-        .setTime(Timespan.newBuilder()
-            .setStart(Long.toString(start_ts))
-            .setEnd(Long.toString(end_ts)))
-        .addMetric(Metric.newBuilder()
-            .setMetric("sys.cpu.user")
-            .setFilter("f1")
-            .setId("m1"))
-        .addMetric(Metric.newBuilder()
-            .setMetric("web.requests")
-            .setFilter("f1")
-            .setId("m2"))
-        .addFilter(Filter.newBuilder()
-            .setId("f1")
-            .addFilter(TagVFilter.newBuilder()
-                .setFilter("web01")
-                .setType("literal_or")
-                .setTagk("host")
-                )
-            )
-        .build();
-    
-    class TestListener implements QueryListener {
-      int on_next = 0;
-      int on_error = 0;
-      int offset = 0;
-      QueryContext ctx;
-      Deferred<Object> completed = new Deferred<Object>();
-      
-      @Override
-      public void onComplete() {
-        completed.callback(null);
-      }
-
-      @Override
-      public void onNext(QueryResult next) {
-        if (next.parallelId() == 0 && on_next > 0) {
-          offset++;
-        }
-        assertEquals(4, next.timeSeries().size());
-        for (TimeSeries ts : next.timeSeries()) {
-          long timestamp = end_ts - ((offset + 1) * MockDataStore.ROW_WIDTH);
-          int values = 0;
-          
-          if (on_next % 2 == 0) {
-            assertEquals("sys.cpu.user", ts.id().metric());
-          } else {
-            assertEquals("web.requests", ts.id().metric());
-          }
-          Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
-          while (it.hasNext()) {
-            TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
-            assertEquals(timestamp, v.timestamp().msEpoch());
-            timestamp += MockDataStore.INTERVAL;
-            values++;
-          }
-          assertEquals(MockDataStore.ROW_WIDTH / MockDataStore.INTERVAL, values);
-        }
-        on_next++;
-        if (next.parallelId() + 1 >= next.parallelism()) {
-          ctx.fetchNext();
-        }
-      }
-
-      @Override
-      public void onError(Throwable t) {
-        on_error++;
-      }
-      
-    }
-    
-    TestListener listener = new TestListener();
-    QueryContext ctx = new ExecutionBuilder()
-        .setQuery(query)
-        .setMode(QueryMode.CLIENT_STREAM_PARALLEL)
-        .setExecutor(mds)
-        .setQueryListener(listener)
-        .build();
-    listener.ctx = ctx;
-    ctx.fetchNext();
-    
-    listener.completed.join();
-    assertEquals(4, listener.on_next);
-    assertEquals(0, listener.on_error);
-    mds.shutdown().join();
-  }
-  
-  @Test
-  public void queryServerStream() throws Exception {
-    config.overrideConfig("MockDataStore.threadpool.enable", "true");
-    MockDataStore mds = new MockDataStore();
-    mds.initialize(tsdb).join();
-    
-    long start_ts = 1483228800000L;
-    long end_ts = 1483236000000l;
-    
-    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-        .setTime(Timespan.newBuilder()
-            .setStart(Long.toString(start_ts))
-            .setEnd(Long.toString(end_ts)))
-        .addMetric(Metric.newBuilder()
-            .setMetric("sys.cpu.user")
-            .setFilter("f1")
-            .setId("m1"))
-        .addMetric(Metric.newBuilder()
-            .setMetric("web.requests")
-            .setFilter("f1")
-            .setId("m2"))
-        .addFilter(Filter.newBuilder()
-            .setId("f1")
-            .addFilter(TagVFilter.newBuilder()
-                .setFilter("web01")
-                .setType("literal_or")
-                .setTagk("host")
-                )
-            )
-        .build();
-    
-    class TestListener implements QueryListener {
-      int on_next = 0;
-      int on_error = 0;
-      int offset = 0;
-      Deferred<Object> completed = new Deferred<Object>();
-      
-      @Override
-      public void onComplete() {
-        completed.callback(null);
-      }
-
-      @Override
-      public void onNext(QueryResult next) {
-        if (next.parallelId() == 0 && on_next > 0) {
-          offset++;
-        }
-        assertEquals(4, next.timeSeries().size());
-        for (TimeSeries ts : next.timeSeries()) {
-          long timestamp = end_ts - ((offset + 1) * MockDataStore.ROW_WIDTH);
-          int values = 0;
-          
-          if (on_next % 2 == 0) {
-            assertEquals("sys.cpu.user", ts.id().metric());
-          } else {
-            assertEquals("web.requests", ts.id().metric());
-          }
-          Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
-          while (it.hasNext()) {
-            TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
-            assertEquals(timestamp, v.timestamp().msEpoch());
-            timestamp += MockDataStore.INTERVAL;
-            values++;
-          }
-          assertEquals(MockDataStore.ROW_WIDTH / MockDataStore.INTERVAL, values);
-        }
-        on_next++;
-      }
-
-      @Override
-      public void onError(Throwable t) {
-        on_error++;
-      }
-      
-    }
-    
-    TestListener listener = new TestListener();
-    QueryContext ctx = new ExecutionBuilder()
-        .setQuery(query)
-        .setMode(QueryMode.SERVER_SYNC_STREAM)
-        .setExecutor(mds)
-        .setQueryListener(listener)
-        .build();
-    ctx.fetchNext();
-    
-    listener.completed.join();
-    assertEquals(4, listener.on_next);
-    assertEquals(0, listener.on_error);
-    mds.shutdown().join();
-  }
-  
-  @Test
-  public void queryServerStreamParallel() throws Exception {
-    config.overrideConfig("MockDataStore.threadpool.enable", "true");
-    MockDataStore mds = new MockDataStore();
-    mds.initialize(tsdb).join();
-    
-    long start_ts = 1483228800000L;
-    long end_ts = 1483236000000l;
-    
-    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-        .setTime(Timespan.newBuilder()
-            .setStart(Long.toString(start_ts))
-            .setEnd(Long.toString(end_ts)))
-        .addMetric(Metric.newBuilder()
-            .setMetric("sys.cpu.user")
-            .setFilter("f1")
-            .setId("m1"))
-        .addMetric(Metric.newBuilder()
-            .setMetric("web.requests")
-            .setFilter("f1")
-            .setId("m2"))
-        .addFilter(Filter.newBuilder()
-            .setId("f1")
-            .addFilter(TagVFilter.newBuilder()
-                .setFilter("web01")
-                .setType("literal_or")
-                .setTagk("host")
-                )
-            )
-        .build();
-    
-    class TestListener implements QueryListener {
-      int on_next = 0;
-      int on_error = 0;
-      int offset = 0;
-      Deferred<Object> completed = new Deferred<Object>();
-      
-      @Override
-      public void onComplete() {
-        completed.callback(null);
-      }
-
-      @Override
-      public void onNext(QueryResult next) {
-        if (next.parallelId() == 0 && on_next > 0) {
-          offset++;
-        }
-        assertEquals(4, next.timeSeries().size());
-        for (TimeSeries ts : next.timeSeries()) {
-          long timestamp = end_ts - ((offset + 1) * MockDataStore.ROW_WIDTH);
-          int values = 0;
-          
-          if (on_next % 2 == 0) {
-            assertEquals("sys.cpu.user", ts.id().metric());
-          } else {
-            assertEquals("web.requests", ts.id().metric());
-          }
-          Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
-          while (it.hasNext()) {
-            TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
-            assertEquals(timestamp, v.timestamp().msEpoch());
-            timestamp += MockDataStore.INTERVAL;
-            values++;
-          }
-          assertEquals(MockDataStore.ROW_WIDTH / MockDataStore.INTERVAL, values);
-        }
-        on_next++;
-      }
-
-      @Override
-      public void onError(Throwable t) {
-        on_error++;
-      }
-      
-    }
-    
-    TestListener listener = new TestListener();
-    QueryContext ctx = new ExecutionBuilder()
-        .setQuery(query)
-        .setMode(QueryMode.SERVER_SYNC_STREAM_PARALLEL)
-        .setExecutor(mds)
-        .setQueryListener(listener)
-        .build();
-    ctx.fetchNext();
-    
-    listener.completed.join();
-    assertEquals(4, listener.on_next);
-    assertEquals(0, listener.on_error);
-    mds.shutdown().join();
-  }
-  
-  @Test
-  public void queryServerStreamAsync() throws Exception {
-    config.overrideConfig("MockDataStore.threadpool.enable", "true");
-    MockDataStore mds = new MockDataStore();
-    mds.initialize(tsdb).join();
-    
-    long start_ts = 1483228800000L;
-    long end_ts = 1483236000000l;
-    
-    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-        .setTime(Timespan.newBuilder()
-            .setStart(Long.toString(start_ts))
-            .setEnd(Long.toString(end_ts)))
-        .addMetric(Metric.newBuilder()
-            .setMetric("sys.cpu.user")
-            .setFilter("f1")
-            .setId("m1"))
-        .addMetric(Metric.newBuilder()
-            .setMetric("web.requests")
-            .setFilter("f1")
-            .setId("m2"))
-        .addFilter(Filter.newBuilder()
-            .setId("f1")
-            .addFilter(TagVFilter.newBuilder()
-                .setFilter("web01")
-                .setType("literal_or")
-                .setTagk("host")
-                )
-            )
-        .build();
-    
-    class TestListener implements QueryListener {
-      int on_next = 0;
-      int on_error = 0;
-      int offset = 0;
-      Deferred<Object> completed = new Deferred<Object>();
-      
-      @Override
-      public void onComplete() {
-        completed.callback(null);
-      }
-
-      @Override
-      public void onNext(QueryResult next) {
-        if (next.parallelId() == 0 && on_next > 0) {
-          offset++;
-        }
-        assertEquals(4, next.timeSeries().size());
-        for (TimeSeries ts : next.timeSeries()) {
-          long timestamp = end_ts - ((offset + 1) * MockDataStore.ROW_WIDTH);
-          int values = 0;
-          
-          if (on_next % 2 == 0) {
-            assertEquals("sys.cpu.user", ts.id().metric());
-          } else {
-            assertEquals("web.requests", ts.id().metric());
-          }
-          Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
-          while (it.hasNext()) {
-            TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
-            assertEquals(timestamp, v.timestamp().msEpoch());
-            timestamp += MockDataStore.INTERVAL;
-            values++;
-          }
-          assertEquals(MockDataStore.ROW_WIDTH / MockDataStore.INTERVAL, values);
-        }
-        on_next++;
-      }
-
-      @Override
-      public void onError(Throwable t) {
-        on_error++;
-      }
-      
-    }
-    
-    TestListener listener = new TestListener();
-    QueryContext ctx = new ExecutionBuilder()
-        .setQuery(query)
-        .setMode(QueryMode.SERVER_ASYNC_STREAM)
-        .setExecutor(mds)
-        .setQueryListener(listener)
-        .build();
-    ctx.fetchNext();
-    
-    listener.completed.join();
-    assertEquals(4, listener.on_next);
-    assertEquals(0, listener.on_error);
-    mds.shutdown().join();
-  }
-  
+//  @Test
+//  public void queryClientStream() throws Exception {
+//    MockDataStore mds = new MockDataStore();
+//    mds.initialize(tsdb).join();
+//    
+//    long start_ts = 1483228800000L;
+//    long end_ts = 1483236000000l;
+//    
+//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
+//        .setTime(Timespan.newBuilder()
+//            .setStart(Long.toString(start_ts))
+//            .setEnd(Long.toString(end_ts)))
+//        .addMetric(Metric.newBuilder()
+//            .setMetric("sys.cpu.user")
+//            .setFilter("f1")
+//            .setId("m1"))
+//        .addMetric(Metric.newBuilder()
+//            .setMetric("web.requests")
+//            .setFilter("f1")
+//            .setId("m2"))
+//        .addFilter(Filter.newBuilder()
+//            .setId("f1")
+//            .addFilter(TagVFilter.newBuilder()
+//                .setFilter("web01")
+//                .setType("literal_or")
+//                .setTagk("host")
+//                )
+//            )
+//        .build();
+//    
+//    class TestListener implements QueryListener {
+//      int on_next = 0;
+//      int on_error = 0;
+//      int offset = 0;
+//      QueryContext ctx;
+//      Deferred<Object> completed = new Deferred<Object>();
+//      
+//      @Override
+//      public void onComplete() {
+//        completed.callback(null);
+//      }
+//
+//      @Override
+//      public void onNext(QueryResult next) {
+//        assertEquals(4, next.timeSeries().size());
+//        for (TimeSeries ts : next.timeSeries()) {
+//          long timestamp = end_ts - ((next.sequenceId() + 1) * MockDataStore.ROW_WIDTH);
+//          int values = 0;
+//          
+//          if (next.parallelId() % 2 == 0) {
+//            assertEquals("sys.cpu.user", ts.id().metric());
+//          } else {
+//            assertEquals("web.requests", ts.id().metric());
+//          }
+//          Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
+//          while (it.hasNext()) {
+//            TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+//            assertEquals(timestamp, v.timestamp().msEpoch());
+//            timestamp += MockDataStore.INTERVAL;
+//            values++;
+//          }
+//          assertEquals(MockDataStore.ROW_WIDTH / MockDataStore.INTERVAL, values);
+//        }
+//        on_next++;
+//        ctx.fetchNext();
+//      }
+//
+//      @Override
+//      public void onError(Throwable t) {
+//        on_error++;
+//      }
+//      
+//    }
+//    
+//    TestListener listener = new TestListener();
+//    QueryContext ctx = new ExecutionBuilder()
+//        .setQuery(query)
+//        .setMode(QueryMode.CLIENT_STREAM)
+//        .setExecutor(mds)
+//        .setQueryListener(listener)
+//        .build();
+//    listener.ctx = ctx;
+//    ctx.fetchNext();
+//    
+//    listener.completed.join();
+//    assertEquals(4, listener.on_next);
+//    assertEquals(0, listener.on_error);
+//    mds.shutdown().join();
+//  }
+//  
+//  @Test
+//  public void queryClientStreamParallel() throws Exception {
+//    config.overrideConfig("MockDataStore.threadpool.enable", "true");
+//    MockDataStore mds = new MockDataStore();
+//    mds.initialize(tsdb).join();
+//    
+//    long start_ts = 1483228800000L;
+//    long end_ts = 1483236000000l;
+//    
+//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
+//        .setTime(Timespan.newBuilder()
+//            .setStart(Long.toString(start_ts))
+//            .setEnd(Long.toString(end_ts)))
+//        .addMetric(Metric.newBuilder()
+//            .setMetric("sys.cpu.user")
+//            .setFilter("f1")
+//            .setId("m1"))
+//        .addMetric(Metric.newBuilder()
+//            .setMetric("web.requests")
+//            .setFilter("f1")
+//            .setId("m2"))
+//        .addFilter(Filter.newBuilder()
+//            .setId("f1")
+//            .addFilter(TagVFilter.newBuilder()
+//                .setFilter("web01")
+//                .setType("literal_or")
+//                .setTagk("host")
+//                )
+//            )
+//        .build();
+//    
+//    class TestListener implements QueryListener {
+//      int on_next = 0;
+//      int on_error = 0;
+//      int offset = 0;
+//      QueryContext ctx;
+//      Deferred<Object> completed = new Deferred<Object>();
+//      
+//      @Override
+//      public void onComplete() {
+//        completed.callback(null);
+//      }
+//
+//      @Override
+//      public void onNext(QueryResult next) {
+//        if (next.parallelId() == 0 && on_next > 0) {
+//          offset++;
+//        }
+//        assertEquals(4, next.timeSeries().size());
+//        for (TimeSeries ts : next.timeSeries()) {
+//          long timestamp = end_ts - ((offset + 1) * MockDataStore.ROW_WIDTH);
+//          int values = 0;
+//          
+//          if (on_next % 2 == 0) {
+//            assertEquals("sys.cpu.user", ts.id().metric());
+//          } else {
+//            assertEquals("web.requests", ts.id().metric());
+//          }
+//          Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
+//          while (it.hasNext()) {
+//            TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+//            assertEquals(timestamp, v.timestamp().msEpoch());
+//            timestamp += MockDataStore.INTERVAL;
+//            values++;
+//          }
+//          assertEquals(MockDataStore.ROW_WIDTH / MockDataStore.INTERVAL, values);
+//        }
+//        on_next++;
+//        if (next.parallelId() + 1 >= next.parallelism()) {
+//          ctx.fetchNext();
+//        }
+//      }
+//
+//      @Override
+//      public void onError(Throwable t) {
+//        on_error++;
+//      }
+//      
+//    }
+//    
+//    TestListener listener = new TestListener();
+//    QueryContext ctx = new ExecutionBuilder()
+//        .setQuery(query)
+//        .setMode(QueryMode.CLIENT_STREAM_PARALLEL)
+//        .setExecutor(mds)
+//        .setQueryListener(listener)
+//        .build();
+//    listener.ctx = ctx;
+//    ctx.fetchNext();
+//    
+//    listener.completed.join();
+//    assertEquals(4, listener.on_next);
+//    assertEquals(0, listener.on_error);
+//    mds.shutdown().join();
+//  }
+//  
+//  @Test
+//  public void queryServerStream() throws Exception {
+//    config.overrideConfig("MockDataStore.threadpool.enable", "true");
+//    MockDataStore mds = new MockDataStore();
+//    mds.initialize(tsdb).join();
+//    
+//    long start_ts = 1483228800000L;
+//    long end_ts = 1483236000000l;
+//    
+//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
+//        .setTime(Timespan.newBuilder()
+//            .setStart(Long.toString(start_ts))
+//            .setEnd(Long.toString(end_ts)))
+//        .addMetric(Metric.newBuilder()
+//            .setMetric("sys.cpu.user")
+//            .setFilter("f1")
+//            .setId("m1"))
+//        .addMetric(Metric.newBuilder()
+//            .setMetric("web.requests")
+//            .setFilter("f1")
+//            .setId("m2"))
+//        .addFilter(Filter.newBuilder()
+//            .setId("f1")
+//            .addFilter(TagVFilter.newBuilder()
+//                .setFilter("web01")
+//                .setType("literal_or")
+//                .setTagk("host")
+//                )
+//            )
+//        .build();
+//    
+//    class TestListener implements QueryListener {
+//      int on_next = 0;
+//      int on_error = 0;
+//      int offset = 0;
+//      Deferred<Object> completed = new Deferred<Object>();
+//      
+//      @Override
+//      public void onComplete() {
+//        completed.callback(null);
+//      }
+//
+//      @Override
+//      public void onNext(QueryResult next) {
+//        if (next.parallelId() == 0 && on_next > 0) {
+//          offset++;
+//        }
+//        assertEquals(4, next.timeSeries().size());
+//        for (TimeSeries ts : next.timeSeries()) {
+//          long timestamp = end_ts - ((offset + 1) * MockDataStore.ROW_WIDTH);
+//          int values = 0;
+//          
+//          if (on_next % 2 == 0) {
+//            assertEquals("sys.cpu.user", ts.id().metric());
+//          } else {
+//            assertEquals("web.requests", ts.id().metric());
+//          }
+//          Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
+//          while (it.hasNext()) {
+//            TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+//            assertEquals(timestamp, v.timestamp().msEpoch());
+//            timestamp += MockDataStore.INTERVAL;
+//            values++;
+//          }
+//          assertEquals(MockDataStore.ROW_WIDTH / MockDataStore.INTERVAL, values);
+//        }
+//        on_next++;
+//      }
+//
+//      @Override
+//      public void onError(Throwable t) {
+//        on_error++;
+//      }
+//      
+//    }
+//    
+//    TestListener listener = new TestListener();
+//    QueryContext ctx = new ExecutionBuilder()
+//        .setQuery(query)
+//        .setMode(QueryMode.SERVER_SYNC_STREAM)
+//        .setExecutor(mds)
+//        .setQueryListener(listener)
+//        .build();
+//    ctx.fetchNext();
+//    
+//    listener.completed.join();
+//    assertEquals(4, listener.on_next);
+//    assertEquals(0, listener.on_error);
+//    mds.shutdown().join();
+//  }
+//  
+//  @Test
+//  public void queryServerStreamParallel() throws Exception {
+//    config.overrideConfig("MockDataStore.threadpool.enable", "true");
+//    MockDataStore mds = new MockDataStore();
+//    mds.initialize(tsdb).join();
+//    
+//    long start_ts = 1483228800000L;
+//    long end_ts = 1483236000000l;
+//    
+//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
+//        .setTime(Timespan.newBuilder()
+//            .setStart(Long.toString(start_ts))
+//            .setEnd(Long.toString(end_ts)))
+//        .addMetric(Metric.newBuilder()
+//            .setMetric("sys.cpu.user")
+//            .setFilter("f1")
+//            .setId("m1"))
+//        .addMetric(Metric.newBuilder()
+//            .setMetric("web.requests")
+//            .setFilter("f1")
+//            .setId("m2"))
+//        .addFilter(Filter.newBuilder()
+//            .setId("f1")
+//            .addFilter(TagVFilter.newBuilder()
+//                .setFilter("web01")
+//                .setType("literal_or")
+//                .setTagk("host")
+//                )
+//            )
+//        .build();
+//    
+//    class TestListener implements QueryListener {
+//      int on_next = 0;
+//      int on_error = 0;
+//      int offset = 0;
+//      Deferred<Object> completed = new Deferred<Object>();
+//      
+//      @Override
+//      public void onComplete() {
+//        completed.callback(null);
+//      }
+//
+//      @Override
+//      public void onNext(QueryResult next) {
+//        if (next.parallelId() == 0 && on_next > 0) {
+//          offset++;
+//        }
+//        assertEquals(4, next.timeSeries().size());
+//        for (TimeSeries ts : next.timeSeries()) {
+//          long timestamp = end_ts - ((offset + 1) * MockDataStore.ROW_WIDTH);
+//          int values = 0;
+//          
+//          if (on_next % 2 == 0) {
+//            assertEquals("sys.cpu.user", ts.id().metric());
+//          } else {
+//            assertEquals("web.requests", ts.id().metric());
+//          }
+//          Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
+//          while (it.hasNext()) {
+//            TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+//            assertEquals(timestamp, v.timestamp().msEpoch());
+//            timestamp += MockDataStore.INTERVAL;
+//            values++;
+//          }
+//          assertEquals(MockDataStore.ROW_WIDTH / MockDataStore.INTERVAL, values);
+//        }
+//        on_next++;
+//      }
+//
+//      @Override
+//      public void onError(Throwable t) {
+//        on_error++;
+//      }
+//      
+//    }
+//    
+//    TestListener listener = new TestListener();
+//    QueryContext ctx = new ExecutionBuilder()
+//        .setQuery(query)
+//        .setMode(QueryMode.SERVER_SYNC_STREAM_PARALLEL)
+//        .setExecutor(mds)
+//        .setQueryListener(listener)
+//        .build();
+//    ctx.fetchNext();
+//    
+//    listener.completed.join();
+//    assertEquals(4, listener.on_next);
+//    assertEquals(0, listener.on_error);
+//    mds.shutdown().join();
+//  }
+//  
+//  @Test
+//  public void queryServerStreamAsync() throws Exception {
+//    config.overrideConfig("MockDataStore.threadpool.enable", "true");
+//    MockDataStore mds = new MockDataStore();
+//    mds.initialize(tsdb).join();
+//    
+//    long start_ts = 1483228800000L;
+//    long end_ts = 1483236000000l;
+//    
+//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
+//        .setTime(Timespan.newBuilder()
+//            .setStart(Long.toString(start_ts))
+//            .setEnd(Long.toString(end_ts)))
+//        .addMetric(Metric.newBuilder()
+//            .setMetric("sys.cpu.user")
+//            .setFilter("f1")
+//            .setId("m1"))
+//        .addMetric(Metric.newBuilder()
+//            .setMetric("web.requests")
+//            .setFilter("f1")
+//            .setId("m2"))
+//        .addFilter(Filter.newBuilder()
+//            .setId("f1")
+//            .addFilter(TagVFilter.newBuilder()
+//                .setFilter("web01")
+//                .setType("literal_or")
+//                .setTagk("host")
+//                )
+//            )
+//        .build();
+//    
+//    class TestListener implements QueryListener {
+//      int on_next = 0;
+//      int on_error = 0;
+//      int offset = 0;
+//      Deferred<Object> completed = new Deferred<Object>();
+//      
+//      @Override
+//      public void onComplete() {
+//        completed.callback(null);
+//      }
+//
+//      @Override
+//      public void onNext(QueryResult next) {
+//        if (next.parallelId() == 0 && on_next > 0) {
+//          offset++;
+//        }
+//        assertEquals(4, next.timeSeries().size());
+//        for (TimeSeries ts : next.timeSeries()) {
+//          long timestamp = end_ts - ((offset + 1) * MockDataStore.ROW_WIDTH);
+//          int values = 0;
+//          
+//          if (on_next % 2 == 0) {
+//            assertEquals("sys.cpu.user", ts.id().metric());
+//          } else {
+//            assertEquals("web.requests", ts.id().metric());
+//          }
+//          Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
+//          while (it.hasNext()) {
+//            TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+//            assertEquals(timestamp, v.timestamp().msEpoch());
+//            timestamp += MockDataStore.INTERVAL;
+//            values++;
+//          }
+//          assertEquals(MockDataStore.ROW_WIDTH / MockDataStore.INTERVAL, values);
+//        }
+//        on_next++;
+//      }
+//
+//      @Override
+//      public void onError(Throwable t) {
+//        on_error++;
+//      }
+//      
+//    }
+//    
+//    TestListener listener = new TestListener();
+//    QueryContext ctx = new ExecutionBuilder()
+//        .setQuery(query)
+//        .setMode(QueryMode.SERVER_ASYNC_STREAM)
+//        .setExecutor(mds)
+//        .setQueryListener(listener)
+//        .build();
+//    ctx.fetchNext();
+//    
+//    listener.completed.join();
+//    assertEquals(4, listener.on_next);
+//    assertEquals(0, listener.on_error);
+//    mds.shutdown().join();
+//  }
+//  
   @Test
   public void initialize() throws Exception {
     MockDataStore mds = new MockDataStore();

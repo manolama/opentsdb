@@ -82,7 +82,7 @@ public class ExecutionBuilder {
     @Override
     public void fetchNext() {
       for (final QueryNode root : ctx.roots()) {
-        root.fetchNext(0);
+        root.fetchNext();
 //        if (mode == QueryMode.SINGLE /*&& ctx.parallelQueries() > 0*/) {
 //          //for (int i = 0; i < ctx.parallelQueries(); i++) {
 //            root.fetchNext(0);

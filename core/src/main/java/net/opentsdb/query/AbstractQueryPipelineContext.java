@@ -81,7 +81,11 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     final DepthFirstIterator<QueryNode, DefaultEdge> df_iterator = 
       new DepthFirstIterator<QueryNode, DefaultEdge>(graph);
     while (df_iterator.hasNext()) {
-      df_iterator.next().initialize();
+      QueryNode node = df_iterator.next();
+      node.initialize();
+      if (graph.incomingEdgesOf(node).isEmpty()) {
+        roots.add(node);
+      }
     }
   }
 }

@@ -1,14 +1,23 @@
 package net.opentsdb.query;
 
 import java.util.Collection;
+import java.util.Set;
+
+import org.jgrapht.experimental.dag.DirectedAcyclicGraph.CycleFoundException;
+import org.jgrapht.graph.DefaultEdge;
+import org.jgrapht.traverse.DepthFirstIterator;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Maps;
 
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.query.plan.SplitMetricPlanner;
+import net.opentsdb.query.pojo.Expression;
 import net.opentsdb.query.pojo.Metric;
 import net.opentsdb.query.processor.GroupByFactory;
 import net.opentsdb.query.processor.GroupByFactory.GBConfig;
+import net.opentsdb.query.processor.JexlExpressionFactory;
+import net.opentsdb.query.processor.JexlExpressionFactory.JEConfig;
 import net.opentsdb.storage.MockDataStore;
 import net.opentsdb.storage.MockDataStore.MDSConfig;
 
@@ -36,28 +45,15 @@ public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext 
   public TimeSeriesQuery getQuery() {
     return query;
   }
-
-  @Override
-  public int parallelQueries() {
-    return plan.subQueries().size();
-  }
   
-  @Override
-  public synchronized int nextParallelId() {
-    if (parallel_id >= plan.subQueries().size()) {
-      parallel_id = 0;
-    }
-    return parallel_id++;
-  }
-
   public void initialize() {
     // TODO - pick metric executors
     for (Metric metric : plan.getMetrics()) {
       System.out.println("WORKING METRIC: " + metric);
       // TODO - push down gb
       MDSConfig c = new MDSConfig();
-      c.id = metric.getId();
       c.metric = metric;
+      c.query = plan;
       if (!Strings.isNullOrEmpty(metric.getFilter())) {
         c.filter = plan.getFilter(metric.getFilter());
       }
@@ -81,20 +77,17 @@ public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext 
           QueryNode gb = new GroupByFactory().newNode(this, gb_config);
           //vertices.put(gb_config.id, gb);
           graph.addVertex(gb);
-          graph.addEdge(gb, node);
+          try {
+            graph.addDagEdge(gb, node);
+          } catch (CycleFoundException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+          }
           node = gb;
         }
       }
-      
-      roots.add(node);
-      // sink time
-//      QueryNode sink = new SinkNode(this, listeners);
-//      listeners.add(sink);
-//      //vertices.put("sink_" + metric.getId(), sink);
-//      graph.addVertex(sink);
-//      graph.addEdge(sink, node);
     }
-    
+    parseExpresions();
     initializeNodes();
     System.out.println("Built graph: " + graph);
   }
@@ -105,15 +98,65 @@ public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext 
     
   }
 
-  @Override
-  public void setListener(QueryListener listener) {
-    // TODO Auto-generated method stub
+  void parseExpresions() {
+    if (plan.getExpressions() == null || plan.getExpressions().isEmpty()) {
+      return;
+    }
     
-  }
-
-  @Override
-  public QueryListener getListener() {
-    // TODO Auto-generated method stub
-    return null;
+    for (Expression e : plan.getExpressions()) {
+      JEConfig config = new JEConfig();
+      config.exp = e;
+      config.ids_map = Maps.newHashMap();
+      
+      for (Metric metric : plan.getMetrics()) {
+        if (e.getVariables().contains(metric.getId())) {
+          config.ids_map.put(metric.getMetric(), metric.getId());
+        }
+      }
+      for (String var : e.getVariables()) {
+        if (config.ids_map.containsKey(var)) {
+          // must be an expression
+          config.ids_map.put(var, var);
+        }
+      }
+      
+      QueryNode enode = new JexlExpressionFactory().newNode(this, config);
+      graph.addVertex(enode);
+      
+      final DepthFirstIterator<QueryNode, DefaultEdge> df_iterator = 
+        new DepthFirstIterator<QueryNode, DefaultEdge>(graph);
+      while (df_iterator.hasNext()) {
+        QueryNode node = df_iterator.next();
+        if (!graph.outgoingEdgesOf(node).isEmpty()) {
+          continue;
+        }
+        
+        if (e.getVariables().contains(node.config().id())) {
+          // matched!
+          QueryNode upstream = node;
+          while (upstream != null) {
+            Set<DefaultEdge> incoming = graph.incomingEdgesOf(upstream);
+            if (incoming.isEmpty()) {
+              break;
+            }
+            System.out.println("Incoming of " + node.config().id() + " => " + incoming);
+            QueryNode us = graph.getEdgeSource(incoming.iterator().next());
+            System.out.println("   Upstream was: " + us);
+            if (us == null) {
+              break;
+            }
+            upstream = us;
+          }
+          // walked up, so now add it to the expression
+          try {
+            System.out.println("LINKING Expression " + e.getId() + " to var: " + node.config().id());
+            graph.addDagEdge(enode, upstream);
+          } catch (CycleFoundException e1) {
+            // TODO Auto-generated catch block
+            e1.printStackTrace();
+          }
+        }
+      }
+    }
   }
 }

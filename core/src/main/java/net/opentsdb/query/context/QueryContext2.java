@@ -6,6 +6,7 @@ import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.QueryListener;
 import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryNode;
+import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.execution.QueryExecutorConfig;
@@ -70,12 +71,6 @@ public class QueryContext2 extends AbstractQueryNode implements QueryContext {
   }
 
   @Override
-  public void fetchNext(final int parallel_id) {
-    // TODO Auto-generated method stub
-    
-  }
-
-  @Override
   public QueryPipelineContext context() {
     // TODO Auto-generated method stub
     return null;
@@ -107,6 +102,12 @@ public class QueryContext2 extends AbstractQueryNode implements QueryContext {
 
   @Override
   public QueryListener getListener() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public QueryNodeConfig config() {
     // TODO Auto-generated method stub
     return null;
   }

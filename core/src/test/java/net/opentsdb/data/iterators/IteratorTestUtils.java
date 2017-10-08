@@ -37,6 +37,7 @@ import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.types.numeric.NumericMillisecondShard;
 import net.opentsdb.data.types.numeric.NumericMillisecondShard2;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 
 /**
@@ -155,21 +156,15 @@ public class IteratorTestUtils {
       }
 
       @Override
-      public int parallelId() {
-        // TODO Auto-generated method stub
-        return 0;
-      }
-
-      @Override
       public int sequenceId() {
         // TODO Auto-generated method stub
         return 0;
       }
 
       @Override
-      public int parallelism() {
+      public QueryNode source() {
         // TODO Auto-generated method stub
-        return 0;
+        return null;
       }
       
     }

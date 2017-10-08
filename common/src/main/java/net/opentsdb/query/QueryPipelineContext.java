@@ -10,14 +10,6 @@ public interface QueryPipelineContext {
   
   public QueryContext getContext();
   
-  public void setListener(final QueryListener listener);
-  
-  public QueryListener getListener();
-  
-  public int parallelQueries();
-  
-  public int nextParallelId();
-  
   public void initialize();
   
   public Collection<QueryListener> upstream(final QueryNode node);

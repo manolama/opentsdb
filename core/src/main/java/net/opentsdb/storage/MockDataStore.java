@@ -60,6 +60,7 @@ import net.opentsdb.query.execution.QueryExecutor2;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.query.pojo.Filter;
 import net.opentsdb.query.pojo.Metric;
+import net.opentsdb.query.processor.GroupBy;
 import net.opentsdb.stats.TsdbTrace;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.JSON;
@@ -101,6 +102,7 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
     if (tsdb.getConfig().hasProperty("MockDataStore.threadpool.enable") && 
         tsdb.getConfig().getBoolean("MockDataStore.threadpool.enable")) {
       thread_pool = Executors.newCachedThreadPool();
+      System.out.println("INITed the thread pool");
     }
     return Deferred.fromResult(null);
   }
@@ -315,10 +317,8 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
     }
     
     @Override
-    public void fetchNext(int parallel_id) {
+    public void fetchNext() {
       try {
-        
-        System.out.println("FETCH NEXT: " + parallel_id);
         if (context.getContext().mode() == QueryMode.SINGLE && sequence_ids[0] > 0/* && parallel_id >= context.parallelQueries()*/) {
           for (final QueryListener node : upstream) {
             node.onComplete();
@@ -329,39 +329,20 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
         //System.out.println("QUERIES: " + context.parallelQueries() + " PID: " + parallel_id + " SID: " + sequence_ids[parallel_id]);
         LocalResult result;
         synchronized(this) {
-          result = new LocalResult(context, 
-              this, parallel_id, sequence_ids[0]++);
+          result = new LocalResult(context, this, config, sequence_ids[0]++);
         }
         
         switch(context.getContext().mode()) {
         case SINGLE:
-  //        if (parallel_id >= context.parallelQueries()) {
-  //          for (final QueryListener node : upstream) {
-  //            node.onComplete();
-  //          }
-  //        } else {
-            result.run();
-  //        }
+          thread_pool.submit(result);
           break;
         case CLIENT_STREAM:
-          result.run();
-          break;
         case CLIENT_STREAM_PARALLEL:
-          if (parallel_id >= context.parallelQueries()) {
-            result.run();
-          } else {
-            thread_pool.submit(result);
-          }
+          thread_pool.submit(result);
           break;
         case SERVER_SYNC_STREAM:
-          result.run();
-          break;
         case SERVER_SYNC_STREAM_PARALLEL:
-          if (parallel_id >= context.parallelQueries()) {
-            result.run();
-          } else {
-            thread_pool.submit(result);
-          }
+          thread_pool.submit(result);
           break;
         case SERVER_ASYNC_STREAM:
           thread_pool.submit(result);
@@ -373,7 +354,7 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
     
     @Override
     public String id() {
-      return config != null ? config.id : null;
+      return config.id();
     }
     
     @Override
@@ -412,20 +393,25 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
       // TODO Auto-generated method stub
       
     }
+
+    @Override
+    public QueryNodeConfig config() {
+      return config;
+    }
   }
   
   class LocalResult implements QueryResult, Runnable {
     final QueryPipelineContext context;
     final MyPipeline pipeline;
-    final int parallel_id;
     final int sequence_id;
     final List<TimeSeries> matched_series;
+    final MDSConfig config;
     
-    LocalResult(QueryPipelineContext context, MyPipeline pipeline, int parallel_id, int sequence_id) {
+    LocalResult(QueryPipelineContext context, MyPipeline pipeline, MDSConfig config, int sequence_id) {
       this.context = context;
       this.pipeline = pipeline;
-      this.parallel_id = parallel_id;
       this.sequence_id = sequence_id;
+      this.config = config;
       matched_series = Lists.newArrayList();
     }
     
@@ -439,36 +425,24 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
     public Collection<TimeSeries> timeSeries() {
       return matched_series;
     }
-
-    @Override
-    public int parallelId() {
-      return parallel_id;
-    }
-
+    
     @Override
     public int sequenceId() {
       return sequence_id;
-    }
-
-    @Override
-    public int parallelism() {
-      return context.parallelQueries();
     }
     
     @Override
     public void run() {
       try {
-      final net.opentsdb.query.pojo.TimeSeriesQuery query = 
-          ((net.opentsdb.query.pojo.TimeSeriesQuery) context.getQuery(parallel_id));
       long start_ts = context.getContext().mode() == QueryMode.SINGLE ? 
-          query.getTime().startTime().msEpoch() : 
-            query.getTime().endTime().msEpoch() - ((sequence_id + 1) * ROW_WIDTH);
+          config.query.getTime().startTime().msEpoch() : 
+            config.query.getTime().endTime().msEpoch() - ((sequence_id + 1) * ROW_WIDTH);
       long end_ts = context.getContext().mode() == QueryMode.SINGLE ? 
-          query.getTime().endTime().msEpoch() : 
-            query.getTime().endTime().msEpoch() - (sequence_id * ROW_WIDTH);
+          config.query.getTime().endTime().msEpoch() : 
+            config.query.getTime().endTime().msEpoch() - (sequence_id * ROW_WIDTH);
       
       //System.out.println("START: " + start_ts + "  END: " + end_ts);
-      if (end_ts <= query.getTime().startTime().msEpoch()) {
+      if (end_ts <= config.query.getTime().startTime().msEpoch()) {
         System.out.println("Over the end time. done");
         if (pipeline.completed.compareAndSet(false, true)) {
           for (QueryListener node : pipeline.upstream()) {
@@ -477,16 +451,17 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
         }
         return;
       }
-      System.out.println("Running the filter: " + query);
+      System.out.println("Running the filter: " + config.query);
       for (final Entry<TimeSeriesId, MockSpan> entry : database.entrySet()) {
-        for (Metric m : query.getMetrics()) {
+        //for (Metric m : config.query.getMetrics()) {
+        Metric m = config.metric;
           if (!m.getMetric().equals(entry.getKey().metric())) {
             continue;
           }
           
           if (!Strings.isNullOrEmpty(m.getFilter())) {
             Filter f = null;
-            for (Filter filter : query.getFilters()) {
+            for (Filter filter : config.query.getFilters()) {
               if (filter.getId().equals(m.getFilter())) {
                 f = filter;
                 break;
@@ -540,7 +515,7 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
           if (rows > 0) {
             matched_series.add(iterator);
           }
-        }
+        //}
       }
       
       System.out.println("DONE with filtering.");
@@ -560,22 +535,22 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
       switch(context.getContext().mode()) {
       case SINGLE:
       case CLIENT_STREAM:
-        break;
       case CLIENT_STREAM_PARALLEL:
-        if (parallel_id < context.parallelQueries() - 1) {
-          pipeline.fetchNext(context.nextParallelId());
-        }
         break;
       case SERVER_SYNC_STREAM:
       case SERVER_SYNC_STREAM_PARALLEL:
       case SERVER_ASYNC_STREAM:
-        pipeline.fetchNext(context.nextParallelId());
+        pipeline.fetchNext();
       }
       } catch (Exception e) {
         e.printStackTrace();
       }
     }
     
+    @Override
+    public QueryNode source() {
+      return pipeline;
+    }
   }
 
   @Override
@@ -591,14 +566,13 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
 
 
   public static class MDSConfig implements QueryNodeConfig {
-    public String id;
+    public net.opentsdb.query.pojo.TimeSeriesQuery query;
     public Filter filter;
     public Metric metric;
     
     @Override
     public String id() {
-      return id;
+      return metric.getId();
     }
   }
-  
 }

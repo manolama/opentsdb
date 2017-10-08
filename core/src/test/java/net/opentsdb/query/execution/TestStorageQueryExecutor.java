@@ -223,45 +223,45 @@ public class TestStorageQueryExecutor extends BaseExecutorTest {
 //    assertTrue(listener.t instanceof IllegalStateException);
 //  }
 //  
-  @Test
-  public void executeClose() throws Exception {
-    final StorageQueryExecutor executor = new StorageQueryExecutor(node);
-    AtomicBoolean completed = new AtomicBoolean();
-    AtomicBoolean fetched = new AtomicBoolean();
-    class TestListener implements QueryListener {
-      
-      @Override
-      public void onComplete() {
-        completed.set(true);
-      }
-
-      @Override
-      public void onNext(QueryResult next) {
-        fetched.set(true);
-      }
-
-      @Override
-      public void onError(Throwable t) { }
-      
-    }
-    
-    TestListener listener = new TestListener();
-    when(context.getListener()).thenReturn(listener);
-    final QueryNode exec = executor.executeQuery(context);
-    assertEquals(1, executor.outstandingPipelines().size());
-    assertEquals(0, execution.fetched_next);
-    assertEquals(0, execution.closed);
-    assertFalse(completed.get());
-    assertFalse(fetched.get());
-    
-    exec.close();
-    assertEquals(0, executor.outstandingPipelines().size());
-    assertEquals(0, execution.fetched_next);
-    assertEquals(1, execution.closed);
-    assertTrue(completed.get());
-    assertFalse(fetched.get());
-  }
-  
+//  @Test
+//  public void executeClose() throws Exception {
+//    final StorageQueryExecutor executor = new StorageQueryExecutor(node);
+//    AtomicBoolean completed = new AtomicBoolean();
+//    AtomicBoolean fetched = new AtomicBoolean();
+//    class TestListener implements QueryListener {
+//      
+//      @Override
+//      public void onComplete() {
+//        completed.set(true);
+//      }
+//
+//      @Override
+//      public void onNext(QueryResult next) {
+//        fetched.set(true);
+//      }
+//
+//      @Override
+//      public void onError(Throwable t) { }
+//      
+//    }
+//    
+//    TestListener listener = new TestListener();
+//    when(context.getListener()).thenReturn(listener);
+//    final QueryNode exec = executor.executeQuery(context);
+//    assertEquals(1, executor.outstandingPipelines().size());
+//    assertEquals(0, execution.fetched_next);
+//    assertEquals(0, execution.closed);
+//    assertFalse(completed.get());
+//    assertFalse(fetched.get());
+//    
+//    exec.close();
+//    assertEquals(0, executor.outstandingPipelines().size());
+//    assertEquals(0, execution.fetched_next);
+//    assertEquals(1, execution.closed);
+//    assertTrue(completed.get());
+//    assertFalse(fetched.get());
+//  }
+//  
   @Test
   public void builder() throws Exception {
     String json = JSON.serializeToString(config);

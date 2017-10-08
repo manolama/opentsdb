@@ -37,27 +37,17 @@ import net.opentsdb.query.processor.GroupByFactory.GBConfig;
 
 public class GroupBy extends AbstractQueryNode implements net.opentsdb.query.TimeSeriesProcessor {
 
-//  private QueryListener upstream;
-//  private QueryNode downstream;
-  //private final Map<String, List<String>> metric_keys;
-  QueryPipelineContext context;
   GBConfig config;
     
-  public GroupBy(QueryPipelineContext context,
-      GBConfig config) {
+  public GroupBy(QueryPipelineContext context, GBConfig config) {
     super(context);
     this.config = config;
   }
   
   @Override
-  public void fetchNext(int parallel_id) {
-    synchronized(this) {
-      if (downstream == null) {
-        downstream = context.downstream(this);
-      }
-    }
+  public void fetchNext() {
     for (QueryNode ds : downstream) {
-      ds.fetchNext(parallel_id);
+      ds.fetchNext();
     }
   }
   
@@ -76,11 +66,6 @@ public class GroupBy extends AbstractQueryNode implements net.opentsdb.query.Tim
 
   @Override
   public void onNext(QueryResult next) {
-    synchronized(this) {
-      if (upstream == null) {
-        upstream = context.upstream(this);
-      }
-    }
     for (final QueryListener us : upstream) {
       us.onNext(new LocalResult(next));
     }
@@ -88,11 +73,6 @@ public class GroupBy extends AbstractQueryNode implements net.opentsdb.query.Tim
 
   @Override
   public void onError(Throwable t) {
-    synchronized(this) {
-      if (upstream == null) {
-        upstream = context.upstream(this);
-      }
-    }
     for (final QueryListener us : upstream) {
       us.onError(t);
     }
@@ -121,17 +101,7 @@ public class GroupBy extends AbstractQueryNode implements net.opentsdb.query.Tim
     public Collection<TimeSeries> timeSeries() {
       return groups.values();
     }
-
-    @Override
-    public int parallelism() {
-      return next.parallelism();
-    }
-
-    @Override
-    public int parallelId() {
-      return next.parallelId();
-    }
-
+    
     @Override
     public int sequenceId() {
       return next.sequenceId();
@@ -168,6 +138,10 @@ public class GroupBy extends AbstractQueryNode implements net.opentsdb.query.Tim
       }
     }
     
+    @Override
+    public QueryNode source() {
+      return GroupBy.this;
+    }
   }
   
   class GBTimeSeries implements TimeSeries {
@@ -323,7 +297,11 @@ public class GroupBy extends AbstractQueryNode implements net.opentsdb.query.Tim
 
   @Override
   public String id() {
-    // TODO Auto-generated method stub
-    return null;
+    return config.id();
+  }
+
+  @Override
+  public QueryNodeConfig config() {
+    return config;
   }
 }

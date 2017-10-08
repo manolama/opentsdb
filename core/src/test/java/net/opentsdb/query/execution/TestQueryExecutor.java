@@ -18,6 +18,7 @@ import net.opentsdb.exceptions.QueryExecutionCanceled;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryListener;
 import net.opentsdb.query.QueryNode;
+import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
@@ -53,7 +54,7 @@ public class TestQueryExecutor {
     public int closed = 0;
     
     @Override
-    public void fetchNext(final int parallel_id) {
+    public void fetchNext() {
       fetched_next++;
     }
     
@@ -90,6 +91,12 @@ public class TestQueryExecutor {
     public void onError(Throwable t) {
       // TODO Auto-generated method stub
       
+    }
+
+    @Override
+    public QueryNodeConfig config() {
+      // TODO Auto-generated method stub
+      return null;
     }
     
   }
