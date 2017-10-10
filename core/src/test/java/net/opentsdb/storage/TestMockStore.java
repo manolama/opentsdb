@@ -90,9 +90,9 @@ public class TestMockStore {
             .setMetric("web.requests")
             .setFilter("f1")
             .setId("m2"))
-        .addExpression(Expression.newBuilder()
-            .setExpression("m1 / m2")
-            .setId("e1"))
+//        .addExpression(Expression.newBuilder()
+//            .setExpression("m1 / m2")
+//            .setId("e1"))
         .addFilter(Filter.newBuilder()
             .setId("f1")
             .addFilter(TagVFilter.newBuilder()
@@ -140,7 +140,7 @@ public class TestMockStore {
     TestListener listener = new TestListener();
     QueryContext ctx = new ExecutionBuilder()
         .setQuery(query)
-        .setMode(QueryMode.SINGLE)
+        .setMode(QueryMode.CLIENT_STREAM)
         .setExecutor(mds)
         .setQueryListener(listener)
         .build();
@@ -205,6 +205,16 @@ public class TestMockStore {
   }
   
   @Test
+  public void timeit2() throws Exception {
+    double ts = 1483315200.000000000;
+    int range = 1000 - 1;
+    for (int i = 0; i < range; i++) {
+      System.out.println(String.format("%.6f", ts));
+      ts = ts + 0.000001D;
+    }
+  }
+  
+  @Test
   public void timeit() throws Exception {
     double ts = 1483315200.000000000;
     final long prefix = 1483315200;
@@ -214,16 +224,17 @@ public class TestMockStore {
     
     System.out.println("INT max: " + Integer.MAX_VALUE);
     for (int i = 0; i < range; i++) {
-      double converted = Double.parseDouble(Long.toString(prefix) + "." + String.format("%09d", suffix));
-      String formatted = String.format("%.9f", converted);
-      String[] splits = formatted.split("\\.");
-      try{
-      assertEquals(prefix, Long.parseLong(splits[0]));
-      assertEquals(suffix, Long.parseLong(splits[1]));
-      } catch (AssertionError e) {
-        System.out.println("[" + i + "] Failed on " + String.format("%.9f", converted) + " != " + formatted + " [" + Long.toString(prefix) + "." + String.format("%09d", suffix) + "]");
-        throw e;
-      }
+      System.out.println(String.format("%.9f", ts));
+//      double converted = Double.parseDouble(Long.toString(prefix) + "." + String.format("%09d", suffix));
+//      String formatted = String.format("%.9f", converted);
+//      String[] splits = formatted.split("\\.");
+//      try{
+//      assertEquals(prefix, Long.parseLong(splits[0]));
+//      assertEquals(suffix, Long.parseLong(splits[1]));
+//      } catch (AssertionError e) {
+//        System.out.println("[" + i + "] Failed on " + String.format("%.9f", converted) + " != " + formatted + " [" + Long.toString(prefix) + "." + String.format("%09d", suffix) + "]");
+//        throw e;
+//      }
 //      try {
 //        assertEquals(ts, converted, 0.0000000001);
 //      } catch (AssertionError e) {
@@ -232,7 +243,7 @@ public class TestMockStore {
 //      }
 //      
 //      System.out.println("[" + i + "] " + String.format("%.3f", ts) + " != " + Long.toString(prefix) + "." + String.format("%03d",suffix) + " => " + String.format("%.3f", converted));
-//      ts = ts + 0.000000001D;
+      ts = ts + 0.000000001D;
 //      suffix += 000000001;
 //      ts = ts + 0.001D;
       suffix++;

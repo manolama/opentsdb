@@ -331,22 +331,23 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
         synchronized(this) {
           result = new LocalResult(context, this, config, sequence_ids[0]++);
         }
-        
-        switch(context.getContext().mode()) {
-        case SINGLE:
-          thread_pool.submit(result);
-          break;
-        case CLIENT_STREAM:
-        case CLIENT_STREAM_PARALLEL:
-          thread_pool.submit(result);
-          break;
-        case SERVER_SYNC_STREAM:
-        case SERVER_SYNC_STREAM_PARALLEL:
-          thread_pool.submit(result);
-          break;
-        case SERVER_ASYNC_STREAM:
-          thread_pool.submit(result);
-        }
+
+        thread_pool.submit(result);
+//        switch(context.getContext().mode()) {
+//        case SINGLE:
+//          thread_pool.submit(result);
+//          break;
+//        case CLIENT_STREAM:
+//        case CLIENT_STREAM_PARALLEL:
+//          thread_pool.submit(result);
+//          break;
+//        case SERVER_SYNC_STREAM:
+//        case SERVER_SYNC_STREAM_PARALLEL:
+//          thread_pool.submit(result);
+//          break;
+//        case SERVER_ASYNC_STREAM:
+//          thread_pool.submit(result);
+//        }
       } catch (Exception e) {
         e.printStackTrace();
       }

@@ -58,6 +58,8 @@ public class ExecutionBuilder {
     private QueryMode mode;
     private QueryPipelineContext ctx;
     //private QueryNode downstream;
+    private QueryNode[] roots;
+    private int root_idx = 0;
     
     LocalContext(final QueryListener sink, net.opentsdb.query.pojo.TimeSeriesQuery query, QueryMode mode, MockDataStore executor) {
       this.sink = sink;
@@ -67,6 +69,11 @@ public class ExecutionBuilder {
       //downstream = executor.executeQuery(ctx);
       
       ctx.initialize();
+      roots = new QueryNode[ctx.roots().size()];
+      int i = 0;
+      for (final QueryNode root : ctx.roots()) {
+        roots[i++] = root;
+      }
     }
     
     @Override
@@ -81,16 +88,13 @@ public class ExecutionBuilder {
 
     @Override
     public void fetchNext() {
-      for (final QueryNode root : ctx.roots()) {
-        root.fetchNext();
-//        if (mode == QueryMode.SINGLE /*&& ctx.parallelQueries() > 0*/) {
-//          //for (int i = 0; i < ctx.parallelQueries(); i++) {
-//            root.fetchNext(0);
-//          //}
-//        } else {
-//          root.fetchNext(ctx.nextParallelId());
-//        }
+      if (root_idx >= roots.length) {
+        root_idx = 0;
       }
+      roots[root_idx++].fetchNext();
+//      for (final QueryNode root : ctx.roots()) {
+//        root.fetchNext();
+//      }
     }
 
     @Override
