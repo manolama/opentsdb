@@ -25,7 +25,6 @@ import com.google.common.hash.HashCode;
 import net.opentsdb.core.Const;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
-import net.opentsdb.query.context.QueryContext2;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
 import net.opentsdb.storage.TimeSeriesDataStore;
 

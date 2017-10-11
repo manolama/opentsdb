@@ -83,12 +83,6 @@ public class QueryContext2 extends AbstractQueryNode implements QueryContext {
   }
 
   @Override
-  public void onComplete() {
-    // TODO Auto-generated method stub
-    
-  }
-
-  @Override
   public void onNext(QueryResult next) {
     // TODO Auto-generated method stub
     
@@ -110,5 +104,11 @@ public class QueryContext2 extends AbstractQueryNode implements QueryContext {
   public QueryNodeConfig config() {
     // TODO Auto-generated method stub
     return null;
+  }
+
+  @Override
+  public void onComplete(QueryNode downstream, int final_sequence) {
+    // TODO Auto-generated method stub
+    
   }
 }

@@ -90,9 +90,9 @@ public class TestMockStore {
             .setMetric("web.requests")
             .setFilter("f1")
             .setId("m2"))
-//        .addExpression(Expression.newBuilder()
-//            .setExpression("m1 / m2")
-//            .setId("e1"))
+        .addExpression(Expression.newBuilder()
+            .setExpression("m1 / m2")
+            .setId("e1"))
         .addFilter(Filter.newBuilder()
             .setId("f1")
             .addFilter(TagVFilter.newBuilder()
@@ -117,17 +117,19 @@ public class TestMockStore {
 
       @Override
       public void onNext(QueryResult next) {
+        synchronized(this) {
         System.out.println("GOT DATA");
-        for (TimeSeries ts : next.timeSeries()) {
-          System.out.println(ts.id());
-          Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
-          if (it.hasNext()) {
-            TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
-            System.out.println("   " + v.timestamp().epoch() + "  " + v.value().toDouble());
+          for (TimeSeries ts : next.timeSeries()) {
+            System.out.println(ts.id());
+            Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
+            if (it.hasNext()) {
+              TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+              System.out.println("   " + v.timestamp().epoch() + "  " + v.value().toDouble());
+            }
           }
+          System.out.println("------------------------------");
         }
-        System.out.println("------------------------------");
-        ctx.fetchNext();
+        //ctx.fetchNext();
       }
 
       @Override
@@ -136,11 +138,11 @@ public class TestMockStore {
       }
       
     }
-    
+    // exp => single, client stream OK
     TestListener listener = new TestListener();
     QueryContext ctx = new ExecutionBuilder()
         .setQuery(query)
-        .setMode(QueryMode.CLIENT_STREAM)
+        .setMode(QueryMode.SERVER_SYNC_STREAM)
         .setExecutor(mds)
         .setQueryListener(listener)
         .build();

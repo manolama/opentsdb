@@ -39,14 +39,14 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   }
   
   @Override
-  public Collection<QueryListener> upstream(final QueryNode node) {
+  public Collection<QueryNode> upstream(final QueryNode node) {
     System.out.println("fetching upstream of: " + node);
     Set<DefaultEdge> upstream = graph.incomingEdgesOf(node);
     if (upstream.isEmpty()) {
       System.out.println("  roots, so returning sinks");
-      return sinks;
+      return Lists.newArrayList(this);
     }
-    List<QueryListener> listeners = Lists.newArrayListWithCapacity(upstream.size());
+    List<QueryNode> listeners = Lists.newArrayListWithCapacity(upstream.size());
     for (final DefaultEdge e : upstream) {
       listeners.add(graph.getEdgeSource(e));
     }

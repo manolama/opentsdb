@@ -76,7 +76,7 @@ public class TestQueryExecutor {
     }
 
     @Override
-    public void onComplete() {
+    public void onComplete(QueryNode node, int seq) {
       // TODO Auto-generated method stub
       
     }

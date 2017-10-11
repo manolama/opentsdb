@@ -57,23 +57,23 @@ public class GroupBy extends AbstractQueryNode implements net.opentsdb.query.Tim
   }
 
   @Override
-  public void onComplete() {
+  public void onComplete(QueryNode downstream, int final_sequence) {
     System.out.println("GB IS complete");
-    for (final QueryListener us : upstream) {
-      us.onComplete();
+    for (final QueryNode us : upstream) {
+      us.onComplete(this, final_sequence);
     }
   }
 
   @Override
   public void onNext(QueryResult next) {
-    for (final QueryListener us : upstream) {
+    for (final QueryNode us : upstream) {
       us.onNext(new LocalResult(next));
     }
   }
 
   @Override
   public void onError(Throwable t) {
-    for (final QueryListener us : upstream) {
+    for (final QueryNode us : upstream) {
       us.onError(t);
     }
   }

@@ -23,9 +23,11 @@ import net.opentsdb.storage.MockDataStore.MDSConfig;
 
 public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext {
 
-  net.opentsdb.query.pojo.TimeSeriesQuery plan;
-  int parallel_id = 0;
-  MockDataStore exec;
+  private net.opentsdb.query.pojo.TimeSeriesQuery plan;
+  private int parallel_id = 0;
+  private MockDataStore exec;
+  private QueryNode[] roots;
+  private int root_idx = 0;
   
   public PerMetricQueryPipelineContext(TimeSeriesQuery query,
       QueryContext context, MockDataStore exec, Collection<QueryListener> sinks) {
@@ -89,7 +91,14 @@ public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext 
     }
     parseExpresions();
     initializeNodes();
+    
+    roots = new QueryNode[roots().size()];
+    int i = 0;
+    for (final QueryNode root : roots()) {
+      roots[i++] = root;
+    }
     System.out.println("Built graph: " + graph);
+    System.out.println("----------------------------------");
   }
   
   @Override
@@ -157,6 +166,57 @@ public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext 
           }
         }
       }
+    }
+  }
+
+  
+  @Override
+  public QueryPipelineContext context() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public void fetchNext() {
+    //synchronized(this) {
+      if (root_idx >= roots.length) {
+        root_idx = 0;
+      }
+      System.out.println("[ROOT] Fetching next: " + root_idx);
+      roots[root_idx++].fetchNext();
+      //}
+  }
+
+  @Override
+  public QueryNodeConfig config() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public String id() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public void onComplete(QueryNode downstream, int final_sequence) {
+    for (final QueryListener sink : sinks) {
+      sink.onComplete();
+    }
+  }
+
+  @Override
+  public void onNext(QueryResult next) {
+    for (final QueryListener sink : sinks) {
+      sink.onNext(next);
+    }
+  }
+
+  @Override
+  public void onError(Throwable t) {
+    for (final QueryListener sink : sinks) {
+      sink.onError(t);
     }
   }
 }

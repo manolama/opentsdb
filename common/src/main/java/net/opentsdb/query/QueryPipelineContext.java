@@ -2,7 +2,7 @@ package net.opentsdb.query;
 
 import java.util.Collection;
 
-public interface QueryPipelineContext {
+public interface QueryPipelineContext extends QueryNode {
 
   public TimeSeriesQuery getQuery(final int parallel_id);
   
@@ -12,7 +12,7 @@ public interface QueryPipelineContext {
   
   public void initialize();
   
-  public Collection<QueryListener> upstream(final QueryNode node);
+  public Collection<QueryNode> upstream(final QueryNode node);
   
   public Collection<QueryNode> downstream(final QueryNode node);
   

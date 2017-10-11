@@ -7,7 +7,7 @@ public abstract class AbstractQueryNode implements QueryNode {
 
   protected QueryPipelineContext context;
   
-  protected Collection<QueryListener> upstream;
+  protected Collection<QueryNode> upstream;
   
   protected Collection<QueryNode> downstream;
   

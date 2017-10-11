@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Map.Entry;
 
 import org.apache.commons.jexl2.JexlContext;
@@ -34,6 +35,7 @@ import net.opentsdb.data.types.numeric.MutableNumericType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryListener;
+import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
@@ -46,6 +48,10 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
   private JEConfig config;
   private Map<String, String> metric_to_ids;
   private Map<Integer, Map<String, QueryResult>> results;
+  private final AtomicBoolean complete = new AtomicBoolean();
+  private int final_sequence;
+  private int completed_downstream;
+  private Map<Integer, Integer> completes = Maps.newHashMap();
   
   public JexlExpression(QueryPipelineContext context, JEConfig config) {
     super(context);
@@ -63,7 +69,21 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
   }
   
   @Override
+  public void initialize() {
+    super.initialize();
+    for (QueryNode ds : downstream) {
+      completes.put(ds.hashCode(), 0);
+    }
+  }
+  
+  @Override
   public void fetchNext() {
+//    if (complete.get()) {
+//      for (QueryNode us : upstream) {
+//        us.onComplete();
+//      }
+//      return;
+//    }
     for (QueryNode ds : downstream) {
       ds.fetchNext();
     }
@@ -76,26 +96,33 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
   }
 
   @Override
-  public void onComplete() {
-    for (final QueryListener us : upstream) {
-      us.onComplete();
+  public void onComplete(QueryNode downstream, int final_sequence) {
+    synchronized(this) {
+      if (final_sequence > this.final_sequence) {
+        this.final_sequence = final_sequence;
+      }
+      completed_downstream++;
     }
   }
 
   @Override
   public void onNext(QueryResult next) {
-    System.out.println("JEXL got next: " + next.sequenceId() + " From: " + next.source().id());
+    
     // TODO - it's possible to optimize based on the results in that if there are
     // a number of expressions with different metrics, e.g. e1 = a + b, e2 = c + d
     // then we could fire off e1 as soon as we get a and b.
     // for now... accumulate within chunks
     try {
+      System.out.println("JEXL got next: " + next.sequenceId() + " From: " + next.source().id());
       Map<String, QueryResult> result = results.get(next.sequenceId());
       if (result == null) {
         result = Maps.newConcurrentMap();
         Map<String, QueryResult> raced_result = results.putIfAbsent(next.sequenceId(), result);
         if (raced_result != null) {
+          System.out.println("    lost race for " + next.sequenceId());
           result = raced_result;
+        } else {
+          System.out.println("   new result map for " + next.sequenceId());
         }
       }
       
@@ -105,18 +132,52 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
         if (result.size() != downstream.size()) {
           all_there = false;
         }
-      }
+        System.out.println("Results size: " + result.size() + " Expecting: " + downstream.size());
+      //}
       
       if (all_there) {
-        System.out.println("Got all the results...");
+        System.out.println("[EXP] Got all the results...");
+        for (final QueryResult r : result.values()) {
+          System.out.println(" seq: " + r.sequenceId());
+        }
         // work on the segment, all our raw data is in.
         LocalResult data = new LocalResult(result.values());
-        for (final QueryListener us : upstream) {
+        System.out.println("Finished setting up [EXP] result");
+        for (final QueryNode us : upstream) {
           us.onNext(data);
         }
+        System.out.println("Sent upstream from EXPRESSION...");
+        
+        synchronized(this) {
+          int max_seq = 0;
+          completes.put(next.source().hashCode(), completes.get(next.source().hashCode()) + 1);
+          for (final int max : completes.values()) {
+            if (max > max_seq) {
+              max_seq = max;
+            }
+          }
+          
+          if (completed_downstream == downstream.size() && max_seq == this.final_sequence) {
+            System.out.println("   All done from Jexl!!");
+            for (final QueryNode us : upstream) {
+              us.onComplete(this, next.sequenceId());
+            }
+          }
+        }
+        
       } else {
         System.out.println("Still waiting for data...");
       }
+      
+      System.out.println("---------------------");
+      }
+      
+//      if ((context.getContext().mode() == QueryMode.SERVER_ASYNC_STREAM || 
+//          context.getContext().mode() == QueryMode.SERVER_SYNC_STREAM) && complete.get()) {
+//        for (final QueryNode us : upstream) {
+//          us.onComplete(this, );
+//        }
+//      }
     } catch (Exception e) {
       e.printStackTrace();
     }
@@ -124,7 +185,7 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
 
   @Override
   public void onError(Throwable t) {
-    for (final QueryListener us : upstream) {
+    for (final QueryNode us : upstream) {
       us.onError(t);
     }
   }
@@ -283,14 +344,14 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
   }
   
   class LocalResult implements QueryResult {
-//    final DirectedAcyclicGraph<ExpVertex, DefaultEdge> graph;
     final Map<Long, TimeSeries> series; 
     final int sequence_id;
     
     LocalResult(Collection<QueryResult> results) {
       series = Maps.newHashMap();
       sequence_id = results.iterator().next().sequenceId();
-      
+      System.out.println("    joining....");
+      try {
       for (final QueryResult result : results) {
         for (final TimeSeries ts : result.timeSeries()) {
           String var = config.ids_map.get(ts.id().metric());
@@ -308,94 +369,10 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
           ((ExpTS) exp).sources.put(var, ts);
         }
       }
-      
-//      graph = new DirectedAcyclicGraph<ExpVertex, DefaultEdge>(DefaultEdge.class);
-//      
-//      final net.opentsdb.query.pojo.TimeSeriesQuery query = 
-//          (net.opentsdb.query.pojo.TimeSeriesQuery) context.getQuery();
-//      Map<String, ExpVertex> metrics = Maps.newHashMap();
-//
-//      for (final String metric : metric_to_ids.values()) {
-//        ExpVertex m = new ExpVertex(metric, VertexType.METRIC);
-//        graph.addVertex(m);
-//        metrics.put(metric, m);
-//      }
-//      
-//      // build graph of expressions
-//      // TODO - optimize out anything not "outputed"
-//      for (final Expression e : query.getExpressions()) {
-//        ExpVertex exp = new ExpVertex(e.getId(), VertexType.EXPRESSION);
-//        if (!graph.containsVertex(exp)) {
-//          graph.addVertex(exp);
-//          exp.expression = e.getExpr();
-//        } else {
-//          for (final ExpVertex extant : graph.vertexSet()) {
-//            if (extant.equals(exp)) {
-//              exp = extant;
-//              break;
-//            }
-//          }
-//        }
-//        for (final String var : e.getVariables()) {
-//          ExpVertex v = metrics.get(var);
-//          if (v == null) {
-//            v = new ExpVertex(var, VertexType.EXPRESSION);
-//            System.out.println("EXP: " + e.getExpr());
-//            v.expression = e.getExpr();
-//          }
-//          graph.addEdge(exp, v);
-//        }
-//      }
-//      
-//      for (QueryResult r : results) {
-//        for (TimeSeries series : r.timeSeries()) {
-//          ExpVertex metric = metrics.get(metric_to_ids.get(series.id().metric()));
-//          metric.addSource(metric.id, series);
-//          //System.out.println("Adding metric ID: " + series.id().metric() + " to vert: " + metric.id + " @" + System.identityHashCode(metric));
-//        }
-//      }
-//      
-//      // now build roots and link into nested expressions
-//      final DepthFirstIterator<ExpVertex, DefaultEdge> df_iterator = 
-//          new DepthFirstIterator<ExpVertex, DefaultEdge>(graph);
-//      while (df_iterator.hasNext()) {
-//        final ExpVertex vertex = df_iterator.next();
-//        System.out.println("Working vertex: " + vertex.id);
-//        
-//        if (vertex.type == VertexType.METRIC) {
-//          continue;
-//        }
-//        
-//        final Set<DefaultEdge> oeo = graph.outgoingEdgesOf(vertex);
-//        for (DefaultEdge e : oeo) {
-//          ExpVertex target = graph.getEdgeTarget(e);
-//          System.out.println("  target: " + target.id);
-//          if (target.type == VertexType.EXPRESSION) {
-//            target.join();
-//            for (TimeSeries source : target.iterators.values()) {
-//              vertex.addSource(target.id, source);
-//            }
-//          } else {
-//            if (target.sources != null) {
-//              for (List<TimeSeries> sources : target.sources.values()) {
-//                for (TimeSeries source : sources) {
-//                  //System.out.println("Adding source to " + vertex.id + ": " + source.id());
-//                  vertex.addSource(target.id, source);
-//                }
-//              }
-//            } else {
-//              //System.out.println("Sources were null!!! for " + target.id + " @" + System.identityHashCode(target));
-//            }
-//          }
-//        }
-//        
-//        if (graph.incomingEdgesOf(vertex).isEmpty()) {
-//          System.out.println("JOINING on " + vertex.id);
-//          vertex.join();
-//          series.addAll(vertex.iterators.values());
-//        }
-//      }
-      
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+      System.out.println("   DONE with the join");
     }
     
     @Override

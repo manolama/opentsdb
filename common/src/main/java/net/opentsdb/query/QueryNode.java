@@ -17,7 +17,7 @@ package net.opentsdb.query;
  * 
  * @since 3.0
  */
-public interface QueryNode extends QueryListener {
+public interface QueryNode {
 
   public QueryPipelineContext context();
   
@@ -41,4 +41,10 @@ public interface QueryNode extends QueryListener {
    * Closes the pipeline and releases all resources.
    */
   public void close();
+  
+  public void onComplete(final QueryNode downstream, final int final_sequence);
+  
+  public void onNext(final QueryResult next);
+  
+  public void onError(final Throwable t);
 }

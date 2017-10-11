@@ -320,8 +320,8 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
     public void fetchNext() {
       try {
         if (context.getContext().mode() == QueryMode.SINGLE && sequence_ids[0] > 0/* && parallel_id >= context.parallelQueries()*/) {
-          for (final QueryListener node : upstream) {
-            node.onComplete();
+          for (final QueryNode node : upstream) {
+            node.onComplete(this, sequence_ids[0]);
           }
           return;
         }
@@ -363,8 +363,8 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
       if (LOG.isDebugEnabled()) {
         LOG.debug("Closing pipeline.");
       }
-      for (final QueryListener node : upstream) {
-        node.onComplete();
+      for (final QueryNode node : upstream) {
+        node.onComplete(this, sequence_ids[0]);
       }
     }
 
@@ -373,12 +373,12 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
       return context;
     }
     
-    Collection<QueryListener> upstream() {
+    Collection<QueryNode> upstream() {
       return upstream;
     }
     
     @Override
-    public void onComplete() {
+    public void onComplete(QueryNode downstream, int final_sequence) {
       // TODO Auto-generated method stub
       
     }
@@ -446,8 +446,8 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
       if (end_ts <= config.query.getTime().startTime().msEpoch()) {
         System.out.println("Over the end time. done");
         if (pipeline.completed.compareAndSet(false, true)) {
-          for (QueryListener node : pipeline.upstream()) {
-            node.onComplete();
+          for (QueryNode node : pipeline.upstream()) {
+            node.onComplete(pipeline, sequenceId());
           }
         }
         return;
@@ -521,27 +521,30 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
       
       System.out.println("DONE with filtering.");
       
-      Collection<QueryListener> listeners = pipeline.upstream();
+      Collection<QueryNode> listeners = pipeline.upstream();
       System.out.println("LISTNERS: " + listeners);
-      for (QueryListener node : pipeline.upstream()) {
+      for (QueryNode node : pipeline.upstream()) {
         if (matched_series.isEmpty()) {
           System.out.println("Nothing matched, done.");
-          node.onComplete();
+          node.onComplete(pipeline, sequenceId());
         } else {
           System.out.println("Sending upstream...");
           node.onNext(this);
         }
       }
       
+      if (matched_series.isEmpty()) {
+        return;
+      }
+      
       switch(context.getContext().mode()) {
       case SINGLE:
       case CLIENT_STREAM:
-      case CLIENT_STREAM_PARALLEL:
         break;
       case SERVER_SYNC_STREAM:
-      case SERVER_SYNC_STREAM_PARALLEL:
       case SERVER_ASYNC_STREAM:
-        pipeline.fetchNext();
+        //pipeline.fetchNext();
+        context.fetchNext();
       }
       } catch (Exception e) {
         e.printStackTrace();
