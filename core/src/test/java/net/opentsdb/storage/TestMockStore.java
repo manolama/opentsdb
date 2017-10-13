@@ -53,6 +53,9 @@ import net.opentsdb.query.pojo.Filter;
 import net.opentsdb.query.pojo.Metric;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
 import net.opentsdb.query.pojo.Timespan;
+import net.opentsdb.stats.MockStats;
+import net.opentsdb.stats.MockTracer;
+import net.opentsdb.stats.Span;
 import net.opentsdb.storage.MockDataStore.MockRow;
 import net.opentsdb.storage.MockDataStore.MockSpan;
 import net.opentsdb.utils.Config;
@@ -77,6 +80,12 @@ public class TestMockStore {
     config.overrideConfig("MockDataStore.threadpool.enable", "true");
     MockDataStore mds = new MockDataStore();
     mds.initialize(tsdb).join();
+    
+    MockTracer tracer = new MockTracer();
+    Span span = tracer.newSpan("query")
+        .withTag("test", "foo")
+        .start();
+    MockStats stats = new MockStats(tracer, span);
     
     TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
         .setTime(Timespan.newBuilder()
@@ -148,11 +157,15 @@ public class TestMockStore {
         .setMode(mode)
         .setExecutor(mds)
         .setQueryListener(listener)
+        .setStats(stats)
         .build();
     listener.ctx = ctx;
     ctx.fetchNext();
     
     listener.completed.join(1000);
+    ctx.close();
+    span.finish();
+    System.out.println(tracer);
     mds.shutdown().join();
   }
   

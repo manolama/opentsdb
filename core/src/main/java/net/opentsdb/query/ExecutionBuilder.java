@@ -64,9 +64,14 @@ public class ExecutionBuilder {
     private final QueryListener sink;
     private QueryMode mode;
     private QueryPipelineContext ctx;
-    private Span query_span;
+    private Span local_span;
     
     LocalContext(final QueryListener sink, net.opentsdb.query.pojo.TimeSeriesQuery query, QueryMode mode, MockDataStore executor) {
+      if (stats != null && stats.tracer() != null) {
+        local_span = stats.tracer().newSpan("Ctx")
+            .asChildOf(stats.querySpan())
+            .start();
+      }
       this.sink = sink;
       this.mode = mode;
       ctx = new PerMetricQueryPipelineContext(query, this, executor, Lists.newArrayList(sink));
@@ -91,9 +96,9 @@ public class ExecutionBuilder {
     @Override
     public void close() {
       ctx.close();
-      if (query_span != null) {
+      if (local_span != null) {
         // TODO - stats
-        query_span.finish();
+        local_span.finish();
       }
     }
 
