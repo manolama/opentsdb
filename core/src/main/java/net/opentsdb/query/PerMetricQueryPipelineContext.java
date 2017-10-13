@@ -24,10 +24,12 @@ import net.opentsdb.storage.MockDataStore.MDSConfig;
 public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext {
 
   private net.opentsdb.query.pojo.TimeSeriesQuery plan;
-  private int parallel_id = 0;
   private MockDataStore exec;
   private QueryNode[] roots;
   private int root_idx = 0;
+  private int final_sequence;
+  private int completed_downstream;
+  private int completed_listeners;
   
   public PerMetricQueryPipelineContext(TimeSeriesQuery query,
       QueryContext context, MockDataStore exec, Collection<QueryListener> sinks) {
@@ -171,20 +173,19 @@ public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext 
   
   @Override
   public QueryPipelineContext context() {
-    // TODO Auto-generated method stub
-    return null;
+    return this;
   }
 
   @Override
   public void fetchNext() {
-    //synchronized(this) {
+    synchronized(this) {
       if (root_idx >= roots.length) {
         root_idx = 0;
       }
       System.out.println("[ROOT] Fetching next: " + root_idx);
-      new RuntimeException().printStackTrace();
+      //new RuntimeException().printStackTrace();
       roots[root_idx++].fetchNext();
-      //}
+    }
   }
 
   @Override
@@ -201,8 +202,19 @@ public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext 
 
   @Override
   public void onComplete(QueryNode downstream, int final_sequence) {
-    for (final QueryListener sink : sinks) {
-      sink.onComplete();
+    if (this.context.mode() == QueryMode.SINGLE) {
+      for (final QueryListener sink : sinks) {
+        sink.onComplete();
+      }
+    } else {
+      synchronized(this) {
+        if (final_sequence > this.final_sequence) {
+          this.final_sequence = final_sequence;
+          System.out.println("   [CTX] New final seq: " + final_sequence);
+        }
+        completed_downstream++;
+        checkComplete();
+      }
     }
   }
 
@@ -211,8 +223,24 @@ public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext 
     for (final QueryListener sink : sinks) {
       sink.onNext(next);
     }
+    
+    if (context.mode() != QueryMode.SINGLE) {
+      synchronized(this) {
+        completed_listeners++;
+        checkComplete();
+      } 
+    }
   }
 
+  void checkComplete() {
+    if (completed_listeners == (final_sequence + 1) * completed_downstream) {
+      System.out.println("  [CTX] DONE Downstream!");
+      for (final QueryListener sink : sinks) {
+        sink.onComplete();
+      }
+    }
+  }
+  
   @Override
   public void onError(Throwable t) {
     for (final QueryListener sink : sinks) {

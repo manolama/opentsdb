@@ -17,6 +17,7 @@ import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.query.pojo.Filter;
 import net.opentsdb.query.pojo.Metric;
 import net.opentsdb.query.processor.GroupBy;
+import net.opentsdb.stats.QueryStats;
 import net.opentsdb.stats.Span;
 import net.opentsdb.stats.Tracer;
 import net.opentsdb.storage.MockDataStore;
@@ -28,9 +29,7 @@ public class ExecutionBuilder {
   private net.opentsdb.query.pojo.TimeSeriesQuery query;
   private QueryMode mode;
   private MockDataStore executor;
-  private Tracer tracer;
-  private Span upstream_span;
-  private boolean report;
+  private QueryStats stats;
   
   public ExecutionBuilder setQueryListener(final QueryListener listener) {
     this.listener = listener;
@@ -52,18 +51,8 @@ public class ExecutionBuilder {
     return this;
   }
   
-  public ExecutionBuilder setTracer(final Tracer tracer) {
-    this.tracer = tracer;
-    return this;
-  }
-  
-  public ExecutionBuilder setUpstreamSpan(final Span span) {
-    this.upstream_span = span;
-    return this;
-  }
-  
-  public ExecutionBuilder setReport(final boolean report) {
-    this.report = report;
+  public ExecutionBuilder setStats(final QueryStats stats) {
+    this.stats = stats;
     return this;
   }
   
@@ -76,23 +65,12 @@ public class ExecutionBuilder {
     private QueryMode mode;
     private QueryPipelineContext ctx;
     private Span query_span;
-    //private QueryNode[] roots;
-    //private int root_idx = 0;
     
     LocalContext(final QueryListener sink, net.opentsdb.query.pojo.TimeSeriesQuery query, QueryMode mode, MockDataStore executor) {
-      if (tracer != null) {
-        query_span = tracer.newSpan(report).buildSpan("MyQuery")
-            .start();
-      }
       this.sink = sink;
       this.mode = mode;
       ctx = new PerMetricQueryPipelineContext(query, this, executor, Lists.newArrayList(sink));
       ctx.initialize();
-//      roots = new QueryNode[ctx.roots().size()];
-//      int i = 0;
-//      for (final QueryNode root : ctx.roots()) {
-//        roots[i++] = root;
-//      }
     }
     
     @Override
@@ -120,13 +98,8 @@ public class ExecutionBuilder {
     }
 
     @Override
-    public Span querySpan() {
-      return query_span;
-    }
-
-    @Override
-    public Tracer tracer() {
-      return tracer;
+    public QueryStats stats() {
+      return stats;
     }
     
   }

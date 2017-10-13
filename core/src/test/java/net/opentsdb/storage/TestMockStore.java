@@ -73,6 +73,7 @@ public class TestMockStore {
   
   @Test
   public void foo() throws Exception {
+    final QueryMode mode = QueryMode.SERVER_ASYNC_STREAM;
     config.overrideConfig("MockDataStore.threadpool.enable", "true");
     MockDataStore mds = new MockDataStore();
     mds.initialize(tsdb).join();
@@ -118,7 +119,6 @@ public class TestMockStore {
       @Override
       public void onNext(QueryResult next) {
         synchronized(this) {
-        System.out.println("GOT DATA");
           for (TimeSeries ts : next.timeSeries()) {
             System.out.println(ts.id());
             Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
@@ -129,7 +129,9 @@ public class TestMockStore {
           }
           System.out.println("------------------------------");
         }
-        //ctx.fetchNext();
+        if (mode == QueryMode.CLIENT_STREAM) {
+          ctx.fetchNext();
+        }
       }
 
       @Override
@@ -142,7 +144,7 @@ public class TestMockStore {
     TestListener listener = new TestListener();
     QueryContext ctx = new ExecutionBuilder()
         .setQuery(query)
-        .setMode(QueryMode.SERVER_SYNC_STREAM)
+        .setMode(mode)
         .setExecutor(mds)
         .setQueryListener(listener)
         .build();

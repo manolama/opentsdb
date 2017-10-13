@@ -325,10 +325,7 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
           return;
         }
         
-        LocalResult result;
-        synchronized(this) {
-          result = new LocalResult(context, this, config, sequence_id.getAndIncrement());
-        }
+        LocalResult result = new LocalResult(context, this, config, sequence_id.getAndIncrement());
 
         thread_pool.submit(result);
       } catch (Exception e) {
@@ -490,7 +487,7 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
                 row.base_timestamp < end_ts) {
               ++rows;
               if (context.getContext().mode() == QueryMode.SINGLE) {
-                ((SlicedTimeSeries) iterator).addSource(row);  
+                ((SlicedTimeSeries) iterator).addSource(row);
               } else {
                 iterator = row;
                 break;
@@ -520,6 +517,10 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
       
       switch(context.getContext().mode()) {
       case SINGLE:
+        for (QueryNode node : pipeline.upstream()) {
+          node.onComplete(pipeline, sequenceId());
+        }
+        break;
       case CLIENT_STREAM:
         break;
       case SERVER_SYNC_STREAM:
@@ -527,12 +528,12 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
         if (!hasNext(sequence_id + 1)) {
           System.out.println("[MDS] Next query wouldn't have any data: " + pipeline);
           for (QueryNode node : pipeline.upstream()) {
-            node.onComplete(pipeline, sequenceId());
+            node.onComplete(pipeline, sequence_id);
           }
         } else {
-          System.out.println("[MDS] Fetching next Seq: " + sequence_id + " as there is more data: " + pipeline);
-          new RuntimeException().printStackTrace();
-          context.fetchNext();
+          System.out.println("[MDS] Fetching next Seq: " + (sequence_id  + 1) + " as there is more data: " + pipeline);
+          //new RuntimeException().printStackTrace();
+          pipeline.fetchNext();
         }
       }
       } catch (Exception e) {
