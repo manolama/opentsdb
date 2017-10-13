@@ -73,7 +73,7 @@ public class TestMockStore {
   
   @Test
   public void foo() throws Exception {
-    final QueryMode mode = QueryMode.SERVER_ASYNC_STREAM;
+    final QueryMode mode = QueryMode.SERVER_SYNC_STREAM;
     config.overrideConfig("MockDataStore.threadpool.enable", "true");
     MockDataStore mds = new MockDataStore();
     mds.initialize(tsdb).join();
@@ -129,6 +129,7 @@ public class TestMockStore {
           }
           System.out.println("------------------------------");
         }
+        next.close();
         if (mode == QueryMode.CLIENT_STREAM) {
           ctx.fetchNext();
         }

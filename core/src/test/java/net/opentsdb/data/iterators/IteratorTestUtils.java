@@ -166,6 +166,12 @@ public class IteratorTestUtils {
         // TODO Auto-generated method stub
         return null;
       }
+
+      @Override
+      public void close() {
+        // TODO Auto-generated method stub
+        
+      }
       
     }
     return new Result();

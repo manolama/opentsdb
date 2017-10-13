@@ -43,6 +43,8 @@ public interface QueryResult {
   public int sequenceId();
   
   public QueryNode source();
+
+  void close();
   
   // TODO meta about the results
 }

@@ -142,6 +142,11 @@ public class GroupBy extends AbstractQueryNode implements net.opentsdb.query.Tim
     public QueryNode source() {
       return GroupBy.this;
     }
+  
+    @Override
+    public void close() {
+      next.close();
+    }
   }
   
   class GBTimeSeries implements TimeSeries {

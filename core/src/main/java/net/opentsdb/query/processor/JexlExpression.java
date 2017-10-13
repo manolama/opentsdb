@@ -356,8 +356,10 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
   class LocalResult implements QueryResult {
     final Map<Long, TimeSeries> series; 
     final int sequence_id;
+    final Collection<QueryResult> results;
     
     LocalResult(Collection<QueryResult> results) {
+      this.results = results;
       series = Maps.newHashMap();
       sequence_id = results.iterator().next().sequenceId();
       System.out.println("    joining....");
@@ -487,6 +489,13 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
       }
       
       return LongHashFunction.xx_r39().hashChars(buffer.toString());
+    }
+  
+    @Override
+    public void close() {
+      for (QueryResult result : results) {
+        result.close();
+      }
     }
   }
   

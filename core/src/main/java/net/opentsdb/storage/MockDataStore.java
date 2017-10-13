@@ -524,6 +524,7 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
       case CLIENT_STREAM:
         break;
       case SERVER_SYNC_STREAM:
+        break;
       case SERVER_ASYNC_STREAM:
         if (!hasNext(sequence_id + 1)) {
           System.out.println("[MDS] Next query wouldn't have any data: " + pipeline);
@@ -555,6 +556,19 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
     @Override
     public QueryNode source() {
       return pipeline;
+    }
+  
+    @Override
+    public void close() {
+      if (!hasNext(sequence_id + 1)) {
+        System.out.println("[MDS] Next query wouldn't have any data: " + pipeline);
+        for (QueryNode node : pipeline.upstream()) {
+          node.onComplete(pipeline, sequence_id);
+        }
+      } else {
+        System.out.println("[MDS] Result closed, firing the next!: " + pipeline);
+        pipeline.fetchNext();
+      }
     }
   }
 
