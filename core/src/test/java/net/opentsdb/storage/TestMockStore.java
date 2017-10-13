@@ -111,7 +111,7 @@ public class TestMockStore {
       @Override
       public void onComplete() {
         // TODO Auto-generated method stub
-        System.out.println("COMPLETE");
+        System.out.println("[QUERY COMPLETE]");
         completed.callback(null);
       }
 

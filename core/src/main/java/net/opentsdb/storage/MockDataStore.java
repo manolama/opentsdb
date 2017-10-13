@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -102,7 +103,6 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
     if (tsdb.getConfig().hasProperty("MockDataStore.threadpool.enable") && 
         tsdb.getConfig().getBoolean("MockDataStore.threadpool.enable")) {
       thread_pool = Executors.newCachedThreadPool();
-      System.out.println("INITed the thread pool");
     }
     return Deferred.fromResult(null);
   }
@@ -305,49 +305,32 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
   }
   
   class MyPipeline extends AbstractQueryNode {
-    int[] sequence_ids;
+    AtomicInteger sequence_id = new AtomicInteger();
     AtomicBoolean completed = new AtomicBoolean();
     MDSConfig config;
     
     public MyPipeline(final QueryPipelineContext context, MDSConfig config) {
       super(context);
-      //listener = context.getListener();
-      sequence_ids = new int[1];
       this.config = config;
     }
     
     @Override
     public void fetchNext() {
       try {
-        if (context.getContext().mode() == QueryMode.SINGLE && sequence_ids[0] > 0/* && parallel_id >= context.parallelQueries()*/) {
+        if (context.getContext().mode() == QueryMode.SINGLE && sequence_id.get() > 0) {
+          System.out.println("[MDS] " + this + " Single done");
           for (final QueryNode node : upstream) {
-            node.onComplete(this, sequence_ids[0]);
+            node.onComplete(this, sequence_id.get() - 1);
           }
           return;
         }
         
-        //System.out.println("QUERIES: " + context.parallelQueries() + " PID: " + parallel_id + " SID: " + sequence_ids[parallel_id]);
         LocalResult result;
         synchronized(this) {
-          result = new LocalResult(context, this, config, sequence_ids[0]++);
+          result = new LocalResult(context, this, config, sequence_id.getAndIncrement());
         }
 
         thread_pool.submit(result);
-//        switch(context.getContext().mode()) {
-//        case SINGLE:
-//          thread_pool.submit(result);
-//          break;
-//        case CLIENT_STREAM:
-//        case CLIENT_STREAM_PARALLEL:
-//          thread_pool.submit(result);
-//          break;
-//        case SERVER_SYNC_STREAM:
-//        case SERVER_SYNC_STREAM_PARALLEL:
-//          thread_pool.submit(result);
-//          break;
-//        case SERVER_ASYNC_STREAM:
-//          thread_pool.submit(result);
-//        }
       } catch (Exception e) {
         e.printStackTrace();
       }
@@ -364,7 +347,7 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
         LOG.debug("Closing pipeline.");
       }
       for (final QueryNode node : upstream) {
-        node.onComplete(this, sequence_ids[0]);
+        node.onComplete(this, sequence_id.get() - 1);
       }
     }
 
@@ -435,23 +418,25 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
     @Override
     public void run() {
       try {
+        if (!hasNext(sequence_id)) {
+          System.out.println("[MDS] Over the end time. done: " + this.pipeline);
+          if (pipeline.completed.compareAndSet(false, true)) {
+            for (QueryNode node : pipeline.upstream()) {
+              node.onComplete(pipeline, sequenceId() - 1);
+            }
+          } else {
+            System.out.println("[MDS] ALREADY MARKED COMPLETE!!");
+          }
+          return;
+        }
+        
       long start_ts = context.getContext().mode() == QueryMode.SINGLE ? 
           config.query.getTime().startTime().msEpoch() : 
             config.query.getTime().endTime().msEpoch() - ((sequence_id + 1) * ROW_WIDTH);
       long end_ts = context.getContext().mode() == QueryMode.SINGLE ? 
           config.query.getTime().endTime().msEpoch() : 
             config.query.getTime().endTime().msEpoch() - (sequence_id * ROW_WIDTH);
-      
-      //System.out.println("START: " + start_ts + "  END: " + end_ts);
-      if (end_ts <= config.query.getTime().startTime().msEpoch()) {
-        System.out.println("Over the end time. done");
-        if (pipeline.completed.compareAndSet(false, true)) {
-          for (QueryNode node : pipeline.upstream()) {
-            node.onComplete(pipeline, sequenceId());
-          }
-        }
-        return;
-      }
+
       System.out.println("Running the filter: " + config.query);
       for (final Entry<TimeSeriesId, MockSpan> entry : database.entrySet()) {
         //for (Metric m : config.query.getMetrics()) {
@@ -519,16 +504,12 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
         //}
       }
       
-      System.out.println("DONE with filtering.");
-      
-      Collection<QueryNode> listeners = pipeline.upstream();
-      System.out.println("LISTNERS: " + listeners);
+      System.out.println("[MDS] DONE with filtering. " + pipeline);
       for (QueryNode node : pipeline.upstream()) {
         if (matched_series.isEmpty()) {
-          System.out.println("Nothing matched, done.");
+          System.out.println("[MDS] Nothing matched, done: " + pipeline);
           node.onComplete(pipeline, sequenceId());
-        } else {
-          System.out.println("Sending upstream...");
+        }else {
           node.onNext(this);
         }
       }
@@ -543,12 +524,31 @@ public class MockDataStore extends TimeSeriesDataStore implements QueryExecutor2
         break;
       case SERVER_SYNC_STREAM:
       case SERVER_ASYNC_STREAM:
-        //pipeline.fetchNext();
-        context.fetchNext();
+        if (!hasNext(sequence_id + 1)) {
+          System.out.println("[MDS] Next query wouldn't have any data: " + pipeline);
+          for (QueryNode node : pipeline.upstream()) {
+            node.onComplete(pipeline, sequenceId());
+          }
+        } else {
+          System.out.println("[MDS] Fetching next Seq: " + sequence_id + " as there is more data: " + pipeline);
+          new RuntimeException().printStackTrace();
+          context.fetchNext();
+        }
       }
       } catch (Exception e) {
         e.printStackTrace();
       }
+    }
+
+    boolean hasNext(final int seqid) {
+      long end_ts = context.getContext().mode() == QueryMode.SINGLE ? 
+          config.query.getTime().endTime().msEpoch() : 
+            config.query.getTime().endTime().msEpoch() - (seqid * ROW_WIDTH);
+      
+      if (end_ts <= config.query.getTime().startTime().msEpoch()) {
+        return false;
+      }
+      return true;
     }
     
     @Override

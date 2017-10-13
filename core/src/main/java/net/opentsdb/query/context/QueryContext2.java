@@ -12,6 +12,8 @@ import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.execution.QueryExecutorConfig;
 import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
+import net.opentsdb.stats.Span;
+import net.opentsdb.stats.Tracer;
 
 public class QueryContext2 extends AbstractQueryNode implements QueryContext {
 
@@ -110,5 +112,17 @@ public class QueryContext2 extends AbstractQueryNode implements QueryContext {
   public void onComplete(QueryNode downstream, int final_sequence) {
     // TODO Auto-generated method stub
     
+  }
+
+  @Override
+  public Span querySpan() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public Tracer tracer() {
+    // TODO Auto-generated method stub
+    return null;
   }
 }

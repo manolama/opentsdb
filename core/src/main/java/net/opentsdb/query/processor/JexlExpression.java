@@ -48,16 +48,14 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
   private JEConfig config;
   private Map<String, String> metric_to_ids;
   private Map<Integer, Map<String, QueryResult>> results;
-  private final AtomicBoolean complete = new AtomicBoolean();
   private int final_sequence;
   private int completed_downstream;
-  private Map<Integer, Integer> completes = Maps.newHashMap();
   
   public JexlExpression(QueryPipelineContext context, JEConfig config) {
     super(context);
     this.config = config;
     
-    results = Maps.newConcurrentMap();
+    results = Maps.newTreeMap();
     metric_to_ids = Maps.newHashMap();
     
     for (final Metric metric : ((net.opentsdb.query.pojo.TimeSeriesQuery) context.getQuery()).getMetrics()) {
@@ -71,19 +69,10 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
   @Override
   public void initialize() {
     super.initialize();
-    for (QueryNode ds : downstream) {
-      completes.put(ds.hashCode(), 0);
-    }
   }
   
   @Override
   public void fetchNext() {
-//    if (complete.get()) {
-//      for (QueryNode us : upstream) {
-//        us.onComplete();
-//      }
-//      return;
-//    }
     for (QueryNode ds : downstream) {
       ds.fetchNext();
     }
@@ -100,6 +89,7 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
     synchronized(this) {
       if (final_sequence > this.final_sequence) {
         this.final_sequence = final_sequence;
+        System.out.println("   [EXP] New final seq: " + final_sequence);
       }
       completed_downstream++;
     }
@@ -114,15 +104,12 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
     // for now... accumulate within chunks
     try {
       System.out.println("JEXL got next: " + next.sequenceId() + " From: " + next.source().id());
-      Map<String, QueryResult> result = results.get(next.sequenceId());
-      if (result == null) {
-        result = Maps.newConcurrentMap();
-        Map<String, QueryResult> raced_result = results.putIfAbsent(next.sequenceId(), result);
-        if (raced_result != null) {
-          System.out.println("    lost race for " + next.sequenceId());
-          result = raced_result;
-        } else {
-          System.out.println("   new result map for " + next.sequenceId());
+      Map<String, QueryResult> result = null;
+      synchronized(this) {
+        result = results.get(next.sequenceId());
+        if (result == null) {
+          result = Maps.newHashMap();
+          results.put(next.sequenceId(), result);
         }
       }
       
@@ -149,22 +136,40 @@ public class JexlExpression extends AbstractQueryNode implements net.opentsdb.qu
         System.out.println("Sent upstream from EXPRESSION...");
         
         synchronized(this) {
-          int max_seq = 0;
-          completes.put(next.source().hashCode(), completes.get(next.source().hashCode()) + 1);
-          for (final int max : completes.values()) {
-            if (max > max_seq) {
-              max_seq = max;
+          boolean allin = true;
+          int seq = -1;
+          int last_seq = -1;
+          for (Entry<Integer, Map<String, QueryResult>> entry : results.entrySet()) {
+            if (!(entry.getKey() == ++seq)) {
+              System.out.println("   [ALLIN?] Seq missmatch: " + entry.getKey() + " != " + seq);
+              allin = false;
+              break;
             }
+            if (entry.getValue().size() != downstream.size()) {
+              System.out.println("   [ALLIN?] Results missmatch: " + entry.getValue().size() + " != " + downstream.size());
+              allin = false;
+              break;
+            }
+            last_seq = entry.getKey();
           }
           
-          if (completed_downstream == downstream.size() && max_seq == this.final_sequence) {
+          if (allin) {
+            System.out.println("   [ALLIN?] ALL IN!!!!!!!!!!!!!!!!");
+          }
+          
+          if (last_seq != final_sequence) {
+            System.out.println("   [ALLIN?] Sequence missmatch... *sniff*");
+          }
+          
+          if (completed_downstream >= downstream.size() && last_seq == final_sequence && allin) {
             System.out.println("   All done from Jexl!!");
             for (final QueryNode us : upstream) {
               us.onComplete(this, next.sequenceId());
             }
+          } else {
+            System.out.println("  NOT done... completed ds: " + completed_downstream + "  last Seq: " + last_seq + "  Final: " + final_sequence);
           }
         }
-        
       } else {
         System.out.println("Still waiting for data...");
       }

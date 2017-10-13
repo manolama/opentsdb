@@ -1,5 +1,8 @@
 package net.opentsdb.query;
 
+import net.opentsdb.stats.Span;
+import net.opentsdb.stats.Tracer;
+
 public interface QueryContext {
 
   /**
@@ -25,4 +28,7 @@ public interface QueryContext {
    */
   public void close();
   
+  public Span querySpan();
+  
+  public Tracer tracer();
 }

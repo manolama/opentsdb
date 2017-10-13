@@ -168,7 +168,6 @@ public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext 
       }
     }
   }
-
   
   @Override
   public QueryPipelineContext context() {
@@ -183,6 +182,7 @@ public class PerMetricQueryPipelineContext extends AbstractQueryPipelineContext 
         root_idx = 0;
       }
       System.out.println("[ROOT] Fetching next: " + root_idx);
+      new RuntimeException().printStackTrace();
       roots[root_idx++].fetchNext();
       //}
   }
