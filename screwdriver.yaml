@@ -4,4 +4,4 @@ shared:
 jobs:
   main:
     steps:
-      - run_arbitrary_script: /build.sh pom.xml && mvn clean test --quiet
+      - run_arbitrary_script: ./build.sh pom.xml && mvn clean test --quiet
