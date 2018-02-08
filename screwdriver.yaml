@@ -4,4 +4,4 @@ shared:
 jobs:
   main:
     steps:
-      - run_arbitrary_script: apt-get install autoconf && ./build.sh pom.xml && mvn clean test --quiet
+      - run_arbitrary_script: apt-get update && apt-get install autoconf make -y && ./build.sh pom.xml && mvn clean test --quiet
