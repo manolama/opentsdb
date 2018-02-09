@@ -782,6 +782,7 @@ public final class TSDB {
    */
   private static void collectUidStats(final UniqueId uid,
                                       final StatsCollector collector) {
+System.out.println("Just testing prs.");
     collector.record("uid.cache-hit", uid.cacheHits(), "kind=" + uid.kind());
     collector.record("uid.cache-miss", uid.cacheMisses(), "kind=" + uid.kind());
     collector.record("uid.cache-size", uid.cacheSize(), "kind=" + uid.kind());
