@@ -165,91 +165,146 @@ public class DataShardMerger implements DataMerger<IteratorGroups> {
                               final List<IteratorGroup> groups, 
                               final QueryContext context, 
                               final Span tracer_span) {
-    final IteratorGroup group = new DefaultIteratorGroup(group_id);
-    
-    /** Holds the list of matched shard objects to merge */
-    TimeSeriesIterators[] merged = new TimeSeriesIterators[groups.size()];
-    
-    /** An array of arrays to track when we've matched a shard so we can avoid
-     * dupe processing and speed things up as we go along. */
-    final boolean[][] processed = new boolean[groups.size()][];
-    int order = -1;
-    for (int i = 0; i < groups.size(); i++) {
-      if (groups.get(i) == null || groups.get(i).iterators() == null) {
-        processed[i] = new boolean[0];
-      } else {
-        processed[i] = new boolean[groups.get(i).iterators().size()];
-        if (order < 0) {
-          order = groups.get(i).order();
-        } else {
-          if (order != groups.get(i).order()) {
-            throw new IllegalStateException("One or more shards in the set was "
-                + "for a different order. Expected: " + order + " but got: " 
-                + groups.get(i));
-          }
-        }
-      }
-    }
-
-    // TODO - There MUST be a better way than this naive quadratic merge O(n^2)
-    // so if you're looking at this and can find it, please help us!
-    // outer loop start for iterating over each shard set
-    for (int i = 0; i < groups.size(); i++) {
-      MergedTimeSeriesId.Builder id = null;
-      if (groups.get(i) == null) {
-        continue;
-      }
-      
-      // inner loop start for iterating over each shard in each set
-      for (int x = 0; x < groups.get(i).iterators().size(); x++) {
-        if (processed[i][x]) {
-          continue;
-        }
-        id = MergedTimeSeriesId.newBuilder();
-        
-        // NOTE: Make sure to reset the shards array here
-        merged = new TimeSeriesIterators[groups.size()];
-        merged[i] = groups.get(i).iterators().get(x);
-        
-        if (groups.get(i).iterators().get(x).id().alias() != null) {
-          id.setAlias(groups.get(i).iterators().get(x).id().alias());
-        }
-        id.addSeries(groups.get(i).iterators().get(x).id());
-        processed[i][x] = true;
-                
-        // nested outer loop to start searching the other shard groups
-        for (int y = 0; y < groups.size(); y++) {
-          if (y == i) {
-            // der, skip ourselves of course.
-            continue;
-          }
-          if (groups.get(y) == null) {
-            continue;
-          }
-          
-          // nexted inner loop to match against a shard in another group
-          for (int z = 0; z < groups.get(y).iterators().size(); z++) {
-            if (processed[y][z]) {
-              continue;
-            }
-            // temp build
-            final TimeSeriesId temp_id = id.build();
-            final TimeSeriesId local_id = groups.get(y).iterators().get(z).id();
-            
-            // alias check first
-            if (!Objects.equals(local_id.alias(), temp_id.alias())) {
-              continue;
-            }
-            
-            // namespace fail fast
-            if (!Objects.equals(local_id.namespace(), temp_id.namespace())) {
-              continue;
-            }
-//            if (temp_id.namespaces().size() != local_id.namespaces().size()) {
+//    final IteratorGroup group = new DefaultIteratorGroup(group_id);
+//    
+//    /** Holds the list of matched shard objects to merge */
+//    TimeSeriesIterators[] merged = new TimeSeriesIterators[groups.size()];
+//    
+//    /** An array of arrays to track when we've matched a shard so we can avoid
+//     * dupe processing and speed things up as we go along. */
+//    final boolean[][] processed = new boolean[groups.size()][];
+//    int order = -1;
+//    for (int i = 0; i < groups.size(); i++) {
+//      if (groups.get(i) == null || groups.get(i).iterators() == null) {
+//        processed[i] = new boolean[0];
+//      } else {
+//        processed[i] = new boolean[groups.get(i).iterators().size()];
+//        if (order < 0) {
+//          order = groups.get(i).order();
+//        } else {
+//          if (order != groups.get(i).order()) {
+//            throw new IllegalStateException("One or more shards in the set was "
+//                + "for a different order. Expected: " + order + " but got: " 
+//                + groups.get(i));
+//          }
+//        }
+//      }
+//    }
+//
+//    // TODO - There MUST be a better way than this naive quadratic merge O(n^2)
+//    // so if you're looking at this and can find it, please help us!
+//    // outer loop start for iterating over each shard set
+//    for (int i = 0; i < groups.size(); i++) {
+//      MergedTimeSeriesId.Builder id = null;
+//      if (groups.get(i) == null) {
+//        continue;
+//      }
+//      
+//      // inner loop start for iterating over each shard in each set
+//      for (int x = 0; x < groups.get(i).iterators().size(); x++) {
+//        if (processed[i][x]) {
+//          continue;
+//        }
+//        id = MergedTimeSeriesId.newBuilder();
+//        
+//        // NOTE: Make sure to reset the shards array here
+//        merged = new TimeSeriesIterators[groups.size()];
+//        merged[i] = groups.get(i).iterators().get(x);
+//        
+//        if (groups.get(i).iterators().get(x).id().alias() != null) {
+//          id.setAlias(groups.get(i).iterators().get(x).id().alias());
+//        }
+//        id.addSeries(groups.get(i).iterators().get(x).id());
+//        processed[i][x] = true;
+//                
+//        // nested outer loop to start searching the other shard groups
+//        for (int y = 0; y < groups.size(); y++) {
+//          if (y == i) {
+//            // der, skip ourselves of course.
+//            continue;
+//          }
+//          if (groups.get(y) == null) {
+//            continue;
+//          }
+//          
+//          // nexted inner loop to match against a shard in another group
+//          for (int z = 0; z < groups.get(y).iterators().size(); z++) {
+//            if (processed[y][z]) {
 //              continue;
 //            }
-//            for (final String namespace : temp_id.namespaces()) {
-//              if (!local_id.namespaces().contains(namespace)) {
+//            // temp build
+//            final TimeSeriesId temp_id = id.build();
+//            final TimeSeriesId local_id = groups.get(y).iterators().get(z).id();
+//            
+//            // alias check first
+//            if (!Objects.equals(local_id.alias(), temp_id.alias())) {
+//              continue;
+//            }
+//            
+//            // namespace fail fast
+//            if (!Objects.equals(local_id.namespace(), temp_id.namespace())) {
+//              continue;
+//            }
+////            if (temp_id.namespaces().size() != local_id.namespaces().size()) {
+////              continue;
+////            }
+////            for (final String namespace : temp_id.namespaces()) {
+////              if (!local_id.namespaces().contains(namespace)) {
+////                matched = false;
+////                break;
+////              }
+////            }
+////            if (!matched) {
+////              continue;
+////            }
+//            
+//            // metric check fail fast
+//            if (!Objects.equals(local_id.metric(), temp_id.metric())) {
+//              continue;
+//            }
+////            if (temp_id.metrics().size() != local_id.metrics().size()) {
+////              continue;
+////            }
+////            for (final String metric : temp_id.metrics()) {
+////              if (!local_id.metrics().contains(metric)) {
+////                matched = false;
+////                break;
+////              }
+////            }
+////            if (!matched) {
+////              continue;
+////            }
+//            
+//            final Set<String> promoted_agg_tags = Sets.newHashSet();
+//            final Set<String> promoted_disjoint_tags = Sets.newHashSet();
+//            boolean matched = true;
+//            for (final Entry<String, String> pair : temp_id.tags().entrySet()) {
+//              final String tag_v = local_id.tags().get(pair.getKey());
+//              if (tag_v != null && tag_v.equals(pair.getValue())) {
+//                // matched!
+//                continue;
+//              }
+//              
+//              if (!local_id.aggregatedTags().contains(pair.getKey())) {
+//                promoted_agg_tags.add(pair.getKey());
+//              } else if (!local_id.disjointTags().contains(pair.getKey())) {
+//                promoted_disjoint_tags.add(pair.getKey());
+//              }
+//            }
+//            if (!matched) {
+//              continue;
+//            }
+//            
+//            // reverse tags processing
+//            for (final Entry<String, String> pair : local_id.tags().entrySet()) {
+//              final String tag_v = temp_id.tags().get(pair.getKey());
+//              if (tag_v != null && tag_v.equals(pair.getValue())) {
+//                continue;
+//              }
+//              
+//              // this one wasn't in the other tag list so check agg/disjoint.
+//              if (!temp_id.aggregatedTags().contains(pair.getKey()) &&
+//                  !temp_id.disjointTags().contains(pair.getKey())) {
 //                matched = false;
 //                break;
 //              }
@@ -257,16 +312,16 @@ public class DataShardMerger implements DataMerger<IteratorGroups> {
 //            if (!matched) {
 //              continue;
 //            }
-            
-            // metric check fail fast
-            if (!Objects.equals(local_id.metric(), temp_id.metric())) {
-              continue;
-            }
-//            if (temp_id.metrics().size() != local_id.metrics().size()) {
-//              continue;
-//            }
-//            for (final String metric : temp_id.metrics()) {
-//              if (!local_id.metrics().contains(metric)) {
+//            
+//            // aggs and disjoint
+//            for (final String tagk : local_id.aggregatedTags()) {
+//              if (temp_id.aggregatedTags().contains(tagk) || 
+//                  promoted_agg_tags.contains(tagk)) {
+//                continue;
+//              }
+//              
+//              if (!temp_id.disjointTags().contains(tagk) &&
+//                  !promoted_disjoint_tags.contains(tagk)) {
 //                matched = false;
 //                break;
 //              }
@@ -274,89 +329,35 @@ public class DataShardMerger implements DataMerger<IteratorGroups> {
 //            if (!matched) {
 //              continue;
 //            }
-            
-            final Set<String> promoted_agg_tags = Sets.newHashSet();
-            final Set<String> promoted_disjoint_tags = Sets.newHashSet();
-            boolean matched = true;
-            for (final Entry<String, String> pair : temp_id.tags().entrySet()) {
-              final String tag_v = local_id.tags().get(pair.getKey());
-              if (tag_v != null && tag_v.equals(pair.getValue())) {
-                // matched!
-                continue;
-              }
-              
-              if (!local_id.aggregatedTags().contains(pair.getKey())) {
-                promoted_agg_tags.add(pair.getKey());
-              } else if (!local_id.disjointTags().contains(pair.getKey())) {
-                promoted_disjoint_tags.add(pair.getKey());
-              }
-            }
-            if (!matched) {
-              continue;
-            }
-            
-            // reverse tags processing
-            for (final Entry<String, String> pair : local_id.tags().entrySet()) {
-              final String tag_v = temp_id.tags().get(pair.getKey());
-              if (tag_v != null && tag_v.equals(pair.getValue())) {
-                continue;
-              }
-              
-              // this one wasn't in the other tag list so check agg/disjoint.
-              if (!temp_id.aggregatedTags().contains(pair.getKey()) &&
-                  !temp_id.disjointTags().contains(pair.getKey())) {
-                matched = false;
-                break;
-              }
-            }
-            if (!matched) {
-              continue;
-            }
-            
-            // aggs and disjoint
-            for (final String tagk : local_id.aggregatedTags()) {
-              if (temp_id.aggregatedTags().contains(tagk) || 
-                  promoted_agg_tags.contains(tagk)) {
-                continue;
-              }
-              
-              if (!temp_id.disjointTags().contains(tagk) &&
-                  !promoted_disjoint_tags.contains(tagk)) {
-                matched = false;
-                break;
-              }
-            }
-            if (!matched) {
-              continue;
-            }
-            
-            for (final String tagk : local_id.disjointTags()) {
-              if (temp_id.aggregatedTags().contains(tagk) ||
-                  promoted_agg_tags.contains(tagk)) {
-                continue;
-              }
-              if (!temp_id.disjointTags().contains(tagk) && 
-                  !promoted_disjoint_tags.contains(tagk)) {
-                matched = false;
-                break;
-              }
-            }
-            if (!matched) {
-              continue;
-            }
-            
-            // matched!!           
-            merged[y] = groups.get(y).iterators().get(z);
-            id.addSeries(groups.get(y).iterators().get(z).id());
-            processed[y][z] = true;
-          } // end dupe inner data shard loop
-        } // end dupe outer shards loop
-
-        group.addIterators(mergeData(merged, id.build(), context, tracer_span));
-      } // end inner data shard loop
-    } // end outer shards loop
-
-    return group;
+//            
+//            for (final String tagk : local_id.disjointTags()) {
+//              if (temp_id.aggregatedTags().contains(tagk) ||
+//                  promoted_agg_tags.contains(tagk)) {
+//                continue;
+//              }
+//              if (!temp_id.disjointTags().contains(tagk) && 
+//                  !promoted_disjoint_tags.contains(tagk)) {
+//                matched = false;
+//                break;
+//              }
+//            }
+//            if (!matched) {
+//              continue;
+//            }
+//            
+//            // matched!!           
+//            merged[y] = groups.get(y).iterators().get(z);
+//            id.addSeries(groups.get(y).iterators().get(z).id());
+//            processed[y][z] = true;
+//          } // end dupe inner data shard loop
+//        } // end dupe outer shards loop
+//
+//        group.addIterators(mergeData(merged, id.build(), context, tracer_span));
+//      } // end inner data shard loop
+//    } // end outer shards loop
+//
+//    return group;
+    return null;
   }
   
   /**
@@ -372,7 +373,7 @@ public class DataShardMerger implements DataMerger<IteratorGroups> {
    */
   protected TimeSeriesIterators mergeData(
                             final TimeSeriesIterators[] to_merge, 
-                                 final TimeSeriesId id, 
+                                 final TimeSeriesQueryId id, 
                                  final QueryContext context, 
                                  final Span tracer_span) {
     if (context == null) {

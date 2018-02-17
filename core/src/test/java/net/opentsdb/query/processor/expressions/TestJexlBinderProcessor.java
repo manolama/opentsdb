@@ -41,7 +41,7 @@ import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.SimpleStringGroupId;
 import net.opentsdb.data.BaseTimeSeriesId;
 import net.opentsdb.data.TimeSeriesGroupId;
-import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.data.TimeSeriesQueryId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.iterators.IteratorStatus;
 import net.opentsdb.data.iterators.TimeSeriesIterator;
@@ -67,8 +67,8 @@ public class TestJexlBinderProcessor {
   private TimeSeriesGroupId group_id_a;
   private TimeSeriesGroupId group_id_b;
   
-  private TimeSeriesId id_a;
-  private TimeSeriesId id_b;
+  private TimeSeriesQueryId id_a;
+  private TimeSeriesQueryId id_b;
   
   private List<List<MutableNumericType>> data_a;
   private List<List<MutableNumericType>> data_b;

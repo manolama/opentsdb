@@ -32,6 +32,7 @@ import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.TimeSeriesGroupId;
 import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.data.TimeSeriesQueryId;
 import net.opentsdb.data.iterators.DefaultIteratorGroups;
 import net.opentsdb.data.iterators.IteratorGroup;
 import net.opentsdb.data.iterators.IteratorGroups;
@@ -131,131 +132,132 @@ public class Joiner {
   private Map<String, IteratorGroups> computeIntersection(
       final Map<String, IteratorGroups> joins) {
     
-    // TODO - join on a specific data type. May not care about annotations or 
-    // others when performing an expression so those can be "grouped".
-    
-    // Ugly but since the iterator sets are immutable, we have to convert to
-    // a map, then back.
-    final Map<String, Map<TimeSeriesGroupId, Map<TimeSeriesId, 
-      Map<TypeToken<?>, TimeSeriesIterator<?>>>>> joined = Maps.newHashMap();
-    
-    for (final Entry<String, IteratorGroups> join : joins.entrySet()) {
-      final Map<TimeSeriesGroupId, Map<TimeSeriesId, 
-        Map<TypeToken<?>, TimeSeriesIterator<?>>>> group = Maps.newHashMap();
-      joined.put(join.getKey(), group);
-      
-      for (final Entry<TimeSeriesGroupId, IteratorGroup> iterators : 
-          join.getValue()) {
-        final Map<TimeSeriesId, Map<TypeToken<?>, 
-          TimeSeriesIterator<?>>> timeseries = Maps.newHashMap();
-        group.put(iterators.getKey(), timeseries);
-        for (final TimeSeriesIterators types : iterators.getValue()) {
-          final Map<TypeToken<?>, TimeSeriesIterator<?>> typed_iterators =
-              Maps.newHashMapWithExpectedSize(types.iterators().size());
-          for (final TimeSeriesIterator<?> iterator : types.iterators()) {
-            typed_iterators.put(iterator.type(), iterator);
-          }
-          timeseries.put(types.id(), typed_iterators);
-        }
-      }
-    }
-    
-    // now compute the intersections.
-    final Iterator<Entry<String, Map<TimeSeriesGroupId, Map<TimeSeriesId, 
-      Map<TypeToken<?>, TimeSeriesIterator<?>>>>>> top_iterator = 
-        joined.entrySet().iterator();
-    while (top_iterator.hasNext()) {
-      final Entry<String, Map<TimeSeriesGroupId, Map<TimeSeriesId, 
-        Map<TypeToken<?>, TimeSeriesIterator<?>>>>> join = top_iterator.next();
-      
-      final Iterator<Entry<TimeSeriesGroupId, Map<TimeSeriesId, 
-        Map<TypeToken<?>, TimeSeriesIterator<?>>>>> group_iterator = 
-          join.getValue().entrySet().iterator();
-      while (group_iterator.hasNext()) {
-        final Entry<TimeSeriesGroupId, Map<TimeSeriesId, 
-          Map<TypeToken<?>, TimeSeriesIterator<?>>>> group = 
-          group_iterator.next();
-        
-        final Iterator<Entry<TimeSeriesId, 
-          Map<TypeToken<?>, TimeSeriesIterator<?>>>> ts_iterator =
-            group.getValue().entrySet().iterator();
-        while (ts_iterator.hasNext()) {
-          final Entry<TimeSeriesId, Map<TypeToken<?>, 
-            TimeSeriesIterator<?>>> timeseries = ts_iterator.next();
-          
-          // now check the other groups to see if they have data.
-          for (final Entry<TimeSeriesGroupId, Map<TimeSeriesId, 
-              Map<TypeToken<?>, TimeSeriesIterator<?>>>> other_group : 
-                  join.getValue().entrySet()) {
-            if (other_group.getKey().equals(group.getKey())) {
-              continue;
-            }
-            
-            final Map<TypeToken<?>, TimeSeriesIterator<?>> other_types = 
-                other_group.getValue().get(timeseries.getKey());
-            if (other_types == null) {
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("[" + join.getKey() + "] kicking out series " 
-                    + timeseries.getKey() + " for group " + group.getKey() 
-                    + " as group " + other_group.getKey() 
-                    + " does not have data.");
-              }
-              ts_iterator.remove();
-              break;
-            }
-            
-            final Iterator<Entry<TypeToken<?>, TimeSeriesIterator<?>>> 
-              type_iterator = timeseries.getValue().entrySet().iterator();
-            while(type_iterator.hasNext()) {
-              final Entry<TypeToken<?>, TimeSeriesIterator<?>> type = 
-                  type_iterator.next();
-              if (!other_types.containsKey(type.getKey())) {
-                if (LOG.isDebugEnabled()) {
-                  LOG.debug("[" + join.getKey() + "] kicking out type " 
-                      + type.getKey() + " for group " + group.getKey() 
-                      + " as group " + other_group.getKey() 
-                      + " does not have data.");
-                }
-                type_iterator.remove();
-                break;
-              }
-              
-            }
-          }
-        }
-        
-        if (group.getValue().isEmpty()) {
-          group_iterator.remove();
-        }
-      }
-      
-      // finally if nothing was present we kick it out
-      if (join.getValue().isEmpty()) {
-        top_iterator.remove();
-      }
-    }
-    
-    final Map<String, IteratorGroups> final_joins = Maps.newHashMap();
-    // reverse
-    for (final Entry<String, Map<TimeSeriesGroupId, Map<TimeSeriesId, 
-        Map<TypeToken<?>, TimeSeriesIterator<?>>>>> groups : joined.entrySet()) {
-      final IteratorGroups final_groups = new DefaultIteratorGroups();
-      final_joins.put(groups.getKey(), final_groups);
-      for (final Entry<TimeSeriesGroupId, Map<TimeSeriesId, 
-          Map<TypeToken<?>, TimeSeriesIterator<?>>>> group : 
-            groups.getValue().entrySet()) {
-        
-        for (final Entry<TimeSeriesId, 
-            Map<TypeToken<?>, TimeSeriesIterator<?>>> typed : 
-          group.getValue().entrySet()) {
-          for (final TimeSeriesIterator<?> iterator : typed.getValue().values()) {
-            final_groups.addIterator(group.getKey(), iterator);
-          }
-        }
-      }
-    }
-    
-    return final_joins;
+//    // TODO - join on a specific data type. May not care about annotations or 
+//    // others when performing an expression so those can be "grouped".
+//    
+//    // Ugly but since the iterator sets are immutable, we have to convert to
+//    // a map, then back.
+//    final Map<String, Map<TimeSeriesGroupId, Map<TimeSeriesQueryId, 
+//      Map<TypeToken<?>, TimeSeriesIterator<?>>>>> joined = Maps.newHashMap();
+//    
+//    for (final Entry<String, IteratorGroups> join : joins.entrySet()) {
+//      final Map<TimeSeriesGroupId, Map<TimeSeriesQueryId, 
+//        Map<TypeToken<?>, TimeSeriesIterator<?>>>> group = Maps.newHashMap();
+//      joined.put(join.getKey(), group);
+//      
+//      for (final Entry<TimeSeriesGroupId, IteratorGroup> iterators : 
+//          join.getValue()) {
+//        final Map<TimeSeriesQueryId, Map<TypeToken<?>, 
+//          TimeSeriesIterator<?>>> timeseries = Maps.newHashMap();
+//        group.put(iterators.getKey(), timeseries);
+//        for (final TimeSeriesIterators types : iterators.getValue()) {
+//          final Map<TypeToken<?>, TimeSeriesIterator<?>> typed_iterators =
+//              Maps.newHashMapWithExpectedSize(types.iterators().size());
+//          for (final TimeSeriesIterator<?> iterator : types.iterators()) {
+//            typed_iterators.put(iterator.type(), iterator);
+//          }
+//          timeseries.put(types.id(), typed_iterators);
+//        }
+//      }
+//    }
+//    
+//    // now compute the intersections.
+//    final Iterator<Entry<String, Map<TimeSeriesGroupId, Map<TimeSeriesQueryId, 
+//      Map<TypeToken<?>, TimeSeriesIterator<?>>>>>> top_iterator = 
+//        joined.entrySet().iterator();
+//    while (top_iterator.hasNext()) {
+//      final Entry<String, Map<TimeSeriesGroupId, Map<TimeSeriesQueryId, 
+//        Map<TypeToken<?>, TimeSeriesIterator<?>>>>> join = top_iterator.next();
+//      
+//      final Iterator<Entry<TimeSeriesGroupId, Map<TimeSeriesQueryId, 
+//        Map<TypeToken<?>, TimeSeriesIterator<?>>>>> group_iterator = 
+//          join.getValue().entrySet().iterator();
+//      while (group_iterator.hasNext()) {
+//        final Entry<TimeSeriesGroupId, Map<TimeSeriesQueryId, 
+//          Map<TypeToken<?>, TimeSeriesIterator<?>>>> group = 
+//          group_iterator.next();
+//        
+//        final Iterator<Entry<TimeSeriesQueryId, 
+//          Map<TypeToken<?>, TimeSeriesIterator<?>>>> ts_iterator =
+//            group.getValue().entrySet().iterator();
+//        while (ts_iterator.hasNext()) {
+//          final Entry<TimeSeriesQueryId, Map<TypeToken<?>, 
+//            TimeSeriesIterator<?>>> timeseries = ts_iterator.next();
+//          
+//          // now check the other groups to see if they have data.
+//          for (final Entry<TimeSeriesGroupId, Map<TimeSeriesQueryId, 
+//              Map<TypeToken<?>, TimeSeriesIterator<?>>>> other_group : 
+//                  join.getValue().entrySet()) {
+//            if (other_group.getKey().equals(group.getKey())) {
+//              continue;
+//            }
+//            
+//            final Map<TypeToken<?>, TimeSeriesIterator<?>> other_types = 
+//                other_group.getValue().get(timeseries.getKey());
+//            if (other_types == null) {
+//              if (LOG.isDebugEnabled()) {
+//                LOG.debug("[" + join.getKey() + "] kicking out series " 
+//                    + timeseries.getKey() + " for group " + group.getKey() 
+//                    + " as group " + other_group.getKey() 
+//                    + " does not have data.");
+//              }
+//              ts_iterator.remove();
+//              break;
+//            }
+//            
+//            final Iterator<Entry<TypeToken<?>, TimeSeriesIterator<?>>> 
+//              type_iterator = timeseries.getValue().entrySet().iterator();
+//            while(type_iterator.hasNext()) {
+//              final Entry<TypeToken<?>, TimeSeriesIterator<?>> type = 
+//                  type_iterator.next();
+//              if (!other_types.containsKey(type.getKey())) {
+//                if (LOG.isDebugEnabled()) {
+//                  LOG.debug("[" + join.getKey() + "] kicking out type " 
+//                      + type.getKey() + " for group " + group.getKey() 
+//                      + " as group " + other_group.getKey() 
+//                      + " does not have data.");
+//                }
+//                type_iterator.remove();
+//                break;
+//              }
+//              
+//            }
+//          }
+//        }
+//        
+//        if (group.getValue().isEmpty()) {
+//          group_iterator.remove();
+//        }
+//      }
+//      
+//      // finally if nothing was present we kick it out
+//      if (join.getValue().isEmpty()) {
+//        top_iterator.remove();
+//      }
+//    }
+//    
+//    final Map<String, IteratorGroups> final_joins = Maps.newHashMap();
+//    // reverse
+//    for (final Entry<String, Map<TimeSeriesGroupId, Map<TimeSeriesQueryId, 
+//        Map<TypeToken<?>, TimeSeriesIterator<?>>>>> groups : joined.entrySet()) {
+//      final IteratorGroups final_groups = new DefaultIteratorGroups();
+//      final_joins.put(groups.getKey(), final_groups);
+//      for (final Entry<TimeSeriesGroupId, Map<TimeSeriesQueryId, 
+//          Map<TypeToken<?>, TimeSeriesIterator<?>>>> group : 
+//            groups.getValue().entrySet()) {
+//        
+//        for (final Entry<TimeSeriesQueryId, 
+//            Map<TypeToken<?>, TimeSeriesIterator<?>>> typed : 
+//          group.getValue().entrySet()) {
+//          for (final TimeSeriesIterator<?> iterator : typed.getValue().values()) {
+//            final_groups.addIterator(group.getKey(), iterator);
+//          }
+//        }
+//      }
+//    }
+//    
+//    return final_joins;
+    return null;
   }
   
   /**
@@ -272,78 +274,78 @@ public class Joiner {
     }
     final StringBuffer buffer = new StringBuffer();
     
-    final List<String> tag_keys = config.getTagKeys();
-    final boolean include_agg_tags = config.getExpression().getJoin() != null ?
-        config.getExpression().getJoin().getIncludeAggTags() : false;
-    final boolean include_disjoint_tags = config.getExpression().getJoin() != null ?
-        config.getExpression().getJoin().getIncludeDisjointTags() : false;
-    if (tag_keys != null) {
-      for (final String tag_key : tag_keys) {
-        String tag_value = id.tags().get(tag_key);
-        if (tag_value != null) {
-          buffer.append(tag_key);
-          buffer.append(tag_value);
-        } else {
-          boolean matched = false;
-          if (include_agg_tags) {
-            for (final String tag : id.aggregatedTags()) {
-              if (tag_key.equals(tag)) {
-                matched = true;
-                break;
-              }
-            }
-          } if (!matched && include_disjoint_tags) {
-            for (final String tag : id.disjointTags()) {
-              if (tag_key.equals(tag)) {
-                matched = true;
-                break;
-              }
-            }
-          }
-          if (!matched) {
-            if (LOG.isDebugEnabled()) {
-              LOG.debug("Ignoring series " + id + " as it doesn't have the "
-                  + "required tags ");
-            }
-            return null;
-          }
-          buffer.append(tag_key);
-        }
-      }
-    } else {
-      // full join!
-      if (!id.tags().isEmpty()) {
-        // make sure it's sorted is already sorted
-        final Map<String, String> tags;
-        if (id instanceof TreeMap) {
-          tags = id.tags();
-        } else {
-          tags = new TreeMap<String, String>(id.tags());
-        }
-        for (final Entry<String, String> pair : tags.entrySet()) {
-          buffer.append(pair.getKey());
-          buffer.append(pair.getValue());
-        }
-      }
-      
-      if (include_agg_tags && !id.aggregatedTags().isEmpty()) {
-        // not guaranteed of sorting
-        final List<String> sorted = Lists.newArrayList(id.aggregatedTags());
-        Collections.sort(sorted);
-        for (final String tag : sorted) {
-          buffer.append(tag);
-        }
-      }
-      
-      if (include_disjoint_tags && !id.disjointTags().isEmpty()) {
-        // not guaranteed of sorting
-        final List<String> sorted = Lists.newArrayList(id.disjointTags());
-        Collections.sort(sorted);
-        for (final String tag : sorted) {
-          buffer.append(tag);
-        }
-      }
-    }
+//    final List<String> tag_keys = config.getTagKeys();
+//    final boolean include_agg_tags = config.getExpression().getJoin() != null ?
+//        config.getExpression().getJoin().getIncludeAggTags() : false;
+//    final boolean include_disjoint_tags = config.getExpression().getJoin() != null ?
+//        config.getExpression().getJoin().getIncludeDisjointTags() : false;
+//    if (tag_keys != null) {
+//      for (final String tag_key : tag_keys) {
+//        String tag_value = id.tags().get(tag_key);
+//        if (tag_value != null) {
+//          buffer.append(tag_key);
+//          buffer.append(tag_value);
+//        } else {
+//          boolean matched = false;
+//          if (include_agg_tags) {
+//            for (final String tag : id.aggregatedTags()) {
+//              if (tag_key.equals(tag)) {
+//                matched = true;
+//                break;
+//              }
+//            }
+//          } if (!matched && include_disjoint_tags) {
+//            for (final String tag : id.disjointTags()) {
+//              if (tag_key.equals(tag)) {
+//                matched = true;
+//                break;
+//              }
+//            }
+//          }
+//          if (!matched) {
+//            if (LOG.isDebugEnabled()) {
+//              LOG.debug("Ignoring series " + id + " as it doesn't have the "
+//                  + "required tags ");
+//            }
+//            return null;
+//          }
+//          buffer.append(tag_key);
+//        }
+//      }
+//    } else {
+//      // full join!
+//      if (!id.tags().isEmpty()) {
+//        // make sure it's sorted is already sorted
+//        final Map<String, String> tags;
+//        if (id instanceof TreeMap) {
+//          tags = id.tags();
+//        } else {
+//          tags = new TreeMap<String, String>(id.tags());
+//        }
+//        for (final Entry<String, String> pair : tags.entrySet()) {
+//          buffer.append(pair.getKey());
+//          buffer.append(pair.getValue());
+//        }
+//      }
+//      
+//      if (include_agg_tags && !id.aggregatedTags().isEmpty()) {
+//        // not guaranteed of sorting
+//        final List<String> sorted = Lists.newArrayList(id.aggregatedTags());
+//        Collections.sort(sorted);
+//        for (final String tag : sorted) {
+//          buffer.append(tag);
+//        }
+//      }
+//      
+//      if (include_disjoint_tags && !id.disjointTags().isEmpty()) {
+//        // not guaranteed of sorting
+//        final List<String> sorted = Lists.newArrayList(id.disjointTags());
+//        Collections.sort(sorted);
+//        for (final String tag : sorted) {
+//          buffer.append(tag);
+//        }
+//      }
+//    }
     
     return buffer.toString();
   }

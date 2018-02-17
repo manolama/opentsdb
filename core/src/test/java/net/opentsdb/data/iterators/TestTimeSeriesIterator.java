@@ -35,7 +35,7 @@ import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.data.TimeSeriesDataType;
-import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.data.TimeSeriesQueryId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.iterators.TimeSeriesIterator;
@@ -45,7 +45,7 @@ import net.opentsdb.query.context.QueryContext;
 
 public class TestTimeSeriesIterator {
 
-  private TimeSeriesId id;
+  private TimeSeriesQueryId id;
   private TimeSeriesIterator<?> source;
   private TimeSeriesIterator<?> source_clone;
   private QueryContext context;
@@ -53,7 +53,7 @@ public class TestTimeSeriesIterator {
   
   @Before
   public void before() throws Exception {
-    id = mock(TimeSeriesId.class);
+    id = mock(TimeSeriesQueryId.class);
     source = mock(TimeSeriesIterator.class);
     context = mock(QueryContext.class);
     type = TypeToken.of(NumericType.class);
@@ -262,11 +262,11 @@ public class TestTimeSeriesIterator {
    */
   static class MockIterator extends TimeSeriesIterator<NumericType> {
     
-    public MockIterator(final TimeSeriesId id) {
+    public MockIterator(final TimeSeriesQueryId id) {
       super(id);
     }
     
-    public MockIterator(final TimeSeriesId id, final QueryContext context) {
+    public MockIterator(final TimeSeriesQueryId id, final QueryContext context) {
       super(id, context);
     }
     

@@ -30,7 +30,7 @@ import net.opentsdb.core.DefaultTSDB;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
-import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.data.TimeSeriesQueryId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.iterators.IteratorGroups;
 import net.opentsdb.query.QueryIteratorFactory;
@@ -45,6 +45,8 @@ import net.opentsdb.stats.TsdbTrace;
 
 /**
  * TODO - complete.
+ * 
+ * TODO - schema picker
  * 
  * @since 3.0
  */
@@ -106,7 +108,7 @@ public class AsyncHBaseDataStore extends TimeSeriesDataStore {
   }
   
   @Override
-  public Deferred<Object> write(TimeSeriesId id, 
+  public Deferred<Object> write(TimeSeriesQueryId id, 
       TimeSeriesValue<?> value, TsdbTrace trace,
       Span upstream_span) {
     // TODO Auto-generated method stub
@@ -148,4 +150,7 @@ public class AsyncHBaseDataStore extends TimeSeriesDataStore {
     return null;
   }
 
+  TSDB tsdb() {
+    return tsdb;
+  }
 }

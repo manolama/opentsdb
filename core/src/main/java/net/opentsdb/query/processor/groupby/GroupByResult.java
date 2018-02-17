@@ -71,20 +71,21 @@ public class GroupByResult implements QueryResult {
     
     for (final TimeSeries series : next.timeSeries()) {
       final StringBuilder buf = new StringBuilder()
-          .append(series.id().metric());
+//          .append(series.id().metric());
+          ;
       
       boolean matched = true;
       for (final String key : ((GroupByConfig) node.config()).getTagKeys()) {
-        final String tagv = series.id().tags().get(key);
-        if (tagv == null) {
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Dropping series from group by due to missing tag key: " 
-                + key + "  " + series.id());
-          }
-          matched = false;
-          break;
-        }
-        buf.append(tagv);
+//        final String tagv = series.id().tags().get(key);
+//        if (tagv == null) {
+//          if (LOG.isDebugEnabled()) {
+//            LOG.debug("Dropping series from group by due to missing tag key: " 
+//                + key + "  " + series.id());
+//          }
+//          matched = false;
+//          break;
+//        }
+//        buf.append(tagv);
       }
       
       if (!matched) {

@@ -78,6 +78,12 @@
           <artifactId>zero-allocation-hashing</artifactId>
           <version>0.6</version>
         </dependency>
+        
+        <dependency>
+          <groupId>org.openjdk.jol</groupId>
+          <artifactId>jol-core</artifactId>
+          <version>0.8</version>
+        </dependency>
 
       </dependencies>
     </dependencyManagement>
@@ -133,6 +139,11 @@
       <dependency>
         <groupId>net.openhft</groupId>
         <artifactId>zero-allocation-hashing</artifactId>
+      </dependency>
+      
+      <dependency>
+        <groupId>org.openjdk.jol</groupId>
+        <artifactId>jol-core</artifactId>
       </dependency>
       
       <!-- TESTING Deps. -->

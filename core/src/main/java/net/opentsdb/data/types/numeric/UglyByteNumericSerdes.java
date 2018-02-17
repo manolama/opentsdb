@@ -23,6 +23,7 @@ import net.opentsdb.common.Const;
 import net.opentsdb.data.BaseTimeSeriesId;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.data.TimeSeriesQueryId;
 import net.opentsdb.data.iterators.TimeSeriesIterator;
 import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.QueryResult;
@@ -62,45 +63,45 @@ public class UglyByteNumericSerdes implements TimeSeriesSerdes {
       for (final TimeSeries series : result.timeSeries()) {
         final TimeSeriesId id = series.id();
         
-        buf = id.alias() == null ? null : id.alias().getBytes(Const.UTF8_CHARSET);
-        stream.write(Bytes.fromInt(buf == null ? 0 : buf.length));
-        if (buf != null) {
-          stream.write(buf);
-        }
-        
-        buf = id.namespace() == null ? null : id.namespace().getBytes(Const.UTF8_CHARSET);
-        stream.write(Bytes.fromInt(buf == null ? 0 : buf.length));
-        if (buf != null) {
-          stream.write(buf);
-        }
-        
-        buf = id.metric().getBytes(Const.UTF8_CHARSET);
-        stream.write(Bytes.fromInt(buf.length));
-        stream.write(buf);
-        
-        stream.write(Bytes.fromInt(id.tags().size()));
-        for (final Entry<String, String> pair : id.tags().entrySet()) {
-          buf = pair.getKey().getBytes(Const.UTF8_CHARSET);
-          stream.write(Bytes.fromInt(buf.length));
-          stream.write(buf);
-          buf = pair.getValue().getBytes(Const.UTF8_CHARSET);
-          stream.write(Bytes.fromInt(buf.length));
-          stream.write(buf);
-        }
-        
-        stream.write(Bytes.fromInt(id.aggregatedTags().size()));
-        for (final String tag : id.aggregatedTags()) {
-          buf = tag.getBytes(Const.UTF8_CHARSET);
-          stream.write(Bytes.fromInt(buf.length));
-          stream.write(buf);
-        }
-        
-        stream.write(Bytes.fromInt(id.disjointTags().size()));
-        for (final String tag : id.disjointTags()) {
-          buf = tag.getBytes(Const.UTF8_CHARSET);
-          stream.write(Bytes.fromInt(buf.length));
-          stream.write(buf);
-        }
+//        buf = id.alias() == null ? null : id.alias().getBytes(Const.UTF8_CHARSET);
+//        stream.write(Bytes.fromInt(buf == null ? 0 : buf.length));
+//        if (buf != null) {
+//          stream.write(buf);
+//        }
+//        
+//        buf = id.namespace() == null ? null : id.namespace().getBytes(Const.UTF8_CHARSET);
+//        stream.write(Bytes.fromInt(buf == null ? 0 : buf.length));
+//        if (buf != null) {
+//          stream.write(buf);
+//        }
+//        
+//        buf = id.metric().getBytes(Const.UTF8_CHARSET);
+//        stream.write(Bytes.fromInt(buf.length));
+//        stream.write(buf);
+//        
+//        stream.write(Bytes.fromInt(id.tags().size()));
+//        for (final Entry<String, String> pair : id.tags().entrySet()) {
+//          buf = pair.getKey().getBytes(Const.UTF8_CHARSET);
+//          stream.write(Bytes.fromInt(buf.length));
+//          stream.write(buf);
+//          buf = pair.getValue().getBytes(Const.UTF8_CHARSET);
+//          stream.write(Bytes.fromInt(buf.length));
+//          stream.write(buf);
+//        }
+//        
+//        stream.write(Bytes.fromInt(id.aggregatedTags().size()));
+//        for (final String tag : id.aggregatedTags()) {
+//          buf = tag.getBytes(Const.UTF8_CHARSET);
+//          stream.write(Bytes.fromInt(buf.length));
+//          stream.write(buf);
+//        }
+//        
+//        stream.write(Bytes.fromInt(id.disjointTags().size()));
+//        for (final String tag : id.disjointTags()) {
+//          buf = tag.getBytes(Const.UTF8_CHARSET);
+//          stream.write(Bytes.fromInt(buf.length));
+//          stream.write(buf);
+//        }
         
         //((NumericMillisecondShard) data).serialize(stream);
         stream.flush();

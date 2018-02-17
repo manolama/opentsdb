@@ -111,16 +111,17 @@ public class JsonV2QuerySerdes implements TimeSeriesSerdes {
         }
         
         json.writeStartObject();
-        
-        json.writeStringField("metric", series.id().metric());
-        json.writeObjectFieldStart("tags");
-        for (final Entry<String, String> entry : series.id().tags().entrySet()) {
-          json.writeStringField(entry.getKey(), entry.getValue());
-        }
-        json.writeArrayFieldStart("aggregateTags");
-        for (final String tag : series.id().aggregatedTags()) {
-          json.writeString(tag);
-        }
+
+        // TODO - determine if the ID needs resolution or not.
+//        json.writeStringField("metric", series.id().metric());
+//        json.writeObjectFieldStart("tags");
+//        for (final Entry<String, String> entry : series.id().tags().entrySet()) {
+//          json.writeStringField(entry.getKey(), entry.getValue());
+//        }
+//        json.writeArrayFieldStart("aggregateTags");
+//        for (final String tag : series.id().aggregatedTags()) {
+//          json.writeString(tag);
+//        }
         json.writeEndArray();
         json.writeEndObject();
         json.writeObjectFieldStart("dps");

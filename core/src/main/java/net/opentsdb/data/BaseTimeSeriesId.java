@@ -34,11 +34,12 @@ import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Ordering;
+import com.stumbleupon.async.Deferred;
 
 import net.openhft.hashing.LongHashFunction;
 
 /**
- * A basic {@link TimeSeriesId} implementation that accepts strings for all
+ * A basic {@link TimeSeriesQueryId} implementation that accepts strings for all
  * parameters. Includes a useful builder and after building, all lists are 
  * immutable.
  * 
@@ -47,7 +48,7 @@ import net.openhft.hashing.LongHashFunction;
 @JsonInclude(Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonDeserialize(builder = BaseTimeSeriesId.Builder.class)
-public class BaseTimeSeriesId implements TimeSeriesId {
+public class BaseTimeSeriesId implements TimeSeriesQueryId {
   
   /** Whether or not the strings are specially encoded values. */
   protected boolean encoded;
@@ -135,6 +136,12 @@ public class BaseTimeSeriesId implements TimeSeriesId {
   }
 
   @Override
+  public boolean decodeToJoin() {
+    // TODO Auto-generated method stub
+    return false;
+  }
+  
+  @Override
   public String alias() {
     return alias;
   }
@@ -170,7 +177,7 @@ public class BaseTimeSeriesId implements TimeSeriesId {
   }
 
   @Override
-  public int compareTo(final TimeSeriesId o) {
+  public int compareTo(final TimeSeriesQueryId o) {
     return ComparisonChain.start()
         .compare(Strings.nullToEmpty(alias), Strings.nullToEmpty(o.alias()))
         .compare(Strings.nullToEmpty(namespace), Strings.nullToEmpty(o.namespace()))
@@ -189,10 +196,10 @@ public class BaseTimeSeriesId implements TimeSeriesId {
   public boolean equals(final Object o) {
     if (this == o)
       return true;
-    if (o == null || !(o instanceof TimeSeriesId))
+    if (o == null || !(o instanceof TimeSeriesQueryId))
       return false;
     
-    final TimeSeriesId id = (TimeSeriesId) o;
+    final TimeSeriesQueryId id = (TimeSeriesQueryId) o;
     
     if (!Objects.equal(alias, id.alias())) {
       return false;
@@ -278,6 +285,11 @@ public class BaseTimeSeriesId implements TimeSeriesId {
         .append(", uniqueIds=")
         .append(unique_ids);
     return buf.toString();
+  }
+  
+  @Override
+  public Deferred<TimeSeriesId> decode() {
+    return Deferred.fromResult(this);
   }
   
   /** @return A new builder or the SimpleStringTimeSeriesID. */
@@ -430,4 +442,6 @@ public class BaseTimeSeriesId implements TimeSeriesId {
       return 0;
     }
   }
+
+  
 }

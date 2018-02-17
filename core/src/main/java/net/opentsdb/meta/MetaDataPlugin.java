@@ -12,21 +12,20 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.meta;
 
+import java.util.List;
+
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.core.TSDBPlugin;
+import net.opentsdb.query.TimeSeriesQuery;
 import net.opentsdb.stats.StatsCollector;
 
 /**
- * This is a first stab at a meta data cache. Initially it only handles
- * incrementing TSUID counters in a local database. The class will then 
- * periodically sync the local counter cache with HBase and generate TSMeta
- * objects if necessary. This keeps us from having to maintain thousands or
- * millions of callback objects in memory while we wait for individual atomic
- * increments per data point. 
- * @since 2.3
+ * 
  */
-public abstract class MetaDataCache {
+public abstract class MetaDataPlugin implements TSDBPlugin {
+  protected TSDB tsdb;
   
   /**
    * Called by TSDB to initialize the plugin
@@ -40,21 +39,18 @@ public abstract class MetaDataCache {
    * missing
    * @throws RuntimeException if something else goes wrong
    */
-  public abstract void initialize(final TSDB tsdb);
+  public Deferred<Object> initialize(final TSDB tsdb) {
+    this.tsdb = tsdb;
+    return Deferred.fromResult(null);
+  }
 
   /**
    * Called when the TSD is shutting down to gracefully flush any buffers or
    * close open connections.
    */
-  public abstract Deferred<Object> shutdown();
-
-  /**
-   * Should return the version of this plugin in the format:
-   * MAJOR.MINOR.MAINT, e.g. 2.0.1. The MAJOR version should match the major
-   * version of OpenTSDB the plugin is meant to work with.
-   * @return A version string used to log the loaded version
-   */
-  public abstract String version();
+  public Deferred<Object> shutdown() {
+    return Deferred.fromResult(null);
+  }
   
   /**
    * Called by the TSD when a request for statistics collection has come in. The
@@ -62,12 +58,24 @@ public abstract class MetaDataCache {
    * available for the implementation, simply stub the method.
    * @param collector The collector used for emitting statistics
    */
-  public abstract void collectStats(final StatsCollector collector);
+  public void collectStats(final StatsCollector collector) {
+    // No-op for now.
+  }
 
-  /**
-   * Increments the given TSUID in the cache by 1
-   * @param tsuid The tsuid to increment 
-   */
-  public abstract void increment(final byte[] tsuid);
-
+  // TODO - tie this to a schema and implementation. Can have multiple meta plugins.
+  // called by the HBase storage impl for now.
+  public abstract List<byte[]> resolveTimeSeriesIds(final TimeSeriesQuery query);
+  
+  public static abstract class MetaDataResult {
+    public static enum Result {
+      NO_DATA_FALLBACK,
+      NO_DATA,
+      EXCEPTION_FALLBACK,
+      EXCEPTION
+    }
+    
+    public abstract Result result();
+    
+    public abstract List<byte[]> timeSeriesIds();
+  }
 }
