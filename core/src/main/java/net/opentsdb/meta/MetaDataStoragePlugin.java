@@ -24,7 +24,7 @@ import net.opentsdb.stats.StatsCollector;
 /**
  * 
  */
-public abstract class MetaDataPlugin implements TSDBPlugin {
+public abstract class MetaDataStoragePlugin implements TSDBPlugin {
   protected TSDB tsdb;
   
   /**
@@ -62,20 +62,5 @@ public abstract class MetaDataPlugin implements TSDBPlugin {
     // No-op for now.
   }
 
-  // TODO - tie this to a schema and implementation. Can have multiple meta plugins.
-  // called by the HBase storage impl for now.
-  public abstract List<byte[]> resolveTimeSeriesIds(final TimeSeriesQuery query);
-  
-  public static abstract class MetaDataResult {
-    public static enum Result {
-      NO_DATA_FALLBACK,
-      NO_DATA,
-      EXCEPTION_FALLBACK,
-      EXCEPTION
-    }
-    
-    public abstract Result result();
-    
-    public abstract List<byte[]> timeSeriesIds();
-  }
+  public abstract MetaDataStorageSchema schema();
 }

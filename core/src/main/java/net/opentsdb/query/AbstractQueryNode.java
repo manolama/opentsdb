@@ -16,6 +16,9 @@ package net.opentsdb.query;
 
 import java.util.Collection;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * A base class for nodes that holds a link to the context, upstream and 
  * downstream nodes.
@@ -23,6 +26,9 @@ import java.util.Collection;
  * @since 3.0
  */
 public abstract class AbstractQueryNode implements QueryNode {
+  private static final Logger LOG = 
+      LoggerFactory.getLogger(AbstractQueryNode.class);
+  
   /** A reference to the query node factory that generated this node. */
   protected QueryNodeFactory factory;
   
@@ -66,5 +72,42 @@ public abstract class AbstractQueryNode implements QueryNode {
 
   public QueryNodeFactory factory() {
     return factory;
+  }
+
+  /**
+   * 
+   * @param result
+   * @throws QueryUpstreamException (as much as I hate checked exceptions...)
+   */
+  protected void sendUpstream(final QueryResult result) throws QueryUpstreamException {
+    for (final QueryNode node : upstream) {
+      try {
+        node.onNext(result);
+      } catch (Exception e) {
+        throw new QueryUpstreamException("Failed to send results "
+            + "upstream to node: " + node, e);
+      }
+    }
+  }
+  
+  protected void sendUpstream(final Throwable t) {
+    for (final QueryNode node : upstream) {
+      try {
+        node.onError(t);
+      } catch (Exception e) {
+        LOG.warn("Failed to send exception upstream to node: " + node, e);
+      }
+    }
+  }
+  
+  protected void completeUpstream(final long final_sequence,
+                                  final long total_sequences) {
+    for (final QueryNode node : upstream) {
+      try {
+        node.onComplete(this, final_sequence, total_sequences);
+      } catch (Exception e) {
+        LOG.warn("Failed to mark upstream node complete: " + node, e);
+      }
+    }
   }
 }

@@ -36,24 +36,31 @@ import net.opentsdb.data.iterators.IteratorGroups;
 import net.opentsdb.query.QueryIteratorFactory;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
+import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
+import net.opentsdb.query.QuerySourceConfig;
 import net.opentsdb.query.context.QueryContext;
 import net.opentsdb.query.execution.QueryExecution;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.stats.TsdbTrace;
+import net.opentsdb.storage.schemas.v1.V1Schema;
 
 /**
  * TODO - complete.
- * 
- * TODO - schema picker
+ *  
+ * ONLY ONE schema per instance. Multiple instances can share the same
+ * connections to the HBase cluster but each schema instance will have 
+ * it's own UID or whatever.
  * 
  * @since 3.0
  */
-public class AsyncHBaseDataStore extends TimeSeriesDataStore {
+public class V1AsyncHBaseDataStore extends TimeSeriesDataStore {
 
   /** The AsyncHBase client. */
   private HBaseClient client;
+  
+  private V1Schema schema;
   
   @Override
   public Deferred<Object> initialize(final TSDB tsdb) {
@@ -80,7 +87,11 @@ public class AsyncHBaseDataStore extends TimeSeriesDataStore {
           tsdb.getConfig().getString("tsd.storage.hbase.zk_quorum"));
     }
     
+    // TODO - create a shared client for the given ZK cluster
     client = new HBaseClient(async_config);
+    
+    
+    
     return Deferred.fromResult(null);
   }
   
@@ -114,13 +125,12 @@ public class AsyncHBaseDataStore extends TimeSeriesDataStore {
     // TODO Auto-generated method stub
     return null;
   }
-
   
   @Override
   public QueryNode newNode(QueryPipelineContext context,
       QueryNodeConfig config) {
-    // TODO Auto-generated method stub
-    return null;
+    // TODO probably a better way
+    return new V1QueryNode((QueryNodeFactory) this, context, (QuerySourceConfig) config);
   }
 
   @Override
@@ -152,5 +162,13 @@ public class AsyncHBaseDataStore extends TimeSeriesDataStore {
 
   TSDB tsdb() {
     return tsdb;
+  }
+
+  HBaseClient client() {
+    return client;
+  }
+  
+  V1Schema schema() {
+    return schema;
   }
 }

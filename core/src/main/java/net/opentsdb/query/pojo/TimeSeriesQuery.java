@@ -32,6 +32,7 @@ import com.google.common.hash.Hashing;
 
 import net.opentsdb.core.Const;
 import net.opentsdb.data.TimeSeriesGroupId;
+import net.opentsdb.query.QueryConfig;
 import net.opentsdb.utils.JSON;
 
 import java.util.Collections;
@@ -613,6 +614,12 @@ public class TimeSeriesQuery extends Validatable implements Comparable<TimeSerie
     public TimeSeriesQuery build() {
       return new TimeSeriesQuery(this);
     }
+  }
+
+  @Override
+  public QueryConfig config() {
+    // TODO Auto-generated method stub
+    return null;
   }
   
 }

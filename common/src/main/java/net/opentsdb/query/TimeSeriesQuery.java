@@ -22,4 +22,5 @@ package net.opentsdb.query;
  */
 public interface TimeSeriesQuery {
 
+  public QueryConfig config();
 }

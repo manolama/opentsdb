@@ -36,4 +36,24 @@ public class V1Schema implements UidSchema {
   public V1Codec getCodec(final TypeToken<?> type) {
     return null;
   }
+
+  public int saltBuckets() {
+    return 0;
+  }
+  
+  public int saltWidth() {
+    return 0;
+  }
+  
+  public int metricUIDBytes() {
+    return 0;
+  }
+  
+  public int tagKUIDBytes() {
+    return 0;
+  }
+  
+  public int tagVUIDBytes() {
+    return 0;
+  }
 }

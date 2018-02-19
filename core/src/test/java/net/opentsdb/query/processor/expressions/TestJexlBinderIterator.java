@@ -214,7 +214,7 @@ public class TestJexlBinderIterator {
     assertNull(it.initialize().join());
     
     //assertEquals("system.cpu.idle", it.id().metric());
-    assertNull(it.id().alias());
+    assertNull(((TimeSeriesQueryId) it.id()).alias());
   }
   
   @Test

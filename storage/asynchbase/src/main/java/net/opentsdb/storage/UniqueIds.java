@@ -1,11 +1,14 @@
 package net.opentsdb.storage;
 
 import java.util.Collection;
+import java.util.List;
 
 import org.hbase.async.HBaseClient;
 
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.query.pojo.Filter;
+import net.opentsdb.uid.ResolvedFilter;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
 
@@ -29,6 +32,10 @@ public class UniqueIds {
     // TODO - create the UniqueIds
     table = null;
     family = null;
+  }
+  
+  public Deferred<List<ResolvedFilter>> resolveUids(final Filter filter) {
+    return null;
   }
   
   public Deferred<byte[]> resolveUid(final UniqueIdType type, final String name) {

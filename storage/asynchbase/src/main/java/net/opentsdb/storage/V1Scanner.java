@@ -26,15 +26,9 @@ public class V1Scanner {
   
   TimeSeriesQueryId sentinel = null; // TODO - fix me!
   
-  enum ScannerState {
-    COMPLETE,
-    EXCEPTION,
-    CONTINUE
-  }
-  
   private final V1QueryNode node;
   private final Scanner scanner;
-  private ScannerState state;
+  private StorageState state;
   
   private Set<Byte> data_type_filter;
   
@@ -46,7 +40,7 @@ public class V1Scanner {
   V1Scanner(final V1QueryNode node, final Scanner scanner) {
     this.node = node;
     this.scanner = scanner;
-    state = ScannerState.CONTINUE;
+    state = StorageState.CONTINUE;
   }
   
   public void fetchNext(final V1Result result) {
@@ -151,16 +145,16 @@ public class V1Scanner {
     
     void complete() {
       if (!result.hasException()) {
-        state = ScannerState.COMPLETE;
+        state = StorageState.COMPLETE;
       }
-      state = ScannerState.EXCEPTION;
+      state = StorageState.EXCEPTION;
       result.scannerDone();
       scanner.close(); // TODO - attach a callback for logging in case
       // something goes pear shaped.
     }
   }
   
-  ScannerState state() {
+  StorageState state() {
     return state;
   }
   
@@ -196,7 +190,7 @@ public class V1Scanner {
         result.addData(base, tsuid, (byte) 0, kv.qualifier(), kv.value());
       } else {
         final byte prefix = kv.qualifier()[0];
-        if (prefix == 5 /* appends, don't hard code */) {
+        if (prefix == 5 /* TODO appends, don't hard code */) {
           if (!data_type_filter.contains((byte) 1)) {
             // filter doesn't want #'s
             continue;
@@ -219,7 +213,7 @@ public class V1Scanner {
     }
     @Override
     public Object call(final Exception ex) throws Exception {
-      state = ScannerState.EXCEPTION;
+      state = StorageState.EXCEPTION;
       result.scannerDone();
       return null;
     }

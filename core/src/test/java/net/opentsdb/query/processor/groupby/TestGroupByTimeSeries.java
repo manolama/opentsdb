@@ -137,7 +137,7 @@ public class TestGroupByTimeSeries {
     ts.addSource(source_a);
     ts.addSource(source_b);
     
-    TimeSeriesQueryId id = ts.id();
+    TimeSeriesQueryId id = (TimeSeriesQueryId) ts.id();
     assertEquals("a", id.metric());
     assertTrue(id.tags().isEmpty());
     assertTrue(id.aggregatedTags().contains("host"));

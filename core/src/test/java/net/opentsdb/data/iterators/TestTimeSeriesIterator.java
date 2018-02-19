@@ -35,6 +35,7 @@ import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.data.TimeSeriesDataType;
+import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSeriesQueryId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
@@ -45,7 +46,7 @@ import net.opentsdb.query.context.QueryContext;
 
 public class TestTimeSeriesIterator {
 
-  private TimeSeriesQueryId id;
+  private TimeSeriesId id;
   private TimeSeriesIterator<?> source;
   private TimeSeriesIterator<?> source_clone;
   private QueryContext context;
@@ -262,11 +263,11 @@ public class TestTimeSeriesIterator {
    */
   static class MockIterator extends TimeSeriesIterator<NumericType> {
     
-    public MockIterator(final TimeSeriesQueryId id) {
+    public MockIterator(final TimeSeriesId id) {
       super(id);
     }
     
-    public MockIterator(final TimeSeriesQueryId id, final QueryContext context) {
+    public MockIterator(final TimeSeriesId id, final QueryContext context) {
       super(id, context);
     }
     
