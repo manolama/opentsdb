@@ -26,6 +26,7 @@ import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
 import io.opentracing.Span;
+import net.opentsdb.common.Const;
 import net.opentsdb.core.DefaultTSDB;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.TimeSeries;
@@ -62,6 +63,14 @@ public class V1AsyncHBaseDataStore extends TimeSeriesDataStore {
   
   private V1Schema schema;
   
+  private byte[] data_table;
+  
+  private byte[] pre_agg_table;
+  
+  private byte[] column_family;
+  
+  private UniqueIds uids;
+  
   @Override
   public Deferred<Object> initialize(final TSDB tsdb) {
     this.tsdb = tsdb;
@@ -90,7 +99,16 @@ public class V1AsyncHBaseDataStore extends TimeSeriesDataStore {
     // TODO - create a shared client for the given ZK cluster
     client = new HBaseClient(async_config);
     
+    data_table = tsdb.getConfig().getString("tsd.storage.hbase.data_table").getBytes(Const.ASCII_CHARSET);
     
+    // TODO - set pre-agg table
+    
+    final byte[] uid_table = tsdb.getConfig().getString("tsd.storage.hbase.uid_table").getBytes(Const.ASCII_CHARSET);
+    
+    // TODO - load a real config
+    uids = new UniqueIds(client, new HBaseUniqueIdConfig());
+    
+    // TODO - validate HBase config.
     
     return Deferred.fromResult(null);
   }
@@ -102,6 +120,7 @@ public class V1AsyncHBaseDataStore extends TimeSeriesDataStore {
   
   @Override
   public Deferred<Object> shutdown() {
+    // TODO - properly shutdown shared client
     if (client != null) {
       return client.shutdown();
     }
@@ -127,10 +146,11 @@ public class V1AsyncHBaseDataStore extends TimeSeriesDataStore {
   }
   
   @Override
-  public QueryNode newNode(QueryPipelineContext context,
-      QueryNodeConfig config) {
-    // TODO probably a better way
-    return new V1QueryNode((QueryNodeFactory) this, context, (QuerySourceConfig) config);
+  public QueryNode newNode(final QueryPipelineContext context,
+                           final QueryNodeConfig config) {
+    return new V1QueryNode((QueryNodeFactory) this, 
+                           context, 
+                           (QuerySourceConfig) config);
   }
 
   @Override
@@ -170,5 +190,21 @@ public class V1AsyncHBaseDataStore extends TimeSeriesDataStore {
   
   V1Schema schema() {
     return schema;
+  }
+
+  byte[] dataTable() {
+    return data_table;
+  }
+  
+  byte[] preAggTable() {
+    return pre_agg_table;
+  }
+  
+  byte[] columnFamily() {
+    return column_family;
+  }
+  
+  UniqueIds uids() {
+    return uids;
   }
 }

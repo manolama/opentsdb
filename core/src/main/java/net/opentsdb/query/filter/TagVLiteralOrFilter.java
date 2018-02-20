@@ -145,6 +145,10 @@ public class TagVLiteralOrFilter extends TagVFilter {
     return FILTER_NAME;
   }
   
+  public Set<String> literals() {
+    return literals;
+  }
+  
   /** @return a string describing the filter */
   public static String description() {
     return "Accepts one or more exact values and matches if the series contains "

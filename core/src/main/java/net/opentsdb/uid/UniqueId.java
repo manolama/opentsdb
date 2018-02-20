@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.Const;
 import net.opentsdb.core.DefaultTSDB;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.data.TimeSeriesQueryId;
 import net.opentsdb.stats.TsdbTrace;
@@ -59,6 +60,7 @@ public abstract class UniqueId extends BaseTSDBPlugin {
     METRIC,
     TAGK,
     TAGV,
+    LABEL,
     NAMESPACE,
     FULL_SERIES,
   }
@@ -83,10 +85,17 @@ public abstract class UniqueId extends BaseTSDBPlugin {
 //  private static final short MAX_SUGGESTIONS = 25;
 
   /** The TSDB this implementation belongs to. */
-  private DefaultTSDB tsdb;
+  protected final TSDB tsdb;
+    
+  protected final UniqueIdConfig config;
   
-  /** The type of UniqueID this UID implementation is working with. */
-  private UniqueIdType type;
+  protected final UniqueIdStore store;
+  
+  public UniqueId(final TSDB tsdb, final UniqueIdConfig config, final UniqueIdStore store) {
+    this.tsdb = tsdb;
+    this.config = config;
+    this.store = store;
+  }
   
 //  
 //  /**
@@ -186,7 +195,7 @@ public abstract class UniqueId extends BaseTSDBPlugin {
   /** @return The type of Unique ID this implementation works with.
    * @since 2.0 */
   public UniqueIdType type() {
-    return type;
+    return config.type();
   }
 
 //  public short width() {
@@ -268,7 +277,7 @@ public abstract class UniqueId extends BaseTSDBPlugin {
    * on the wrong number of bytes or it was null or empty.
    * @since 3.0
    */
-  public Deferred<String[]> getName(final List<byte[]> ids) {
+  public Deferred<List<String>> getName(final List<byte[]> ids) {
     return getName(ids, null, null);
   }
   
@@ -287,7 +296,7 @@ public abstract class UniqueId extends BaseTSDBPlugin {
    * on the wrong number of bytes or it was null or empty.
    * @since 3.0
    */
-  public abstract Deferred<String[]> getName(final List<byte[]> ids, 
+  public abstract Deferred<List<String>> getName(final List<byte[]> ids, 
                                              final TsdbTrace trace, 
                                              final Span span);
   
@@ -392,7 +401,7 @@ public abstract class UniqueId extends BaseTSDBPlugin {
    * @throws IllegalArgumentException if the names were null or empty.
    * @since 3.0
    */
-  public Deferred<byte[][]> getId(final List<String> names) {
+  public Deferred<List<byte[]>> getId(final List<String> names) {
     return getId(names, null, null);
   }
   
@@ -409,7 +418,7 @@ public abstract class UniqueId extends BaseTSDBPlugin {
    * @throws IllegalArgumentException if the names were null or empty.
    * @since 3.0
    */
-  public abstract Deferred<byte[][]> getId(final List<String> names, 
+  public abstract Deferred<List<byte[]>> getId(final List<String> names, 
                                            final TsdbTrace trace, 
                                            final Span span);
 
@@ -1396,9 +1405,9 @@ public abstract class UniqueId extends BaseTSDBPlugin {
 //    return s.getBytes(CHARSET);
 //  }
 //
-//  private static String fromBytes(final byte[] b) {
-//    return new String(b, CHARSET);
-//  }
+  protected String fromBytes(final byte[] b) {
+    return new String(b, config.characterSet());
+  }
 //
 //  /** Returns a human readable string representation of the object. */
 //  public String toString() {

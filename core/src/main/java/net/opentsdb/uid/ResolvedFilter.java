@@ -1,21 +1,13 @@
 package net.opentsdb.uid;
 
+import java.util.List;
+
 public class ResolvedFilter {
 
-  private byte[] metric;
-  
   private byte[] tag_key;
   
-  private byte[] tag_values;
+  private List<byte[]> tag_values;
   
-  public byte[] getMetric() {
-    return metric;
-  }
-
-  public void setMetric(byte[] metric) {
-    this.metric = metric;
-  }
-
   public byte[] getTagKey() {
     return tag_key;
   }
@@ -24,11 +16,11 @@ public class ResolvedFilter {
     this.tag_key = tag_key;
   }
 
-  public byte[] getTagValues() {
+  public List<byte[]> getTagValues() {
     return tag_values;
   }
 
-  public void setTagValues(byte[] tag_values) {
+  public void setTagValues(final List<byte[]> tag_values) {
     this.tag_values = tag_values;
   }  
 }
