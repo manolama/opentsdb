@@ -531,11 +531,11 @@ public class DefaultRegistry implements Registry {
       
       ctor = MultiClusterQueryExecutor.class.getConstructor(
           ExecutionGraphNode.class);
-  executor_factory = 
-      new DefaultQueryExecutorFactory<IteratorGroups>(
-          (Constructor<QueryExecutor<?>>) ctor, IteratorGroups.class,
-            "MultiClusterQueryExecutor");
-  registerFactory(executor_factory);
+      executor_factory = 
+          new DefaultQueryExecutorFactory<IteratorGroups>(
+              (Constructor<QueryExecutor<?>>) ctor, IteratorGroups.class,
+                "MultiClusterQueryExecutor");
+      registerFactory(executor_factory);
       
     } catch (Exception e) {
       LOG.error("Failed setting up one or more default executors or planners", e);

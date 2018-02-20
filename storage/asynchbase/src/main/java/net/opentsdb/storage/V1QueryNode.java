@@ -1,5 +1,6 @@
 package net.opentsdb.storage;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -31,6 +32,7 @@ import net.opentsdb.storage.schemas.v1.V1Result;
 import net.opentsdb.storage.schemas.v1.V1Schema;
 import net.opentsdb.storage.schemas.v1.V1SourceNode;
 import net.opentsdb.uid.ResolvedFilter;
+import net.opentsdb.uid.UniqueId.UniqueIdType;
 
 /**
  * 
@@ -55,10 +57,9 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
   private final net.opentsdb.stats.Span trace_span;
   private final UniqueIds uids;
   
-  private V1Scanner[] scanners;
+  private List<V1Scanners> scanners;
   private V1MultiGet multi_gets;
   private MetaDataStorageSchema meta;
-  
   
   private Object initialized;
   
@@ -135,13 +136,13 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
     }
     
     int completed = 0;
-    for (final V1Scanner scanner : scanners) {
-      if (scanner.state() == StorageState.COMPLETE) {
+    for (final V1Scanners scanners : scanners) {
+      if (scanners.state() == StorageState.COMPLETE) {
         completed++;
       }
     }
     
-    if (completed == scanners.length) {
+    if (completed == scanners.size()) {
       for (final QueryNode node : upstream) {
         node.onComplete(this, seq, seq);
       }
@@ -187,23 +188,23 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
     
     // not multi-gets so scan.
     int completed = 0;
-    for (final V1Scanner scanner : scanners) {
-      if (scanner.state() == StorageState.EXCEPTION) {
+    for (final V1Scanners scanners : scanners) {
+      if (scanners.state() == StorageState.EXCEPTION) {
         // TODO - figure it out
-      } else if (scanner.state() == StorageState.COMPLETE) {
+      } else if (scanners.state() == StorageState.COMPLETE) {
         completed++;
       }
     }
     
-    if (completed == scanners.length) {
+    if (completed == scanners.size()) {
       final int seq = sequence_id.get();
       completeUpstream(seq, seq);
       return;
     }
     
     final V1Result result = new V1Result(this);
-    for (final V1Scanner scanner : scanners) {
-      scanner.fetchNext(result);
+    for (final V1Scanners scanners : scanners) {
+      scanners.fetchNext(result);
     }
   }
 
@@ -218,7 +219,7 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
 
   @Override
   public int parallelProcesses() {
-    return scanners.length;
+    return scanners.size();
   }
 
   @Override
@@ -241,6 +242,12 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
       // TODO - set {@code sequence_end}
       
       // TODO - set data type filters
+      
+      // TODO - some fetches can be mget, others scan. Decide and create
+      // a generic interface to work on
+      
+      // TODO - also decide at query time if we need to run metric by 
+      // metric or we can run em ALL at the same time.
       
       // eval meta first if configured
       // TODO - meta disable flag in config
@@ -285,11 +292,19 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
       }
       
       // if we're here no meta resolution so we go the slow way for tsd 1.x schema
-      setupScanners();
+      try {
+        setupScanners().join();
+      } catch (InterruptedException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      } catch (Exception e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
     }
   }
   
-  void setupScanners() {
+  Deferred<Object> setupScanners() {
 
     /**
      * workflow for filters:
@@ -305,23 +320,43 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
      */
     
     // TODO - proper query when we're there, for now, old school
-    net.opentsdb.query.pojo.TimeSeriesQuery query = 
+    final net.opentsdb.query.pojo.TimeSeriesQuery query = 
         (net.opentsdb.query.pojo.TimeSeriesQuery) config.query();
     
-    class ResolveCB implements Callback<Deferred<Object>, List<ResolvedFilter>> {
+    class ResolveMetricCB implements Callback<Object, byte[]> {
+      final Metric metric;
+      final Filter filter;
+      final List<ResolvedFilter> resolved;
+      
+      ResolveMetricCB(final Metric metric, final Filter filter, final List<ResolvedFilter> resolved) {
+        this.metric = metric;
+        this.filter = filter;
+        this.resolved = resolved;
+      }
+      
+      @Override
+      public Object call(final byte[] uid) throws Exception {
+        final V1Scanners scnr = new V1Scanners(V1QueryNode.this, query, metric, filter, resolved, uid);
+        scanners.add(scnr);
+        return null;
+      }
+      
+    }
+    
+    class ResolveTagsCB implements Callback<Object, List<ResolvedFilter>> {
       
       final Metric metric;
       final Filter filter;
       
-      ResolveCB(final Metric metric, final Filter filter) {
+      ResolveTagsCB(final Metric metric, final Filter filter) {
         this.metric = metric;
         this.filter = filter;
       }
       
       @Override
-      public Deferred<Object> call(final List<ResolvedFilter> resolved) throws Exception {
-        // TODO Auto-generated method stub
-        return Deferred.fromResult(null);
+      public Object call(final List<ResolvedFilter> resolved) throws Exception {
+        return uids.stringToId(UniqueIdType.METRIC, metric.getMetric())
+            .addCallback(new ResolveMetricCB(metric, filter, resolved));
       }
       
     }
@@ -330,21 +365,26 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
     for (final Metric metric : query.getMetrics()) {
       if (!Strings.isNullOrEmpty(metric.getFilter())) {
         final Filter filter = query.getFilter(metric.getFilter());
-        deferreds.add(uids.resolveUids(filter).addCallbackDeferring(new ResolveCB(metric, filter)));
-        continue;
+        deferreds.add(uids.resolveUids(filter)
+            .addCallback(new ResolveTagsCB(metric, filter)));
+      } else {
+        // just a metric, setup simple scanners.
+        deferreds.add(uids.stringToId(UniqueIdType.METRIC, metric.getMetric())
+            .addCallback(new ResolveMetricCB(metric, null, null)));
+      }
+    }
+    
+    class FinalCB implements Callback<Object, ArrayList<Object>> {
+
+      @Override
+      public Object call(final ArrayList<Object> ignored) throws Exception {
+        return null;
       }
       
-      // just a metric, setup simple scanners.
     }
     
     // TODO - create HBase scanners/queries
-    
-    // TODO - real count
-    int cnt = 20;
-    scanners = new V1Scanner[cnt]; // TODO - real scanners
-    for (int i = 0; i < cnt; i++) {
-      scanners[i] = new V1Scanner(this, null /* REAL SCANNER */);
-    }
+    return Deferred.group(deferreds).addCallback(new FinalCB());
   }
 
   HBaseClient client() {

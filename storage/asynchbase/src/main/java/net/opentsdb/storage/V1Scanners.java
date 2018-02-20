@@ -156,6 +156,11 @@ public class V1Scanners {
     // TODO - build me
     return null;
   }
+
+  StorageState state() {
+    // TODO - implement
+    return null;
+  }
   
   private Scanner newScanner() {
     final Scanner scanner;
