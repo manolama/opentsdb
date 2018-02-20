@@ -41,7 +41,7 @@ import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.SimpleStringGroupId;
 import net.opentsdb.data.BaseTimeSeriesId;
 import net.opentsdb.data.TimeSeriesGroupId;
-import net.opentsdb.data.TimeSeriesQueryId;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.iterators.IteratorStatus;
 import net.opentsdb.data.iterators.TimeSeriesIterator;
@@ -63,8 +63,8 @@ public class TestJexlBinderIterator {
   private TimeSeriesGroupId group_id_a;
   private TimeSeriesGroupId group_id_b;
   
-  private TimeSeriesQueryId id_a;
-  private TimeSeriesQueryId id_b;
+  private TimeSeriesStringId id_a;
+  private TimeSeriesStringId id_b;
   
   private List<List<MutableNumericType>> data_a;
   private List<List<MutableNumericType>> data_b;
@@ -214,7 +214,7 @@ public class TestJexlBinderIterator {
     assertNull(it.initialize().join());
     
     //assertEquals("system.cpu.idle", it.id().metric());
-    assertNull(((TimeSeriesQueryId) it.id()).alias());
+    assertNull(((TimeSeriesStringId) it.id()).alias());
   }
   
   @Test

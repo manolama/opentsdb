@@ -18,8 +18,10 @@ import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Callback;
 
 import net.opentsdb.data.TimeSeries;
+import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.TimeStamp;
@@ -92,6 +94,11 @@ public class V1Result implements QueryResult, Runnable {
     return node;
   }
 
+  @Override
+  public TypeToken<? extends TimeSeriesId> idType() {
+    return TypeToken.of(TimeSeriesByteId.class);
+  }
+  
   @Override
   public void close() {
     // TODO - correct?

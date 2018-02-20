@@ -35,7 +35,7 @@ import java.util.Optional;
 import com.google.common.reflect.TypeToken;
 
 /**
- * A collection of data for a specific time series, i.e. {@link TimeSeriesQueryId}.
+ * A collection of data for a specific time series, i.e. {@link TimeSeriesStringId}.
  * The collection may contain multiple data types, e.g. a series of numeric
  * values and a series of strings or annotations.
  * <p>

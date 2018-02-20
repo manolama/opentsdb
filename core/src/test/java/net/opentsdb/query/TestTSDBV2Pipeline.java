@@ -31,7 +31,7 @@ import com.stumbleupon.async.TimeoutException;
 import net.opentsdb.core.DefaultRegistry;
 import net.opentsdb.core.DefaultTSDB;
 import net.opentsdb.data.TimeSeries;
-import net.opentsdb.data.TimeSeriesQueryId;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.filter.TagVFilter;
@@ -105,7 +105,7 @@ public class TestTSDBV2Pipeline {
         for (TimeSeries ts : next.timeSeries()) {
           long timestamp = start_ts;
           int values = 0;
-          System.out.println(((TimeSeriesQueryId) ts.id()));
+          System.out.println(((TimeSeriesStringId) ts.id()));
 //          assertEquals("sys.cpu.user", ((TimeSeriesQueryId) ts.id()).metric());
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -190,7 +190,7 @@ public class TestTSDBV2Pipeline {
           long timestamp = start_ts;
           int values = 0;
           
-          assertEquals("sys.cpu.user", ((TimeSeriesQueryId) ts.id()).metric());
+          assertEquals("sys.cpu.user", ((TimeSeriesStringId) ts.id()).metric());
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
             TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
@@ -347,9 +347,9 @@ public class TestTSDBV2Pipeline {
           long timestamp = start_ts;
           int values = 0;
           if (idx++ > 3) {
-            assertEquals("sys.cpu.user", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("sys.cpu.user", ((TimeSeriesStringId) ts.id()).metric());
           } else {
-            assertEquals("web.requests", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("web.requests", ((TimeSeriesStringId) ts.id()).metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -512,9 +512,9 @@ public class TestTSDBV2Pipeline {
           int values = 0;
           
           if (on_next % 2 == 0) {
-            assertEquals("web.requests", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("web.requests", ((TimeSeriesStringId) ts.id()).metric());
           } else {
-            assertEquals("sys.cpu.user", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("sys.cpu.user", ((TimeSeriesStringId) ts.id()).metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -682,9 +682,9 @@ public class TestTSDBV2Pipeline {
           int values = 0;
           
           if (on_next % 2 == 0) {
-            assertEquals("web.requests", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("web.requests", ((TimeSeriesStringId) ts.id()).metric());
           } else {
-            assertEquals("sys.cpu.user", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("sys.cpu.user", ((TimeSeriesStringId) ts.id()).metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -779,9 +779,9 @@ public class TestTSDBV2Pipeline {
           int values = 0;
           
           if (on_next < 2) {
-            assertEquals("web.requests", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("web.requests", ((TimeSeriesStringId) ts.id()).metric());
           } else {
-            assertEquals("sys.cpu.user", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("sys.cpu.user", ((TimeSeriesStringId) ts.id()).metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -872,9 +872,9 @@ public class TestTSDBV2Pipeline {
           int values = 0;
           
           if (on_next < 2) {
-            assertEquals("web.requests", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("web.requests", ((TimeSeriesStringId) ts.id()).metric());
           } else {
-            assertEquals("sys.cpu.user", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("sys.cpu.user", ((TimeSeriesStringId) ts.id()).metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -968,9 +968,9 @@ public class TestTSDBV2Pipeline {
           int values = 0;
           
           if (on_next < 2) {
-            assertEquals("web.requests", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("web.requests", ((TimeSeriesStringId) ts.id()).metric());
           } else {
-            assertEquals("sys.cpu.user", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("sys.cpu.user", ((TimeSeriesStringId) ts.id()).metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
@@ -1061,9 +1061,9 @@ public class TestTSDBV2Pipeline {
           int values = 0;
           
           if (on_next < 2) {
-            assertEquals("web.requests", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("web.requests", ((TimeSeriesStringId) ts.id()).metric());
           } else {
-            assertEquals("sys.cpu.user", ((TimeSeriesQueryId) ts.id()).metric());
+            assertEquals("sys.cpu.user", ((TimeSeriesStringId) ts.id()).metric());
           }
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {

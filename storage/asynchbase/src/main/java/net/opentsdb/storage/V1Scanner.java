@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Lists;
 import com.stumbleupon.async.Callback;
 
-import net.opentsdb.data.TimeSeriesQueryId;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.RelationalOperator;
 import net.opentsdb.storage.schemas.v1.V1Result;
@@ -24,7 +24,7 @@ import net.opentsdb.utils.ConcurrentByteMap;
 public class V1Scanner {
   private static final Logger LOG = LoggerFactory.getLogger(V1Scanner.class);
   
-  TimeSeriesQueryId sentinel = null; // TODO - fix me!
+  TimeSeriesStringId sentinel = null; // TODO - fix me!
   
   private final V1QueryNode node;
   private final Scanner scanner;
@@ -33,7 +33,7 @@ public class V1Scanner {
   private Set<Byte> data_type_filter;
   
   // TODO - make this an LRU
-  private ConcurrentByteMap<TimeSeriesQueryId> keys_to_ids;
+  private ConcurrentByteMap<TimeSeriesStringId> keys_to_ids;
   
   private List<ArrayList<KeyValue>> row_buffer;
     
@@ -108,7 +108,7 @@ public class V1Scanner {
           }
           
           final byte[] tsuid = node.schema().timelessKey(row.get(0).key());
-          TimeSeriesQueryId id = keys_to_ids.get(tsuid);
+          TimeSeriesStringId id = keys_to_ids.get(tsuid);
           if (id == null) {
             if (keys_to_ids.putIfAbsent(tsuid, sentinel) == null) {
               // start resolution of the tags to strings, then filter

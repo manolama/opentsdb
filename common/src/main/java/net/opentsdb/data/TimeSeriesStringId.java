@@ -24,7 +24,7 @@ import java.util.Set;
  * 
  * @since 3.0
  */
-public interface TimeSeriesQueryId extends TimeSeriesId, Comparable<TimeSeriesQueryId> {
+public interface TimeSeriesStringId extends TimeSeriesId, Comparable<TimeSeriesStringId> {
   
   /**
    * A simple string for identifying the time series. The alias may be null or

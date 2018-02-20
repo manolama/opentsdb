@@ -32,7 +32,7 @@ import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.TimeSeriesGroupId;
 import net.opentsdb.data.TimeSeriesId;
-import net.opentsdb.data.TimeSeriesQueryId;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.iterators.DefaultIteratorGroups;
 import net.opentsdb.data.iterators.IteratorGroup;
 import net.opentsdb.data.iterators.IteratorGroups;

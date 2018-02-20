@@ -16,7 +16,10 @@ package net.opentsdb.query;
 
 import java.util.Collection;
 
+import com.google.common.reflect.TypeToken;
+
 import net.opentsdb.data.TimeSeries;
+import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSpecification;
 
 /**
@@ -54,6 +57,8 @@ public interface QueryResult {
    */
   public QueryNode source();
 
+  public TypeToken<? extends TimeSeriesId> idType();
+  
   /**
    * Closes and releases resources used by this result set. Should be called
    * by the API consumer or {@link QueryPipelineContext} when the listeners are

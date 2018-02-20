@@ -1,9 +1,13 @@
 package net.opentsdb.data;
 
-/**
- * TODO - This is just a native ID e.g. TSUID as bytes
- *
- */
-public interface TimeSeriesDataId extends TimeSeriesId, Comparable<TimeSeriesDataId> {
+import net.opentsdb.utils.Bytes.ByteMap;
+
+public interface TimeSeriesDataId extends TimeSeriesId {
+
+  public byte[] namespace();
+  
+  public byte[] metric();
+  
+  public ByteMap<byte[]> tags();
   
 }

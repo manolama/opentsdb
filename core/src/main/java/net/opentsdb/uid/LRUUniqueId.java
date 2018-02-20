@@ -10,7 +10,7 @@ import com.stumbleupon.async.Deferred;
 
 import io.opentracing.Span;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.data.TimeSeriesQueryId;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.stats.TsdbTrace;
 
 public class LRUUniqueId extends UniqueId {
@@ -116,7 +116,7 @@ public class LRUUniqueId extends UniqueId {
   }
 
   @Override
-  public Deferred<byte[]> getOrCreateId(String name, TimeSeriesQueryId id,
+  public Deferred<byte[]> getOrCreateId(String name, TimeSeriesStringId id,
       TsdbTrace trace, Span span) {
     // TODO Auto-generated method stub
     return null;
@@ -124,7 +124,7 @@ public class LRUUniqueId extends UniqueId {
 
   @Override
   public Deferred<byte[][]> getOrCreateId(List<String> names,
-      List<TimeSeriesQueryId> ids, TsdbTrace trace, Span span) {
+      List<TimeSeriesStringId> ids, TsdbTrace trace, Span span) {
     // TODO Auto-generated method stub
     return null;
   }

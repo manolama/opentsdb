@@ -1,12 +1,12 @@
 package net.opentsdb.query.filter;
 
-import net.opentsdb.data.TimeSeriesQueryId;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeStamp;
 
 public class TimeFilter implements QueryFilter {
 
   @Override
-  public boolean matches(final TimeSeriesQueryId id) {
+  public boolean matches(final TimeSeriesStringId id) {
     return true;
   }
 

@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import net.opentsdb.query.QueryIteratorInterpolatorConfig;
 import net.opentsdb.query.QueryIteratorInterpolatorFactory;
 import net.opentsdb.query.QueryNodeConfig;
+import net.opentsdb.utils.ByteSet;
 
 /**
  * The configuration class for a {@link GroupBy} query node.
@@ -35,6 +36,7 @@ public class GroupByConfig implements QueryNodeConfig {
   private final boolean infectious_nan;
   private final QueryIteratorInterpolatorFactory interpolator;
   private final QueryIteratorInterpolatorConfig interpolator_config;
+  private ByteSet encoded_tag_keys; // TODO - init
   
   private GroupByConfig(final Builder builder) {
     if (Strings.isNullOrEmpty(builder.id)) {
@@ -68,6 +70,10 @@ public class GroupByConfig implements QueryNodeConfig {
   /** @return The non-empty list of tag keys to group on. */
   public Set<String> getTagKeys() {
     return tag_keys;
+  }
+  
+  public ByteSet getEncodedTagKeys() {
+    return encoded_tag_keys;
   }
   
   /** @return The non-null and non-empty aggregation function name. */

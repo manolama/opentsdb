@@ -373,7 +373,7 @@ public class DataShardMerger implements DataMerger<IteratorGroups> {
    */
   protected TimeSeriesIterators mergeData(
                             final TimeSeriesIterators[] to_merge, 
-                                 final TimeSeriesQueryId id, 
+                                 final TimeSeriesStringId id, 
                                  final QueryContext context, 
                                  final Span tracer_span) {
     if (context == null) {

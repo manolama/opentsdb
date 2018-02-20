@@ -35,7 +35,7 @@ import com.google.common.reflect.TypeToken;
 import net.opentsdb.data.BaseTimeSeriesId;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
-import net.opentsdb.data.TimeSeriesQueryId;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryNodeFactory;
@@ -49,8 +49,8 @@ public class TestGroupByTimeSeries {
   private QueryNodeFactory factory;
   private GroupBy node;
   private GroupByConfig config;
-  private TimeSeriesQueryId id_a;
-  private TimeSeriesQueryId id_b;
+  private TimeSeriesStringId id_a;
+  private TimeSeriesStringId id_b;
   private TimeSeries source_a;
   private TimeSeries source_b;
   
@@ -137,7 +137,7 @@ public class TestGroupByTimeSeries {
     ts.addSource(source_a);
     ts.addSource(source_b);
     
-    TimeSeriesQueryId id = (TimeSeriesQueryId) ts.id();
+    TimeSeriesStringId id = (TimeSeriesStringId) ts.id();
     assertEquals("a", id.metric());
     assertTrue(id.tags().isEmpty());
     assertTrue(id.aggregatedTags().contains("host"));

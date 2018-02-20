@@ -39,7 +39,7 @@ import com.stumbleupon.async.Deferred;
 import net.openhft.hashing.LongHashFunction;
 
 /**
- * A basic {@link TimeSeriesQueryId} implementation that accepts strings for all
+ * A basic {@link TimeSeriesStringId} implementation that accepts strings for all
  * parameters. Includes a useful builder and after building, all lists are 
  * immutable.
  * 
@@ -48,7 +48,7 @@ import net.openhft.hashing.LongHashFunction;
 @JsonInclude(Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonDeserialize(builder = BaseTimeSeriesId.Builder.class)
-public class BaseTimeSeriesId implements TimeSeriesQueryId {
+public class BaseTimeSeriesId implements TimeSeriesStringId {
   
   /** Whether or not the strings are specially encoded values. */
   protected boolean encoded;
@@ -177,7 +177,7 @@ public class BaseTimeSeriesId implements TimeSeriesQueryId {
   }
 
   @Override
-  public int compareTo(final TimeSeriesQueryId o) {
+  public int compareTo(final TimeSeriesStringId o) {
     return ComparisonChain.start()
         .compare(Strings.nullToEmpty(alias), Strings.nullToEmpty(o.alias()))
         .compare(Strings.nullToEmpty(namespace), Strings.nullToEmpty(o.namespace()))
@@ -196,10 +196,10 @@ public class BaseTimeSeriesId implements TimeSeriesQueryId {
   public boolean equals(final Object o) {
     if (this == o)
       return true;
-    if (o == null || !(o instanceof TimeSeriesQueryId))
+    if (o == null || !(o instanceof TimeSeriesStringId))
       return false;
     
-    final TimeSeriesQueryId id = (TimeSeriesQueryId) o;
+    final TimeSeriesStringId id = (TimeSeriesStringId) o;
     
     if (!Objects.equal(alias, id.alias())) {
       return false;
@@ -288,7 +288,7 @@ public class BaseTimeSeriesId implements TimeSeriesQueryId {
   }
   
   @Override
-  public Deferred<TimeSeriesId> decode() {
+  public Deferred<TimeSeriesStringId> decode() {
     return Deferred.fromResult(this);
   }
   

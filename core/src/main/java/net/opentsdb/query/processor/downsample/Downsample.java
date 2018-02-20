@@ -167,6 +167,11 @@ public class Downsample extends AbstractQueryNode {
     }
 
     @Override
+    public TypeToken<? extends TimeSeriesId> idType() {
+      return results.idType();
+    }
+    
+    @Override
     public void close() {
       // NOTE - a race here. Should be idempotent.
       latch.countDown();

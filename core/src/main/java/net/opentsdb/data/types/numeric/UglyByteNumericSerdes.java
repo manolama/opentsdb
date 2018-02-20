@@ -23,7 +23,7 @@ import net.opentsdb.common.Const;
 import net.opentsdb.data.BaseTimeSeriesId;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesId;
-import net.opentsdb.data.TimeSeriesQueryId;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.iterators.TimeSeriesIterator;
 import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.QueryResult;

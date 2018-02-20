@@ -29,7 +29,6 @@ import net.opentsdb.data.MergedTimeSeriesId;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
-import net.opentsdb.data.TimeSeriesQueryId;
 import net.opentsdb.data.TimeSeriesValue;
 
 /**

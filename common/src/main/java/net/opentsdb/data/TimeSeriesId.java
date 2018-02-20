@@ -11,5 +11,5 @@ public interface TimeSeriesId {
   
   public boolean decodeToJoin();
   
-  public Deferred<TimeSeriesId> decode();
+  public Deferred<TimeSeriesStringId> decode();
 }

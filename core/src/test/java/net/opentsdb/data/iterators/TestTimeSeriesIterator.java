@@ -36,7 +36,7 @@ import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
-import net.opentsdb.data.TimeSeriesQueryId;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.iterators.TimeSeriesIterator;
@@ -54,7 +54,7 @@ public class TestTimeSeriesIterator {
   
   @Before
   public void before() throws Exception {
-    id = mock(TimeSeriesQueryId.class);
+    id = mock(TimeSeriesStringId.class);
     source = mock(TimeSeriesIterator.class);
     context = mock(QueryContext.class);
     type = TypeToken.of(NumericType.class);

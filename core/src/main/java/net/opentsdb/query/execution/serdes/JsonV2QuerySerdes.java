@@ -24,6 +24,7 @@ import java.util.Optional;
 import com.fasterxml.jackson.core.JsonGenerator;
 
 import net.opentsdb.data.TimeSeries;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp.RelationalOperator;
 import net.opentsdb.data.types.numeric.NumericType;
@@ -113,15 +114,17 @@ public class JsonV2QuerySerdes implements TimeSeriesSerdes {
         json.writeStartObject();
 
         // TODO - determine if the ID needs resolution or not.
-//        json.writeStringField("metric", series.id().metric());
-//        json.writeObjectFieldStart("tags");
-//        for (final Entry<String, String> entry : series.id().tags().entrySet()) {
-//          json.writeStringField(entry.getKey(), entry.getValue());
-//        }
-//        json.writeArrayFieldStart("aggregateTags");
-//        for (final String tag : series.id().aggregatedTags()) {
-//          json.writeString(tag);
-//        }
+        System.out.println("ID: " + series.id());
+        
+        json.writeStringField("metric", ((TimeSeriesStringId) series.id()).metric());
+        json.writeObjectFieldStart("tags");
+        for (final Entry<String, String> entry : ((TimeSeriesStringId) series.id()).tags().entrySet()) {
+          json.writeStringField(entry.getKey(), entry.getValue());
+        }
+        json.writeArrayFieldStart("aggregateTags");
+        for (final String tag : ((TimeSeriesStringId) series.id()).aggregatedTags()) {
+          json.writeString(tag);
+        }
         json.writeEndArray();
         json.writeEndObject();
         json.writeObjectFieldStart("dps");
