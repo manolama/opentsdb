@@ -13,8 +13,6 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this library.  If not, see <http://www.gnu.org/licenses/>.
 
-ASYNCHBASE_VERSION := 1.8.0
-ASYNCHBASE := third_party/hbase/asynchbase-$(ASYNCHBASE_VERSION).jar
 ASYNCHBASE_BASE_URL := https://oss.sonatype.org/content/repositories/snapshots/org/hbase/asynchbase/2.0.0-SNAPSHOT/$(ASYNCHBASE_VERSION)
 
 $(ASYNCHBASE): $(ASYNCHBASE).md5

@@ -33,7 +33,6 @@ final public class CliOptions {
   
   /**
    * Parse the command line arguments with the given options.
-   * @param opt,ions Options to parse in the given args.
    * @param args Command line arguments to parse.
    * @return The remainder of the command line or
    * {@code null} if {@code args} were invalid and couldn't be parsed.
