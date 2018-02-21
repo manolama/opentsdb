@@ -54,7 +54,10 @@ public class V1Scanners {
     final ScanFilter scan_filter = buildFilter();
     
     final byte[] start_key = setStartKey();
-    final byte[] end_key = setEndKey();
+    final byte[] stop_key = setStopKey();
+    
+    System.out.println("START KEY: " + Bytes.pretty(start_key));
+    System.out.println("STOP KEY: " + Bytes.pretty(stop_key));
     
     for (int i = 0; i < scanners.length; i++) {
       final Scanner scanner = newScanner();
@@ -65,13 +68,13 @@ public class V1Scanners {
         node.schema().setSaltBucket(i, key);
         scanner.setStartKey(key);
         
-        key = new byte[end_key.length];
-        System.arraycopy(end_key, 0, key, 0, end_key.length);
+        key = new byte[stop_key.length];
+        System.arraycopy(stop_key, 0, key, 0, stop_key.length);
         node.schema().setSaltBucket(i, key);
         scanner.setStopKey(key);
       } else {
         scanner.setStartKey(start_key);
-        scanner.setStopKey(end_key);
+        scanner.setStopKey(stop_key);
       }
       
       if (scan_filter != null) {
@@ -80,6 +83,8 @@ public class V1Scanners {
       
       scanners[i] = new V1Scanner(node, scanner);
     }
+    
+    System.out.println("SETUP " + scanners.length + " real scanners!");
     
     // READY!
   }
@@ -113,7 +118,7 @@ public class V1Scanners {
     return start_key;
   }
   
-  byte[] setEndKey() {
+  byte[] setStopKey() {
     long end_ts = query.getTime().endTime().epoch();
     
     if (rollup_intervals != null) {
@@ -142,6 +147,7 @@ public class V1Scanners {
   }
   
   void fetchNext(final V1Result result) {
+    System.out.println("FETCHING NEXT on all scanners for a scanner set...");
     for (final V1Scanner scanner : scanners) {
       scanner.fetchNext(result);
     }
@@ -158,8 +164,22 @@ public class V1Scanners {
   }
 
   StorageState state() {
-    // TODO - implement
-    return null;
+    int complete = 0;
+    for (V1Scanner s : scanners) {
+      if (s.state() == StorageState.EXCEPTION) {
+        System.out.println("Scanner had an exception....?");
+        return s.state();
+      }
+      if (s.state() == StorageState.COMPLETE) {
+        complete++;
+      }
+    }
+    
+    if (complete == scanners.length) {
+      System.out.println(" sub scanners complete: " + complete);
+      return StorageState.COMPLETE;
+    }
+    return StorageState.CONTINUE;
   }
   
   private Scanner newScanner() {
@@ -169,6 +189,7 @@ public class V1Scanners {
       // TODO - determine if pre-agg query
       scanner = node.client().newScanner(((V1AsyncHBaseDataStore) node.factory()).dataTable());
       scanner.setFamily(((V1AsyncHBaseDataStore) node.factory()).columnFamily());
+      System.out.println("Dun got a new scanner :)");
     } else {
       // it's a rollup
       // TODO - do it

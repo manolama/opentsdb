@@ -2,6 +2,7 @@ package net.opentsdb.storage.schemas.v1;
 
 import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.data.TimeStamp;
+import net.opentsdb.uid.UniqueIdStore;
 
 public interface V1SourceNode extends TimeSeriesDataSource {
 
@@ -9,4 +10,8 @@ public interface V1SourceNode extends TimeSeriesDataSource {
   
   // either the next chunk or end of query.
   public TimeStamp sequenceEnd();
+  
+  public V1Schema schema();
+  
+  public UniqueIdStore uidStore();
 }

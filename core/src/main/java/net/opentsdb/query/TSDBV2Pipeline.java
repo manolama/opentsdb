@@ -29,6 +29,8 @@ import net.opentsdb.query.pojo.Metric;
 import net.opentsdb.query.pojo.RateOptions;
 import net.opentsdb.query.processor.groupby.GroupByFactory;
 import net.opentsdb.query.processor.rate.RateFactory;
+import net.opentsdb.query.uidresolver.ByteIdResolver;
+import net.opentsdb.query.uidresolver.ByteIdResolverFactory;
 import net.opentsdb.storage.TimeSeriesDataStore;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
 import net.opentsdb.query.processor.downsample.DownsampleFactory;
@@ -142,6 +144,13 @@ public class TSDBV2Pipeline extends AbstractQueryPipelineContext {
         addVertex(rate);
         addDagEdge(rate, node);
         node = rate;
+      }
+      
+      if (true) {
+        QueryNode resolver = new ByteIdResolverFactory("Resolver").newNode(this, null);
+        addVertex(resolver);
+        addDagEdge(resolver, node);
+        node = resolver;
       }
       
       addDagEdge(this, node);

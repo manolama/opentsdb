@@ -12,24 +12,25 @@ public class UniqueIdConfig {
     READ_WRITE // populate both caches
   }
   
+  public Mode mode;
+  public UniqueIdType type;
+  public int width;
+  public Charset charset = Charset.forName("ISO-8859-1");
+  
   public Mode mode() {
-    // TODO - implement!
-    return Mode.READ_WRITE;
+    return mode;
   }
   
   public UniqueIdType type() {
-    // TODO - implement!
-    return UniqueIdType.METRIC;
+    return type;
   }
   
   public int width() {
-    // TODO - implement!
-    return 3;
+    return width;
   }
   
   public Charset characterSet() {
-    // TODO - implement!
-    return Charset.forName("ISO-8859-1");
+    return charset;
   }
   
   public int maxAssignmentAttempts() {

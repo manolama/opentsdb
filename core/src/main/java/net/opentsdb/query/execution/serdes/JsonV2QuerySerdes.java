@@ -65,9 +65,11 @@ public class JsonV2QuerySerdes implements TimeSeriesSerdes {
     if (stream == null) {
       throw new IllegalArgumentException("Output stream may not be null.");
     }
+    
     if (result == null) {
       throw new IllegalArgumentException("Data may not be null.");
     }
+    
     final JsonV2QuerySerdesOptions opts;
     if (options != null) {
       if (!(options instanceof JsonV2QuerySerdesOptions)) {
@@ -83,13 +85,16 @@ public class JsonV2QuerySerdes implements TimeSeriesSerdes {
     
     try {
       for (final TimeSeries series : result.timeSeries()) {
+        System.out.println("WORKING SERIES: " + series);
         final Optional<Iterator<TimeSeriesValue<?>>> optional = 
             series.iterator(NumericType.TYPE);
         if (!optional.isPresent()) {
+          System.out.println("NO NUMBERS in the series... sniff");
           continue;
         }
         final Iterator<TimeSeriesValue<?>> iterator = optional.get();
         if (!iterator.hasNext()) {
+          System.out.println("No next series... *sniff");
           continue;
         }
         
@@ -97,6 +102,7 @@ public class JsonV2QuerySerdes implements TimeSeriesSerdes {
             (TimeSeriesValue<NumericType>) iterator.next();
         while (value != null && value.timestamp().compare(RelationalOperator.LT, 
             query.getTime().startTime())) {
+          System.out.println("TS is OOB too early");
           if (iterator.hasNext()) {
             value = (TimeSeriesValue<NumericType>) iterator.next();
           } else {
@@ -108,8 +114,12 @@ public class JsonV2QuerySerdes implements TimeSeriesSerdes {
         }
         if (value.timestamp().compare(RelationalOperator.LT, query.getTime().startTime()) ||
             value.timestamp().compare(RelationalOperator.GT, query.getTime().endTime())) {
+          System.out.println("TS is oob totally");
           continue;
         }
+        
+        
+        
         
         json.writeStartObject();
 

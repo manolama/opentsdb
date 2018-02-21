@@ -27,12 +27,15 @@ public class V1NumericStorageSeries implements StorageSeries {
   /** The real counts and values. */
   private byte[] values;
   
+  List<Integer> dummy_values = Lists.newArrayList();
+  
   public V1NumericStorageSeries() {
   }
 
   @Override
   public Iterator<TimeSeriesValue<?>> iterator() {
-    return null;
+    System.out.println("NEW ITERATOR!!!!!!!!!!!!");
+    return new LocalIterator();
   }
 
   @Override
@@ -46,5 +49,62 @@ public class V1NumericStorageSeries implements StorageSeries {
       byte[] qualifier, byte[] value) {
     // TODO - decode into row sequences
     // WARNING - need to sync
+    
+    // hacky hack
+    dummy_values.add(dummy_values.size());
+  }
+  
+  protected class LocalIterator implements Iterator<TimeSeriesValue<?>>,
+    TimeSeriesValue<NumericType>, NumericType {
+
+    Iterator<Integer> it = dummy_values.iterator();
+    int value = 0; 
+    long ts = 1519171200000L;
+    @Override
+    public TimeStamp timestamp() {
+      return new MillisecondTimeStamp(ts += 60000);
+    }
+
+    @Override
+    public NumericType value() {
+      return this;
+    }
+
+    @Override
+    public TypeToken<NumericType> type() {
+      return NumericType.TYPE;
+    }
+
+    @Override
+    public boolean hasNext() {
+      return it.hasNext();
+    }
+
+    @Override
+    public TimeSeriesValue<?> next() {
+      value = it.next();
+      return this;
+    }
+
+    @Override
+    public boolean isInteger() {
+      return true;
+    }
+
+    @Override
+    public long longValue() {
+      return value;
+    }
+
+    @Override
+    public double doubleValue() {
+      return value;
+    }
+
+    @Override
+    public double toDouble() {
+      return value;
+    }
+    
   }
 }

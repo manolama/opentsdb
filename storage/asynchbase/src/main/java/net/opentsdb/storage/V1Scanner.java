@@ -44,6 +44,7 @@ public class V1Scanner {
   }
   
   public void fetchNext(final V1Result result) {
+    System.out.println("[SCANNER] fetching next....");
     if (result.hasException()) {
       scanner.close();
       // TODO - log
@@ -55,7 +56,7 @@ public class V1Scanner {
       result.scannerDone();
       return;
     }
-    
+    try {
     if (row_buffer != null) {
       // copy so we can delete and create a new one if necessary
       final List<ArrayList<KeyValue>> row_buffer = this.row_buffer;
@@ -66,12 +67,16 @@ public class V1Scanner {
     }
     
     if (result.isFull()) {
-      // still continuing
+      System.out.println("SCANN is full, bail out");
       result.scannerDone();
       return;
     }
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
     
     // try for some more!
+    System.out.println("SCANNING for some more data :)");
     scanner.nextRows().addCallbacks(new ScannerCB(result), new ErrorCB(result));
   }
   
@@ -84,6 +89,7 @@ public class V1Scanner {
 
     @Override
     public Object call(final ArrayList<ArrayList<KeyValue>> rows) throws Exception {
+      System.out.println("SCANNER RESULTS: " + rows);
       if (result.hasException()) {
         // bail out!
         complete();
@@ -96,7 +102,7 @@ public class V1Scanner {
       }
       
       // TODO - also stop at the next hour or boundary
-      
+      try {
       if (node.scannerFilter() != null) {
         for (final ArrayList<KeyValue> row : rows) {
           if (row.isEmpty()) {
@@ -127,27 +133,36 @@ public class V1Scanner {
             }
             continue;
           }
-          decode(row, null);
+          decode(row, result);
         }
       }
       
       if (!result.isFull()) {
         // keep going!
-        scanner.nextRows().addCallbacks(this, new ErrorCB(result));
+        System.out.println("SCANNER is gonna keep going!");
+        return scanner.nextRows().addCallbacks(this, new ErrorCB(result));
       }
+      
       if (result.hasException()) {
         complete();
       } else {
+        // is full
         result.scannerDone();
       }
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+      
       return null;
     }
     
     void complete() {
+      System.out.println("[SCANNER] was marked as complete.");
       if (!result.hasException()) {
         state = StorageState.COMPLETE;
+      } else {
+        state = StorageState.EXCEPTION;
       }
-      state = StorageState.EXCEPTION;
       result.scannerDone();
       scanner.close(); // TODO - attach a callback for logging in case
       // something goes pear shaped.
@@ -168,6 +183,8 @@ public class V1Scanner {
     // the types of data we have.
     
     final TimeStamp base = node.schema().baseTimestamp(row.get(0).key());
+    
+    System.out.println("DECODE: result: " + result + "  Base: " + base + "  nodeseq: " + node.sequenceEnd());
     
     if (result.isFull() || base.compare(RelationalOperator.GTE, node.sequenceEnd())) {
       // store the rest in the buffer

@@ -12,11 +12,14 @@ import com.google.common.collect.Lists;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.common.Const;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.query.filter.TagVLiteralOrFilter;
 import net.opentsdb.query.pojo.Filter;
 import net.opentsdb.stats.Span;
 import net.opentsdb.stats.TsdbTrace;
+import net.opentsdb.storage.schemas.v1.V1Schema;
+import net.opentsdb.uid.LRUUniqueId;
 import net.opentsdb.uid.ResolvedFilter;
 import net.opentsdb.uid.UniqueId;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
@@ -28,9 +31,13 @@ public class UniqueIds implements UniqueIdStore {
   private static final String TAG_NAME_QUAL = "tagk";
   private static final String TAG_VALUE_QUAL = "tagv";
   
+  private final V1AsyncHBaseDataStore store;
+  
   private final HBaseClient client;
   
-  private final HBaseUniqueIdConfig config;
+  private final byte[] table;
+  private final byte[] id_family;
+  private final byte[] name_family;
   
   private UniqueId metrics;
   
@@ -38,16 +45,25 @@ public class UniqueIds implements UniqueIdStore {
   
   private UniqueId tag_values;
   
-  public UniqueIds(final HBaseClient client, final HBaseUniqueIdConfig config) {
-    this.client = client;
-    this.config = config;
+  public UniqueIds(final V1AsyncHBaseDataStore store, 
+      final byte[] table, final byte[] id_family, final byte[] name_family) {
+    this.store = store;
+    this.client = store.client();
+    metrics = new LRUUniqueId(store.tsdb(), store.schema().getConfig(UniqueIdType.METRIC), this);
+    tag_keys = new LRUUniqueId(store.tsdb(), store.schema().getConfig(UniqueIdType.TAGK), this);
+    tag_values = new LRUUniqueId(store.tsdb(), store.schema().getConfig(UniqueIdType.TAGV), this);
+    this.table = table;
+    this.id_family = id_family;
+    this.name_family = name_family;
   }
-  
-  public Deferred<List<ResolvedFilter>> resolveUids(final Filter filter) {
-    // TODO - implement!
     
+  public Deferred<List<ResolvedFilter>> resolveUids(final Filter filter) {
+    System.out.println("RESOLVING FILTER: " + filter);
     final List<ResolvedFilter> resolved_filters = 
         Lists.newArrayListWithCapacity(filter.getTags().size());
+    for (int i = 0; i < filter.getTags().size(); i++) {
+      resolved_filters.add(null);
+    }
     
     class TagVCB implements Callback<Object, List<byte[]>> {
       final int idx;
@@ -100,6 +116,7 @@ public class UniqueIds implements UniqueIdStore {
       @Override
       public List<ResolvedFilter> call(final ArrayList<Object> ignored)
           throws Exception {
+        System.out.println("DONE WITH RESOLVE FILTERS");
         return resolved_filters;
       }
       
@@ -116,9 +133,9 @@ public class UniqueIds implements UniqueIdStore {
   @Override
   public Deferred<byte[]> stringToId(UniqueIdType type, String id) {
     final GetRequest get = new GetRequest(
-        config.table(), 
-        id.getBytes(config.characterSet()), 
-        config.idFamily()); // TODO - make sure this is right, may have it backy
+        table,
+        id.getBytes(Const.ASCII_CHARSET /* TODO - proper config */), 
+        id_family); // TODO - make sure this is right, may have it backy
     switch (type) {
     case METRIC:
       get.qualifier(METRICS_QUAL);
@@ -147,9 +164,9 @@ public class UniqueIds implements UniqueIdStore {
   @Override
   public Deferred<String> idToString(UniqueIdType type, byte[] id) {
     final GetRequest get = new GetRequest(
-        config.table(), 
+        table, 
         id, 
-        config.nameFamily()); // TODO - make sure this is right, may have it backy
+        name_family); // TODO - make sure this is right, may have it backy
     switch (type) {
     case METRIC:
       get.qualifier(METRICS_QUAL);
@@ -169,7 +186,8 @@ public class UniqueIds implements UniqueIdStore {
         if (row == null || row.isEmpty()) {
           return null;
         }
-        return new String(row.get(0).value(), config.characterSet());
+        // TODO - proper config
+        return new String(row.get(0).value(), Const.ASCII_CHARSET);
       }
     }
     return client.get(get).addCallback(new GetCB());
@@ -180,6 +198,9 @@ public class UniqueIds implements UniqueIdStore {
     // TODO - proper multiget. This is... ugly and wrong
     final List<Deferred<Object>> gets = Lists.newArrayListWithCapacity(ids.size());
     final List<byte[]> results = Lists.newArrayListWithCapacity(ids.size());
+    for (int i = 0; i < ids.size(); i++) {
+      results.add(null);
+    }
     
     class FinalCB implements Callback<Deferred<List<byte[]>>, ArrayList<Object>> {
       @Override
@@ -222,6 +243,9 @@ public class UniqueIds implements UniqueIdStore {
     // TODO - proper multiget. This is... ugly and wrong
     final List<Deferred<Object>> gets = Lists.newArrayListWithCapacity(ids.size());
     final List<String> results = Lists.newArrayListWithCapacity(ids.size());
+    for (int i = 0; i < ids.size(); i++) {
+      results.add(null);
+    }
     
     class FinalCB implements Callback<Deferred<List<String>>, ArrayList<Object>> {
       @Override

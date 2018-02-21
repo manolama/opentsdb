@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.hbase.async.Bytes;
 import org.hbase.async.HBaseClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,7 @@ import net.opentsdb.storage.schemas.v1.V1Schema;
 import net.opentsdb.storage.schemas.v1.V1SourceNode;
 import net.opentsdb.uid.ResolvedFilter;
 import net.opentsdb.uid.UniqueId.UniqueIdType;
+import net.opentsdb.uid.UniqueIdStore;
 
 /**
  * 
@@ -90,7 +92,9 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
       trace_span = null;
     }
     
-    uids = null;
+    uids = ((V1AsyncHBaseDataStore) factory).uids();
+    
+    scanners = Lists.newArrayList();
     // TODO - may need some basic validation regarding the query.
   }
 
@@ -121,31 +125,39 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
 
   @Override
   public void onNext(final QueryResult next) {
-    
+    System.out.println("[HBASE] query node got some results: " + next);
     // TODO - if results are empty and we are segmented, then we should
     // call fetchNext();
     
+    try {
     // TODO - based on the results determine if we need to fallback to higher
     // resolution data. In such cases we need to build an agg pipeline to 
     // perform the same steps that the pre-agg/rollup did.
     
     int seq = sequence_id.incrementAndGet();
     ((V1Result) next).setSequenceId(seq);
-    for (final QueryNode node : upstream) {
-      node.onNext(next);
-    }
+    
+    System.out.println("[HBASE] Series in results: " + next.timeSeries().size());
+    
+    sendUpstream(next);
     
     int completed = 0;
     for (final V1Scanners scanners : scanners) {
+      if (scanners.state() == StorageState.EXCEPTION) {
+        sendUpstream(new RuntimeException("WTF?"));
+        return;
+      }
       if (scanners.state() == StorageState.COMPLETE) {
         completed++;
       }
     }
+    System.out.println("[HBASE] Completed: " + completed);
     
     if (completed == scanners.size()) {
-      for (final QueryNode node : upstream) {
-        node.onComplete(this, seq, seq);
-      }
+      this.completeUpstream(seq, seq);
+    }
+    } catch (Exception e) {
+      e.printStackTrace();
     }
   }
 
@@ -159,10 +171,12 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
 
   @Override
   public void fetchNext() {
+    System.out.println("NEW QUERY!!!");
     // good ole double lock
     if (initialized == null) {
       synchronized(this) {
         if (initialized == null) {
+          System.out.println("INITIALIZING....");
           // TODO - thread pool it if needed.
           run();
         }
@@ -213,7 +227,7 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
     return null;
   }
   
-  V1Schema schema() {
+  public V1Schema schema() {
     return ((V1AsyncHBaseDataStore) factory).schema();
   }
 
@@ -294,6 +308,7 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
       // if we're here no meta resolution so we go the slow way for tsd 1.x schema
       try {
         setupScanners().join();
+        System.out.println("FINISHED SETTING UP SCANNERS!");
       } catch (InterruptedException e) {
         // TODO Auto-generated catch block
         e.printStackTrace();
@@ -322,6 +337,9 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
     // TODO - proper query when we're there, for now, old school
     final net.opentsdb.query.pojo.TimeSeriesQuery query = 
         (net.opentsdb.query.pojo.TimeSeriesQuery) config.query();
+    System.out.println("QUERY: " + query);
+    
+    sequence_end = query.getTime().endTime();
     
     class ResolveMetricCB implements Callback<Object, byte[]> {
       final Metric metric;
@@ -336,6 +354,7 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
       
       @Override
       public Object call(final byte[] uid) throws Exception {
+        System.out.println("Metric UID: " + Bytes.pretty(uid));
         final V1Scanners scnr = new V1Scanners(V1QueryNode.this, query, metric, filter, resolved, uid);
         scanners.add(scnr);
         return null;
@@ -360,6 +379,8 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
       }
       
     }
+    
+    System.out.println("GONNA RESOLVE: " + uids);
     
     final List<Deferred<Object>> deferreds = Lists.newArrayList();
     for (final Metric metric : query.getMetrics()) {
@@ -389,5 +410,11 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
 
   HBaseClient client() {
     return ((V1AsyncHBaseDataStore) factory).client();
+  }
+
+  @Override
+  public UniqueIdStore uidStore() {
+    // TODO Auto-generated method stub
+    return uids;
   }
 }

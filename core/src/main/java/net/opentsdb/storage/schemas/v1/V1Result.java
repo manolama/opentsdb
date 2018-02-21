@@ -29,6 +29,7 @@ import net.opentsdb.data.TimeStamp.RelationalOperator;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.storage.StorageSeries;
+import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.ConcurrentByteMap;
 
 public class V1Result implements QueryResult, Runnable {
@@ -47,7 +48,7 @@ public class V1Result implements QueryResult, Runnable {
   private List<TimeSeries> timeseries;
   
   private final CountDownLatch countdown;
-  private final QueryNode node;
+  private final V1SourceNode node;
 
   private int sequence_id;
   private Exception ex;
@@ -58,6 +59,7 @@ public class V1Result implements QueryResult, Runnable {
   
   public V1Result(final V1SourceNode node) {
     countdown = new CountDownLatch(node.parallelProcesses());
+    schema = node.schema();
     this.node = node;
   }
   
@@ -71,6 +73,7 @@ public class V1Result implements QueryResult, Runnable {
       timeseries.add(new LocalTS(entry.getKey(), entry.getValue()));
     }
     iterators = null; // let it go so GC can do it's thang!
+    System.out.println("DONE WITH RUN of the results time series build.");
   }
 
   @Override
@@ -117,6 +120,8 @@ public class V1Result implements QueryResult, Runnable {
   public void addData(final TimeStamp base, final byte[] tsuid, final byte prefix, final byte[] qualifier, final byte[] value) {
     // TODO - if we have too much data, return false so the scanner can cache it 
     // for the next call.
+    
+    System.out.println("ADDING DATA: " + Bytes.pretty(tsuid) + "  Prefix: " + prefix + "  Qual: " + Bytes.pretty(qualifier) + "  Val: " + Bytes.pretty(value));
     
     // decode
     final V1Codec codec = schema.getCodec(prefix);
@@ -174,6 +179,7 @@ public class V1Result implements QueryResult, Runnable {
     // called to mark the scanner as done with it's current workload.
     countdown.countDown();
     if (countdown.getCount() == 0) {
+      System.out.println("ALL SCANNERS DONE in result!!! Woot!");
       run(); // TODO - may need to move to another pool!
       node.onNext(this);
     }
@@ -188,7 +194,7 @@ public class V1Result implements QueryResult, Runnable {
     private final ConcurrentHashMap<TypeToken<?>, StorageSeries> series;
     
     LocalTS(final byte[] tsuid, final ConcurrentHashMap<TypeToken<?>, StorageSeries> series) {
-      id = new V1TimeSeriesId(tsuid);
+      id = new V1TimeSeriesId(tsuid, node.uidStore());
       this.series = series;
     }
     
@@ -219,6 +225,7 @@ public class V1Result implements QueryResult, Runnable {
 
     @Override
     public Collection<TypeToken<?>> types() {
+      System.out.println("TYPES: " + series.keySet());
       return series.keySet();
     }
 

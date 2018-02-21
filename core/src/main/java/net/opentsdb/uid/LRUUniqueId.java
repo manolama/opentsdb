@@ -27,10 +27,10 @@ public class LRUUniqueId extends UniqueId {
     
     // TODO - only one or the other depending on mode
     name_cache = CacheBuilder.newBuilder()
-        .maximumSize(tsdb.getConfig().getInt("tsd.uid." + config.type().toString().toLowerCase() + ".lru.name.size"))
+        .maximumSize(1024 /*tsdb.getConfig().getInt("tsd.uid." + config.type().toString().toLowerCase() + ".lru.name.size")*/)
         .build();
     id_cache = CacheBuilder.newBuilder()
-        .maximumSize(tsdb.getConfig().getInt("tsd.uid." + config.type().toString().toLowerCase() + "lru.id.size"))
+        .maximumSize(1024/*tsdb.getConfig().getInt("tsd.uid." + config.type().toString().toLowerCase() + "lru.id.size")*/)
         .build();
   }
 
