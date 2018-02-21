@@ -21,11 +21,11 @@ public class V1TimeSeriesId implements TimeSeriesByteId {
 
   final byte[] tsuid;
   
-  final UniqueIdStore uid_store;
+  final V1Schema schema;
   
-  public V1TimeSeriesId(final byte[] tsuid, final UniqueIdStore uid_store) {
+  public V1TimeSeriesId(final byte[] tsuid, final V1Schema schema) {
     this.tsuid = tsuid;
-    this.uid_store = uid_store;
+    this.schema = schema;
   }
 
   @Override
@@ -96,21 +96,21 @@ System.out.println("RESOLVING ID!");
     
     List<Deferred<Object>> deferreds = Lists.newArrayListWithCapacity(3);
     
-    deferreds.add(uid_store.idToString(UniqueIdType.METRIC, Arrays.copyOfRange(tsuid, 0, 3)) // TODO - fix me
+    deferreds.add(schema.idToString(UniqueIdType.METRIC, Arrays.copyOfRange(tsuid, 0, 3)) // TODO - fix me
         .addCallback(new MetricCB()));
     
     List<byte[]> ids = Lists.newArrayListWithCapacity(1); // TODO  - proper size
     for (int i = 3; i < tsuid.length; i += 6) {
       ids.add(Arrays.copyOfRange(tsuid, i, i + 3));
     }
-    deferreds.add(uid_store.idsToString(UniqueIdType.TAGK, ids)
+    deferreds.add(schema.idsToString(UniqueIdType.TAGK, ids)
         .addCallback(new TagKeyCB()));
     
     ids = Lists.newArrayListWithCapacity(1); // TODO  - proper size
     for (int i = 6; i < tsuid.length; i += 6) {
       ids.add(Arrays.copyOfRange(tsuid, i, i + 3));
     }
-    deferreds.add(uid_store.idsToString(UniqueIdType.TAGV, ids)
+    deferreds.add(schema.idsToString(UniqueIdType.TAGV, ids)
         .addCallback(new TagValueCB()));
     
     System.out.println("RETURNING from the resolution...");

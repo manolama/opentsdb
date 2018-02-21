@@ -112,6 +112,7 @@ public class V1Scanners {
     final byte[] start_key = new byte[node.schema().saltWidth() + 
                                       node.schema().metricUIDBytes() +
                                       V1Schema.TIMESTAMP_BYTES];
+    System.out.println("SCHEMA: " + node.schema() + " UID: " + metric_uid);
     System.arraycopy(metric_uid, 0, start_key, node.schema().saltWidth(), metric_uid.length);
     Bytes.setInt(start_key, (int) start_ts, (node.schema().saltWidth() + 
                                              node.schema().metricUIDBytes()));

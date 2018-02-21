@@ -17,6 +17,12 @@ public class UniqueIdConfig {
   public int width;
   public Charset charset = Charset.forName("ISO-8859-1");
   
+  public UniqueIdConfig(final Mode mode, final UniqueIdType type, final int width) {
+    this.mode = mode;
+    this.type = type;
+    this.width = width;
+  }
+  
   public Mode mode() {
     return mode;
   }

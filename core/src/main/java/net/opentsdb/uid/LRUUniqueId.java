@@ -63,6 +63,9 @@ public class LRUUniqueId extends UniqueId {
     // need the clone so we can dump cached copies
     final List<byte[]> clone = Lists.newArrayList(ids);
     final List<String> names = Lists.newArrayListWithCapacity(ids.size());
+    for (int i = 0; i < ids.size(); i++) {
+      names.add(null);
+    }
     int resolved = 0;
     for (int i = 0; i < ids.size(); i++) {
       final String name = id_cache.getIfPresent(fromBytes(ids.get(i)));
@@ -84,7 +87,7 @@ public class LRUUniqueId extends UniqueId {
   @Override
   public Deferred<byte[]> getId(String name, TsdbTrace trace, Span span) {
     final byte[] uid = name_cache.getIfPresent(name);
-    if (uid == null) {
+    if (uid != null) {
       return Deferred.fromResult(uid);
     }
     return store.stringToId(config.type(), name)

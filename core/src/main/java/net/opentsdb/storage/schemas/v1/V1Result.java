@@ -194,7 +194,7 @@ public class V1Result implements QueryResult, Runnable {
     private final ConcurrentHashMap<TypeToken<?>, StorageSeries> series;
     
     LocalTS(final byte[] tsuid, final ConcurrentHashMap<TypeToken<?>, StorageSeries> series) {
-      id = new V1TimeSeriesId(tsuid, node.uidStore());
+      id = new V1TimeSeriesId(tsuid, node.schema());
       this.series = series;
     }
     

@@ -57,12 +57,12 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
   private AtomicBoolean completed = new AtomicBoolean();
   private QuerySourceConfig config;
   private final net.opentsdb.stats.Span trace_span;
-  private final UniqueIds uids;
   
   private List<V1Scanners> scanners;
   private V1MultiGet multi_gets;
   private MetaDataStorageSchema meta;
   
+  private V1Schema schema;
   private Object initialized;
   
   // when the timestamp
@@ -92,7 +92,7 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
       trace_span = null;
     }
     
-    uids = ((V1AsyncHBaseDataStore) factory).uids();
+    schema = ((V1AsyncHBaseDataStore) factory).schema();
     
     scanners = Lists.newArrayList();
     // TODO - may need some basic validation regarding the query.
@@ -374,23 +374,23 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
       
       @Override
       public Object call(final List<ResolvedFilter> resolved) throws Exception {
-        return uids.stringToId(UniqueIdType.METRIC, metric.getMetric())
+        return schema.stringToId(UniqueIdType.METRIC, metric.getMetric())
             .addCallback(new ResolveMetricCB(metric, filter, resolved));
       }
       
     }
     
-    System.out.println("GONNA RESOLVE: " + uids);
+    System.out.println("GONNA RESOLVE: " + schema);
     
     final List<Deferred<Object>> deferreds = Lists.newArrayList();
     for (final Metric metric : query.getMetrics()) {
       if (!Strings.isNullOrEmpty(metric.getFilter())) {
         final Filter filter = query.getFilter(metric.getFilter());
-        deferreds.add(uids.resolveUids(filter)
+        deferreds.add(schema.resolveUids(filter)
             .addCallback(new ResolveTagsCB(metric, filter)));
       } else {
         // just a metric, setup simple scanners.
-        deferreds.add(uids.stringToId(UniqueIdType.METRIC, metric.getMetric())
+        deferreds.add(schema.stringToId(UniqueIdType.METRIC, metric.getMetric())
             .addCallback(new ResolveMetricCB(metric, null, null)));
       }
     }
@@ -410,11 +410,5 @@ public class V1QueryNode extends AbstractQueryNode implements V1SourceNode, Runn
 
   HBaseClient client() {
     return ((V1AsyncHBaseDataStore) factory).client();
-  }
-
-  @Override
-  public UniqueIdStore uidStore() {
-    // TODO Auto-generated method stub
-    return uids;
   }
 }

@@ -39,90 +39,13 @@ public class UniqueIds implements UniqueIdStore {
   private final byte[] id_family;
   private final byte[] name_family;
   
-  private UniqueId metrics;
-  
-  private UniqueId tag_keys;
-  
-  private UniqueId tag_values;
-  
   public UniqueIds(final V1AsyncHBaseDataStore store, 
       final byte[] table, final byte[] id_family, final byte[] name_family) {
     this.store = store;
     this.client = store.client();
-    metrics = new LRUUniqueId(store.tsdb(), store.schema().getConfig(UniqueIdType.METRIC), this);
-    tag_keys = new LRUUniqueId(store.tsdb(), store.schema().getConfig(UniqueIdType.TAGK), this);
-    tag_values = new LRUUniqueId(store.tsdb(), store.schema().getConfig(UniqueIdType.TAGV), this);
     this.table = table;
     this.id_family = id_family;
     this.name_family = name_family;
-  }
-    
-  public Deferred<List<ResolvedFilter>> resolveUids(final Filter filter) {
-    System.out.println("RESOLVING FILTER: " + filter);
-    final List<ResolvedFilter> resolved_filters = 
-        Lists.newArrayListWithCapacity(filter.getTags().size());
-    for (int i = 0; i < filter.getTags().size(); i++) {
-      resolved_filters.add(null);
-    }
-    
-    class TagVCB implements Callback<Object, List<byte[]>> {
-      final int idx;
-      
-      TagVCB(final int idx) {
-        this.idx = idx;
-      }
-
-      @Override
-      public Object call(final List<byte[]> uids) throws Exception {
-        // TODO - may need sync
-        resolved_filters.get(idx).setTagValues(uids);
-        return null;
-      }
-      
-    }
-    
-    class TagKCB implements Callback<Deferred<Object>, byte[]> {
-      final int idx;
-      final TagVFilter f;
-      
-      TagKCB(final int idx, final TagVFilter f) {
-        this.idx = idx;
-        this.f = f;
-      }
-
-      @Override
-      public Deferred<Object> call(final byte[] uid) throws Exception {
-        final ResolvedFilter resolved = new ResolvedFilter();
-        resolved.setTagKey(uid);
-        resolved_filters.set(idx, resolved); // TODO - wonder if we need sync here since it's an array
-        final List<String> tags = Lists.newArrayList(((TagVLiteralOrFilter) f).literals());
-        return tag_values.getId(tags, (TsdbTrace) null, null /* TOD - setem */)
-            .addCallback(new TagVCB(idx));
-      }
-      
-    }
-    
-    List<Deferred<Object>> deferreds = Lists.newArrayListWithCapacity(filter.getTags().size());
-    for (int i = 0; i < filter.getTags().size(); i++) {
-      final TagVFilter f = filter.getTags().get(i);
-      if (f instanceof TagVLiteralOrFilter) {
-        deferreds.add(tag_keys.getId(f.getTagk())
-            .addCallbackDeferring(new TagKCB(i, f)));
-      }
-    }
-    
-    class FinalCB implements Callback<List<ResolvedFilter>, ArrayList<Object>> {
-
-      @Override
-      public List<ResolvedFilter> call(final ArrayList<Object> ignored)
-          throws Exception {
-        System.out.println("DONE WITH RESOLVE FILTERS");
-        return resolved_filters;
-      }
-      
-    }
-    
-    return Deferred.group(deferreds).addCallback(new FinalCB());
   }
   
   Deferred<Object> validateTables() {

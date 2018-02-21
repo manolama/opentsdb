@@ -13,5 +13,4 @@ public interface V1SourceNode extends TimeSeriesDataSource {
   
   public V1Schema schema();
   
-  public UniqueIdStore uidStore();
 }

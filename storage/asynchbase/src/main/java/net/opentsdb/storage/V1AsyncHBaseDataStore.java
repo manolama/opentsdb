@@ -105,12 +105,12 @@ public class V1AsyncHBaseDataStore extends TimeSeriesDataStore {
     
     final byte[] uid_table = tsdb.getConfig().getString("tsd.storage.hbase.uid_table").getBytes(Const.ASCII_CHARSET);
     
-    
-    // TODO - finish up the V1Schema config
-    schema = new V1Schema();
-    
     // TODO - load a real config
     uids = new UniqueIds(this, "tsdb-uid".getBytes(), "id".getBytes(), "name".getBytes());
+    
+    // TODO - finish up the V1Schema config
+    schema = new V1Schema(tsdb, uids);
+    
     column_family = new byte[] { 't' };
     data_table = "tsdb".getBytes();
     // TODO - validate HBase config.
