@@ -1,6 +1,10 @@
 package net.opentsdb.data;
 
+import java.util.List;
+import java.util.Set;
+
 import net.opentsdb.storage.StorageSchema;
+import net.opentsdb.utils.Bytes.ByteMap;
 
 /**
  * TODO - This is just a native ID e.g. TSUID as bytes
@@ -16,16 +20,11 @@ public interface TimeSeriesByteId extends TimeSeriesId, Comparable<TimeSeriesByt
   
   public byte[] metric();
   
-  // tag key value key value.... flat for space savings
-  public byte[] tags();
+  public ByteMap<byte[]> tags();
+    
+  public List<byte[]> aggregatedTags();
   
-  public byte[] tagValue(final byte[] key);
+  public List<byte[]> disjointTags();
   
-  // tag keys in flat array for saving space
-  public byte[] aggregatedTags();
-  
-  // tag keys in flat array for space savings
-  public byte[] disjointTags();
-  
-  public byte[] timeseriesUID();
+  public Set<byte[]> uniqueIds();
 }

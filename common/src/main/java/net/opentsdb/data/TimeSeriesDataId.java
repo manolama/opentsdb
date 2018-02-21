@@ -10,4 +10,5 @@ public interface TimeSeriesDataId extends TimeSeriesId {
   
   public ByteMap<byte[]> tags();
   
+  public byte[] timeseriesUID();
 }

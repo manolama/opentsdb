@@ -121,12 +121,12 @@ public class GroupByResult implements QueryResult {
           
           boolean matched = true;
           for (final byte[] key : ((GroupByConfig) node.config()).getEncodedTagKeys()) {
-            if (id.tags() == null || id.tags().length < 1) {
+            if (id.tags() == null || id.tags().size() < 1) {
               matched = false;
               break;
             }
             
-            final byte[] tagv = id.tagValue(key);
+            final byte[] tagv = id.tags().get(key);
             if (tagv == null) {
               if (LOG.isDebugEnabled()) {
                 LOG.debug("Dropping series from group by due to missing tag key: " 

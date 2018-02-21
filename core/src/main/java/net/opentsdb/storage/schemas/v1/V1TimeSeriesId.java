@@ -3,6 +3,7 @@ package net.opentsdb.storage.schemas.v1;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 import com.google.common.collect.Lists;
 import com.stumbleupon.async.Callback;
@@ -150,46 +151,31 @@ System.out.println("RESOLVING ID!");
   }
 
   @Override
-  public byte[] tags() {
-    return Arrays.copyOfRange(tsuid, 3, tsuid.length);
-  }
-
-  @Override
-  public byte[] aggregatedTags() {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  @Override
-  public byte[] disjointTags() {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  @Override
-  public byte[] timeseriesUID() {
-    return tsuid;
-  }
-
-  @Override
-  public byte[] tagValue(byte[] key) {
-    // TODO make sure key length is correct
-    int idx = 3;
-    while (idx < key.length) {
-      boolean matched = true;
-      for (int i = 0; i < 3; i++) {
-        if (key[i] != tsuid[idx + i]) {
-          matched = false;
-          break;
-        }
-      }
-      if (matched) {
-        return Arrays.copyOfRange(tsuid, idx + 3, idx + 6);
-      }
-      
-      idx += 6;
+  public ByteMap<byte[]> tags() {
+    ByteMap<byte[]> tags = new ByteMap<byte[]>();
+    for (int i = 3; i < tsuid.length; i += 6) {
+      byte[] tagk = Arrays.copyOfRange(tsuid, i, i + 3);
+      tags.put(tagk, Arrays.copyOfRange(tsuid, i + 3, i + 6));
     }
+    return tags;
+  }
+
+  @Override
+  public List<byte[]> aggregatedTags() {
+    // TODO Auto-generated method stub
     return null;
   }
-  
+
+  @Override
+  public List<byte[]> disjointTags() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public Set<byte[]> uniqueIds() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
 }
