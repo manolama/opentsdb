@@ -26,7 +26,7 @@ import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.RelationalOperator;
 import net.opentsdb.data.types.numeric.Aggregators;
-import net.opentsdb.data.types.numeric.MutableNumericType;
+import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericAggregator;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryIterator;
@@ -61,7 +61,7 @@ public class GroupByNumericIterator implements QueryIterator,
   private final TimeStamp next_next_ts = new MillisecondTimeStamp(0);
   
   /** The data point set and returned by the iterator. */
-  private final MutableNumericType dp;
+  private final MutableNumericValue dp;
   
   /** The list of interpolators containing the real sources. */
   private final QueryIteratorInterpolator<NumericType>[] interpolators;
@@ -117,10 +117,7 @@ public class GroupByNumericIterator implements QueryIterator,
     if (Strings.isNullOrEmpty(((GroupByConfig) node.config()).getAggregator())) {
       throw new IllegalArgumentException("Aggregator cannot be null or empty."); 
     }
-    if (((GroupByConfig) node.config()).getInterpolator() == null) {
-      throw new IllegalArgumentException("Interpolator cannot be null.");
-    }
-    dp = new MutableNumericType();
+    dp = new MutableNumericValue();
     next_ts.setMax();
     dp.resetNull(next_ts);
     // TODO - better way of supporting aggregators
@@ -132,10 +129,10 @@ public class GroupByNumericIterator implements QueryIterator,
         throw new IllegalArgumentException("Null time series are not allowed in the sources.");
       }
       interpolators[iterator_max] = (QueryIteratorInterpolator<NumericType>) 
-          ((GroupByConfig) node.config()).getInterpolator()
-            .newInterpolator(NumericType.TYPE, 
-                             source, ((GroupByConfig) node.config())
-                               .getInterpolatorConfig());
+          ((GroupByConfig) node.config()).interpolationConfig().newInterpolator(NumericType.TYPE, source);
+//            .newInterpolator(NumericType.TYPE, 
+//                             source, ((GroupByConfig) node.config())
+//                               .getInterpolatorConfig());
       if (interpolators[iterator_max].hasNext()) {
         has_next = true;
         if (interpolators[iterator_max].nextReal().compare(RelationalOperator.LT, next_ts)) {

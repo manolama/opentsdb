@@ -34,137 +34,137 @@ import net.opentsdb.query.pojo.FillPolicy;
 
 public class TestGroupByConfig {
 
-  @Test
-  public void build() throws Exception {
-    final QueryIteratorInterpolatorFactory interpolator = 
-        new NumericInterpolatorFactory.Default();
-    final NumericInterpolatorConfig interpolator_config = 
-        ScalarNumericInterpolatorConfig.newBuilder()
-        .setValue(42)
-        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
-        .setRealFillPolicy(FillWithRealPolicy.NONE)
-        .build();
-    
-    GroupByConfig config = GroupByConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("GBy")
-        .setTagKeys(Sets.newHashSet("host"))
-        .addTagKey("dc")
-        .setQueryIteratorInterpolatorFactory(interpolator)
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
-        .build();
-    
-    assertEquals("sum", config.getAggregator());
-    assertEquals("GBy", config.getId());
-    assertTrue(config.getTagKeys().contains("host"));
-    assertTrue(config.getTagKeys().contains("dc"));
-    assertFalse(config.groupAll());
-    assertSame(interpolator, config.getInterpolator());
-    assertSame(interpolator_config, config.getInterpolatorConfig());
-    
-    config = GroupByConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("GBy")
-        .setGroupAll(true)
-        .setQueryIteratorInterpolatorFactory(interpolator)
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
-        .build();
-    
-    assertEquals("sum", config.getAggregator());
-    assertEquals("GBy", config.getId());
-    assertNull(config.getTagKeys());
-    assertTrue(config.groupAll());
-    assertSame(interpolator, config.getInterpolator());
-    assertSame(interpolator_config, config.getInterpolatorConfig());
-    
-    config = GroupByConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("GBy")
-        .setTagKeys(Sets.newHashSet("host"))
-        .addTagKey("dc")
-        .setGroupAll(true)
-        .setQueryIteratorInterpolatorFactory(interpolator)
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
-        .build();
-    
-    assertEquals("sum", config.getAggregator());
-    assertEquals("GBy", config.getId());
-    assertTrue(config.getTagKeys().contains("host"));
-    assertTrue(config.getTagKeys().contains("dc"));
-    assertTrue(config.groupAll());
-    assertSame(interpolator, config.getInterpolator());
-    assertSame(interpolator_config, config.getInterpolatorConfig());
-    
-    try {
-      GroupByConfig.newBuilder()
-        //.setAggregator("sum")
-        .setId("GBy")
-        .setTagKeys(Sets.newHashSet("host"))
-        .addTagKey("dc")
-        .setQueryIteratorInterpolatorFactory(interpolator)
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
-        .build();
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    try {
-      GroupByConfig.newBuilder()
-        .setAggregator("")
-        .setId("GBy")
-        .setTagKeys(Sets.newHashSet("host"))
-        .addTagKey("dc")
-        .setQueryIteratorInterpolatorFactory(interpolator)
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
-        .build();
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    try {
-      GroupByConfig.newBuilder()
-        .setAggregator("sum")
-        //.setId("GBy")
-        .setTagKeys(Sets.newHashSet("host"))
-        .addTagKey("dc")
-        .setQueryIteratorInterpolatorFactory(interpolator)
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
-        .build();
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    try {
-      GroupByConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("")
-        .setTagKeys(Sets.newHashSet("host"))
-        .addTagKey("dc")
-        .setQueryIteratorInterpolatorFactory(interpolator)
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
-        .build();
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    try {
-      GroupByConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("GBy")
-        //.setTagKeys(Sets.newHashSet("host"))
-        //.addTagKey("dc")
-        .setQueryIteratorInterpolatorFactory(interpolator)
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
-        .build();
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    try {
-      GroupByConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("GBy")
-        .setTagKeys(Sets.newHashSet("host"))
-        .addTagKey("dc")
-        //.setQueryIteratorInterpolatorFactory(interpolator)
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
-        .build();
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-  }
+//  @Test
+//  public void build() throws Exception {
+//    final QueryIteratorInterpolatorFactory interpolator = 
+//        new NumericInterpolatorFactory.Default();
+//    final NumericInterpolatorConfig interpolator_config = 
+//        ScalarNumericInterpolatorConfig.newBuilder()
+//        .setValue(42)
+//        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
+//        .setRealFillPolicy(FillWithRealPolicy.NONE)
+//        .build();
+//    
+//    GroupByConfig config = GroupByConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("GBy")
+//        .setTagKeys(Sets.newHashSet("host"))
+//        .addTagKey("dc")
+//        .setQueryIteratorInterpolatorFactory(interpolator)
+//        .setQueryIteratorInterpolatorConfig(interpolator_config)
+//        .build();
+//    
+//    assertEquals("sum", config.getAggregator());
+//    assertEquals("GBy", config.getId());
+//    assertTrue(config.getTagKeys().contains("host"));
+//    assertTrue(config.getTagKeys().contains("dc"));
+//    assertFalse(config.groupAll());
+//    assertSame(interpolator, config.getInterpolator());
+//    assertSame(interpolator_config, config.getInterpolatorConfig());
+//    
+//    config = GroupByConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("GBy")
+//        .setGroupAll(true)
+//        .setQueryIteratorInterpolatorFactory(interpolator)
+//        .setQueryIteratorInterpolatorConfig(interpolator_config)
+//        .build();
+//    
+//    assertEquals("sum", config.getAggregator());
+//    assertEquals("GBy", config.getId());
+//    assertNull(config.getTagKeys());
+//    assertTrue(config.groupAll());
+//    assertSame(interpolator, config.getInterpolator());
+//    assertSame(interpolator_config, config.getInterpolatorConfig());
+//    
+//    config = GroupByConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("GBy")
+//        .setTagKeys(Sets.newHashSet("host"))
+//        .addTagKey("dc")
+//        .setGroupAll(true)
+//        .setQueryIteratorInterpolatorFactory(interpolator)
+//        .setQueryIteratorInterpolatorConfig(interpolator_config)
+//        .build();
+//    
+//    assertEquals("sum", config.getAggregator());
+//    assertEquals("GBy", config.getId());
+//    assertTrue(config.getTagKeys().contains("host"));
+//    assertTrue(config.getTagKeys().contains("dc"));
+//    assertTrue(config.groupAll());
+//    assertSame(interpolator, config.getInterpolator());
+//    assertSame(interpolator_config, config.getInterpolatorConfig());
+//    
+//    try {
+//      GroupByConfig.newBuilder()
+//        //.setAggregator("sum")
+//        .setId("GBy")
+//        .setTagKeys(Sets.newHashSet("host"))
+//        .addTagKey("dc")
+//        .setQueryIteratorInterpolatorFactory(interpolator)
+//        .setQueryIteratorInterpolatorConfig(interpolator_config)
+//        .build();
+//      fail("Expected IllegalArgumentException");
+//    } catch (IllegalArgumentException e) { }
+//    
+//    try {
+//      GroupByConfig.newBuilder()
+//        .setAggregator("")
+//        .setId("GBy")
+//        .setTagKeys(Sets.newHashSet("host"))
+//        .addTagKey("dc")
+//        .setQueryIteratorInterpolatorFactory(interpolator)
+//        .setQueryIteratorInterpolatorConfig(interpolator_config)
+//        .build();
+//      fail("Expected IllegalArgumentException");
+//    } catch (IllegalArgumentException e) { }
+//    
+//    try {
+//      GroupByConfig.newBuilder()
+//        .setAggregator("sum")
+//        //.setId("GBy")
+//        .setTagKeys(Sets.newHashSet("host"))
+//        .addTagKey("dc")
+//        .setQueryIteratorInterpolatorFactory(interpolator)
+//        .setQueryIteratorInterpolatorConfig(interpolator_config)
+//        .build();
+//      fail("Expected IllegalArgumentException");
+//    } catch (IllegalArgumentException e) { }
+//    
+//    try {
+//      GroupByConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("")
+//        .setTagKeys(Sets.newHashSet("host"))
+//        .addTagKey("dc")
+//        .setQueryIteratorInterpolatorFactory(interpolator)
+//        .setQueryIteratorInterpolatorConfig(interpolator_config)
+//        .build();
+//      fail("Expected IllegalArgumentException");
+//    } catch (IllegalArgumentException e) { }
+//    
+//    try {
+//      GroupByConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("GBy")
+//        //.setTagKeys(Sets.newHashSet("host"))
+//        //.addTagKey("dc")
+//        .setQueryIteratorInterpolatorFactory(interpolator)
+//        .setQueryIteratorInterpolatorConfig(interpolator_config)
+//        .build();
+//      fail("Expected IllegalArgumentException");
+//    } catch (IllegalArgumentException e) { }
+//    
+//    try {
+//      GroupByConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("GBy")
+//        .setTagKeys(Sets.newHashSet("host"))
+//        .addTagKey("dc")
+//        //.setQueryIteratorInterpolatorFactory(interpolator)
+//        .setQueryIteratorInterpolatorConfig(interpolator_config)
+//        .build();
+//      fail("Expected IllegalArgumentException");
+//    } catch (IllegalArgumentException e) { }
+//  }
 }

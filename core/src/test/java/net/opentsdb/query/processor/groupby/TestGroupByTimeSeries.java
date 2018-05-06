@@ -40,6 +40,7 @@ import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
+import net.opentsdb.query.interpolation.types.numeric.DefaultInterpolationConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorFactory;
 import net.opentsdb.query.pojo.FillPolicy;
@@ -62,11 +63,13 @@ public class TestGroupByTimeSeries {
         .setAggregator("sum")
         .setId("GB")
         .addTagKey("host")
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-          .setFillPolicy(FillPolicy.NOT_A_NUMBER)
-          .setRealFillPolicy(FillWithRealPolicy.NONE)
-          .build())
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, NumericInterpolatorConfig.newBuilder()
+                .setFillPolicy(FillPolicy.NOT_A_NUMBER)
+                .setRealFillPolicy(FillWithRealPolicy.NONE)
+                .build(), 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     
     when(node.factory()).thenReturn(factory);

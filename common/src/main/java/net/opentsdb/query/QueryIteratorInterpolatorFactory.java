@@ -14,11 +14,14 @@
 // limitations under the License.
 package net.opentsdb.query;
 
+import java.util.Iterator;
+
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.core.TSDBPlugin;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
+import net.opentsdb.data.TimeSeriesValue;
 
 /**
  * A factory interface for generating interator interpolators.
@@ -39,5 +42,10 @@ public interface QueryIteratorInterpolatorFactory extends TSDBPlugin {
   public QueryIteratorInterpolator<? extends TimeSeriesDataType> newInterpolator(
       final TypeToken<? extends TimeSeriesDataType> type, 
       final TimeSeries source, 
-      final QueryIteratorInterpolatorConfig config);
+      final QueryInterpolatorConfig config);
+  
+  public QueryIteratorInterpolator<? extends TimeSeriesDataType> newInterpolator(
+      final TypeToken<? extends TimeSeriesDataType> type, 
+      final Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator, 
+      final QueryInterpolatorConfig config);
 }

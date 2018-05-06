@@ -1,0 +1,3234 @@
+{
+  "reportSchema": "1.1",
+  "scanInfo": {
+    "engineVersion": "3.0.2",
+    "dataSource": [
+      {
+        "name": "NVD CVE 2002",
+        "timestamp": "28/03/2018 01:29:13"
+      },
+      {
+        "name": "NVD CVE 2003",
+        "timestamp": "28/03/2018 01:25:06"
+      },
+      {
+        "name": "NVD CVE 2004",
+        "timestamp": "28/03/2018 01:23:58"
+      },
+      {
+        "name": "NVD CVE 2005",
+        "timestamp": "28/03/2018 01:21:54"
+      },
+      {
+        "name": "NVD CVE 2006",
+        "timestamp": "28/03/2018 01:18:17"
+      },
+      {
+        "name": "NVD CVE 2007",
+        "timestamp": "30/03/2018 00:49:16"
+      },
+      {
+        "name": "NVD CVE 2008",
+        "timestamp": "28/03/2018 01:07:26"
+      },
+      {
+        "name": "NVD CVE 2009",
+        "timestamp": "28/03/2018 01:01:46"
+      },
+      {
+        "name": "NVD CVE 2010",
+        "timestamp": "28/03/2018 00:57:17"
+      },
+      {
+        "name": "NVD CVE 2011",
+        "timestamp": "30/03/2018 00:43:52"
+      },
+      {
+        "name": "NVD CVE 2012",
+        "timestamp": "28/03/2018 00:44:45"
+      },
+      {
+        "name": "NVD CVE 2013",
+        "timestamp": "30/03/2018 00:37:04"
+      },
+      {
+        "name": "NVD CVE 2014",
+        "timestamp": "30/03/2018 00:31:58"
+      },
+      {
+        "name": "NVD CVE 2015",
+        "timestamp": "04/04/2018 00:25:05"
+      },
+      {
+        "name": "NVD CVE 2016",
+        "timestamp": "04/04/2018 00:19:01"
+      },
+      {
+        "name": "NVD CVE 2017",
+        "timestamp": "04/04/2018 00:12:15"
+      },
+      {
+        "name": "NVD CVE 2018",
+        "timestamp": "04/04/2018 00:01:30"
+      },
+      {
+        "name": "NVD CVE Checked",
+        "timestamp": "04/04/2018 16:29:54"
+      },
+      {
+        "name": "NVD CVE Modified",
+        "timestamp": "04/04/2018 15:01:21"
+      }
+    ]
+  },
+  "projectInfo": {
+    "name": "opentsdb-core",
+    "groupID": "net.opentsdb",
+    "artifactID": "opentsdb-core",
+    "version": "3.0.2",
+    "reportDate": "2018-04-04T16:50:27.401-0700",
+    "credits": {
+      "NVD": "This report contains data retrieved from the National Vulnerability Database: http://nvd.nist.gov",
+      "NSP": "This report may contain data retrieved from the Node Security Platform: https://nodesecurity.io"
+    }
+  },
+  "dependencies": [
+    {
+      "isVirtual": false,
+      "fileName": "slf4j-api-1.7.7.jar",
+      "filePath": "/Users/clarsen/.m2/repository/org/slf4j/slf4j-api/1.7.7/slf4j-api-1.7.7.jar",
+      "md5": "ca4280bf93d64367723ae5c8d42dd0b9",
+      "sha1": "2b8019b6249bb05d81d3a3094e468753e2b21311",
+      "description": "The slf4j API",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "slf4j-parent"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "The slf4j API"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "org.slf4j"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "slf4j-api"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "slf4j.api"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "org.slf4j"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "groupid",
+            "value": "org.slf4j"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-requiredexecutionenvironment",
+            "value": "J2SE-1.3"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "description",
+            "value": "The slf4j API"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "slf4j-api"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "slf4j"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "url",
+            "value": "http://www.slf4j.org"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "SLF4J API Module"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "slf4j-api"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "The slf4j API"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Title",
+            "value": "slf4j-api"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "artifactid",
+            "value": "slf4j-api"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "slf4j"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "slf4j.api"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Bundle-Name",
+            "value": "slf4j-api"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-requiredexecutionenvironment",
+            "value": "J2SE-1.3"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "description",
+            "value": "The slf4j API"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "url",
+            "value": "http://www.slf4j.org"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "slf4j-api"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "org.slf4j"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "slf4j-parent"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "SLF4J API Module"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Version",
+            "value": "1.7.7"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "version",
+            "value": "1.7.7"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "1.7.7"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "1.7.7"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "org.slf4j:slf4j-api:1.7.7",
+          "type": "maven",
+          "confidence": "HIGHEST",
+          "url": "http://search.maven.org/#search|ga|1|1%3A%222b8019b6249bb05d81d3a3094e468753e2b21311%22"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "async-1.4.1.jar",
+      "filePath": "/Users/clarsen/.m2/repository/com/stumbleupon/async/1.4.1/async-1.4.1.jar",
+      "md5": "dd937b989f6d84dacc20cad00305cee3",
+      "sha1": "25b9507a58570c349d32a80e395bc29da091059c",
+      "description": "\n    Building blocks for high-performance multi-threaded asynchronous\n    applications. Inspired by Twisted's async library (twisted.internet.defer).\n  ",
+      "license": "BSD: http://www.opensource.org/licenses/BSD-3-Clause",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "stumbleupon"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "stumbleupon"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "SUAsync Library"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "url",
+            "value": "stumbleupon/async"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "async"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "async"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "com.stumbleupon"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "async"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "groupid",
+            "value": "com.stumbleupon"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "description",
+            "value": "Building blocks for high-performance multi-threaded asynchronous applications. Inspired by Twisted's async library (twisted.internet.defer)."
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "organization name",
+            "value": "The SUAsync Authors"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "organization url",
+            "value": "http://www.stumbleupon.com"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "async"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "SUAsync Library"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "description",
+            "value": "Building blocks for high-performance multi-threaded asynchronous applications. Inspired by Twisted's async library (twisted.internet.defer)."
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "async"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "url",
+            "value": "stumbleupon/async"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "stumbleupon"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "artifactid",
+            "value": "async"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "organization name",
+            "value": "The SUAsync Authors"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "async"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "organization url",
+            "value": "http://www.stumbleupon.com"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "1.4.1"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "version",
+            "value": "1.4.1"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "1.4.1"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "com.stumbleupon:async:1.4.1",
+          "type": "maven",
+          "confidence": "HIGHEST",
+          "url": "http://search.maven.org/#search|ga|1|1%3A%2225b9507a58570c349d32a80e395bc29da091059c%22"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "opentsdb-common-3.0.84-SNAPSHOT.jar",
+      "filePath": "/Users/clarsen/Documents/opentsdb/opentsdbv3/common/target/opentsdb-common-3.0.84-SNAPSHOT.jar",
+      "md5": "810d17ff942622372a7795d7a38ad160",
+      "sha1": "eb06cf16c425a07d140562f32c6a297ed7b8c9b6",
+      "description": "OpenTSDB's common module holding classes and functions usable\n    across multiple modules and external projects.",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "net.opentsdb"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "opentsdb"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "opentsdb-common"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "opentsdb-common"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "description",
+            "value": "OpenTSDB's common module holding classes and functions usable across multiple modules and external projects."
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "opentsdb-common"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "opentsdb"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "net"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "opentsdb-common"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "opentsdb"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "net.opentsdb"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "opentsdb-common"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "description",
+            "value": "OpenTSDB's common module holding classes and functions usable across multiple modules and external projects."
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "opentsdb-common"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "opentsdb"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "3.0.84"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "3.0.84-SNAPSHOT"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "net.opentsdb:opentsdb-common:3.0.84-SNAPSHOT",
+          "type": "maven",
+          "confidence": "HIGH"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "guava-19.0.jar",
+      "filePath": "/Users/clarsen/.m2/repository/com/google/guava/guava/19.0/guava-19.0.jar",
+      "md5": "43bfc49bdc7324f6daaa60c1ee9f3972",
+      "sha1": "6ce200f6b23222af3d8abb6b6459e6c44f4bb0e9",
+      "description": "\n    Guava is a suite of core and expanded libraries that include\n    utility classes, google's collections, io classes, and much\n    much more.\n\n    Guava has only one code dependency - javax.annotation,\n    per the JSR-305 spec.\n  ",
+      "license": "http://www.apache.org/licenses/LICENSE-2.0.txt",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "Guava is a suite of core and expanded libraries that include utility classes, google's collections, io classes, and much much more. Guava has only one code dependency - javax.annotation, per the JSR-305 spec."
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "com.google.guava"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "guava"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "description",
+            "value": "Guava is a suite of core and expanded libraries that include utility classes, google's collections, io classes, and much much more. Guava has only one code dependency - javax.annotation, per the JSR-305 spec."
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "com.google.guava"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "guava-parent"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "guava"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Guava: Google Core Libraries for Java"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "com.google.guava"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-docurl",
+            "value": "https://guava-libraries.googlecode.com/"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "google.guava"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "groupid",
+            "value": "com.google.guava"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "Guava is a suite of core and expanded libraries that include utility classes, google's collections, io classes, and much much more. Guava has only one code dependency - javax.annotation, per the JSR-305 spec."
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "guava-parent"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "description",
+            "value": "Guava is a suite of core and expanded libraries that include utility classes, google's collections, io classes, and much much more. Guava has only one code dependency - javax.annotation, per the JSR-305 spec."
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "guava"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "com.google.guava"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "guava"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "google.guava"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Guava: Google Core Libraries for Java"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "com.google.guava"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "artifactid",
+            "value": "guava"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-docurl",
+            "value": "https://guava-libraries.googlecode.com/"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Bundle-Name",
+            "value": "Guava: Google Core Libraries for Java"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "19.0"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "19.0"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "version",
+            "value": "19.0"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "com.google.guava:guava:19.0",
+          "type": "maven",
+          "confidence": "HIGHEST",
+          "url": "http://search.maven.org/#search|ga|1|1%3A%226ce200f6b23222af3d8abb6b6459e6c44f4bb0e9%22"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "netty-common-4.1.9.Final.jar",
+      "filePath": "/Users/clarsen/.m2/repository/io/netty/netty-common/4.1.9.Final/netty-common-4.1.9.Final.jar",
+      "md5": "67e675b3d24a3f15a4cb737af5736d60",
+      "sha1": "7c6ba17f3b9e08fbbfc000fa3ce46208446a0019",
+      "description": "Netty is an asynchronous event-driven network application framework for    rapid development of maintainable high performance protocol servers and    clients.",
+      "license": "http://www.apache.org/licenses/LICENSE-2.0",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Implementation-Vendor-Id",
+            "value": "io.netty"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "io.netty.common"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "Netty is an asynchronous event-driven network application framework for rapid development of maintainable high performance protocol servers and clients."
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "require-capability",
+            "value": "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version=1.6))\""
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "io.netty"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "netty"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "netty-common"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-docurl",
+            "value": "http://netty.io/"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "io"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Vendor",
+            "value": "The Netty Project"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "groupid",
+            "value": "io.netty"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "implementation-url",
+            "value": "http://netty.io/netty-common/"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "util"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Title",
+            "value": "Netty/Common"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "io.netty.common"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "Netty is an asynchronous event-driven network application framework for rapid development of maintainable high performance protocol servers and clients."
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "require-capability",
+            "value": "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version=1.6))\""
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "netty"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "netty-common"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-docurl",
+            "value": "http://netty.io/"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Bundle-Name",
+            "value": "Netty/Common"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "implementation-url",
+            "value": "http://netty.io/netty-common/"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "artifactid",
+            "value": "netty-common"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "util"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "netty-common"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "4.1.9"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "version",
+            "value": "4.1.9.Final"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Version",
+            "value": "4.1.9.Final"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "4.1.9.Final"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "io.netty:netty-common:4.1.9.Final",
+          "type": "maven",
+          "confidence": "HIGHEST",
+          "url": "http://search.maven.org/remotecontent?filepath=io/netty/netty-common/4.1.9.Final/netty-common-4.1.9.Final.jar"
+        },
+        {
+          "name": "cpe:/a:netty_project:netty:4.1.9",
+          "type": "cpe",
+          "confidence": "LOW"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "jackson-core-2.9.5.jar",
+      "filePath": "/Users/clarsen/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.9.5/jackson-core-2.9.5.jar",
+      "md5": "ec59f24f7f8d9acf53301c562722adf2",
+      "sha1": "a22ac51016944b06fd9ffbc9541c6e7ce5eea117",
+      "description": "Core Jackson processing abstractions (aka Streaming API), implementation for JSON",
+      "license": "http://www.apache.org/licenses/LICENSE-2.0.txt",
+      "relatedDependencies": [
+        {
+          "isVirtual": false,
+          "filePath": "/Users/clarsen/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.9.5/jackson-annotations-2.9.5.jar",
+          "sha1": "9056ec9db21c57d43219a84bb18c129ae51c6a5d",
+          "md5": "93ff99082f89beba3dd7b594a478df10",
+          "identifiers": [
+            {
+              "type": "maven",
+              "name": "com.fasterxml.jackson.core:jackson-annotations:2.9.5",
+              "url": "http://search.maven.org/#search|ga|1|1%3A%229056ec9db21c57d43219a84bb18c129ae51c6a5d%22"
+            }
+          ]
+        }
+      ],
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "jackson-core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "require-capability",
+            "value": "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version=1.6))\""
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "description",
+            "value": "Core Jackson processing abstractions (aka Streaming API), implementation for JSON"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "jackson-base"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "url",
+            "value": "FasterXML/jackson-core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "groupid",
+            "value": "com.fasterxml.jackson.core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Implementation-Vendor-Id",
+            "value": "com.fasterxml.jackson.core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "com.fasterxml.jackson.core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "implementation-build-date",
+            "value": "2018-03-26 15:03:46+0000"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Vendor",
+            "value": "FasterXML"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "fasterxml.jackson.core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "com.fasterxml.jackson"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-docurl",
+            "value": "https://github.com/FasterXML/jackson-core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "com.fasterxml.jackson.core.jackson-core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "Core Jackson processing abstractions (aka Streaming API), implementation for JSON"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "specification-vendor",
+            "value": "FasterXML"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "automatic-module-name",
+            "value": "com.fasterxml.jackson.core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Jackson-core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "jackson-core"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "specification-title",
+            "value": "Jackson-core"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "jackson-core"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "require-capability",
+            "value": "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version=1.6))\""
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "description",
+            "value": "Core Jackson processing abstractions (aka Streaming API), implementation for JSON"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "jackson-base"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "implementation-build-date",
+            "value": "2018-03-26 15:03:46+0000"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "jackson-core"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-docurl",
+            "value": "https://github.com/FasterXML/jackson-core"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "com.fasterxml.jackson.core.jackson-core"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Bundle-Name",
+            "value": "Jackson-core"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "Core Jackson processing abstractions (aka Streaming API), implementation for JSON"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "url",
+            "value": "FasterXML/jackson-core"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "com.fasterxml.jackson"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Title",
+            "value": "Jackson-core"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "fasterxml.jackson.core"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "automatic-module-name",
+            "value": "com.fasterxml.jackson.core"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Jackson-core"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "artifactid",
+            "value": "jackson-core"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Version",
+            "value": "2.9.5"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "version",
+            "value": "2.9.5"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "2.9.5"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "2.9.5"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "cpe:/a:fasterxml:jackson:2.9.5",
+          "type": "cpe",
+          "confidence": "LOW"
+        },
+        {
+          "name": "com.fasterxml.jackson.core:jackson-core:2.9.5",
+          "type": "maven",
+          "confidence": "HIGHEST",
+          "url": "http://search.maven.org/#search|ga|1|1%3A%22a22ac51016944b06fd9ffbc9541c6e7ce5eea117%22"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "jackson-databind-2.9.5.jar",
+      "filePath": "/Users/clarsen/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.9.5/jackson-databind-2.9.5.jar",
+      "md5": "34b37affbf74f5d199be10622ddc83cd",
+      "sha1": "3490508379d065fe3fcb80042b62f630f7588606",
+      "description": "General data-binding functionality for Jackson: works on core streaming API",
+      "license": "http://www.apache.org/licenses/LICENSE-2.0.txt",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "com.fasterxml.jackson.core.jackson-databind"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "jackson-databind"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-docurl",
+            "value": "http://github.com/FasterXML/jackson"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "implementation-build-date",
+            "value": "2018-03-26 15:13:41+0000"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "require-capability",
+            "value": "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version=1.7))\""
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "jackson-base"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "description",
+            "value": "General data-binding functionality for Jackson: works on core streaming API"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "groupid",
+            "value": "com.fasterxml.jackson.core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Implementation-Vendor-Id",
+            "value": "com.fasterxml.jackson.core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "com.fasterxml.jackson.core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "jackson-databind"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "jackson-databind"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "automatic-module-name",
+            "value": "com.fasterxml.jackson.databind"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Vendor",
+            "value": "FasterXML"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "fasterxml.jackson.core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "com.fasterxml.jackson"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "General data-binding functionality for Jackson: works on core streaming API"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "specification-vendor",
+            "value": "FasterXML"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "url",
+            "value": "http://github.com/FasterXML/jackson"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "com.fasterxml.jackson.core.jackson-databind"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "specification-title",
+            "value": "jackson-databind"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-docurl",
+            "value": "http://github.com/FasterXML/jackson"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Title",
+            "value": "jackson-databind"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "implementation-build-date",
+            "value": "2018-03-26 15:13:41+0000"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "require-capability",
+            "value": "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version=1.7))\""
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "description",
+            "value": "General data-binding functionality for Jackson: works on core streaming API"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "url",
+            "value": "http://github.com/FasterXML/jackson"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "jackson-base"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "jackson-databind"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "artifactid",
+            "value": "jackson-databind"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "jackson-databind"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Bundle-Name",
+            "value": "jackson-databind"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "automatic-module-name",
+            "value": "com.fasterxml.jackson.databind"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "General data-binding functionality for Jackson: works on core streaming API"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "com.fasterxml.jackson"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "jackson-databind"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "fasterxml.jackson.core"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Version",
+            "value": "2.9.5"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "version",
+            "value": "2.9.5"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "2.9.5"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "2.9.5"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "com.fasterxml.jackson.core:jackson-databind:2.9.5",
+          "type": "maven",
+          "confidence": "HIGHEST",
+          "url": "http://search.maven.org/#search|ga|1|1%3A%223490508379d065fe3fcb80042b62f630f7588606%22"
+        },
+        {
+          "name": "cpe:/a:fasterxml:jackson:2.9.5",
+          "type": "cpe",
+          "confidence": "LOW"
+        },
+        {
+          "name": "cpe:/a:fasterxml:jackson-databind:2.9.5",
+          "type": "cpe",
+          "confidence": "LOW"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "commons-logging-1.1.1.jar",
+      "filePath": "/Users/clarsen/.m2/repository/commons-logging/commons-logging/1.1.1/commons-logging-1.1.1.jar",
+      "md5": "ed448347fc0104034aa14c8189bf37de",
+      "sha1": "5043bfebc3db072ed80fbd362e7caf00e885d8ae",
+      "description": "Commons Logging is a thin adapter allowing configurable bridging to other,\n    well known logging systems.",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "groupid",
+            "value": "commons-logging"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "specification-vendor",
+            "value": "Apache Software Foundation"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Vendor",
+            "value": "Apache Software Foundation"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "commons-logging"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Implementation-Vendor-Id",
+            "value": "org.apache"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "commons-logging"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Commons Logging"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "org.apache.commons"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "url",
+            "value": "http://commons.apache.org/logging"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "extension-name",
+            "value": "org.apache.commons.logging"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "commons-parent"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "commons-logging"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "description",
+            "value": "Commons Logging is a thin adapter allowing configurable bridging to other, well known logging systems."
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "org.apache.commons"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "commons-logging"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "commons-parent"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "artifactid",
+            "value": "commons-logging"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "commons-logging"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "url",
+            "value": "http://commons.apache.org/logging"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Commons Logging"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "commons-logging"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "extension-name",
+            "value": "org.apache.commons.logging"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "specification-title",
+            "value": "Jakarta Commons Logging"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "description",
+            "value": "Commons Logging is a thin adapter allowing configurable bridging to other, well known logging systems."
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Title",
+            "value": "Jakarta Commons Logging"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Version",
+            "value": "1.1.1"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "version",
+            "value": "1.1.1"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "1.1.1"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "1.1.1"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "commons-logging:commons-logging:1.1.1",
+          "type": "maven",
+          "confidence": "HIGHEST",
+          "url": "http://search.maven.org/#search|ga|1|1%3A%225043bfebc3db072ed80fbd362e7caf00e885d8ae%22"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "commons-jexl-2.1.1.jar",
+      "filePath": "/Users/clarsen/.m2/repository/org/apache/commons/commons-jexl/2.1.1/commons-jexl-2.1.1.jar",
+      "md5": "4ad8f5c161dd3a50e190334555675db9",
+      "sha1": "6ecc181debade00230aa1e17666c4ea0371beaaa",
+      "description": "The Commons Jexl library is an implementation of the JSTL Expression Language with extensions.",
+      "license": "http://www.apache.org/licenses/LICENSE-2.0.txt",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "apache.commons"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "org.apache.commons"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "description",
+            "value": "The Commons Jexl library is an implementation of the JSTL Expression Language with extensions."
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "commons-jexl"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "implementation-build",
+            "value": "COMMONS_JEXL_2_1_1-RC1@r1220732; 2011-12-19 14:53:11+0000"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "url",
+            "value": "http://commons.apache.org/jexl/"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "commons-jexl"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Implementation-Vendor-Id",
+            "value": "org.apache"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-docurl",
+            "value": "http://commons.apache.org/jexl/"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Vendor",
+            "value": "The Apache Software Foundation"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "org.apache.commons"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Commons JEXL"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "The Commons Jexl library is an implementation of the JSTL Expression Language with extensions."
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "org.apache.commons.jexl"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "commons-parent"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "specification-vendor",
+            "value": "The Apache Software Foundation"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "groupid",
+            "value": "org.apache.commons"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "org.apache.commons"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "artifactid",
+            "value": "commons-jexl"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "commons-jexl"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "description",
+            "value": "The Commons Jexl library is an implementation of the JSTL Expression Language with extensions."
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "commons-jexl"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "implementation-build",
+            "value": "COMMONS_JEXL_2_1_1-RC1@r1220732; 2011-12-19 14:53:11+0000"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "commons-parent"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-docurl",
+            "value": "http://commons.apache.org/jexl/"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Commons JEXL"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Bundle-Name",
+            "value": "Commons JEXL"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "The Commons Jexl library is an implementation of the JSTL Expression Language with extensions."
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "org.apache.commons.jexl"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "apache.commons"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "specification-title",
+            "value": "Commons JEXL"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Title",
+            "value": "Commons JEXL"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "url",
+            "value": "http://commons.apache.org/jexl/"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "version",
+            "value": "2.1.1"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "2.1.1"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Version",
+            "value": "2.1.1"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "2.1.1"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "org.apache.commons:commons-jexl:2.1.1",
+          "type": "maven",
+          "confidence": "HIGHEST",
+          "url": "http://search.maven.org/#search|ga|1|1%3A%226ecc181debade00230aa1e17666c4ea0371beaaa%22"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "commons-math3-3.4.1.jar",
+      "filePath": "/Users/clarsen/.m2/repository/org/apache/commons/commons-math3/3.4.1/commons-math3-3.4.1.jar",
+      "md5": "14a218d0ee57907dd2c7ef944b6c0afd",
+      "sha1": "3ac44a8664228384bc68437264cf7c4cf112f579",
+      "description": "The Apache Commons Math project is a library of lightweight, self-contained mathematics and statistics components addressing the most common practical problems not immediately available in the Java programming language or commons-lang.",
+      "license": "http://www.apache.org/licenses/LICENSE-2.0.txt",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "url",
+            "value": "http://commons.apache.org/proper/commons-math/"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "apache.commons"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "The Apache Commons Math project is a library of lightweight, self-contained mathematics and statistics components addressing the most common practical problems not immediately available in the Java programming language or commons-lang."
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "org.apache.commons"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "commons-math3"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Implementation-Vendor-Id",
+            "value": "org.apache"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Apache Commons Math"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "description",
+            "value": "The Apache Commons Math project is a library of lightweight, self-contained mathematics and statistics components addressing the most common practical problems not immediately available in the Java programming language or commons-lang."
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Vendor",
+            "value": "The Apache Software Foundation"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "org.apache.commons"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-docurl",
+            "value": "http://commons.apache.org/proper/commons-math/"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "implementation-build",
+            "value": "ef6e0f882819e7c5230aece1610297e67775cca2; 2015-01-08 18:19:01+0100"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "commons-parent"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "commons-math3"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "org.apache.commons.math3"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "specification-vendor",
+            "value": "The Apache Software Foundation"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "groupid",
+            "value": "org.apache.commons"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "org.apache.commons"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "The Apache Commons Math project is a library of lightweight, self-contained mathematics and statistics components addressing the most common practical problems not immediately available in the Java programming language or commons-lang."
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "url",
+            "value": "http://commons.apache.org/proper/commons-math/"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "specification-title",
+            "value": "Apache Commons Math"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "artifactid",
+            "value": "commons-math3"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Bundle-Name",
+            "value": "Apache Commons Math"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "commons-parent"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Apache Commons Math"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "commons-math3"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Title",
+            "value": "Apache Commons Math"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "description",
+            "value": "The Apache Commons Math project is a library of lightweight, self-contained mathematics and statistics components addressing the most common practical problems not immediately available in the Java programming language or commons-lang."
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "bundle-docurl",
+            "value": "http://commons.apache.org/proper/commons-math/"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "implementation-build",
+            "value": "ef6e0f882819e7c5230aece1610297e67775cca2; 2015-01-08 18:19:01+0100"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "apache.commons"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "commons-math3"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "org.apache.commons.math3"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGH",
+            "source": "Manifest",
+            "name": "Implementation-Version",
+            "value": "3.4.1"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "3.4.1"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "version",
+            "value": "3.4.1"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "3.4.1"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "org.apache.commons:commons-math3:3.4.1",
+          "type": "maven",
+          "confidence": "HIGHEST",
+          "url": "http://search.maven.org/#search|ga|1|1%3A%223ac44a8664228384bc68437264cf7c4cf112f579%22"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "jgrapht-core-0.9.2.jar",
+      "filePath": "/Users/clarsen/.m2/repository/org/jgrapht/jgrapht-core/0.9.2/jgrapht-core-0.9.2.jar",
+      "md5": "ae515025fda476afb55d1edebc6c166f",
+      "sha1": "2597c1f9aa80fcfdd1f2e8ad0f0655bd768d95ca",
+      "description": "A Java class library for graph-theory data structures and algorithms.",
+      "license": "GNU Lesser General Public License Version 2.1, February 1999: http://jgrapht.sourceforge.net/LGPL.html\nEclipse Public License (EPL) 1.0: http://www.eclipse.org/legal/epl-v10.html",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "jgrapht"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "jgrapht-core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "jgrapht"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "org.jgrapht"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "A Java class library for graph-theory data structures and algorithms."
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "jgrapht-core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "org.jgrapht.core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "require-capability",
+            "value": "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version=1.7))\""
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "groupid",
+            "value": "org.jgrapht"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "org.jgrapht"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "JGraphT - Core"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-groupid",
+            "value": "org.jgrapht"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "artifactid",
+            "value": "jgrapht-core"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "A Java class library for graph-theory data structures and algorithms."
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "jgrapht-core"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "jgrapht"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "org.jgrapht.core"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "require-capability",
+            "value": "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version=1.7))\""
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "jgrapht-core"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Bundle-Name",
+            "value": "JGraphT - Core"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "JGraphT - Core"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "jgrapht"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "version",
+            "value": "0.9.2"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "0.9.2"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "0.9.2"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "org.jgrapht:jgrapht-core:0.9.2",
+          "type": "maven",
+          "confidence": "HIGHEST",
+          "url": "http://search.maven.org/#search|ga|1|1%3A%222597c1f9aa80fcfdd1f2e8ad0f0655bd768d95ca%22"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "opentracing-api-0.20.10.jar",
+      "filePath": "/Users/clarsen/.m2/repository/io/opentracing/opentracing-api/0.20.10/opentracing-api-0.20.10.jar",
+      "md5": "c1eccb1a1c453508f102b1d14f8db81e",
+      "sha1": "dcf34ad85d6571980fc265152966aefa0694c6d1",
+      "description": "OpenTracing Java API",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "opentracing-api"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "description",
+            "value": "OpenTracing Java API"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "io.opentracing"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "opentracing"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "opentracing-api"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "parent"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "groupid",
+            "value": "io.opentracing"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "OpenTracing API"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "io"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "opentracing-api"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "artifactid",
+            "value": "opentracing-api"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "description",
+            "value": "OpenTracing Java API"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "jar",
+            "name": "package name",
+            "value": "opentracing"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "opentracing-api"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "parent"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "io.opentracing"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "OpenTracing API"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "version",
+            "value": "0.20.10"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "0.20.10"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "0.20.10"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "io.opentracing:opentracing-api:0.20.10",
+          "type": "maven",
+          "confidence": "HIGHEST",
+          "url": "http://search.maven.org/#search|ga|1|1%3A%22dcf34ad85d6571980fc265152966aefa0694c6d1%22"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "zero-allocation-hashing-0.6.jar",
+      "filePath": "/Users/clarsen/.m2/repository/net/openhft/zero-allocation-hashing/0.6/zero-allocation-hashing-0.6.jar",
+      "md5": "5a8fc33bc3993ee150a668974c651764",
+      "sha1": "38042e3eb12f714dc704e90a8329d7af87d77421",
+      "description": "Zero-allocation, pretty fast implementations\n        of non-cryptographic hash functions for byte sequences or blocks of memory",
+      "license": "http://www.apache.org/licenses/LICENSE-2.0.txt",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "net.openhft.zero-allocation-hashing"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "net.openhft"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Zero-allocation Hashing"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "require-capability",
+            "value": "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version=1.6))\""
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "zero-allocation-hashing"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "zero-allocation-hashing"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "groupid",
+            "value": "net.openhft"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "Zero-allocation, pretty fast implementations of non-cryptographic hash functions for byte sequences or blocks of memory"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "description",
+            "value": "Zero-allocation, pretty fast implementations of non-cryptographic hash functions for byte sequences or blocks of memory"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "java-parent-pom"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "zero-allocation-hashing"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "parent-artifactid",
+            "value": "java-parent-pom"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "bundle-symbolicname",
+            "value": "net.openhft.zero-allocation-hashing"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "Manifest",
+            "name": "Bundle-Name",
+            "value": "OpenHFT :: zero-allocation-hashing"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Zero-allocation Hashing"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "Manifest",
+            "name": "require-capability",
+            "value": "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version=1.6))\""
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "file",
+            "name": "name",
+            "value": "zero-allocation-hashing"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "manifest",
+            "name": "Bundle-Description",
+            "value": "Zero-allocation, pretty fast implementations of non-cryptographic hash functions for byte sequences or blocks of memory"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "net.openhft"
+          },
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "description",
+            "value": "Zero-allocation, pretty fast implementations of non-cryptographic hash functions for byte sequences or blocks of memory"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "artifactid",
+            "value": "zero-allocation-hashing"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "central",
+            "name": "version",
+            "value": "0.6"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "0.6"
+          },
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "file",
+            "name": "version",
+            "value": "0.6"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "net.openhft:zero-allocation-hashing:0.6",
+          "type": "maven",
+          "confidence": "HIGHEST",
+          "url": "http://search.maven.org/#search|ga|1|1%3A%2238042e3eb12f714dc704e90a8329d7af87d77421%22"
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "netty-common-4.1.9.Final.jar/META-INF/maven/org.jctools/jctools-core/pom.xml",
+      "filePath": "/Users/clarsen/.m2/repository/io/netty/netty-common/4.1.9.Final/netty-common-4.1.9.Final.jar/META-INF/maven/org.jctools/jctools-core/pom.xml",
+      "md5": "ff7b0b544295fb15c18c258e9fd33f37",
+      "sha1": "93cf6661c66216bbcf63dffe85c510c81481c3e5",
+      "description": "Java Concurrency Tools Core Library",
+      "license": "Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0.txt",
+      "evidenceCollected": {
+        "vendorEvidence": [
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "groupid",
+            "value": "jctools"
+          },
+          {
+            "type": "vendor",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "jctools-core"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "url",
+            "value": "JCTools"
+          },
+          {
+            "type": "vendor",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "description",
+            "value": "Java Concurrency Tools Core Library"
+          },
+          {
+            "type": "vendor",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Java Concurrency Tools Core Library"
+          }
+        ],
+        "productEvidence": [
+          {
+            "type": "product",
+            "confidence": "LOW",
+            "source": "pom",
+            "name": "groupid",
+            "value": "jctools"
+          },
+          {
+            "type": "product",
+            "confidence": "MEDIUM",
+            "source": "pom",
+            "name": "description",
+            "value": "Java Concurrency Tools Core Library"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "artifactid",
+            "value": "jctools-core"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "url",
+            "value": "JCTools"
+          },
+          {
+            "type": "product",
+            "confidence": "HIGH",
+            "source": "pom",
+            "name": "name",
+            "value": "Java Concurrency Tools Core Library"
+          }
+        ],
+        "versionEvidence": [
+          {
+            "type": "version",
+            "confidence": "HIGHEST",
+            "source": "pom",
+            "name": "version",
+            "value": "2.0.1"
+          }
+        ]
+      },
+      "identifiers": [
+        {
+          "name": "org.jctools:jctools-core:2.0.1",
+          "type": "maven",
+          "confidence": "HIGH"
+        }
+      ]
+    }
+  ]
+}

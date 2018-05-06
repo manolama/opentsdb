@@ -33,22 +33,24 @@ import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.RelationalOperator;
-import net.opentsdb.data.types.numeric.MutableNumericType;
+import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericMillisecondShard;
+import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.TimeSeriesQuery;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
+import net.opentsdb.query.interpolation.types.numeric.DefaultInterpolationConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorFactory;
+import net.opentsdb.query.interpolation.types.numeric.NumericSummaryInterpolatorConfig;
 import net.opentsdb.query.interpolation.types.numeric.ScalarNumericInterpolatorConfig;
 import net.opentsdb.query.pojo.FillPolicy;
 import net.opentsdb.query.pojo.Metric;
 import net.opentsdb.query.pojo.Timespan;
 
-import org.junit.Before;
 import org.junit.Test;
 
 @SuppressWarnings("unchecked")
@@ -71,11 +73,6 @@ public class TestDownsampleNumericIterator {
   // Tue, 15 Dec 2015 04:02:25.123 UTC
   final static long DST_TS = 1450137600000L;
   
-  @Before
-  public void before() {
-    
-  }
-  
   @Test
   public void ctor() {
     source = new NumericMillisecondShard(BaseTimeSeriesStringId.newBuilder()
@@ -95,18 +92,19 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("avg")
-        .setId("foo")
-        .setInterval("1000s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("avg", "1000s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("avg")
+//        .setId("foo")
+//        .setInterval("1000s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -155,17 +153,18 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("avg")
-        .setId("foo")
-        .setInterval("1000s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("avg", "1000s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("avg")
+//        .setId("foo")
+//        .setInterval("1000s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -196,19 +195,21 @@ public class TestDownsampleNumericIterator {
     assertEquals(50, v.value().longValue());
     
     assertFalse(it.hasNext());
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("avg")
-        .setId("foo")
-        .setInterval("1000s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    // fill
+    setConfig("avg", "1000s", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("avg")
+//        .setId("foo")
+//        .setInterval("1000s")
+//        .setQuery(query)
+//        .setFill(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -302,17 +303,18 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "10s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("10s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     final DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -376,17 +378,18 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("15s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "15s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("15s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     final DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -439,18 +442,19 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("15s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "15s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("15s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     final DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -503,18 +507,19 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("15s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "15s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("15s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     final DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -567,18 +572,19 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("15s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "15s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("15s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     final DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -632,17 +638,18 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("15s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "15s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("15s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     final DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -699,17 +706,18 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "10s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("10s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -737,18 +745,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "10s", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("10s")
+//        .setQuery(query)
+//        .setFill(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -805,17 +814,18 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "10s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("10s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -838,18 +848,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "10s", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("10s")
+//        .setQuery(query)
+//        .setFill(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -910,18 +921,19 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "10s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("10s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -939,18 +951,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "10s", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("10s")
+//        .setQuery(query)
+//        .setFill(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1002,17 +1015,18 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "10s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("10s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -1020,18 +1034,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "10s", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("10s")
+//        .setQuery(query)
+//        .setFill(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1058,10 +1073,6 @@ public class TestDownsampleNumericIterator {
     ((NumericMillisecondShard) source).add(BASE_TIME + 5000L * 9, 512);
     ((NumericMillisecondShard) source).add(BASE_TIME + 5000L * 10, 1024);
     Iterator<TimeSeriesValue<?>> i = source.iterator(NumericType.TYPE).get();
-    while (i.hasNext()) {
-      TimeSeriesValue<NumericType> v=  (TimeSeriesValue<NumericType>) i.next();
-      System.out.println(v.timestamp() + " " + v.value().longValue());
-    }
     query = net.opentsdb.query.pojo.TimeSeriesQuery.newBuilder()
         .setTime(Timespan.newBuilder()
             .setStart(Long.toString(1356998460000L))
@@ -1072,17 +1083,18 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "10s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("10s")
+//        .setQuery(query)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -1090,18 +1102,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "10s", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("10s")
+//        .setQuery(query)
+//        .setFill(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1132,19 +1145,20 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("0all")
-        .setQuery(query)
-        .setRunAll(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "0all", false, true, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("0all")
+//        .setQuery(query)
+//        .setRunAll(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -1157,19 +1171,20 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("0all")
-        .setQuery(query)
-        .setFill(true)
-        .setRunAll(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "0all", true, true, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("0all")
+//        .setQuery(query)
+//        .setFill(true)
+//        .setRunAll(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1205,19 +1220,20 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("0all")
-        .setQuery(query)
-        .setRunAll(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "0all", false, true, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("0all")
+//        .setQuery(query)
+//        .setRunAll(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -1230,19 +1246,20 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("0all")
-        .setQuery(query)
-        .setFill(true)
-        .setRunAll(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "0all", true, true, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("0all")
+//        .setQuery(query)
+//        .setFill(true)
+//        .setRunAll(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1279,18 +1296,19 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("0all")
-        .setQuery(query)
-        .setRunAll(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "0all", false, true, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("0all")
+//        .setQuery(query)
+//        .setRunAll(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -1298,19 +1316,20 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("0all")
-        .setQuery(query)
-        .setFill(true)
-        .setRunAll(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "0all", true, true, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("0all")
+//        .setQuery(query)
+//        .setFill(true)
+//        .setRunAll(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1341,19 +1360,20 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("0all")
-        .setQuery(query)
-        .setRunAll(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "0all", false, true, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("0all")
+//        .setQuery(query)
+//        .setRunAll(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -1361,19 +1381,20 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("0all")
-        .setQuery(query)
-        .setFill(true)
-        .setRunAll(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "0all", true, true, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("0all")
+//        .setQuery(query)
+//        .setFill(true)
+//        .setRunAll(true)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1411,10 +1432,12 @@ public class TestDownsampleNumericIterator {
         .setInterval("1d")
         .setQuery(query)
         .setTimeZone(ZoneId.of("America/Denver"))
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, NumericInterpolatorConfig.newBuilder()
+                .setFillPolicy(FillPolicy.NONE)
+                .setRealFillPolicy(FillWithRealPolicy.NONE)
+                .build(), 
+                new NumericInterpolatorFactory.Default())
             .build())
         .build();
     
@@ -1452,19 +1475,20 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1h")
-        .setQuery(query)
-        //.setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "1h", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1h")
+//        .setQuery(query)
+//        //.setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -1482,19 +1506,20 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1h")
-        .setQuery(query)
-        .setFill(true)
-        //.setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1h", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1h")
+//        .setQuery(query)
+//        .setFill(true)
+//        //.setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1517,18 +1542,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // 12 hour offset
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1h")
-        .setQuery(query)
-        .setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1h", false, TV);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1h")
+//        .setQuery(query)
+//        .setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1546,18 +1572,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // 30 minute offset with a different timezone
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1h")
-        .setQuery(query)
-        .setTimeZone(AF)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1h", false, AF);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1h")
+//        .setQuery(query)
+//        .setTimeZone(AF)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1585,19 +1612,20 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("4h")
-        .setQuery(query)
-        .setTimeZone(AF)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "4h", false, AF);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("4h")
+//        .setQuery(query)
+//        .setTimeZone(AF)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1634,18 +1662,19 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1d")
-        .setQuery(query)
-        //.setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1d", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1d")
+//        .setQuery(query)
+//        //.setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -1668,19 +1697,20 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1d")
-        .setQuery(query)
-        .setFill(true)
-        //.setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1d", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1d")
+//        .setQuery(query)
+//        .setFill(true)
+//        //.setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1708,18 +1738,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // 12 hour offset from UTC
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1d")
-        .setQuery(query)
-        .setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1d", false, TV);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1d")
+//        .setQuery(query)
+//        .setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1743,18 +1774,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // 11 hour offset from UTC
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1d")
-        .setQuery(query)
-        .setTimeZone(FJ)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1d", false, FJ);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1d")
+//        .setQuery(query)
+//        .setTimeZone(FJ)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1779,18 +1811,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // 30m offset
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1d")
-        .setQuery(query)
-        .setTimeZone(AF)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1d", false, AF);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1d")
+//        .setQuery(query)
+//        .setTimeZone(AF)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1818,19 +1851,20 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("3d")
-        .setQuery(query)
-        .setTimeZone(AF)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "3d", false, AF);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("3d")
+//        .setQuery(query)
+//        .setTimeZone(AF)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1865,19 +1899,20 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1w")
-        .setQuery(query)
-        //.setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "1w", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1w")
+//        .setQuery(query)
+//        //.setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -1900,19 +1935,20 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
 
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1w")
-        .setQuery(query)
-        .setFill(true)
-        //.setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1w", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1w")
+//        .setQuery(query)
+//        .setFill(true)
+//        //.setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1945,18 +1981,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // 12 hour offset from UTC
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1w")
-        .setQuery(query)
-        .setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1w", false, TV);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1w")
+//        .setQuery(query)
+//        .setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -1980,18 +2017,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // 11 hour offset from UTC
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1w")
-        .setQuery(query)
-        .setTimeZone(FJ)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1w", false, FJ);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1w")
+//        .setQuery(query)
+//        .setTimeZone(FJ)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2020,18 +2058,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // 30m offset
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1w")
-        .setQuery(query)
-        .setTimeZone(AF)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1w", false, AF);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1w")
+//        .setQuery(query)
+//        .setTimeZone(AF)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2059,19 +2098,20 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("2w")
-        .setQuery(query)
-        .setTimeZone(AF)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "2w", false, AF);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("2w")
+//        .setQuery(query)
+//        .setTimeZone(AF)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2117,19 +2157,20 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1n")
-        .setQuery(query)
-        //.setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "1n", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1n")
+//        .setQuery(query)
+//        //.setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -2151,19 +2192,20 @@ public class TestDownsampleNumericIterator {
     
     assertFalse(it.hasNext());
     
-    // 12h offset    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1n")
-        .setQuery(query)
-        .setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    // 12h offset
+    setConfig("sum", "1n", false, TV);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1n")
+//        .setQuery(query)
+//        .setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2182,18 +2224,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // 11h offset
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1n")
-        .setQuery(query)
-        .setTimeZone(FJ)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1n", false, FJ);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1n")
+//        .setQuery(query)
+//        .setTimeZone(FJ)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2212,18 +2255,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // 30m offset
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1n")
-        .setQuery(query)
-        .setTimeZone(AF)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1n", false, AF);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1n")
+//        .setQuery(query)
+//        .setTimeZone(AF)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2253,18 +2297,19 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("3n")
-        .setQuery(query)
-        .setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "3n", false, TV);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("3n")
+//        .setQuery(query)
+//        .setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2300,19 +2345,20 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1y")
-        .setQuery(query)
-        //.setTimeZone(AF)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "1y", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1y")
+//        .setQuery(query)
+//        //.setTimeZone(AF)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -2339,19 +2385,20 @@ public class TestDownsampleNumericIterator {
     
     assertFalse(it.hasNext());
     
-    // 12h offset    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1y")
-        .setQuery(query)
-        .setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    // 12h offset
+    setConfig("sum", "1y", false, TV);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1y")
+//        .setQuery(query)
+//        .setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2380,18 +2427,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // 11h offset
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1y")
-        .setQuery(query)
-        .setTimeZone(FJ)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1y", false, FJ);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1y")
+//        .setQuery(query)
+//        .setTimeZone(FJ)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2419,18 +2467,19 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // 30m offset
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1y")
-        .setQuery(query)
-        .setTimeZone(AF)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1y", false, AF);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("1y")
+//        .setQuery(query)
+//        .setTimeZone(AF)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2468,19 +2517,20 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-    
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("3y")
-        .setQuery(query)
-        .setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+
+    setConfig("sum", "3y", false, TV);
+//    config = DownsampleConfig.newBuilder()
+//        .setAggregator("sum")
+//        .setId("foo")
+//        .setInterval("3y")
+//        .setQuery(query)
+//        .setTimeZone(TV)
+//        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+//        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+//            .setFillPolicy(FillPolicy.NONE)
+//            .setRealFillPolicy(FillWithRealPolicy.NONE)
+//            .build())
+//        .build();
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2512,37 +2562,14 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1d")
-        .setQuery(query)
-        .setTimeZone(ZoneId.of("America/Denver"))
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
-    
+    setConfig("avg", "1000s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
     
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1d")
-        .setQuery(query)
-        .setTimeZone(ZoneId.of("America/Denver"))
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("avg", "1000s", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2594,20 +2621,7 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1d")
-        .setFill(true)
-        .setQuery(query)
-        //.setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
-    
+    setConfig("sum", "1d", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
     
@@ -2630,18 +2644,7 @@ public class TestDownsampleNumericIterator {
     assertEquals(336, iterations); // last value is skipped as it's out of bounds.
     
     // no fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("1d")
-        .setQuery(query)
-        //.setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "1d", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
     
     setupMock();
     it = new DownsampleNumericIterator(node, source);
@@ -2684,20 +2687,7 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("avg")
-        .setId("foo")
-        .setInterval("1000s")
-        .setQuery(query)
-        .setFill(true)
-        //.setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
-    
+    setConfig("avg", "1000s", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
     
@@ -2746,20 +2736,7 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // no fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("avg")
-        .setId("foo")
-        .setInterval("1000s")
-        .setQuery(query)
-        //.setFill(true)
-        //.setTimeZone(TV)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
-    
+    setConfig("avg", "1000s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
     setupMock();
     it = new DownsampleNumericIterator(node, source);
     
@@ -2779,36 +2756,37 @@ public class TestDownsampleNumericIterator {
   public void downsampleNullAtStart() {
     // behaves the same with the difference that the old version would return the
     // first value at BASE_TIME but now we skip it.
-    source = new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
+    source = new MockTimeSeries<NumericType>(BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    MutableNumericType nully = new MutableNumericType();
+        .build(),
+        NumericType.TYPE);
+    MutableNumericValue nully = new MutableNumericValue();
     nully.resetNull(new MillisecondTimeStamp(BASE_TIME + 5000L * 0));
-    ((MockTimeSeries) source).addValue(nully);
+    ((MockTimeSeries) source).add(nully);
     //((MockTimeSeries) source).addValue(new MutableNumericType(
     //    new MillisecondTimeStamp(BASE_TIME + 5000L * 0), 1));
-    nully = new MutableNumericType();
+    nully = new MutableNumericValue();
     nully.resetNull(new MillisecondTimeStamp(BASE_TIME + 5000L * 2));
-    ((MockTimeSeries) source).addValue(nully);
-    //((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(nully);
+    //((MockTimeSeries) source).add(new MutableNumericType(
     //    new MillisecondTimeStamp(BASE_TIME + 5000L * 1), 2));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 2), 4));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 3), 8));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 4), 16));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 5), 32));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 6), 64));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 7), 128));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 8), 256));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 9), 512));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 10), 1024));
     query = net.opentsdb.query.pojo.TimeSeriesQuery.newBuilder()
         .setTime(Timespan.newBuilder()
@@ -2820,18 +2798,7 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
-    
+    setConfig("sum", "10s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
     
@@ -2863,19 +2830,7 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
-    
+    setConfig("sum", "10s", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
     setupMock();
     it = new DownsampleNumericIterator(node, source);
         
@@ -2918,34 +2873,35 @@ public class TestDownsampleNumericIterator {
     // first value at BASE_TIME but now we skip it.
     source = new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+        .build(),
+        NumericType.TYPE);
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 0), 1));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 1), 2));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 2), 4));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 3), 8));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 4), 16));
-    MutableNumericType nully = new MutableNumericType();
+    MutableNumericValue nully = new MutableNumericValue();
     nully.resetNull(new MillisecondTimeStamp(BASE_TIME + 5000L * 5));
-    ((MockTimeSeries) source).addValue(nully);
-    //((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(nully);
+    //((MockTimeSeries) source).add(new MutableNumericType(
     //    new MillisecondTimeStamp(BASE_TIME + 5000L * 5), 32));
-    nully = new MutableNumericType();
+    nully = new MutableNumericValue();
     nully.resetNull(new MillisecondTimeStamp(BASE_TIME + 5000L * 6));
-    ((MockTimeSeries) source).addValue(nully);
-    //((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(nully);
+    //((MockTimeSeries) source).add(new MutableNumericType(
     //    new MillisecondTimeStamp(BASE_TIME + 5000L * 6), 64));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 7), 128));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 8), 256));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 9), 512));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 10), 1024));
     query = net.opentsdb.query.pojo.TimeSeriesQuery.newBuilder()
         .setTime(Timespan.newBuilder()
@@ -2957,18 +2913,7 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
-    
+    setConfig("sum", "10s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
     setupMock();
     final DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
         
@@ -3011,34 +2956,35 @@ public class TestDownsampleNumericIterator {
     // first value at BASE_TIME but now we skip it.
     source = new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+        .build(),
+        NumericType.TYPE);
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 0), 1));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 1), 2));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 2), 4));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 3), 8));
-    MutableNumericType nully = new MutableNumericType();
+    MutableNumericValue nully = new MutableNumericValue();
     nully.resetNull(new MillisecondTimeStamp(BASE_TIME + 5000L * 4));
-    ((MockTimeSeries) source).addValue(nully);
-    nully = new MutableNumericType();
+    ((MockTimeSeries) source).add(nully);
+    nully = new MutableNumericValue();
     nully.resetNull(new MillisecondTimeStamp(BASE_TIME + 5000L * 6));
-    ((MockTimeSeries) source).addValue(nully);
-    //((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(nully);
+    //((MockTimeSeries) source).add(new MutableNumericType(
     //    new MillisecondTimeStamp(BASE_TIME + 5000L * 4), 16));
-    //((MockTimeSeries) source).addValue(new MutableNumericType(
+    //((MockTimeSeries) source).add(new MutableNumericType(
     //    new MillisecondTimeStamp(BASE_TIME + 5000L * 5), 32));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 6), 64));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 7), 128));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 8), 256));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 9), 512));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 5000L * 10), 1024));
     query = net.opentsdb.query.pojo.TimeSeriesQuery.newBuilder()
         .setTime(Timespan.newBuilder()
@@ -3050,17 +2996,7 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
     
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
+    setConfig("sum", "10s", false, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -3093,19 +3029,7 @@ public class TestDownsampleNumericIterator {
     assertFalse(it.hasNext());
     
     // fill
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("sum")
-        .setId("foo")
-        .setInterval("10s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
-    
+    setConfig("sum", "10s", true, false, FillPolicy.NONE, FillWithRealPolicy.NONE);
     setupMock();
     it = new DownsampleNumericIterator(node, source);
         
@@ -3166,19 +3090,7 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
 
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("avg")
-        .setId("foo")
-        .setInterval("1000s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NOT_A_NUMBER)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
-    
+    setConfig("avg", "1000s", true, false, FillPolicy.NOT_A_NUMBER, FillWithRealPolicy.NONE);
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
     
@@ -3264,19 +3176,7 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
 
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("avg")
-        .setId("foo")
-        .setInterval("1000s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NULL)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
-    
+    setConfig("avg", "1000s", true, false, FillPolicy.NULL, FillWithRealPolicy.NONE);
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
     
@@ -3362,19 +3262,7 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
 
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("avg")
-        .setId("foo")
-        .setInterval("1000s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.ZERO)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
-            .build())
-        .build();
-    
+    setConfig("avg", "1000s", true, false, FillPolicy.ZERO, FillWithRealPolicy.NONE);
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
     
@@ -3459,18 +3347,20 @@ public class TestDownsampleNumericIterator {
             .setId("m1")
             .setMetric("a"))
         .build();
-
+    
     config = DownsampleConfig.newBuilder()
         .setAggregator("avg")
         .setId("foo")
         .setInterval("1000s")
         .setQuery(query)
         .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(ScalarNumericInterpolatorConfig.newBuilder()
-            .setValue(42)
-            .setFillPolicy(FillPolicy.SCALAR)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, ScalarNumericInterpolatorConfig.newBuilder()
+                .setValue(42)
+                .setFillPolicy(FillPolicy.SCALAR)
+                .setRealFillPolicy(FillWithRealPolicy.NONE)
+                .build(), 
+                new NumericInterpolatorFactory.Default())
             .build())
         .build();
     
@@ -3559,18 +3449,7 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
 
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("avg")
-        .setId("foo")
-        .setInterval("1000s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.PREFER_NEXT)
-            .build())
-        .build();
+    setConfig("avg", "1000s", true, false, FillPolicy.NONE, FillWithRealPolicy.PREFER_NEXT);
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -3657,18 +3536,7 @@ public class TestDownsampleNumericIterator {
             .setMetric("a"))
         .build();
 
-    config = DownsampleConfig.newBuilder()
-        .setAggregator("avg")
-        .setId("foo")
-        .setInterval("1000s")
-        .setQuery(query)
-        .setFill(true)
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NONE)
-            .setRealFillPolicy(FillWithRealPolicy.PREFER_PREVIOUS)
-            .build())
-        .build();
+    setConfig("avg", "1000s", true, false, FillPolicy.NONE, FillWithRealPolicy.PREFER_PREVIOUS);
     
     setupMock();
     DownsampleNumericIterator it = new DownsampleNumericIterator(node, source);
@@ -3739,5 +3607,41 @@ public class TestDownsampleNumericIterator {
     when(pipeline_context.queryContext()).thenReturn(query_context);
     when(query_context.query()).thenReturn(query);
     when(node.pipelineContext()).thenReturn(pipeline_context);
+  }
+
+  void setConfig(final String agg, final String interval, boolean fill, boolean runall, FillPolicy fill_pol, FillWithRealPolicy real) {
+    config = DownsampleConfig.newBuilder()
+        .setAggregator(agg)
+        .setId("foo")
+        .setInterval(interval)
+        .setQuery(query)
+        .setRunAll(runall)
+        .setFill(fill)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, NumericInterpolatorConfig.newBuilder()
+                .setFillPolicy(fill_pol)
+                .setRealFillPolicy(real)
+                .build(), 
+                new NumericInterpolatorFactory.Default())
+            .build())
+        .build();
+  }
+  
+  void setConfig(final String agg, final String interval, boolean fill, final ZoneId tz) {
+    config = DownsampleConfig.newBuilder()
+        .setAggregator(agg)
+        .setId("foo")
+        .setInterval(interval)
+        .setQuery(query)
+        .setTimeZone(tz)
+        .setFill(fill)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, NumericInterpolatorConfig.newBuilder()
+                .setFillPolicy(FillPolicy.NONE)
+                .setRealFillPolicy(FillWithRealPolicy.NONE)
+                .build(), 
+                new NumericInterpolatorFactory.Default())
+            .build())
+        .build();
   }
 }

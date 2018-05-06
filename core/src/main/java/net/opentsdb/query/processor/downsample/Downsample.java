@@ -209,6 +209,9 @@ public class Downsample extends AbstractQueryNode {
       if (type == null) {
         throw new IllegalArgumentException("Type cannot be null.");
       }
+      if (!source.types().contains(type)) {
+        return Optional.empty();
+      }
       final Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator = 
           Downsample.this.factory().newIterator(type, Downsample.this, 
               Lists.newArrayList(source));
@@ -232,7 +235,8 @@ public class Downsample extends AbstractQueryNode {
 
     @Override
     public Collection<TypeToken<?>> types() {
-      return Lists.newArrayList(NumericType.TYPE);
+      // TODO - join with the factories supported.
+      return source.types();
     }
 
     @Override

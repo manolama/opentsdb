@@ -74,4 +74,8 @@ public interface QueryNode {
    * @param t A non-null exception.
    */
   public void onError(final Throwable t);
+  
+  /** @return The factory used to instantiate this node. Used to fetch
+   * iterators. */
+  public QueryNodeFactory factory();
 }

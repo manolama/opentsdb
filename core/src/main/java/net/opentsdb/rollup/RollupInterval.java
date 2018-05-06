@@ -85,6 +85,8 @@ public class RollupInterval {
    */
   private final boolean is_default_interval;
   
+  private RollupConfig config;
+  
   /**
    * Protected ctor used by the builder.
    * @param builder The non-null builder to load from.
@@ -104,6 +106,10 @@ public class RollupInterval {
     this.unit_multiplier = DateTime.getDurationInterval(row_span);
     
     validateAndCompile();
+  }
+  
+  void setConfig(final RollupConfig config) {
+    this.config = config;
   }
   
   @Override
@@ -304,6 +310,10 @@ public class RollupInterval {
   /** @return The width of each row as an interval string. */
   public String getRowSpan() {
     return row_span;
+  }
+  
+  public RollupConfig rollupConfig() {
+    return config;
   }
   
   public static Builder builder() {

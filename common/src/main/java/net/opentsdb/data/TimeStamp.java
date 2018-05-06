@@ -136,6 +136,8 @@ public interface TimeStamp {
    */
   public void add(final TemporalAmount amount);
   
+  public void subtract(final TemporalAmount amount);
+  
   /**
    * Moves to the timestamp to a well defined time at the start of an interval
    * given a unit of time and number of those units. For example, an interval

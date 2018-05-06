@@ -33,11 +33,16 @@ import org.powermock.modules.junit4.PowerMockRunner;
 
 import com.google.common.collect.Lists;
 
+import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
+import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
+import net.opentsdb.query.interpolation.types.numeric.DefaultInterpolationConfig;
+import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorFactory;
+import net.opentsdb.query.pojo.FillPolicy;
 
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({ GroupBy.class })
@@ -55,7 +60,13 @@ public class TestGroupBy {
         .setAggregator("sum")
         .setId("GB")
         .addTagKey("host")
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, NumericInterpolatorConfig.newBuilder()
+                .setFillPolicy(FillPolicy.NONE)
+                .setRealFillPolicy(FillWithRealPolicy.NONE)
+                .build(), 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     upstream = mock(QueryNode.class);
     when(context.upstream(any(QueryNode.class))).thenReturn(Lists.newArrayList(upstream));

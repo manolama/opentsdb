@@ -76,6 +76,8 @@ public class Timespan extends Validatable implements Comparable<Timespan> {
   /** A parsed slice config. */
   private SliceConfig slice;
   
+  private boolean reverse;
+  
   /**
    * Default ctor
    * @param builder The builder to pull values from
@@ -89,6 +91,7 @@ public class Timespan extends Validatable implements Comparable<Timespan> {
     rate = builder.rate;
     rate_options = builder.rateOptions;
     slice_config = builder.sliceConfig;
+    reverse = builder.reverse;
     
     if (builder.start_ts != null) {
       start_ts = builder.start_ts;
@@ -152,6 +155,10 @@ public class Timespan extends Validatable implements Comparable<Timespan> {
   /** @return The slice config as a string (for serialization). */
   public String getSliceConfig() {
     return slice_config;
+  }
+  
+  public boolean reverse() {
+    return reverse;
   }
   
   /** @return Returns the parsed start time. 
@@ -333,6 +340,8 @@ public class Timespan extends Validatable implements Comparable<Timespan> {
     private RateOptions rateOptions;
     @JsonProperty
     private String sliceConfig;
+    @JsonProperty
+    private boolean reverse;
     // not publicly serdes'able. Only for copy builders.
     private TimeStamp start_ts;
     private TimeStamp end_ts;
@@ -388,6 +397,11 @@ public class Timespan extends Validatable implements Comparable<Timespan> {
     
     public Builder setSliceConfig(final String slice_config) {
       this.sliceConfig = slice_config;
+      return this;
+    }
+    
+    public Builder setReverse(final boolean reverse) {
+      this.reverse = reverse;
       return this;
     }
     

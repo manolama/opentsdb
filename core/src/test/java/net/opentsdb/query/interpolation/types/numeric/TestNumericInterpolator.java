@@ -86,7 +86,7 @@ public class TestNumericInterpolator {
     assertFalse(lerp.has_next);
     
     try {
-      new NumericLERP(null, config);
+      new NumericLERP((TimeSeries) null, config);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     

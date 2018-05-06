@@ -15,6 +15,7 @@
 package net.opentsdb.storage;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -182,11 +183,11 @@ public class Tsdb1xQueryNode extends AbstractQueryNode implements SourceNode {
       Downsampler ds = query.getMetrics().get(0).getDownsampler();
       if (ds != null) {
         rollup_intervals = ((Tsdb1xHBaseDataStore) factory).schema().rollupConfig().getRollupInterval(
-            DateTime.parseDuration(ds.getInterval()) / 1000, ds.getInterval());
+            DateTime.parseDuration(ds.getInterval()) / 1000, ds.getInterval(), true);
       } else if (query.getTime().getDownsampler() != null) {
         ds = query.getTime().getDownsampler();
         rollup_intervals = ((Tsdb1xHBaseDataStore) factory).schema().rollupConfig().getRollupInterval(
-            DateTime.parseDuration(ds.getInterval()) / 1000, ds.getInterval());
+            DateTime.parseDuration(ds.getInterval()) / 1000, ds.getInterval(), true);
       } else {
         rollup_intervals = null;
       }

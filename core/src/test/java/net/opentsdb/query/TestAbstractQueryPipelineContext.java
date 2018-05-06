@@ -412,5 +412,11 @@ public class TestAbstractQueryPipelineContext {
       return "TestContext";
     }
 
+    @Override
+    public QueryNodeFactory factory() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
   }
 }

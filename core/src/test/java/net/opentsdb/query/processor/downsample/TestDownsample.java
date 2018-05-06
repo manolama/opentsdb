@@ -29,12 +29,13 @@ import org.junit.Test;
 
 import com.google.common.collect.Lists;
 
-import net.opentsdb.query.QueryIteratorInterpolatorFactory;
+import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
+import net.opentsdb.query.interpolation.types.numeric.DefaultInterpolationConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorFactory;
 import net.opentsdb.query.pojo.FillPolicy;
@@ -66,20 +67,18 @@ public class TestDownsample {
             .setMetric("sys.cpu.user"))
         .build();
     
-    QueryIteratorInterpolatorFactory factory = 
-        new NumericInterpolatorFactory.Default();
-    NumericInterpolatorConfig factory_config = NumericInterpolatorConfig.newBuilder()
-        .setFillPolicy(FillPolicy.NONE)
-        .setRealFillPolicy(FillWithRealPolicy.NONE)
-        .build();
-    
     config = DownsampleConfig.newBuilder()
         .setAggregator("sum")
         .setId("foo")
         .setInterval("15s")
         .setQuery(q)
-        .setQueryIteratorInterpolatorFactory(factory)
-        .setQueryIteratorInterpolatorConfig(factory_config)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, NumericInterpolatorConfig.newBuilder()
+                .setFillPolicy(FillPolicy.NONE)
+                .setRealFillPolicy(FillWithRealPolicy.NONE)
+                .build(), 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
   }
   

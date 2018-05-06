@@ -17,6 +17,7 @@ package net.opentsdb.data.types.annotation;
 import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.data.MockTimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSeriesStringId;
@@ -24,7 +25,6 @@ import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.iterators.IteratorStatus;
 import net.opentsdb.data.iterators.TimeSeriesIterator;
-import net.opentsdb.data.types.numeric.MockNumericTimeSeries;
 import net.opentsdb.query.context.QueryContext;
 import net.opentsdb.query.processor.TimeSeriesProcessor;
 
@@ -37,7 +37,7 @@ public class MockAnnotationIterator extends
   public RuntimeException ex;
   public boolean throw_ex;
   
-  private MockNumericTimeSeries parent;
+  private MockTimeSeries parent;
   
   @Override
   public Deferred<Object> initialize() {

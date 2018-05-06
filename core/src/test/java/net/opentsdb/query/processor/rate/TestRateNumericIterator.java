@@ -31,7 +31,7 @@ import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.ZonedNanoTimeStamp;
-import net.opentsdb.data.types.numeric.MutableNumericType;
+import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericMillisecondShard;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryContext;
@@ -364,24 +364,25 @@ public class TestRateNumericIterator {
   public void nullsAtStart() {
     source = new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    MutableNumericType nully = new MutableNumericType();
+        .build(),
+        NumericType.TYPE);
+    MutableNumericValue nully = new MutableNumericValue();
     nully.resetNull(new MillisecondTimeStamp(BASE_TIME ));
-    ((MockTimeSeries) source).addValue(nully);
-    //((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(nully);
+    //((MockTimeSeries) source).add(new MutableNumericType(
     //    new MillisecondTimeStamp(BASE_TIME ), 40));
-    nully = new MutableNumericType();
+    nully = new MutableNumericValue();
     nully.resetNull(new MillisecondTimeStamp(BASE_TIME + 2000000L));
-    ((MockTimeSeries) source).addValue(nully);
-    //((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(nully);
+    //((MockTimeSeries) source).add(new MutableNumericType(
     //    new MillisecondTimeStamp(BASE_TIME + 2000000L), 50));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 3600000L), 40));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 3605000L), 50));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 7200000L), 40));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 9200000L), 50));
     
     config = RateOptions.newBuilder()
@@ -416,24 +417,25 @@ public class TestRateNumericIterator {
   public void nullsInMiddle() {
     source = new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+        .build(),
+        NumericType.TYPE);
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME ), 40));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 2000000L), 50));
-    MutableNumericType nully = new MutableNumericType();
+    MutableNumericValue nully = new MutableNumericValue();
     nully.resetNull(new MillisecondTimeStamp(BASE_TIME + 3600000L));
-    ((MockTimeSeries) source).addValue(nully);
-    //((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(nully);
+    //((MockTimeSeries) source).add(new MutableNumericType(
     //    new MillisecondTimeStamp(BASE_TIME + 3600000L), 40));
-    nully = new MutableNumericType();
+    nully = new MutableNumericValue();
     nully.resetNull(new MillisecondTimeStamp(BASE_TIME + 3605000L));
-    ((MockTimeSeries) source).addValue(nully);
-    //((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(nully);
+    //((MockTimeSeries) source).add(new MutableNumericType(
     //    new MillisecondTimeStamp(BASE_TIME + 3605000L), 50));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 7200000L), 40));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 9200000L), 50));
     
     config = RateOptions.newBuilder()
@@ -468,23 +470,24 @@ public class TestRateNumericIterator {
   public void nullsAtEnd() {
     source = new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+        .build(),
+        NumericType.TYPE);
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME ), 40));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 2000000L), 50));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 3600000L), 40));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new MillisecondTimeStamp(BASE_TIME + 3605000L), 50));
-    MutableNumericType nully = new MutableNumericType();
+    MutableNumericValue nully = new MutableNumericValue();
     nully.resetNull(new MillisecondTimeStamp(BASE_TIME + 7200000L));
-    ((MockTimeSeries) source).addValue(nully);
-    //((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(nully);
+    //((MockTimeSeries) source).add(new MutableNumericType(
     //    new MillisecondTimeStamp(BASE_TIME + 7200000L), 40));
-    nully = new MutableNumericType();
+    nully = new MutableNumericValue();
     nully.resetNull(new MillisecondTimeStamp(BASE_TIME + 9200000L));
-    ((MockTimeSeries) source).addValue(nully);
+    ((MockTimeSeries) source).add(nully);
     //((MockTimeSeries) source).addValue(new MutableNumericType(
     //    new MillisecondTimeStamp(BASE_TIME + 9200000L), 50));
     
@@ -562,8 +565,8 @@ public class TestRateNumericIterator {
     source = mock(TimeSeries.class);
     final List<TimeSeriesValue<? extends TimeSeriesDataType>> dps = 
         Lists.newArrayListWithCapacity(2);
-    dps.add(new MutableNumericType(new MillisecondTimeStamp(2000L), 42));
-    dps.add(new MutableNumericType(new MillisecondTimeStamp(1000L), 24));
+    dps.add(new MutableNumericValue(new MillisecondTimeStamp(2000L), 42));
+    dps.add(new MutableNumericValue(new MillisecondTimeStamp(1000L), 24));
     when(source.iterator(NumericType.TYPE)).thenReturn(Optional.of(dps.iterator()));
     config = RateOptions.newBuilder()
         .setId("foo")
@@ -579,8 +582,8 @@ public class TestRateNumericIterator {
     source = mock(TimeSeries.class);
     final List<TimeSeriesValue<? extends TimeSeriesDataType>> dps = 
         Lists.newArrayListWithCapacity(2);
-    dps.add(new MutableNumericType(new MillisecondTimeStamp(2000L), 42));
-    dps.add(new MutableNumericType(new MillisecondTimeStamp(2000L), 24));
+    dps.add(new MutableNumericValue(new MillisecondTimeStamp(2000L), 42));
+    dps.add(new MutableNumericValue(new MillisecondTimeStamp(2000L), 24));
     when(source.iterator(NumericType.TYPE)).thenReturn(Optional.of(dps.iterator()));
     config = RateOptions.newBuilder()
         .setId("foo")
@@ -857,11 +860,12 @@ public class TestRateNumericIterator {
   public void nanoRollover() {
     source = new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
+        .build(),
+        NumericType.TYPE);
     
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new ZonedNanoTimeStamp(BASE_TIME / 1000, 5000, Const.UTC), 40));
-    ((MockTimeSeries) source).addValue(new MutableNumericType(
+    ((MockTimeSeries) source).add(new MutableNumericValue(
         new ZonedNanoTimeStamp((BASE_TIME / 1000) + 1L, 1000, Const.UTC), 50));
     
     config = RateOptions.newBuilder()

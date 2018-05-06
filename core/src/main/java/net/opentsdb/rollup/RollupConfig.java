@@ -21,6 +21,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.exceptions.IllegalDataException;
+import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.JSON;
 
 import org.slf4j.Logger;
@@ -107,6 +109,7 @@ public class RollupConfig {
       reverse_intervals.put(config_interval.getTable(), config_interval);
       reverse_intervals.put(config_interval.getPreAggregationTable(), 
           config_interval);
+      config_interval.setConfig(this);
       LOG.info("Loaded rollup interval: " + config_interval);
     }
     
@@ -116,13 +119,11 @@ public class RollupConfig {
             + "0 and 127: " + entry);
       }
       final String agg = entry.getKey().toLowerCase();
+      // TODO multi-map!
       if (ids_to_aggregations.containsKey(entry.getValue())) {
         throw new IllegalArgumentException("Multiple mappings for the "
             + "ID '" + entry.getValue() + "' are not allowed."); 
       }
-//      if (Aggregators.get(agg) == null) {
-//        throw new IllegalArgumentException("No such aggregator found for " + agg);
-//      }
       aggregations_to_ids.put(agg, entry.getValue());
       ids_to_aggregations.put(entry.getValue(), agg);
       LOG.info("Mapping aggregator '" + agg + "' to ID " + entry.getValue());
@@ -149,6 +150,11 @@ public class RollupConfig {
     return rollup;
   }
   
+  public List<RollupInterval> getRollupInterval(final long interval, 
+      final String str_interval) {
+    return getRollupInterval(interval, str_interval, false);
+  }
+  
   /**
    * Fetches the RollupInterval corresponding to the integer interval in seconds.
    * It returns a list of matching RollupInterval and best next matches in the 
@@ -164,7 +170,8 @@ public class RollupConfig {
    * @throws NoSuchRollupForIntervalException if the interval was not configured
    */
   public List<RollupInterval> getRollupInterval(final long interval, 
-                                                final String str_interval) {
+                                                final String str_interval,
+                                                final boolean skip_default) {
     
     if (interval <= 0) {
       throw new IllegalArgumentException("Interval cannot be null or empty");
@@ -176,15 +183,24 @@ public class RollupConfig {
     
     for (RollupInterval rollup: forward_intervals.values()) {
       if (rollup.getIntervalSeconds() == interval) {
+        if (rollup.isDefaultInterval() && skip_default) {
+          right_match = true;
+          continue;
+        }
+        
         rollups.put((long) rollup.getIntervalSeconds(), rollup);
         right_match = true;
       }
       else if (interval % rollup.getIntervalSeconds() == 0) {
+        if (rollup.isDefaultInterval() && skip_default) {
+          continue;
+        }
+        
         rollups.put((long) rollup.getIntervalSeconds(), rollup);
       }
     }
 
-    if (rollups.isEmpty()) {
+    if (rollups.isEmpty() && !right_match) {
       throw new NoSuchRollupForIntervalException(Long.toString(interval));
     }
     
@@ -263,6 +279,20 @@ public class RollupConfig {
     return Collections.unmodifiableMap(aggregations_to_ids);
   }
   
+  public static String aggConverter(String agg) {
+    agg = agg.toLowerCase();
+    if (agg.equals("zimsum")) {
+      return "sum";
+    }
+    if (agg.equals("mimmax")) {
+      return "max";
+    }
+    if (agg.equals("mimmin")) {
+      return "min";
+    }
+    return agg;
+  }
+  
   /**
    * @param id The ID of an aggregator to search for.
    * @return The aggregator if found, null if it was not mapped.
@@ -281,12 +311,55 @@ public class RollupConfig {
     if (Strings.isNullOrEmpty(aggregator)) {
       throw new IllegalArgumentException("Aggregator cannot be null or empty.");
     }
-    Integer id = aggregations_to_ids.get(aggregator.toLowerCase());
+    Integer id = aggregations_to_ids.get(aggConverter(aggregator));
     if (id == null) {
       throw new IllegalArgumentException("No ID found mapping to aggregator: " 
           + aggregator);
     }
     return id;
+  }
+  
+  public int getIdForAggregator(final byte[] qualifier) {
+    if (qualifier == null || qualifier.length < 6) {
+      throw new IllegalArgumentException("Qualifier can't be null or "
+          + "less than 6 bytes.");
+    }
+    switch (qualifier[0]) {
+    case 'S':
+    case 's':
+      return getIdForAggregator("sum");
+    case 'c':
+    case 'C':
+      return getIdForAggregator("count");
+    case 'm':
+    case 'M':
+      if (qualifier[1] == 'A' || qualifier[1] == 'a') {
+        return getIdForAggregator("max");
+      } else {
+        return getIdForAggregator("min");
+      }
+    }
+    throw new IllegalDataException("Unrecognized qualifier: " 
+        + Bytes.pretty(qualifier));
+  }
+  
+  public int getOffsetStartFromQualifier(final byte[] qualifier) {
+    if (qualifier == null || qualifier.length < 6) {
+      throw new IllegalArgumentException("Qualifier can't be null or "
+          + "less than 6 bytes.");
+    }
+    switch (qualifier[0]) {
+    case 'S':
+    case 's':
+    case 'M':
+    case 'm':
+      return 4;
+    case 'C':
+    case 'c':
+      return 6;
+    }
+    throw new IllegalDataException("Unrecognized qualifier: " 
+        + Bytes.pretty(qualifier));
   }
   
   @Override

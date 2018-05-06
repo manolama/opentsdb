@@ -14,11 +14,13 @@
 // limitations under the License.
 package net.opentsdb.query.interpolation.types.numeric;
 
+import java.util.Iterator;
+
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.RelationalOperator;
-import net.opentsdb.data.types.numeric.MutableNumericType;
+import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericType;
 
 /**
@@ -50,6 +52,11 @@ public class NumericLERP extends NumericInterpolator {
     super(source, config);
   }
   
+  public NumericLERP(final Iterator<TimeSeriesValue<?>> iterator, 
+                     final NumericInterpolatorConfig config) {
+    super(iterator, config);
+  }
+  
   @SuppressWarnings("unchecked")
   @Override
   public TimeSeriesValue<NumericType> next(final TimeStamp timestamp) {
@@ -62,7 +69,7 @@ public class NumericLERP extends NumericInterpolator {
     has_next = false;
     if (timestamp.compare(RelationalOperator.EQ, next.timestamp())) {
       if (previous == null) {
-        previous = new MutableNumericType(next);
+        previous = new MutableNumericValue(next);
       } else {
         previous.reset(next);
       }

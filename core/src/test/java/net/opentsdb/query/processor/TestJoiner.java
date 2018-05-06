@@ -27,13 +27,13 @@ import com.google.common.collect.Lists;
 
 import net.opentsdb.data.SimpleStringGroupId;
 import net.opentsdb.data.BaseTimeSeriesStringId;
+import net.opentsdb.data.MockTimeSeries;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.iterators.DefaultIteratorGroups;
 import net.opentsdb.data.iterators.IteratorGroup;
 import net.opentsdb.data.iterators.IteratorGroups;
 import net.opentsdb.data.types.annotation.AnnotationType;
 import net.opentsdb.data.types.annotation.MockAnnotationIterator;
-import net.opentsdb.data.types.numeric.MockNumericTimeSeries;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.pojo.Expression;
 import net.opentsdb.query.pojo.Join;

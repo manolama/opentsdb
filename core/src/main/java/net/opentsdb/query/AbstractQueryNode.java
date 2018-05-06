@@ -72,6 +72,7 @@ public abstract class AbstractQueryNode implements QueryNode {
     return context;
   }
 
+  @Override
   public QueryNodeFactory factory() {
     return factory;
   }

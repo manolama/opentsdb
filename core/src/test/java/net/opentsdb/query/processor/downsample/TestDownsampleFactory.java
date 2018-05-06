@@ -37,9 +37,9 @@ import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.types.numeric.NumericMillisecondShard;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryIteratorFactory;
-import net.opentsdb.query.QueryIteratorInterpolatorFactory;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
+import net.opentsdb.query.interpolation.types.numeric.DefaultInterpolationConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorFactory;
 import net.opentsdb.query.pojo.FillPolicy;
@@ -52,7 +52,7 @@ public class TestDownsampleFactory {
   @Test
   public void ctor() throws Exception {
     final DownsampleFactory factory = new DownsampleFactory("Downsample");
-    assertEquals(1, factory.types().size());
+    assertEquals(2, factory.types().size());
     assertTrue(factory.types().contains(NumericType.TYPE));
     assertEquals("Downsample", factory.id());
     
@@ -70,11 +70,11 @@ public class TestDownsampleFactory {
   @Test
   public void registerIteratorFactory() throws Exception {
     final DownsampleFactory factory = new DownsampleFactory("Downsample");
-    assertEquals(1, factory.types().size());
+    assertEquals(2, factory.types().size());
     
     QueryIteratorFactory mock = mock(QueryIteratorFactory.class);
     factory.registerIteratorFactory(NumericType.TYPE, mock);
-    assertEquals(1, factory.types().size());
+    assertEquals(2, factory.types().size());
     
     try {
       factory.registerIteratorFactory(null, mock);
@@ -100,20 +100,18 @@ public class TestDownsampleFactory {
             .setMetric("sys.cpu.user"))
         .build();
     
-    QueryIteratorInterpolatorFactory interpolator_factory = 
-        new NumericInterpolatorFactory.Default();
-    NumericInterpolatorConfig factory_config = NumericInterpolatorConfig.newBuilder()
-        .setFillPolicy(FillPolicy.NONE)
-        .setRealFillPolicy(FillWithRealPolicy.NONE)
-        .build();
-    
     DownsampleConfig config = DownsampleConfig.newBuilder()
         .setAggregator("sum")
         .setId("foo")
         .setInterval("15s")
         .setQuery(q)
-        .setQueryIteratorInterpolatorFactory(interpolator_factory)
-        .setQueryIteratorInterpolatorConfig(factory_config)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, NumericInterpolatorConfig.newBuilder()
+                .setFillPolicy(FillPolicy.NONE)
+                .setRealFillPolicy(FillWithRealPolicy.NONE)
+                .build(), 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     
     final DownsampleFactory factory = new DownsampleFactory("Downsample");

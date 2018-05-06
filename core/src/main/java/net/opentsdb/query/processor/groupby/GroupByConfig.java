@@ -21,9 +21,12 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
-import net.opentsdb.query.QueryIteratorInterpolatorConfig;
+import net.opentsdb.query.QueryInterpolationConfig;
+import net.opentsdb.query.QueryInterpolatorConfig;
 import net.opentsdb.query.QueryIteratorInterpolatorFactory;
 import net.opentsdb.query.QueryNodeConfig;
+import net.opentsdb.query.processor.downsample.DownsampleConfig.Builder;
+import net.opentsdb.rollup.RollupConfig;
 
 /**
  * The configuration class for a {@link GroupBy} query node.
@@ -36,9 +39,9 @@ public class GroupByConfig implements QueryNodeConfig {
   private final List<byte[]> encoded_tag_keys;
   private final String aggregator;
   private final boolean infectious_nan;
-  private final QueryIteratorInterpolatorFactory interpolator;
-  private final QueryIteratorInterpolatorConfig interpolator_config;
+  private final QueryInterpolationConfig interpolation_config;
   private final boolean group_all;
+  private final boolean fill;
   
   private GroupByConfig(final Builder builder) {
     if (Strings.isNullOrEmpty(builder.id)) {
@@ -53,17 +56,17 @@ public class GroupByConfig implements QueryNodeConfig {
     if (Strings.isNullOrEmpty(builder.aggregator)) {
       throw new IllegalArgumentException("Aggregator cannot be null or empty.");
     }
-    if (builder.interpolator == null) {
-      throw new IllegalArgumentException("Interpolator factory cannot be null.");
+    if (builder.interpolation_config == null) {
+      throw new IllegalArgumentException("Interpolator config cannot be null.");
     }
     id = builder.id;
     tag_keys = builder.tag_keys;
     encoded_tag_keys = builder.encoded_tag_keys;
     aggregator = builder.aggregator;
     infectious_nan = builder.infectious_nan;
-    interpolator = builder.interpolator;
-    interpolator_config = builder.interpolator_config;
+    interpolation_config = builder.interpolation_config;
     group_all = builder.group_all;
+    fill = builder.fill;
   }
   
   @Override
@@ -93,19 +96,17 @@ public class GroupByConfig implements QueryNodeConfig {
     return infectious_nan;
   }
   
-  /** @return The non-null interpolator factory. */
-  public QueryIteratorInterpolatorFactory getInterpolator() {
-    return interpolator;
-  }
-  
-  /** @return The optional interpolator config. May be null. */
-  public QueryIteratorInterpolatorConfig getInterpolatorConfig() {
-    return interpolator_config;
+  public QueryInterpolationConfig interpolationConfig() {
+    return interpolation_config;
   }
   
   /** @return Whether or not to group by just the metric or the given tags. */
   public boolean groupAll() {
     return group_all;
+  }
+  
+  public boolean fill() {
+    return fill;
   }
   
   /** @return A new builder to work from. */
@@ -119,9 +120,9 @@ public class GroupByConfig implements QueryNodeConfig {
     private List<byte[]> encoded_tag_keys;
     private String aggregator;
     private boolean infectious_nan;
-    private QueryIteratorInterpolatorFactory interpolator;
-    private QueryIteratorInterpolatorConfig interpolator_config;
+    private QueryInterpolationConfig interpolation_config;
     private boolean group_all;
+    private boolean fill;
     
     /**
      * @param id A non-null and on-empty Id for the group by function.
@@ -196,33 +197,43 @@ public class GroupByConfig implements QueryNodeConfig {
       this.infectious_nan = infectious_nan;
       return this;
     }
-    
-    /**
-     * @param interpolator The non-null interpolator factory to use.
-     * @return The builder.
-     */
-    public Builder setQueryIteratorInterpolatorFactory(
-        final QueryIteratorInterpolatorFactory interpolator) {
-      this.interpolator = interpolator;
+
+    public Builder setQueryInterpolationConfig(final QueryInterpolationConfig interpolation_config) {
+      this.interpolation_config = interpolation_config;
       return this;
     }
     
-    /**
-     * @param interpolator_config An optional interpolator config.
-     * @return The builder.
-     */
-    public Builder setQueryIteratorInterpolatorConfig(
-        final QueryIteratorInterpolatorConfig interpolator_config) {
-      this.interpolator_config = interpolator_config;
-      return this;
-    }
-    
+//    /**
+//     * @param interpolator The non-null interpolator factory to use.
+//     * @return The builder.
+//     */
+//    public Builder setQueryIteratorInterpolatorFactory(
+//        final QueryIteratorInterpolatorFactory interpolator) {
+//      this.interpolator = interpolator;
+//      return this;
+//    }
+//    
+//    /**
+//     * @param interpolator_config An optional interpolator config.
+//     * @return The builder.
+//     */
+//    public Builder setQueryIteratorInterpolatorConfig(
+//        final QueryInterpolatorConfig interpolator_config) {
+//      this.interpolator_config = interpolator_config;
+//      return this;
+//    }
+//    
     /**
      * @param group_all Whether or not to group by all tags (just on metrics)
      * @return The builder.
      */
     public Builder setGroupAll(final boolean group_all) {
       this.group_all = group_all;
+      return this;
+    }
+    
+    public Builder setFill(final boolean fill) {
+      this.fill = fill;
       return this;
     }
     

@@ -122,7 +122,6 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
     final Configuration config = tsdb.getConfig();
     synchronized(config) {
       if (!config.hasProperty(getConfigKey(DATA_TABLE_KEY))) {
-        System.out.println("REGISTERED: " + getConfigKey(DATA_TABLE_KEY));
         config.register(getConfigKey(DATA_TABLE_KEY), "tsdb", false, 
             "The name of the raw data table for OpenTSDB.");
       }

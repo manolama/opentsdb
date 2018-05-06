@@ -59,4 +59,6 @@ public interface QueryFillPolicy<T extends TimeSeriesDataType> {
   
   /** @return The real-value fill policy used by the implementation. */
   public FillWithRealPolicy realPolicy();
+  
+  public QueryInterpolatorConfig config();
 }

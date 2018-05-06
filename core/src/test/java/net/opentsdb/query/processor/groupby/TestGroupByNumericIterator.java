@@ -38,15 +38,16 @@ import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.BaseTimeSeriesStringId;
 import net.opentsdb.data.MillisecondTimeStamp;
+import net.opentsdb.data.MockTimeSeries;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
-import net.opentsdb.data.types.numeric.MockNumericTimeSeries;
-import net.opentsdb.data.types.numeric.MutableNumericType;
+import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericMillisecondShard;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
+import net.opentsdb.query.interpolation.types.numeric.DefaultInterpolationConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorFactory;
 import net.opentsdb.query.interpolation.types.numeric.ScalarNumericInterpolatorConfig;
@@ -73,9 +74,10 @@ public class TestGroupByNumericIterator {
         .setAggregator("sum")
         .setId("Testing")
         .addTagKey("dc")
-        .setQueryIteratorInterpolatorFactory(
-            new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, interpolator_config, 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     node = mock(GroupBy.class);
     when(node.config()).thenReturn(config);
@@ -156,15 +158,19 @@ public class TestGroupByNumericIterator {
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
+    interpolator_config = NumericInterpolatorConfig.newBuilder()
+        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
+        .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .build();
+    
     // invalid agg
     config = GroupByConfig.newBuilder()
         .setAggregator("nosuchagg")
         .setId("Testing")
         .addTagKey("dc")
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NOT_A_NUMBER)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, interpolator_config, 
+                new NumericInterpolatorFactory.Default())
             .build())
         .build();
     when(node.config()).thenReturn(config);
@@ -292,9 +298,10 @@ public class TestGroupByNumericIterator {
         .setAggregator("sum")
         .setId("Testing")
         .addTagKey("dc")
-        .setQueryIteratorInterpolatorFactory(
-            new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, interpolator_config, 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     when(node.config()).thenReturn(config);
     
@@ -579,9 +586,10 @@ public class TestGroupByNumericIterator {
         .setAggregator("sum")
         .setId("Testing")
         .addTagKey("dc")
-        .setQueryIteratorInterpolatorFactory(
-            new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, interpolator_config, 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     when(node.config()).thenReturn(config);
     
@@ -639,9 +647,10 @@ public class TestGroupByNumericIterator {
         .setAggregator("sum")
         .setId("Testing")
         .addTagKey("dc")
-        .setQueryIteratorInterpolatorFactory(
-            new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, interpolator_config, 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     when(node.config()).thenReturn(config);
     
@@ -700,9 +709,10 @@ public class TestGroupByNumericIterator {
         .setId("Testing")
         .addTagKey("dc")
         .setInfectiousNan(true)
-        .setQueryIteratorInterpolatorFactory(
-            new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, interpolator_config, 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     when(node.config()).thenReturn(config);
     
@@ -760,25 +770,27 @@ public class TestGroupByNumericIterator {
         .setId("Testing")
         .addTagKey("dc")
         .setInfectiousNan(false)
-        .setQueryIteratorInterpolatorFactory(
-            new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, interpolator_config, 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     when(node.config()).thenReturn(config);
     
-    ts2 = new MockNumericTimeSeries(
+    ts2 = new MockTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    MutableNumericType dp = new MutableNumericType(
+        .build(),
+        NumericType.TYPE);
+    MutableNumericValue dp = new MutableNumericValue(
         new MillisecondTimeStamp(1000), 4);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(3000), Double.NaN);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(5000), 8);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(7000), Double.NaN);
-    ((MockNumericTimeSeries) ts2).add(dp);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 8);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
+    ((MockTimeSeries) ts2).add(dp);
     
     source_map = Maps.newHashMapWithExpectedSize(3);
     source_map.put("a", ts1);
@@ -827,25 +839,27 @@ public class TestGroupByNumericIterator {
         .setId("Testing")
         .addTagKey("dc")
         .setInfectiousNan(true)
-        .setQueryIteratorInterpolatorFactory(
-            new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, interpolator_config, 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     when(node.config()).thenReturn(config);
     
-    ts2 = new MockNumericTimeSeries(
+    ts2 = new MockTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    MutableNumericType dp = new MutableNumericType(
+        .build(),
+        NumericType.TYPE);
+    MutableNumericValue dp = new MutableNumericValue(
         new MillisecondTimeStamp(1000), 4);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(3000), Double.NaN);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(5000), 8);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(7000), Double.NaN);
-    ((MockNumericTimeSeries) ts2).add(dp);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 8);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
+    ((MockTimeSeries) ts2).add(dp);
     
     source_map = Maps.newHashMapWithExpectedSize(3);
     source_map.put("a", ts1);
@@ -893,27 +907,29 @@ public class TestGroupByNumericIterator {
         .setId("Testing")
         .addTagKey("dc")
         .setInfectiousNan(true)
-        .setQueryIteratorInterpolatorFactory(
-            new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, interpolator_config, 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     when(node.config()).thenReturn(config);
     
-    ts2 = new MockNumericTimeSeries(
+    ts2 = new MockTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    MutableNumericType dp = new MutableNumericType(
+        .build(),
+        NumericType.TYPE);
+    MutableNumericValue dp = new MutableNumericValue(
         new MillisecondTimeStamp(1000), 4);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(3000), Double.NaN);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
     dp.resetNull(new MillisecondTimeStamp(3000));
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(5000), 8);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(7000), Double.NaN);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 8);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
     dp.resetNull(new MillisecondTimeStamp(7000));
-    ((MockNumericTimeSeries) ts2).add(dp);
+    ((MockTimeSeries) ts2).add(dp);
     
     source_map = Maps.newHashMapWithExpectedSize(3);
     source_map.put("a", ts1);
@@ -961,57 +977,61 @@ public class TestGroupByNumericIterator {
         .setId("Testing")
         .addTagKey("dc")
         .setInfectiousNan(true)
-        .setQueryIteratorInterpolatorFactory(
-            new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, interpolator_config, 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     when(node.config()).thenReturn(config);
     
-    ts1 = new MockNumericTimeSeries(
+    ts1 = new MockTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    MutableNumericType dp = new MutableNumericType(
+        .build(),
+        NumericType.TYPE);
+    MutableNumericValue dp = new MutableNumericValue(
         new MillisecondTimeStamp(1000), 1);
-    ((MockNumericTimeSeries) ts1).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(3000), Double.NaN);
+    ((MockTimeSeries) ts1).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
     dp.resetNull(new MillisecondTimeStamp(3000));
-    ((MockNumericTimeSeries) ts1).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(5000), 2);
-    ((MockNumericTimeSeries) ts1).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(7000), Double.NaN);
+    ((MockTimeSeries) ts1).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 2);
+    ((MockTimeSeries) ts1).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
     dp.resetNull(new MillisecondTimeStamp(7000));
-    ((MockNumericTimeSeries) ts1).add(dp);
+    ((MockTimeSeries) ts1).add(dp);
     
-    ts2 = new MockNumericTimeSeries(
+    ts2 = new MockTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    dp = new MutableNumericType(new MillisecondTimeStamp(1000), 4);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(3000), Double.NaN);
+        .build(),
+        NumericType.TYPE);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(1000), 4);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
     dp.resetNull(new MillisecondTimeStamp(3000));
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(5000), 8);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(7000), Double.NaN);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 8);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
     dp.resetNull(new MillisecondTimeStamp(7000));
-    ((MockNumericTimeSeries) ts2).add(dp);
+    ((MockTimeSeries) ts2).add(dp);
     
-    ts3 = new MockNumericTimeSeries(
+    ts3 = new MockTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    dp = new MutableNumericType(new MillisecondTimeStamp(1000), 0);
-    ((MockNumericTimeSeries) ts3).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(3000), Double.NaN);
+        .build(),
+        NumericType.TYPE);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(1000), 0);
+    ((MockTimeSeries) ts3).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
     dp.resetNull(new MillisecondTimeStamp(3000));
-    ((MockNumericTimeSeries) ts3).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(5000), 3);
-    ((MockNumericTimeSeries) ts3).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(7000), Double.NaN);
+    ((MockTimeSeries) ts3).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 3);
+    ((MockTimeSeries) ts3).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
     dp.resetNull(new MillisecondTimeStamp(7000));
-    ((MockNumericTimeSeries) ts3).add(dp);
+    ((MockTimeSeries) ts3).add(dp);
     
     source_map = Maps.newHashMapWithExpectedSize(3);
     source_map.put("a", ts1);
@@ -1057,51 +1077,55 @@ public class TestGroupByNumericIterator {
         .setId("Testing")
         .addTagKey("dc")
         .setInfectiousNan(true)
-        .setQueryIteratorInterpolatorFactory(
-            new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(interpolator_config)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, interpolator_config, 
+                new NumericInterpolatorFactory.Default())
+            .build())
         .build();
     when(node.config()).thenReturn(config);
     
-    ts1 = new MockNumericTimeSeries(
+    ts1 = new MockTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    MutableNumericType dp = new MutableNumericType(
+        .build(),
+        NumericType.TYPE);
+    MutableNumericValue dp = new MutableNumericValue(
         new MillisecondTimeStamp(1000), 1);
-    ((MockNumericTimeSeries) ts1).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(3000), Double.NaN);
-    ((MockNumericTimeSeries) ts1).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(5000), 2);
-    ((MockNumericTimeSeries) ts1).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(7000), Double.NaN);
-    ((MockNumericTimeSeries) ts1).add(dp);
+    ((MockTimeSeries) ts1).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
+    ((MockTimeSeries) ts1).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 2);
+    ((MockTimeSeries) ts1).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
+    ((MockTimeSeries) ts1).add(dp);
     
-    ts2 = new MockNumericTimeSeries(
+    ts2 = new MockTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    dp = new MutableNumericType(new MillisecondTimeStamp(1000), 4);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(3000), Double.NaN);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(5000), 8);
-    ((MockNumericTimeSeries) ts2).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(7000), Double.NaN);
-    ((MockNumericTimeSeries) ts2).add(dp);
+        .build(),
+        NumericType.TYPE);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(1000), 4);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 8);
+    ((MockTimeSeries) ts2).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
+    ((MockTimeSeries) ts2).add(dp);
     
-    ts3 = new MockNumericTimeSeries(
+    ts3 = new MockTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
-        .build());
-    dp = new MutableNumericType(new MillisecondTimeStamp(1000), 0);
-    ((MockNumericTimeSeries) ts3).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(3000), Double.NaN);
-    ((MockNumericTimeSeries) ts3).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(5000), 3);
-    ((MockNumericTimeSeries) ts3).add(dp);
-    dp = new MutableNumericType(new MillisecondTimeStamp(7000), Double.NaN);
-    ((MockNumericTimeSeries) ts3).add(dp);
+        .build(),
+        NumericType.TYPE);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(1000), 0);
+    ((MockTimeSeries) ts3).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
+    ((MockTimeSeries) ts3).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 3);
+    ((MockTimeSeries) ts3).add(dp);
+    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
+    ((MockTimeSeries) ts3).add(dp);
     
     source_map = Maps.newHashMapWithExpectedSize(3);
     source_map.put("a", ts1);

@@ -391,7 +391,9 @@ public class Tsdb1xScanner {
         complete(null, 0);
         return null;
       }
-      
+      for (final ArrayList<KeyValue> r : rows) {
+        System.out.println("[ROW] " + r);
+      }
       if (owner.hasException()) {
         // bail out!
         complete(null, rows.size());
@@ -482,7 +484,6 @@ public class Tsdb1xScanner {
               buffer(i, rows, true);
               return null;
             }
-            
             result.decode(row, rollup_interval);
           }
         }

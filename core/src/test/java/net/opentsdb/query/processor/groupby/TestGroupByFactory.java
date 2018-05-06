@@ -39,6 +39,7 @@ import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryIteratorFactory;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
+import net.opentsdb.query.interpolation.types.numeric.DefaultInterpolationConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorFactory;
 import net.opentsdb.query.pojo.FillPolicy;
@@ -48,7 +49,7 @@ public class TestGroupByFactory {
   @Test
   public void ctor() throws Exception {
     final GroupByFactory factory = new GroupByFactory("GroupBy");
-    assertEquals(1, factory.types().size());
+    assertEquals(2, factory.types().size());
     assertTrue(factory.types().contains(NumericType.TYPE));
     assertEquals("GroupBy", factory.id());
     
@@ -66,11 +67,11 @@ public class TestGroupByFactory {
   @Test
   public void registerIteratorFactory() throws Exception {
     final GroupByFactory factory = new GroupByFactory("GroupBy");
-    assertEquals(1, factory.types().size());
+    assertEquals(2, factory.types().size());
     
     QueryIteratorFactory mock = mock(QueryIteratorFactory.class);
     factory.registerIteratorFactory(NumericType.TYPE, mock);
-    assertEquals(1, factory.types().size());
+    assertEquals(2, factory.types().size());
     
     try {
       factory.registerIteratorFactory(null, mock);
@@ -89,10 +90,12 @@ public class TestGroupByFactory {
         .setId("Test")
         .setAggregator("sum")
         .addTagKey("host")
-        .setQueryIteratorInterpolatorFactory(new NumericInterpolatorFactory.Default())
-        .setQueryIteratorInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-            .setFillPolicy(FillPolicy.NOT_A_NUMBER)
-            .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setQueryInterpolationConfig(DefaultInterpolationConfig.newBuilder()
+            .add(NumericType.TYPE, NumericInterpolatorConfig.newBuilder()
+                .setFillPolicy(FillPolicy.NOT_A_NUMBER)
+                .setRealFillPolicy(FillWithRealPolicy.NONE)
+                .build(), 
+                new NumericInterpolatorFactory.Default())
             .build())
         .build();
     final NumericMillisecondShard source = new NumericMillisecondShard(
