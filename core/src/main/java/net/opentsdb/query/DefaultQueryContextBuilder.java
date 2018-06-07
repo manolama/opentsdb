@@ -19,6 +19,7 @@ import java.util.List;
 
 import com.google.common.collect.Lists;
 
+import net.opentsdb.auth.AuthState;
 import net.opentsdb.core.DefaultTSDB;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.QueryStats;
@@ -46,6 +47,9 @@ public class DefaultQueryContextBuilder implements QueryContextBuilder {
   
   /** The stats object. */
   private QueryStats stats;
+  
+  /** The auth state. */
+  private AuthState auth;
   
   /** Whether or not this object was built users can't call the set methods. */
   private boolean built;
@@ -114,6 +118,11 @@ public class DefaultQueryContextBuilder implements QueryContextBuilder {
     return this;
   }
 
+  public QueryContextBuilder setAuthState(final AuthState auth) {
+    this.auth = auth;
+    return this;
+  }
+  
   @Override
   public QueryContext build() {
     if (sinks == null || sinks.isEmpty()) {
@@ -178,13 +187,16 @@ public class DefaultQueryContextBuilder implements QueryContextBuilder {
     public QueryStats stats() {
       return stats;
     }
-
     
     @Override
     public TimeSeriesQuery query() {
       return query;
     }
     
+    @Override
+    public AuthState authState() {
+      return auth;
+    }
   }
   
 }

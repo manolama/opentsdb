@@ -16,6 +16,7 @@ package net.opentsdb.query;
 
 import java.util.Collection;
 
+import net.opentsdb.auth.AuthState;
 import net.opentsdb.stats.QueryStats;
 import net.opentsdb.stats.Span;
 
@@ -53,6 +54,12 @@ public interface QueryContext {
    * Closes the pipeline and releases all resources.
    */
   public void close();
+  
+  /**
+   * The authentication state associated with this pipeline.
+   * @return A non-null state object. May be a default.
+   */
+  public AuthState authState();
   
   /**
    * @return An optional stats collector for the query, may be null.
