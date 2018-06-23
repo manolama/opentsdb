@@ -31,12 +31,8 @@ import org.junit.BeforeClass;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import com.google.common.collect.Maps;
-
 import net.opentsdb.common.Const;
-import net.opentsdb.configuration.Configuration;
-import net.opentsdb.configuration.UnitTestConfiguration;
-import net.opentsdb.core.Registry;
+import net.opentsdb.core.MockTSDB;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.MockTrace;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
@@ -98,8 +94,8 @@ public class UTBase {
   public static final int TS_NSUI_SERIES_COUNT = 16;
   public static final int TS_NSUI_SERIES_INTERVAL = 3600;
   
-  public static final byte[] DATA_TABLE = "tsdb".getBytes(Const.ASCII_CHARSET);
-  public static final byte[] UID_TABLE = "tsdb-uid".getBytes(Const.ASCII_CHARSET);
+  public static final byte[] DATA_TABLE = "tsdb".getBytes(Const.ISO_8859_CHARSET);
+  public static final byte[] UID_TABLE = "tsdb-uid".getBytes(Const.ISO_8859_CHARSET);
   
   // GMT: Monday, January 1, 2018 12:15:00 AM
   public static final int START_TS = 1514765700;
@@ -122,11 +118,8 @@ public class UTBase {
     NSUI_SERIES,
   }
   
-  protected static TSDB tsdb;
-  protected static Registry registry;
+  protected static MockTSDB tsdb;
   protected static Tsdb1xDataStoreFactory store_factory;
-  protected static Map<String, String> config_map;
-  protected static Configuration config;
   protected static HBaseClient client;
   protected static MockBase storage;
   protected static Tsdb1xHBaseDataStore data_store;
@@ -139,18 +132,13 @@ public class UTBase {
   
   @BeforeClass
   public static void beforeClass() throws Exception {
-    tsdb = mock(TSDB.class);
-    registry = mock(Registry.class);
+    tsdb = new MockTSDB();
     store_factory = mock(Tsdb1xDataStoreFactory.class);
     client = mock(HBaseClient.class);
-    config_map = Maps.newHashMap();
-    config = UnitTestConfiguration.getConfiguration(config_map);
     uid_factory = mock(UniqueIdFactory.class);
     data_store = mock(Tsdb1xHBaseDataStore.class);
     
-    when(tsdb.getConfig()).thenReturn(config);
-    when(tsdb.getRegistry()).thenReturn(registry);
-    when(registry.getDefaultPlugin(Tsdb1xDataStoreFactory.class))
+    when(tsdb.registry.getDefaultPlugin(Tsdb1xDataStoreFactory.class))
       .thenReturn(store_factory);
     when(store_factory.newInstance(any(TSDB.class), any(), any(Schema.class)))
       .thenReturn(data_store);    
@@ -162,15 +150,15 @@ public class UTBase {
         return "tsd.mock." + (String) invocation.getArguments()[0];
       }
     });
-    when(data_store.dataTable()).thenReturn("tsdb".getBytes(Const.ASCII_CHARSET));
+    when(data_store.dataTable()).thenReturn("tsdb".getBytes(Const.ISO_8859_CHARSET));
     when(data_store.uidTable()).thenReturn(UID_TABLE);
     when(data_store.client()).thenReturn(client);
-    when(registry.getSharedObject(any())).thenReturn(data_store);
+    when(tsdb.registry.getSharedObject(any())).thenReturn(data_store);
    
-    when(registry.getPlugin(UniqueIdFactory.class, "LRU"))
+    when(tsdb.registry.getPlugin(UniqueIdFactory.class, "LRU"))
       .thenReturn(uid_factory);
     uid_store = new Tsdb1xUniqueIdStore(data_store);
-    when(registry.getSharedObject("default_uidstore"))
+    when(tsdb.registry.getSharedObject("default_uidstore"))
       .thenReturn(uid_store);
     when(uid_factory.newInstance(eq(tsdb), anyString(), 
         any(UniqueIdType.class), eq(uid_store))).thenAnswer(new Answer<UniqueId>() {
@@ -196,19 +184,19 @@ public class UTBase {
   public static void loadUIDTable() {
     bothUIDs(UniqueIdType.METRIC, METRIC_STRING, METRIC_BYTES);
     bothUIDs(UniqueIdType.METRIC, METRIC_B_STRING, METRIC_B_BYTES);
-    storage.throwException(METRIC_STRING_EX.getBytes(Const.ASCII_CHARSET), 
+    storage.throwException(METRIC_STRING_EX.getBytes(Const.ISO_8859_CHARSET), 
         new UnitTestException(), true);
     storage.throwException(METRIC_BYTES_EX, new UnitTestException(), true);
     
     bothUIDs(UniqueIdType.TAGK, TAGK_STRING, TAGK_BYTES);
     bothUIDs(UniqueIdType.TAGK, TAGK_B_STRING, TAGK_B_BYTES);
-    storage.throwException(TAGK_STRING_EX.getBytes(Const.ASCII_CHARSET), 
+    storage.throwException(TAGK_STRING_EX.getBytes(Const.ISO_8859_CHARSET), 
         new UnitTestException(), true);
     storage.throwException(TAGK_BYTES_EX, new UnitTestException(), true);
     
     bothUIDs(UniqueIdType.TAGV, TAGV_STRING, TAGV_BYTES);
     bothUIDs(UniqueIdType.TAGV, TAGV_B_STRING, TAGV_B_BYTES);
-    storage.throwException(TAGV_STRING_EX.getBytes(Const.ASCII_CHARSET), 
+    storage.throwException(TAGV_STRING_EX.getBytes(Const.ISO_8859_CHARSET), 
         new UnitTestException(), true);
     storage.throwException(TAGV_BYTES_EX, new UnitTestException(), true);
     
@@ -244,7 +232,7 @@ public class UTBase {
           + " isn't supported here.");
     }
     storage.addColumn(UID_TABLE, 
-        name.getBytes(Const.ASCII_CHARSET), 
+        name.getBytes(Const.ISO_8859_CHARSET), 
         Tsdb1xUniqueIdStore.ID_FAMILY,
         qualifier, 
         id);
@@ -252,7 +240,7 @@ public class UTBase {
         id, 
         Tsdb1xUniqueIdStore.NAME_FAMILY,
         qualifier, 
-        name.getBytes(Const.ASCII_CHARSET));
+        name.getBytes(Const.ISO_8859_CHARSET));
   }
   
   /**
@@ -288,7 +276,7 @@ public class UTBase {
    * @throws Exception
    */
   public static void loadRawData() throws Exception {
-    final byte[] table = "tsdb".getBytes(Const.ASCII_CHARSET);
+    final byte[] table = "tsdb".getBytes(Const.ISO_8859_CHARSET);
     for (int i = 0; i < TS_SINGLE_SERIES_COUNT; i++) {
       storage.addColumn(table, makeRowKey(
           METRIC_BYTES, 

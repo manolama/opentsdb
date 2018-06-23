@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017  The OpenTSDB Authors.
+// Copyright (C) 2017-2018  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
 
+import com.google.common.reflect.TypeToken;
+
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
@@ -30,25 +32,32 @@ import net.opentsdb.data.TimeSeriesValue;
  */
 public interface QueryIteratorFactory {
   
+  /** @return A non-null collection of types supported by this factory. */
+  public Collection<TypeToken<?>> types();
+  
   /**
    * Returns an iterator using a non-keyed collection of time series sources.
    * @param node A non-null query node the iterator belongs to.
+   * @param result The result this source is a part of.
    * @param sources A non-null and non-empty list of time series sources to
    * read from. 
    * @return A non-null iterator over a specific data type.
    */
   public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> newIterator(
       final QueryNode node,
+      final QueryResult result,
       final Collection<TimeSeries> sources);
 
   /**
    * Returns an iterator using a keyed collection of time series sources.
    * @param node A non-null query node the iterator belongs to.
+   * @param result The result this source is a part of.
    * @param sources A non-null and non-empty list of time series sources to
    * read from. 
    * @return A non-null iterator over a specific data type.
    */
   public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> newIterator(
       final QueryNode node,
+      final QueryResult result,
       final Map<String, TimeSeries> sources);
 }

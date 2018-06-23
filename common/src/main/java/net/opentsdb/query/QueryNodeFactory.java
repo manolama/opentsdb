@@ -14,16 +14,6 @@
 // limitations under the License.
 package net.opentsdb.query;
 
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.Map;
-
-import com.google.common.reflect.TypeToken;
-
-import net.opentsdb.data.TimeSeries;
-import net.opentsdb.data.TimeSeriesDataType;
-import net.opentsdb.data.TimeSeriesValue;
-
 /**
  * The factory used to generate a {@link QueryNode} for a new query execution.
  * 
@@ -32,13 +22,25 @@ import net.opentsdb.data.TimeSeriesValue;
 public interface QueryNodeFactory {
 
   /**
-   * Instantiates a new node using the given context and config.
+   * Instantiates a new node using the given context and the default
+   * configuration for this node.
    * @param context A non-null query pipeline context.
-   * @param config A query node config. May be null if the node does not
-   * require a configuration.
-   * @return
+   * @param id An ID for this node.
+   * @return An instantiated node if successful.
    */
   public QueryNode newNode(final QueryPipelineContext context, 
+                           final String id);
+  
+  /**
+   * Instantiates a new node using the given context and config.
+   * @param context A non-null query pipeline context.
+   * @param id An ID for this node.
+   * @param config A query node config. May be null if the node does not
+   * require a configuration.
+   * @return An instantiated node if successful.
+   */
+  public QueryNode newNode(final QueryPipelineContext context, 
+                           final String id,
                            final QueryNodeConfig config);
   
   /**
@@ -47,18 +49,7 @@ public interface QueryNodeFactory {
    */
   public String id();
  
-  public Collection<TypeToken<?>> types();
-  
-  public void registerIteratorFactory(final TypeToken<?> type, 
-                                      final QueryIteratorFactory factory);
-  
-  public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> newIterator(
-      final TypeToken<?> type,
-      final QueryNode node,
-      final Collection<TimeSeries> sources);
-  
-  public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> newIterator(
-      final TypeToken<?> type,
-      final QueryNode node,
-      final Map<String, TimeSeries> sources);
+  /** @return A class to use for serdes for configuring nodes of this
+   * type. */
+  public Class<? extends QueryNodeConfig> nodeConfigClass();
 }

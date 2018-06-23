@@ -17,9 +17,13 @@ package net.opentsdb.servlet.exceptions;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.ws.rs.NotFoundException;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.ext.ExceptionMapper;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import ch.qos.logback.classic.spi.ThrowableProxy;
 import ch.qos.logback.classic.spi.ThrowableProxyUtil;
@@ -32,9 +36,15 @@ import net.opentsdb.utils.JSON;
  * @since 3.0
  */
 public class GenericExceptionMapper implements ExceptionMapper<Throwable> {
+  private static final Logger LOG = LoggerFactory.getLogger(
+      GenericExceptionMapper.class);
   
   @Override
   public Response toResponse(final Throwable t) {
+    if (!(t instanceof NotFoundException)) {
+      LOG.error("Unexpected exception", t);
+    }
+    
     final ThrowableProxy tp = new ThrowableProxy(t);
     tp.calculatePackagingData();
     final String formattedTrace = ThrowableProxyUtil.asString(tp);

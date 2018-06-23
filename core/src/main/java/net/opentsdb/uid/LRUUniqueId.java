@@ -15,6 +15,7 @@
 package net.opentsdb.uid;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,10 +24,14 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheStats;
 import com.google.common.collect.Lists;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
+import io.netty.util.Timeout;
+import io.netty.util.TimerTask;
+import net.opentsdb.core.DefaultTSDB;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.StorageException;
@@ -37,7 +42,7 @@ import net.opentsdb.utils.Bytes;
  * TODO - add a negative cache
  *
  */
-public class LRUUniqueId implements UniqueId {
+public class LRUUniqueId implements UniqueId, TimerTask {
   private static final Logger LOG = LoggerFactory.getLogger(
       LRUUniqueId.class);
   
@@ -48,6 +53,7 @@ public class LRUUniqueId implements UniqueId {
    * The ID in the key is a byte[] converted to a String to be Comparable. */
   private final Cache<String, String> id_cache;
   
+  private final TSDB tsdb;
   private final UniqueIdStore store;
   private final UniqueIdType type;
   private final CacheMode mode;
@@ -57,6 +63,7 @@ public class LRUUniqueId implements UniqueId {
                      final String id, 
                      final UniqueIdType type, 
                      final UniqueIdStore store) {
+    this.tsdb = tsdb;
     this.store = store;
     this.id = id;
     this.type = type;
@@ -111,6 +118,10 @@ public class LRUUniqueId implements UniqueId {
       builder = builder.recordStats();
     }
     id_cache = builder.<String, String>build();
+    
+    tsdb.getMaintenanceTimer().newTimeout(this, 
+        tsdb.getConfig().getInt(DefaultTSDB.MAINT_TIMER_KEY), 
+        TimeUnit.MILLISECONDS);
     
     LOG.info("Initialized LRU UniqueId cache for [" + type 
         + "] with a name limit of " + name_size 
@@ -270,6 +281,8 @@ public class LRUUniqueId implements UniqueId {
         for (int i = 0; i < misses.size(); i++) {
           final String name = store_names.get(i);
           if (Strings.isNullOrEmpty(name)) {
+            // this'll throw an exception later
+            ids_idx++;
             continue;
           }
           
@@ -290,7 +303,10 @@ public class LRUUniqueId implements UniqueId {
             id_cache.put(UniqueId.uidToString(misses.get(i)), name);
             name_cache.put(name, misses.get(i));
           }
-          names.set(ids_idx, name);
+          // always advance the index. If the same tag value is used multiple
+          // times in one ID we don't want to be stuck writing to the same
+          // index over and over.
+          names.set(ids_idx++, name);
         }
         
         if (child != null) {
@@ -456,6 +472,8 @@ public class LRUUniqueId implements UniqueId {
         for (int i = 0; i < misses.size(); i++) {
           final byte[] id = store_uids.get(i);
           if (Bytes.isNullOrEmpty(id)) {
+            // this'll throw an exception later
+            names_idx++;
             continue;
           }
           
@@ -477,7 +495,10 @@ public class LRUUniqueId implements UniqueId {
             id_cache.put(UniqueId.uidToString(id), misses.get(i));
           }
           
-          uids.set(names_idx, id);
+          // always advance the index. If the same tag value is used multiple
+          // times in one ID we don't want to be stuck writing to the same
+          // index over and over.
+          uids.set(names_idx++, id);
         }
         
         if (child != null) {
@@ -543,5 +564,53 @@ public class LRUUniqueId implements UniqueId {
   @VisibleForTesting
   Cache<String, String> idCache() {
     return id_cache;
+  }
+
+  
+  @Override
+  public void run(final Timeout ignored) throws Exception {
+    String id = this.id == null ? "default" : this.id;
+    try {
+      if (name_cache != null) {
+        final CacheStats stats = name_cache.stats();
+        tsdb.getStatsCollector().setGauge("uid.cache.guava.lru.requestCount", 
+            stats.requestCount(), "uid", type.toString(), "type", "name", "id", id);
+        tsdb.getStatsCollector().setGauge("uid.cache.guava.lru.hitCount", 
+            stats.hitCount(), "uid", type.toString(), "type", "name", "id", id);
+        tsdb.getStatsCollector().setGauge("uid.cache.guava.lru.hitRate", 
+            stats.hitRate(), "uid", type.toString(), "type", "name", "id", id);
+        tsdb.getStatsCollector().setGauge("uid.cache.guava.lru.missCount", 
+            stats.missCount(), "uid", type.toString(), "type", "name", "id", id);
+        tsdb.getStatsCollector().setGauge("uid.cache.guava.lru.missRate", 
+            stats.missRate(), "uid", type.toString(), "type", "name", "id", id);
+        tsdb.getStatsCollector().setGauge("uid.cache.guava.lru.evictionCount", 
+            stats.evictionCount(), "uid", type.toString(), "type", "name", "id", id);
+      }
+      
+      if (id_cache != null) {
+        final CacheStats stats = id_cache.stats();
+        tsdb.getStatsCollector().setGauge("uid.cache.guava.lru.requestCount", 
+            stats.requestCount(), "uid", type.toString(), "type", "uid", "id", id);
+        tsdb.getStatsCollector().setGauge("uid.cache.guava.lru.hitCount", 
+            stats.hitCount(), "uid", type.toString(), "type", "uid", "id", id);
+        tsdb.getStatsCollector().setGauge("uid.cache.guava.lru.hitRate", 
+            stats.hitRate(), "uid", type.toString(), "type", "uid", "id", id);
+        tsdb.getStatsCollector().setGauge("uid.cache.guava.lru.missCount", 
+            stats.missCount(), "uid", type.toString(), "type", "uid", "id", id);
+        tsdb.getStatsCollector().setGauge("uid.cache.guava.lru.missRate", 
+            stats.missRate(), "uid", type.toString(), "type", "uid", "id", id);
+        tsdb.getStatsCollector().setGauge("uid.cache.guava.lru.evictionCount", 
+            stats.evictionCount(), "uid", type.toString(), "type", "uid", "id", id);
+      }
+    } catch (Exception e) {
+      LOG.error("Unexpected exception recording LRU stats", e);
+    }
+    
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Wrote stats for UID cache " + type + " and ID " + id);
+    }
+    tsdb.getMaintenanceTimer().newTimeout(this, 
+        tsdb.getConfig().getInt(DefaultTSDB.MAINT_TIMER_KEY), 
+        TimeUnit.MILLISECONDS);
   }
 }

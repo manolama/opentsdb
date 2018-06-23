@@ -14,9 +14,11 @@
 // limitations under the License.
 package net.opentsdb.query;
 
+import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.jgrapht.experimental.dag.DirectedAcyclicGraph;
@@ -27,15 +29,20 @@ import org.jgrapht.traverse.DepthFirstIterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.reflect.TypeToken;
 
-import net.opentsdb.core.DefaultTSDB;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSpecification;
+import net.opentsdb.query.execution.graph.ExecutionGraph;
+import net.opentsdb.query.execution.graph.ExecutionGraphNode;
+import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.stats.Span;
 
 /**
@@ -49,6 +56,14 @@ import net.opentsdb.stats.Span;
  * TODO - assumptions made: All query results in the SINGLE mode will have the 
  * same timespecs. This may not be the case.
  * 
+ * <b>Invariants:</b>
+ * <ul>
+ * <li>Each {@link ExecutionGraphNode} must have a unique ID within the graph.</li>
+ * <li>The graph must have at most one sink that will be used to execution a
+ * query.</li>
+ * <li>The graph must be a non-cyclical DAG.</li>
+ * </ul>
+ * 
  * @since 3.0
  */
 public abstract class AbstractQueryPipelineContext implements QueryPipelineContext {
@@ -56,16 +71,18 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
       AbstractQueryPipelineContext.class);
   
   /** The TSDB to which we belong. */
-  protected final DefaultTSDB tsdb;
+  protected final TSDB tsdb;
   
   /** The query we're working on. */
-  protected TimeSeriesQuery query;
+  protected final TimeSeriesQuery query;
   
   /** The upstream query context this pipeline context belongs to. */
-  protected QueryContext context;
+  protected final QueryContext context;
+  
+  protected final ExecutionGraph execution_graph;
   
   /** The set of query sinks. */
-  protected Collection<QuerySink> sinks;
+  protected final Collection<QuerySink> sinks;
   
   /** The set of node roots to link to the sinks. */
   protected Set<QueryNode> roots;
@@ -93,7 +110,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   /** The graph of query nodes. 
    * PRIVATE so that we can swap out the graph implementation at a later date.
    */
-  private DirectedAcyclicGraph<QueryNode, DefaultEdge> graph;
+  protected DirectedAcyclicGraph<QueryNode, DefaultEdge> graph;
   
   /**
    * Default ctor.
@@ -103,9 +120,10 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
    * @param sinks A collection of one or more sinks to publish to.
    * @throws IllegalArgumentException if any argument was null.
    */
-  public AbstractQueryPipelineContext(final DefaultTSDB tsdb, 
+  public AbstractQueryPipelineContext(final TSDB tsdb, 
                                       final TimeSeriesQuery query, 
                                       final QueryContext context,
+                                      final ExecutionGraph execution_graph,
                                       final Collection<QuerySink> sinks) {
     if (tsdb == null) {
       throw new IllegalArgumentException("TSDB object cannot be null.");
@@ -116,17 +134,26 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     if (context == null) {
       throw new IllegalArgumentException("The context cannot be null.");
     }
+    if (execution_graph == null) {
+      throw new IllegalArgumentException("Execution graph cannot be null.");
+    }
     if (sinks == null || sinks.isEmpty()) {
       throw new IllegalArgumentException("The sinks cannot be null or empty");
     }
     this.tsdb = tsdb;
     this.query = query;
     this.context = context;
+    this.execution_graph = execution_graph;
+    this.sinks = sinks;
     graph = new DirectedAcyclicGraph<QueryNode, DefaultEdge>(DefaultEdge.class);
     graph.addVertex(this);
-    this.sinks = sinks;
     roots = Sets.newHashSet();
     sources = Lists.newArrayList();
+  }
+  
+  @Override
+  public TSDB tsdb() {
+    return tsdb;
   }
   
   @Override
@@ -182,6 +209,36 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   }
   
   @Override
+  public Collection<TimeSeriesDataSource> downstreamSources(final QueryNode node) {
+    if (node == null) {
+      throw new IllegalArgumentException("Node cannot be null.");
+    }
+    if (!graph.containsVertex(node)) {
+      throw new IllegalArgumentException("The given node wasn't in this graph: " 
+          + node);
+    }
+    final Set<DefaultEdge> downstream = graph.outgoingEdgesOf(node);
+    if (downstream.isEmpty()) {
+      return Collections.emptyList();
+    }
+    final Set<TimeSeriesDataSource> downstreams = Sets.newHashSetWithExpectedSize(
+        downstream.size());
+    for (final DefaultEdge e : downstream) {
+      final QueryNode target = graph.getEdgeTarget(e);
+      if (downstreams.contains(target)) {
+        continue;
+      }
+      
+      if (target instanceof TimeSeriesDataSource) {
+        downstreams.add((TimeSeriesDataSource) target);
+      } else {
+        downstreams.addAll(downstreamSources(target));
+      }
+    }
+    return downstreams;
+  }
+  
+  @Override
   public Collection<QuerySink> sinks() {
     return sinks;
   }
@@ -221,7 +278,14 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
         context.mode() == QueryMode.BOUNDED_SERVER_ASYNC_STREAM ||
         context.mode() == QueryMode.CONTINOUS_SERVER_ASYNC_STREAM) {
       for (final TimeSeriesDataSource source : sources) {
-        source.fetchNext(span);
+        try {
+          source.fetchNext(span);
+        } catch (Exception e) {
+          LOG.error("Failed to fetch next from source: " 
+              + source, e);
+          onError(e);
+          break;
+        }
       }
       return;
     }
@@ -258,7 +322,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
         if (single_results == null) {
           single_results = new CumulativeQueryResult(next);
         } else {
-          single_results.addResults(next.timeSeries());
+          single_results.addResults(next);
         }
       }
       try {
@@ -301,60 +365,114 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   }
   
   /**
-   * Adds a node to the execution graph.
-   * @param node The non-null node to add.
-   */
-  protected void addVertex(final QueryNode node) {
-    if (node == null) {
-      throw new IllegalArgumentException("Node cannot be null.");
-    }
-    graph.addVertex(node);
-  }
-  
-  /**
-   * Links the source to the target in the graph.
-   * @param source A non-null source node.
-   * @param target A non-null target node.
-   */
-  protected void addDagEdge(final QueryNode source, final QueryNode target) {
-    if (source == null) {
-      throw new IllegalArgumentException("Source cannot be null.");
-    }
-    if (target == null) {
-      throw new IllegalArgumentException("Target cannot be null.");
-    }
-    try {
-      graph.addDagEdge(source, target);
-    } catch (CycleFoundException e) {
-      throw new IllegalArgumentException("Cycles are not allowed", e);
-    }
-  }
-  
-  /**
    * A helper to initialize the nodes in depth-first order.
    */
-  protected void initializeGraph() {
-    if (graph.vertexSet().size() == 1) {
-      throw new IllegalStateException("Graph cannot be empty (with only the context).");
+  protected void initializeGraph(final Span span) {
+    final Span child;
+    if (span != null) {
+      child = span.newChild(getClass() + ".initializeGraph").start();
+    } else {
+      child = null;
     }
-    final DepthFirstIterator<QueryNode, DefaultEdge> df_iterator = 
-      new DepthFirstIterator<QueryNode, DefaultEdge>(graph);
-    while (df_iterator.hasNext()) {
-      final QueryNode node = df_iterator.next();
-      if (node == this) {
-        continue;
+  
+    final Map<String, QueryNodeConfig> node_configs = 
+        execution_graph.nodeConfigs();
+    final Map<String, QueryNode> map = 
+        Maps.newHashMapWithExpectedSize(execution_graph.getNodes().size());
+    final Set<String> unique_ids = 
+        Sets.newHashSetWithExpectedSize(execution_graph.getNodes().size());
+    
+    // first pass to instantiate the nodes.
+    for (final ExecutionGraphNode node : execution_graph.getNodes()) {
+      if (unique_ids.contains(node.getId())) {
+        throw new IllegalArgumentException("The node id \"" 
+            + node.getId() + "\" appeared more than once in the "
+            + "graph. It must be unique.");
       }
-      node.initialize();
+      unique_ids.add(node.getId());
+      
+      final QueryNodeFactory factory;
+      if (!Strings.isNullOrEmpty(node.getType())) {
+        factory = tsdb.getRegistry().getQueryNodeFactory(node.getType().toLowerCase());
+      } else {
+        factory = tsdb.getRegistry().getQueryNodeFactory(node.getId().toLowerCase());
+      }
+      if (factory == null) {
+        throw new IllegalArgumentException("No node factory found for "
+            + "configuration " + node);
+      }
+      
+      final QueryNode query_node;
+      QueryNodeConfig node_config = node.getConfig() != null ? 
+          node.getConfig() : node_configs.get(node.getId());
+      if (node_config == null) {
+        node_config = node_configs.get(node.getType());
+      }
+      if (node_config != null) {
+        query_node = factory.newNode(this, node.getId(), node_config);
+      } else {
+        query_node = factory.newNode(this, node.getId());
+      }
+      if (query_node == null) {
+        throw new IllegalStateException("Factory returned a null "
+            + "instance for " + node);
+      }
+      
+      map.put(node.getId(), query_node);
+      
+      graph.addVertex(query_node);
+    }
+    
+    // second pass to build the graph.
+    for (final ExecutionGraphNode node : execution_graph.getNodes()) {
+      if (node != null && 
+          node.getSources() != null && 
+          !node.getSources().isEmpty()) {
+        final QueryNode query_node = map.get(node.getId());
+        for (final String source : node.getSources()) {
+          try {
+            graph.addDagEdge(query_node, map.get(source));
+          } catch (CycleFoundException e) {
+            throw new IllegalArgumentException("A cycle was detected "
+                + "adding node: " + node, e);
+          }
+        }
+      }
+    }
+    
+    // depth first initiation of the executors since we have to init
+    // the ones without any downstream dependencies first.
+    final DepthFirstIterator<QueryNode, DefaultEdge> iterator = 
+        new DepthFirstIterator<QueryNode, DefaultEdge>(graph);
+    final Set<TimeSeriesDataSource> source_set = Sets.newHashSet();
+    while (iterator.hasNext()) {
+      final QueryNode node = iterator.next();
+      
       final Set<DefaultEdge> incoming = graph.incomingEdgesOf(node);
-      if (incoming.size() == 1 && graph.getEdgeSource(incoming.iterator().next()) == this) {
+      if (incoming.size() == 0 && node != this) {
+        try {
+          graph.addDagEdge(this, node);
+        } catch (CycleFoundException e) {
+          throw new IllegalArgumentException(
+              "Invalid graph configuration", e);
+        }
         roots.add(node);
       }
+      
       if (node instanceof TimeSeriesDataSource) {
-        sources.add((TimeSeriesDataSource) node);
+        source_set.add((TimeSeriesDataSource) node);
+      }
+      
+      if (node != this) {
+        node.initialize(child);
       }
     }
+    sources.addAll(source_set);
+    if (child != null) {
+      child.setSuccessTags().finish();
+    }
   }
-
+  
   /**
    * A helper to determine if the stream is finished and calls the sink's 
    * {@link QuerySink#onComplete()} method.
@@ -396,10 +514,22 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     /** The type of ID token pulled from the result. */
     private final TypeToken<? extends TimeSeriesId> id_type;
     
+    /** The max resolution for the results. */
+    private ChronoUnit resolution;
+    
+    /** The sequence ID to return. */
+    private long sequence_id = 0;
+    
+    /** Rollup config if a result gave us one. */
+    private RollupConfig rollup_config;
+    
     public CumulativeQueryResult(final QueryResult result) {
       series = Lists.newArrayList(result.timeSeries());
       time_specification = result.timeSpecification();
       id_type = result.idType();
+      resolution = result.resolution();
+      sequence_id = result.sequenceId();
+      rollup_config = result.rollupConfig();
     }
     
     @Override
@@ -414,7 +544,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
 
     @Override
     public long sequenceId() {
-      return 0;
+      return sequence_id;
     }
 
     @Override
@@ -428,16 +558,46 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     }
     
     @Override
+    public ChronoUnit resolution() {
+      return resolution;
+    }
+    
+    @Override
+    public RollupConfig rollupConfig() {
+      return rollup_config;
+    }
+    
+    @Override
     public void close() {
       // No-Op
     }
     
     /**
      * Add the resulting time series to the accumulation.
-     * @param results A non-null collection of results. May be empty.
+     * @param next A non-null result.
      */
-    protected void addResults(final Collection<TimeSeries> results) {
-      series.addAll(results);
+    protected void addResults(final QueryResult next) {
+      if (time_specification != null || next.timeSpecification() != null) {
+        if ((time_specification == null && next.timeSpecification() != null) ||
+            (time_specification != null && next.timeSpecification() == null)) {
+          throw new IllegalStateException("Received a different time "
+              + "specification in query result: " + next);
+        }
+        
+        if (!time_specification.equals(next.timeSpecification())) {
+          throw new IllegalStateException("Received a different time "
+              + "specification in query result: " + next);
+        }
+      }
+      if (next.sequenceId() > sequence_id) {
+        sequence_id = next.sequenceId();
+      }
+      if (next.resolution().ordinal() < resolution.ordinal()) {
+        resolution = next.resolution();
+      }
+      series.addAll(next.timeSeries());
     }
+
+    
   }
 }

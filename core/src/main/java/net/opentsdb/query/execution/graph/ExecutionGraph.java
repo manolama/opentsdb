@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017  The OpenTSDB Authors.
+// Copyright (C) 2017-2018  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,21 +14,18 @@
 // limitations under the License.
 package net.opentsdb.query.execution.graph;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-
-import org.jgrapht.experimental.dag.DirectedAcyclicGraph;
-import org.jgrapht.experimental.dag.DirectedAcyclicGraph.CycleFoundException;
-import org.jgrapht.graph.DefaultEdge;
-import org.jgrapht.traverse.DepthFirstIterator;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
@@ -36,17 +33,16 @@ import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Ordering;
-import com.google.common.collect.Sets;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
-import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.Const;
-import net.opentsdb.core.DefaultRegistry;
 import net.opentsdb.core.DefaultTSDB;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.query.execution.QueryExecutor;
-import net.opentsdb.query.execution.QueryExecutorFactory;
+import net.opentsdb.query.QueryNodeConfig;
+import net.opentsdb.query.QueryNodeFactory;
+import net.opentsdb.utils.JSON;
+import net.opentsdb.utils.JSONException;
 
 /**
  * An execution graph that defines a set of executors, default configs and the
@@ -54,28 +50,12 @@ import net.opentsdb.query.execution.QueryExecutorFactory;
  * graphs can be setup per TSD and consumed or overridden at query time.
  * <p>
  * Note that the builder is used to instantiate the object (via code or JSON
- * deserialization) but the graph will not be ready to use until 
- * {@link #initialize(DefaultTSDB)} is called.
- * <p>
- * If the graph is part of a cluster or a sub config, give a unique prefix
- * to {@link #initialize(DefaultTSDB, String)} and all executors and configs will be
- * pre-pended with the prefix. That will allow users to override configs at
- * query time.
- * <p>
- * Note the executor may be registered with the TSD but must be done so outside
- * of this class.
- * <p>
- * <b>Invariants:</b>
- * <ul>
- * <li>Each {@link ExecutionGraphNode} must have a unique ID within the graph.</li>
- * <li>The graph must have at most one sink that will be used to execution a
- * query.</li>
- * <li>The graph must be an uncyclical DAG.</li>
- * </ul>
+ * deserialization) and construction/validation of the graph must be done
+ * elsewhere.
+ * 
  * @since 3.0
  */
 @JsonInclude(Include.NON_NULL)
-@JsonIgnoreProperties(ignoreUnknown = true)
 @JsonDeserialize(builder = ExecutionGraph.Builder.class)
 public class ExecutionGraph implements Comparable<ExecutionGraph> {
   /** The TSDB to which this graph belongs. */
@@ -86,15 +66,10 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
   
   /** The list of nodes given by the user or config. */
   protected List<ExecutionGraphNode> nodes;
-  
-  /** The instantiated executors for each node. Used when closing. */
-  protected final Map<String, QueryExecutor<?>> executors;
-  
-  /** The graph of node IDs .*/
-  protected final DirectedAcyclicGraph<String, DefaultEdge> graph;
-  
-  /** The sink executor for the graph. */
-  protected QueryExecutor<?> sink_executor;
+
+  /** A set of optional node configs manually de-serialized. Not counted
+   * in the equals, hash code or comparable. */
+  protected Map<String, QueryNodeConfig> node_configs;
   
   /**
    * Protected ctor that sets up maps but doesn't generate the graph.
@@ -106,145 +81,8 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
     }
     id = builder.id;
     nodes = builder.nodes;
-    executors = Maps.newHashMapWithExpectedSize(nodes.size());
-    graph = new DirectedAcyclicGraph<String,
-        DefaultEdge>(DefaultEdge.class);
-  }
-  
-  /**
-   * Initializes the graph as per the config, looking for factories and 
-   * instantiating executors.
-   * @param tsdb A non-null TSDB to pull factories from.
-   * @return A deferred to wait on for initialization to complete. May return
-   * an exception if the graph does not conform to specs.
-   * @throws IllegalArgumentException if the TSDB was null.
-   */
-  public Deferred<Object> initialize(final TSDB tsdb) {
-    return initialize(tsdb, null);
-  }
-  
-  /**
-   * Initializes the graph as per the config, looking for factories and 
-   * instantiating executors.
-   * @param tsdb2 A non-null TSDB to pull factories from.
-   * @param id_prefix An optional prefix to use if this graph belongs to an
-   * executor such as a cluster executor.
-   * @return A deferred to wait on for initialization to complete. May return
-   * an exception if the graph does not conform to specs.
-   * @throws IllegalArgumentException if the TSDB was null.
-   */
-  public Deferred<Object> initialize(final TSDB tsdb2, final String id_prefix) {
-    if (tsdb2 == null) {
-      throw new IllegalArgumentException("TSDB cannot be null.");
-    }
-    this.tsdb = tsdb2;
-    try {
-      final Map<String, ExecutionGraphNode> map = 
-          Maps.newHashMapWithExpectedSize(nodes.size());
-      final Set<String> unique_ids = 
-          Sets.newHashSetWithExpectedSize(nodes.size());
-      for (final ExecutionGraphNode node : nodes) {
-        node.setExecutionGraph(this);
-        
-        // prepend the ID and upstream ID if we have one.
-        if (!Strings.isNullOrEmpty(id_prefix)) {
-          node.resetId(id_prefix + "_" + node.getExecutorId());
-          if (!Strings.isNullOrEmpty(node.getUpstream())) {
-            node.resetUpstream(id_prefix + "_" + node.getUpstream());
-          }
-        }
-        
-        if (unique_ids.contains(node.getExecutorId())) {
-          return Deferred.<Object>fromResult(new IllegalArgumentException(
-              "The node id \"" + node.getExecutorId() 
-                + "\" appeared more than once in "
-                + "the graph. It must be unique."));
-        }
-        unique_ids.add(node.getExecutorId());
-        map.put(node.getExecutorId(), node);
-        
-        graph.addVertex(node.getExecutorId());
-        if (!Strings.isNullOrEmpty(node.getUpstream())) {
-          graph.addVertex(node.getUpstream());
-          try {
-            graph.addDagEdge(node.getUpstream(), node.getExecutorId());
-          } catch (CycleFoundException e) {
-            return Deferred.<Object>fromResult(
-                new IllegalArgumentException("A cycle was "
-                + "detected adding node: " + node, e));
-          }
-        }
-      }
-      
-      // depth first initiation of the executors since we have to init
-      // the ones without any downstream dependencies first.
-      final DepthFirstIterator<String, DefaultEdge> iterator = 
-          new DepthFirstIterator<String, DefaultEdge>(graph);
-      while (iterator.hasNext()) {
-        final String id = iterator.next();
-        recursiveInit(id, map);
-      }
-      
-      return Deferred.<Object>fromResult(null);
-    } catch (Exception e) {
-      return Deferred.<Object>fromResult(e);
-    }
   }
 
-  /**
-   * Helper that recursively walks the graph, initializing the deepest executors
-   * first so that parents that depend on downstream executors will find their
-   * children on construction.
-   * @param id A non-null graph node ID.
-   * @param map The map of Ids to nodes to use for lookups.
-   */
-  private void recursiveInit(final String id, 
-                             final Map<String, ExecutionGraphNode> map) {
-    if (executors.containsKey(id)) {
-      return;
-    }
-    
-    final Set<DefaultEdge> outgoing = graph.outgoingEdgesOf(id);
-    for (final DefaultEdge edge : outgoing) {
-      final String downstream = graph.getEdgeTarget(edge);
-      recursiveInit(downstream, map);
-    }
-    
-    final ExecutionGraphNode node = map.get(id);
-    if (node == null) {
-      throw new IllegalArgumentException("No upstream node found with ID: " 
-          + id);
-    }
-    
-    // init an executor
-    final QueryExecutorFactory<?> factory = 
-        ((DefaultRegistry) tsdb.getRegistry()).getFactory(node.getExecutorType());
-    if (factory == null) {
-      throw new IllegalArgumentException("No factory "
-          + "found for executor: " + node.getExecutorType());
-    }
-    
-    final QueryExecutor<?> executor = factory.newExecutor(node);
-    if (executor == null) {
-      throw new IllegalStateException("Factory "
-          + "returned a null executor.");
-    }
-    executors.put(node.getExecutorId(), executor);
-    
-    // find the sink executor
-    if (graph.incomingEdgesOf(node.getExecutorId()).isEmpty()) {
-      // we can't have more than one sink executor.
-      if (sink_executor != null && sink_executor != executor) {
-        if (graph.incomingEdgesOf(sink_executor.id()).isEmpty()) {
-          throw new IllegalArgumentException(
-              "Can't replace the existing sink: " + sink_executor 
-              + " without adding an edge.");
-        }
-      }
-      sink_executor = executor;
-    }
-  }
-  
   /** @return The unique ID of this graph. */
   public String getId() {
     return id;
@@ -255,43 +93,56 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
     return Collections.unmodifiableList(nodes);
   }
   
-  /** @return The sink executor to send queries to. */
-  public QueryExecutor<?> sinkExecutor() {
-    return sink_executor;
+  /** @return An optional map of node configs. */
+  public Map<String, QueryNodeConfig> nodeConfigs() {
+    return node_configs != null ? node_configs : Collections.emptyMap();
   }
   
   /**
-   * Looks for the first of the downstream executors and returns it.
-   * TODO - for multi-downstream graphs we'll need to add an override.
-   * @param executor_id A non-null and non-empty executor ID.
-   * @return An instantiated executor if found.
-   * @throws IllegalArgumentException if the id was null or empty or not present
-   * in the graph.
-   * @throws IllegalStateException if the executor didn't have any downstream
-   * executors.
+   * Overrides the list of node configs with those given in the collection.
+   * Uses the {@link QueryNodeConfig#getId()} as the ID of a specific
+   * node or the name of node types. 
+   * @param configs A non-null list of node configs. May be empty.
+   * @throws IllegalArgumentException if the collection was null.
    */
-  public QueryExecutor<?> getDownstreamExecutor(final String executor_id) {
-    if (Strings.isNullOrEmpty(executor_id)) {
-      throw new IllegalArgumentException("Executor ID cannot be null or empty.");
+  public void setNodeConfigs(final Collection<QueryNodeConfig> configs) {
+    if (configs == null) {
+      throw new IllegalArgumentException("Configs cannot be null.");
     }
-    if (!graph.containsVertex(executor_id)) {
-      throw new IllegalArgumentException("No such executor ID in graph: " 
-          + executor_id);
+    if (node_configs != null) {
+      node_configs.clear();
     }
-    
-    final Set<DefaultEdge> downstream = graph.outgoingEdgesOf(executor_id);
-    if (downstream.isEmpty()) {
-      throw new IllegalStateException("Executor " + executor_id + " does not "
-          + "have any downstream executors in graph: " + this);
+    for (final QueryNodeConfig config : configs) {
+      addNodeConfig(config);
     }
-    DefaultEdge target = downstream.iterator().next();
-    String exec = graph.getEdgeTarget(target);
-    return executors.get(exec);
   }
   
-  /** The TSDB this graph belongs to. */
-  public TSDB tsdb() {
-    return tsdb;
+  /**
+   * Adds the given node config to the map using the 
+   * {@link QueryNodeConfig#getId()} as the unique key of config. This 
+   * may map to a node type to be used as the default for all nodes of 
+   * that type or it may be a specific node ID. It may not be null.
+   * @param config A non-null config.
+   * @throws IllegalArgumentException if the config was null or the 
+   * id of the config was null or empty or if a config with the same
+   * ID was already present.
+   */
+  public void addNodeConfig(final QueryNodeConfig config) {
+    if (config == null) {
+      throw new IllegalArgumentException("Config cannot be null.");
+    }
+    if (Strings.isNullOrEmpty(config.getId())) {
+      throw new IllegalArgumentException("Config ID cannot be null or "
+          + "empty.");
+    }
+    if (node_configs == null) {
+      node_configs = Maps.newHashMap();
+    }
+    if (node_configs.containsKey(config.getId())) {
+      throw new IllegalArgumentException("Duplicate config ID found "
+          + "for:  " + config.getId());
+    }
+    node_configs.put(config.getId(), config);
   }
   
   @Override
@@ -315,16 +166,14 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
     final HashCode hc = Const.HASH_FUNCTION().newHasher()
         .putString(Strings.nullToEmpty(id), Const.UTF8_CHARSET)
         .hash();
-    if (executors != null) {
-      final List<HashCode> hashes = 
-          Lists.newArrayListWithCapacity(nodes.size() + 1);
-      hashes.add(hc);
-      for (final ExecutionGraphNode node : nodes) {
-        hashes.add(node.buildHashCode());
-      }
-      return Hashing.combineOrdered(hashes);
+    final List<HashCode> hashes = 
+        Lists.newArrayListWithCapacity(nodes.size() + 1);
+    Collections.sort(nodes);
+    hashes.add(hc);
+    for (final ExecutionGraphNode node : nodes) {
+      hashes.add(node.buildHashCode());
     }
-    return hc;
+    return Hashing.combineOrdered(hashes);
   }
   
   @Override
@@ -343,8 +192,8 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
         .append(id)
         .append(", nodes=")
         .append(nodes)
-        .append(", sinkExecutor=")
-        .append(sink_executor)
+        .append(", nodeConfigs=")
+        .append(node_configs)
         .toString();
   }
   
@@ -372,6 +221,7 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
   }
   
   /** A builder for ExecutionGraphs. */
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public static class Builder {
     @JsonProperty
     private String id;
@@ -433,4 +283,66 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
       return new ExecutionGraph(this);
     }
   }
+
+  public static ExecutionGraph.Builder parse(final TSDB tsdb, 
+                                             final JsonNode graph_root) {
+    if (graph_root == null) {
+      throw new IllegalArgumentException("Graph root cannot be null.");
+    }
+    final Builder builder = newBuilder();
+    builder.setId(graph_root.get("id").asText());
+    
+    final JsonNode nodes = graph_root.get("nodes");
+    for (final JsonNode node : nodes) {
+      final ExecutionGraphNode.Builder node_builder = 
+          ExecutionGraphNode.newBuilder();
+      final String id = node.get("id").asText();
+      final String type = node.get("type").asText();
+      node_builder.setId(id);
+      if (!Strings.isNullOrEmpty(type)) {
+        node_builder.setType(type);
+      }
+      
+      final JsonNode sources = node.get("sources");
+      if (sources != null) {
+        try {
+          node_builder.setSources(JSON.getMapper().treeToValue(
+              node.get("sources"), List.class));
+        } catch (JsonProcessingException e) {
+          throw new JSONException("Failed to parse sources: " + node, e);
+        }
+      }
+      
+      final JsonNode config = node.get("config");
+      if (config != null) {
+        final QueryNodeFactory factory;
+        if (!Strings.isNullOrEmpty(type)) {
+          factory = tsdb.getRegistry().getQueryNodeFactory(type.toLowerCase());
+          if (factory == null) {
+            throw new IllegalArgumentException("No node factory found "
+                + "for node type: " + type);
+          }
+        } else {
+          factory = tsdb.getRegistry().getQueryNodeFactory(id.toLowerCase());
+          if (factory == null) {
+            throw new IllegalArgumentException("No node factory found "
+                + "for node type: " + id);
+          }
+        }
+        try {
+          final QueryNodeConfig node_config = 
+              JSON.getMapper().treeToValue(config, factory.nodeConfigClass());
+          node_builder.setConfig(node_config);
+          
+        } catch (JsonProcessingException e) {
+          throw new JSONException("Failed to parse config: " + node, e);
+        }
+      }
+      
+      builder.addNode(node_builder.build());
+    }
+    
+    return builder;
+  }
+  
 }

@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 017  The OpenTSDB Authors.
+// Copyright (C) 2017-2018  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -51,9 +51,10 @@ public class TestNumericLERP {
   
   @Before
   public void before() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setType(NumericType.TYPE.toString())
         .build();
   }
   
@@ -66,6 +67,10 @@ public class TestNumericLERP {
     source.add(1000, 1000);
     
     NumericLERP lerp = new NumericLERP(source, config);
+    assertTrue(lerp.has_next);
+    assertEquals(1000, lerp.nextReal().msEpoch());
+    
+    lerp = new NumericLERP(source.iterator(NumericType.TYPE).get(), config);
     assertTrue(lerp.has_next);
     assertEquals(1000, lerp.nextReal().msEpoch());
     
@@ -84,8 +89,11 @@ public class TestNumericLERP {
     lerp = new NumericLERP(source, config);
     assertFalse(lerp.has_next);
     
+    lerp = new NumericLERP((Iterator<TimeSeriesValue<? extends TimeSeriesDataType>>) null, config);
+    assertFalse(lerp.has_next);
+    
     try {
-      new NumericLERP(null, config);
+      new NumericLERP((TimeSeries) null, config);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
@@ -312,9 +320,10 @@ public class TestNumericLERP {
   
   @Test
   public void previousOnly() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.PREVIOUS_ONLY)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -359,9 +368,10 @@ public class TestNumericLERP {
   
   @Test
   public void nextOnly() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.NEXT_ONLY)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -406,9 +416,10 @@ public class TestNumericLERP {
 
   @Test
   public void preferPrevious() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.PREFER_PREVIOUS)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -453,9 +464,10 @@ public class TestNumericLERP {
   
   @Test
   public void preferNext() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.PREFER_NEXT)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -500,9 +512,10 @@ public class TestNumericLERP {
   
   @Test
   public void fillNone() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NONE)
         .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -547,9 +560,10 @@ public class TestNumericLERP {
   
   @Test
   public void fillNull() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NONE)
         .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -594,9 +608,10 @@ public class TestNumericLERP {
   
   @Test
   public void fillZero() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.ZERO)
         .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -640,10 +655,11 @@ public class TestNumericLERP {
   
   @Test
   public void fillScalar() throws Exception {
-    config = ScalarNumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) ScalarNumericInterpolatorConfig.newBuilder()
         .setValue(42)
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()

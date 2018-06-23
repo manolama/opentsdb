@@ -39,7 +39,7 @@ import net.opentsdb.data.BaseTimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
-import net.opentsdb.data.types.numeric.MutableNumericType;
+import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.storage.MockDataStore.MockRow;
 import net.opentsdb.storage.MockDataStore.MockSpan;
@@ -64,7 +64,6 @@ public class TestMockDataStore {
     config.register("MockDataStore.sysout.enable", true, false, "UT");
     
     mds = new MockDataStore(tsdb, "Mock");
-    when(registry.getQueryNodeFactory(anyString())).thenReturn(mds);
   }
   
   @Test
@@ -100,7 +99,7 @@ public class TestMockDataStore {
         .addTags("dc", "lga")
         .addTags("host", "db01")
         .build();
-    MutableNumericType dp = new MutableNumericType();
+    MutableNumericValue dp = new MutableNumericValue();
     TimeStamp ts = new MillisecondTimeStamp(1483228800000L);
     dp.reset(ts, 42.5);
     mds.write(id, dp, null);

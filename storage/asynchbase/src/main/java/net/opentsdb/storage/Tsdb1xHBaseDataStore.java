@@ -14,26 +14,16 @@
 // limitations under the License.
 package net.opentsdb.storage;
 
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Map.Entry;
-
 import org.hbase.async.HBaseClient;
 
 import com.google.common.base.Strings;
-import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.common.Const;
 import net.opentsdb.configuration.Configuration;
-import net.opentsdb.configuration.ConfigurationView.ConfigurationEntryWrapper;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.data.TimeSeries;
-import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
-import net.opentsdb.query.QueryIteratorFactory;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
@@ -83,7 +73,7 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
   public static final String MAX_MG_CARDINALITY_KEY = "tsd.query.multiget.max_cardinality";
   
   public static final byte[] DATA_FAMILY = 
-      "t".getBytes(Const.ASCII_CHARSET);
+      "t".getBytes(Const.ISO_8859_CHARSET);
   
   private final TSDB tsdb;
   private final String id;
@@ -127,25 +117,25 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
             "The name of the raw data table for OpenTSDB.");
       }
       data_table = config.getString(getConfigKey(DATA_TABLE_KEY))
-          .getBytes(Const.ASCII_CHARSET);
+          .getBytes(Const.ISO_8859_CHARSET);
       if (!config.hasProperty(getConfigKey(UID_TABLE_KEY))) {
         config.register(getConfigKey(UID_TABLE_KEY), "tsdb-uid", false, 
             "The name of the UID mapping table for OpenTSDB.");
       }
       uid_table = config.getString(getConfigKey(UID_TABLE_KEY))
-          .getBytes(Const.ASCII_CHARSET);
+          .getBytes(Const.ISO_8859_CHARSET);
       if (!config.hasProperty(getConfigKey(TREE_TABLE_KEY))) {
         config.register(getConfigKey(TREE_TABLE_KEY), "tsdb-tree", false, 
             "The name of the Tree table for OpenTSDB.");
       }
       tree_table = config.getString(getConfigKey(TREE_TABLE_KEY))
-          .getBytes(Const.ASCII_CHARSET);
+          .getBytes(Const.ISO_8859_CHARSET);
       if (!config.hasProperty(getConfigKey(META_TABLE_KEY))) {
         config.register(getConfigKey(META_TABLE_KEY), "tsdb-meta", false, 
             "The name of the Meta data table for OpenTSDB.");
       }
       meta_table = config.getString(getConfigKey(META_TABLE_KEY))
-          .getBytes(Const.ASCII_CHARSET);
+          .getBytes(Const.ISO_8859_CHARSET);
       
       // asynchbase flags
       if (!config.hasProperty(getConfigKey(ZK_QUORUM_KEY))) {
@@ -224,6 +214,15 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
         config.register(ROWS_PER_SCAN_KEY, "128", true,
             "TODO");
       }
+      
+      if (!config.hasProperty(MULTI_GET_CONCURRENT_KEY)) {
+        config.register(MULTI_GET_CONCURRENT_KEY, "20", true,
+            "TODO");
+      }
+      if (!config.hasProperty(MULTI_GET_BATCH_KEY)) {
+        config.register(MULTI_GET_BATCH_KEY, "1024", true,
+            "TODO");
+      }
       if (!config.hasProperty(MAX_MG_CARDINALITY_KEY)) {
         config.register(MAX_MG_CARDINALITY_KEY, "128", true,
             "TODO");
@@ -287,35 +286,9 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
   
   @Override
   public QueryNode newNode(final QueryPipelineContext context,
+                           final String id,
                            final QueryNodeConfig config) {
-    return new Tsdb1xQueryNode(this, context, (QuerySourceConfig) config);
-  }
-
-  @Override
-  public Collection<TypeToken<?>> types() {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  @Override
-  public void registerIteratorFactory(TypeToken<?> type,
-      QueryIteratorFactory factory) {
-    // TODO Auto-generated method stub
-    
-  }
-
-  @Override
-  public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> newIterator(
-      TypeToken<?> type, QueryNode node, Collection<TimeSeries> sources) {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  @Override
-  public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> newIterator(
-      TypeToken<?> type, QueryNode node, Map<String, TimeSeries> sources) {
-    // TODO Auto-generated method stub
-    return null;
+    return new Tsdb1xQueryNode(this, context, id, (QuerySourceConfig) config);
   }
   
   public Deferred<Object> shutdown() {

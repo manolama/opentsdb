@@ -5,7 +5,7 @@
     <parent>
       <groupId>net.opentsdb</groupId>
       <artifactId>opentsdb</artifactId>
-      <version>3.0.84-SNAPSHOT</version>
+      <version>3.0.85-SNAPSHOT</version>
     </parent>
     
     <artifactId>opentsdb-common</artifactId>
@@ -89,6 +89,18 @@
           <executions>
             <execution>
               <goals>
+                <goal>test-jar</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <artifactId>maven-source-plugin</artifactId>
+          <executions>
+            <execution>
+              <id>attach-sources</id>
+              <goals>
+                <goal>jar-no-fork</goal>
                 <goal>test-jar</goal>
               </goals>
             </execution>

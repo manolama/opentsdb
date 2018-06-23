@@ -14,11 +14,11 @@
 // limitations under the License.
 package net.opentsdb.storage.schemas.tsdb1x;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -27,30 +27,31 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.io.Files;
 import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 import com.stumbleupon.async.DeferredGroupException;
 
+import net.opentsdb.common.Const;
 import net.opentsdb.configuration.ConfigurationException;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.BaseTimeSeriesStringId;
-import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
+import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.meta.MetaDataStorageSchema;
-import net.opentsdb.query.QueryIteratorFactory;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.query.filter.TagVLiteralOrFilter;
 import net.opentsdb.query.pojo.Filter;
-import net.opentsdb.rollup.RollupConfig;
+import net.opentsdb.rollup.DefaultRollupConfig;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.StorageException;
 import net.opentsdb.storage.TimeSeriesDataStore;
@@ -61,6 +62,7 @@ import net.opentsdb.uid.UniqueIdStore;
 import net.opentsdb.uid.UniqueIdType;
 import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.Exceptions;
+import net.opentsdb.utils.JSON;
 
 /**
  * The interface for an OpenTSDB version 1 and version 2 schema where 
@@ -82,6 +84,7 @@ public class Schema implements TimeSeriesDataStore {
   public static final String QUERY_REVERSE_KEY = "tsd.query.time.descending";
   public static final String QUERY_KEEP_FIRST_KEY = "tsd.query.duplicates.keep_earliest";
   public static final String TIMELESS_SALTING_KEY = "tsd.storage.salt.timeless";
+  public static final String OLD_SALTING_KEY = "tsd.storage.salt.old";
   
   /** Max time delta (in seconds) we can store in a column qualifier.  */
   public static final short MAX_RAW_TIMESPAN = 3600;
@@ -107,7 +110,13 @@ public class Schema implements TimeSeriesDataStore {
   protected int salt_buckets;
   protected int salt_width;
   
+  protected final boolean timeless_salting;
+  protected final boolean old_salting;
+  protected final DefaultRollupConfig rollup_config;
+  
   protected Map<TypeToken<?>, Codec> codecs;
+  
+  protected MetaDataStorageSchema meta_schema;
   
   public Schema(final TSDB tsdb, final String id) {
     this.tsdb = tsdb;
@@ -188,6 +197,28 @@ public class Schema implements TimeSeriesDataStore {
           + " returned a null UniqueId instance.");
     }
     
+    key = configKey("rollups.enable");
+    final boolean rollups_enabled = tsdb.getConfig().getBoolean(key);
+    if (rollups_enabled) {
+      key = configKey("rollups.config");
+      value = tsdb.getConfig().getString(key);
+      if (Strings.isNullOrEmpty(value)) { 
+        throw new ConfigurationException("Null value for config key: " + key);
+      }
+      
+      if (value.endsWith(".json")) {
+        try {
+          value = Files.toString(new File(value), Const.UTF8_CHARSET);
+        } catch (IOException e) {
+          throw new IllegalArgumentException("Failed to open conf file: " 
+              + value, e);
+        }
+      }
+      rollup_config = JSON.parseToObject(value, DefaultRollupConfig.class);
+    } else {
+      rollup_config = null;
+    }
+    
     if (!tsdb.getConfig().hasProperty(QUERY_BYTE_LIMIT_KEY)) {
       tsdb.getConfig().register(QUERY_BYTE_LIMIT_KEY, 
           QUERY_BYTE_LIMIT_DEFAULT, true, 
@@ -213,49 +244,46 @@ public class Schema implements TimeSeriesDataStore {
       tsdb.getConfig().register(TIMELESS_SALTING_KEY, true, false,
           "Whether or not timestamps are incorporated into the salting "
           + "calculations. When true, time is not incorporated, when false "
-          + "it is included.");
+          + "it is included. NOTE: For almost all uses, leave this as true.");
+    }
+    if (!tsdb.getConfig().hasProperty(OLD_SALTING_KEY)) {
+      tsdb.getConfig().register(OLD_SALTING_KEY, false, false,
+          "Whether or not to enable the old, stringified salting "
+          + "calculation. DO NOT SET THIS TO TRUE!");
     }
     
-    codecs = Maps.newHashMapWithExpectedSize(1);
+    timeless_salting = tsdb.getConfig().getBoolean(TIMELESS_SALTING_KEY);
+    old_salting = tsdb.getConfig().getBoolean(OLD_SALTING_KEY);
+    codecs = Maps.newHashMapWithExpectedSize(2);
     codecs.put(NumericType.TYPE, new NumericCodec());
+    codecs.put(NumericSummaryType.TYPE, new NumericSummaryCodec());
+    
+    meta_schema = tsdb.getRegistry()
+        .getDefaultPlugin(MetaDataStorageSchema.class);
   }
   
   @Override
-  public QueryNode newNode(QueryPipelineContext context,
-      QueryNodeConfig config) {
-    return data_store.newNode(context, config);
+  public QueryNode newNode(final QueryPipelineContext context,
+                           final String id,
+                           final QueryNodeConfig config) {
+    return data_store.newNode(context, id, config);
   }
 
+  @Override
+  public QueryNode newNode(QueryPipelineContext context, String id) {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public Class<? extends QueryNodeConfig> nodeConfigClass() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+  
   @Override
   public Deferred<List<byte[]>> encodeJoinKeys(final List<String> join_keys, final Span span) {
     return getIds(UniqueIdType.TAGK, join_keys, span);
-  }
-  
-  @Override
-  public Collection<TypeToken<?>> types() {
-    return data_store.types();
-  }
-
-  @Override
-  public void registerIteratorFactory(final TypeToken<?> type,
-                                      final QueryIteratorFactory factory) {
-    data_store.registerIteratorFactory(type, factory);
-  }
-
-  @Override
-  public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> newIterator(
-      final TypeToken<?> type, 
-      final QueryNode node, 
-      final Collection<TimeSeries> sources) {
-    return data_store.newIterator(type, node, sources);
-  }
-
-  @Override
-  public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> newIterator(
-      final TypeToken<?> type, 
-      final QueryNode node, 
-      final Map<String, TimeSeries> sources) {
-    return data_store.newIterator(type, node, sources);
   }
   
   /**
@@ -631,27 +659,76 @@ public class Schema implements TimeSeriesDataStore {
    * @param row_key A non-null and non-empty row key.
    */
   public void prefixKeyWithSalt(final byte[] row_key) {
-    // TODO - implement
+    if (salt_width < 1) {
+      return;
+    }
+    if ((row_key.length < salt_width + metric_width) ||    
+        (Bytes.memcmp(row_key, new byte[salt_width + metric_width], 
+            salt_width, metric_width) == 0)) {    
+        //Metric id is 0, which means it is a global row. Don't prefix it with salt   
+        return;
+      }
+    
+    if (timeless_salting) {
+      // we want the metric and tags, not the timestamp
+      int hash = 1;
+      for (int i = salt_width; i < row_key.length; i++) {
+        hash = 31 * hash + row_key[i];
+        if (i + 1 == salt_width + metric_width) {
+          i = salt_width + metric_width + Const.TIMESTAMP_BYTES - 1;
+        }
+      }
+      int modulo = hash % salt_buckets;
+      if (modulo < 0) {
+        // make sure we return a positive salt.
+        modulo = modulo * -1;
+      }
+      prefixKeyWithSalt(row_key, modulo);
+    } else if (old_salting) {
+      // DON'T DO THIS! Don't USE IT!
+      int modulo = (new String(Arrays.copyOfRange(row_key, salt_width,    
+          row_key.length), Const.ASCII_US_CHARSET)).hashCode() % salt_buckets;   
+      if (modulo < 0) {
+        // make sure we return a positive salt.
+        modulo = modulo * -1;   
+      }
+      prefixKeyWithSalt(row_key, modulo);
+    } else {
+      int hash = 1;
+      for (int i = salt_width; i < row_key.length; i++) {
+        hash = 31 * hash + row_key[i];
+      }
+      int modulo = hash % salt_buckets;
+      if (modulo < 0) {
+        // make sure we return a positive salt.
+        modulo = modulo * -1;
+      }
+      prefixKeyWithSalt(row_key, modulo);
+    }
   }
   
+  /**
+   * Sets the bucket on the row key. The row key must be pre-allocated
+   * the proper number of salt bytes at the start of the array.
+   * @param row_key A non-null and non-empty row key.
+   * @param bucket A 0 based positive bucket ID.
+   */
   public void prefixKeyWithSalt(final byte[] row_key, final int bucket) {
     if (salt_width == 1) {
       row_key[0] = (byte) bucket;
       return;
     }
     
-    final byte[] salt = new byte[salt_width];
     int shift = 0;
-    for (int i = 0; i <= salt_width; i++) {
-      salt[salt_width - i] = (byte) (bucket >>> shift);
+    for (int i = 0; i < salt_width; i++) {
+      row_key[salt_width - i - 1] = 0;
+      row_key[salt_width - i - 1] = (byte) (bucket >>> shift);
       shift += 8;
     }
-    System.arraycopy(salt, 0, row_key, 0, salt_width);
   }
   
-  public RollupConfig rollupConfig() {
-    // TODO - implement
-    return null;
+  public DefaultRollupConfig rollupConfig() {
+    return rollup_config;
   }
   
   /**
@@ -673,9 +750,9 @@ public class Schema implements TimeSeriesDataStore {
     Bytes.setInt(row, base_time, salt_width + metric_width);
   }
   
+  /** @return Whether or not timeless salting is enabled. */
   public boolean timelessSalting() {
-    // TODO - implement
-    return true;
+    return timeless_salting;
   }
   
   public net.opentsdb.storage.schemas.tsdb1x.Span<? extends TimeSeriesDataType> newSpan(
@@ -701,8 +778,7 @@ public class Schema implements TimeSeriesDataStore {
   
   /** @return The meta schema if implemented and assigned, null if not. */
   public MetaDataStorageSchema metaSchema() {
-    // TODO - implement
-    return null;
+    return meta_schema;
   }
   
   static class ResolvedFilterImplementation implements ResolvedFilter {
@@ -784,6 +860,18 @@ public class Schema implements TimeSeriesDataStore {
       tsdb.getConfig().register(key, null, false, 
           "The name of the data store factory to load and associate "
               + "with this schema.");
+    }
+    
+    key = configKey("rollups.enable");
+    if (!tsdb.getConfig().hasProperty(key)) {
+      tsdb.getConfig().register(key, false, false, 
+          "Whether or not rollups are enabled for this schema.");
+    }
+    
+    key = configKey("rollups.config");
+    if (!tsdb.getConfig().hasProperty(key)) {
+      tsdb.getConfig().register(key, null, false, 
+          "The path to a JSON file containing the rollup configuration.");
     }
   }
   
@@ -976,5 +1064,5 @@ public class Schema implements TimeSeriesDataStore {
     // TODO Auto-generated method stub
     return null;
   }
-
+  
 }

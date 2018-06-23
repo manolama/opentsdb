@@ -23,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Iterator;
 
@@ -34,17 +35,21 @@ import org.junit.runner.RunWith;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.primitives.Bytes;
 
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesValue;
+import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QuerySourceConfig;
 import net.opentsdb.query.pojo.Metric;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
 import net.opentsdb.query.pojo.Timespan;
-import net.opentsdb.rollup.RollupConfig;
+import net.opentsdb.rollup.DefaultRollupConfig;
+import net.opentsdb.rollup.RollupInterval;
+import net.opentsdb.rollup.RollupUtils;
 import net.opentsdb.storage.schemas.tsdb1x.NumericCodec;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
 import net.opentsdb.storage.schemas.tsdb1x.NumericCodec.OffsetResolution;
@@ -61,7 +66,7 @@ public class TestTsdb1xQueryResult extends UTBase {
   private Tsdb1xQueryNode node;
   private Schema schema; 
   private QuerySourceConfig source_config;
-  public RollupConfig rollup_config;
+  public DefaultRollupConfig rollup_config;
   public TimeSeriesQuery query;
   
   @Before
@@ -81,7 +86,7 @@ public class TestTsdb1xQueryResult extends UTBase {
     when(node.fetchDataType(any(byte.class))).thenReturn(true);
     when(node.schema()).thenReturn(schema);
     when(node.config()).thenReturn(source_config);
-    when(source_config.configuration()).thenReturn(config);
+    when(source_config.configuration()).thenReturn(tsdb.config);
     when(source_config.query()).thenReturn(query);
   }
   
@@ -105,6 +110,7 @@ public class TestTsdb1xQueryResult extends UTBase {
     assertEquals(TS_SINGLE_SERIES, v.timestamp().epoch());
     assertEquals(1, v.value().longValue());
     assertFalse(it.hasNext());
+    assertEquals(ChronoUnit.SECONDS, result.resolution());
   }
 
   @Test
@@ -122,6 +128,7 @@ public class TestTsdb1xQueryResult extends UTBase {
     result.decode(row, null);
     
     assertTrue(result.timeSeries().isEmpty());
+    assertEquals(ChronoUnit.SECONDS, result.resolution());
   }
 
   @Test
@@ -161,6 +168,7 @@ public class TestTsdb1xQueryResult extends UTBase {
     assertEquals(3, v.value().longValue());
     
     assertFalse(it.hasNext());
+    assertEquals(ChronoUnit.SECONDS, result.resolution());
   }
 
   @Test
@@ -186,6 +194,7 @@ public class TestTsdb1xQueryResult extends UTBase {
     result.decode(row, null);
     
     assertTrue(result.timeSeries().isEmpty());
+    assertEquals(ChronoUnit.SECONDS, result.resolution());
   }
 
   @Test
@@ -220,6 +229,7 @@ public class TestTsdb1xQueryResult extends UTBase {
     assertEquals(3, v.value().longValue());
     
     assertFalse(it.hasNext());
+    assertEquals(ChronoUnit.SECONDS, result.resolution());
   }
 
   @Test
@@ -240,6 +250,7 @@ public class TestTsdb1xQueryResult extends UTBase {
     result.decode(row, null);
     
     assertTrue(result.timeSeries().isEmpty());
+    assertEquals(ChronoUnit.SECONDS, result.resolution());
   }
 
   @Test
@@ -285,6 +296,7 @@ public class TestTsdb1xQueryResult extends UTBase {
     assertEquals(4, v.value().longValue());
     
     assertFalse(it.hasNext());
+    assertEquals(ChronoUnit.SECONDS, result.resolution());
   }
 
   @Test
@@ -312,8 +324,81 @@ public class TestTsdb1xQueryResult extends UTBase {
     result.decode(row, null);
     
     assertTrue(result.timeSeries().isEmpty());
+    assertEquals(ChronoUnit.SECONDS, result.resolution());
   }
 
+  @Test
+  public void decodeSingleColumnRollup() throws Exception {
+    RollupInterval interval = RollupInterval.builder()
+        .setInterval("1h")
+        .setRowSpan("1d")
+        .setTable("tsdb-rollup-1h")
+        .setPreAggregationTable("tsdb-rollup-1h")
+        .build();
+    interval.setConfig(rollup_config);
+    rollup_config = DefaultRollupConfig.builder()
+        .addInterval(interval)
+        .addAggregationId("sum", 0)
+        .build();
+    
+    Tsdb1xQueryResult result = new Tsdb1xQueryResult(0, node, schema);
+    
+    byte[] qualifier = RollupUtils.buildRollupQualifier(TS_SINGLE_SERIES, (short) 0, 0, interval);
+    final byte[] row_key = makeRowKey(METRIC_BYTES, TS_SINGLE_SERIES, TAGK_BYTES, TAGV_BYTES);
+    ArrayList<KeyValue> row = Lists.newArrayList();
+    row.add(new KeyValue(row_key, Tsdb1xHBaseDataStore.DATA_FAMILY,
+        qualifier,
+        NumericCodec.vleEncodeLong(1)
+        ));
+    
+    result.decode(row, interval);
+    
+    assertEquals(1, result.timeSeries().size());
+    TimeSeries series = result.timeSeries().iterator().next();
+    Iterator<TimeSeriesValue<?>> it = series.iterator(NumericSummaryType.TYPE).get();
+    TimeSeriesValue<NumericSummaryType> v = (TimeSeriesValue<NumericSummaryType>) it.next();
+    assertEquals(TS_SINGLE_SERIES, v.timestamp().epoch());
+    assertEquals(1, v.value().value(0).longValue());
+    assertFalse(it.hasNext());
+    assertEquals(ChronoUnit.SECONDS, result.resolution());
+  }
+  
+  @Test
+  public void decodeSingleColumnRollupStringPrefix() throws Exception {
+    RollupInterval interval = RollupInterval.builder()
+        .setInterval("1h")
+        .setRowSpan("1d")
+        .setTable("tsdb-rollup-1h")
+        .setPreAggregationTable("tsdb-rollup-1h")
+        .build();
+    interval.setConfig(rollup_config);
+    rollup_config = DefaultRollupConfig.builder()
+        .addInterval(interval)
+        .addAggregationId("sum", 0)
+        .build();
+    
+    Tsdb1xQueryResult result = new Tsdb1xQueryResult(0, node, schema);
+    
+    byte[] qualifier = buildStringQualifier(0, (short) 0, 0, interval);
+    final byte[] row_key = makeRowKey(METRIC_BYTES, TS_SINGLE_SERIES, TAGK_BYTES, TAGV_BYTES);
+    ArrayList<KeyValue> row = Lists.newArrayList();
+    row.add(new KeyValue(row_key, Tsdb1xHBaseDataStore.DATA_FAMILY,
+        qualifier,
+        NumericCodec.vleEncodeLong(1)
+        ));
+    
+    result.decode(row, interval);
+    
+    assertEquals(1, result.timeSeries().size());
+    TimeSeries series = result.timeSeries().iterator().next();
+    Iterator<TimeSeriesValue<?>> it = series.iterator(NumericSummaryType.TYPE).get();
+    TimeSeriesValue<NumericSummaryType> v = (TimeSeriesValue<NumericSummaryType>) it.next();
+    assertEquals(TS_SINGLE_SERIES, v.timestamp().epoch());
+    assertEquals(1, v.value().value(0).longValue());
+    assertFalse(it.hasNext());
+    assertEquals(ChronoUnit.SECONDS, result.resolution());
+  }
+  
   @Test
   public void decodeUnknownType() throws Exception {
     Tsdb1xQueryResult result = new Tsdb1xQueryResult(0, node, schema);
@@ -370,5 +455,18 @@ public class TestTsdb1xQueryResult extends UTBase {
     } catch (IndexOutOfBoundsException e) { }
   }
   
+  byte[] buildStringQualifier(int offset, short flags, int type, RollupInterval interval) {
+    byte[] qualifier = RollupUtils.buildRollupQualifier(TS_SINGLE_SERIES + offset, flags, type, interval);
+    String name = interval.rollupConfig().getAggregatorForId(type);
+    if (Strings.isNullOrEmpty(name)) {
+      throw new IllegalArgumentException("No agg for ID: " + type);
+    }
+    name = name.toUpperCase();
+    byte[] q = new byte[qualifier.length - 1 + name.length() + 1];
+    System.arraycopy(name.getBytes(), 0, q, 0, name.length());
+    q[name.length()] = ':';
+    System.arraycopy(qualifier, 1, q, name.length() + 1, qualifier.length - 1);
+    return q;
+  }
   // TODO - test other types when codecs are ready
 }

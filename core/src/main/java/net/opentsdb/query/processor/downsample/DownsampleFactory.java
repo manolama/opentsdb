@@ -18,13 +18,18 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
 
+import com.google.common.collect.Lists;
+import com.google.common.reflect.TypeToken;
+
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesValue;
+import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryIteratorFactory;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
+import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.processor.BaseQueryNodeFactory;
 
 /**
@@ -36,22 +41,35 @@ public class DownsampleFactory extends BaseQueryNodeFactory {
 
   /**
    * Default ctor.
-   * @param id A non-null and non-empty ID.
    */
-  public DownsampleFactory(final String id) {
-    super(id);
+  public DownsampleFactory() {
+    super("downsample");
     registerIteratorFactory(NumericType.TYPE, new NumericIteratorFactory());
+    registerIteratorFactory(NumericSummaryType.TYPE, 
+        new NumericSummaryIteratorFactory());
   }
 
   @Override
   public QueryNode newNode(final QueryPipelineContext context,
+                           final String id,
                            final QueryNodeConfig config) {
     if (config == null) {
       throw new IllegalArgumentException("Config cannot be null.");
     }
-    return new Downsample(this, context, (DownsampleConfig) config);
+    return new Downsample(this, context, id, (DownsampleConfig) config);
+  }
+  
+  @Override
+  public QueryNode newNode(QueryPipelineContext context, String id) {
+    // TODO Auto-generated method stub
+    return null;
   }
 
+  @Override
+  public Class<? extends QueryNodeConfig> nodeConfigClass() {
+    return DownsampleConfig.class;
+  }
+  
   /**
    * The default numeric iterator factory.
    */
@@ -59,15 +77,48 @@ public class DownsampleFactory extends BaseQueryNodeFactory {
 
     @Override
     public Iterator<TimeSeriesValue<?>> newIterator(final QueryNode node,
+                                                    final QueryResult result,
                                                     final Collection<TimeSeries> sources) {
       return new DownsampleNumericIterator(node, sources.iterator().next());
     }
 
     @Override
     public Iterator<TimeSeriesValue<?>> newIterator(final QueryNode node,
+                                                    final QueryResult result,
                                                     final Map<String, TimeSeries> sources) {
       return new DownsampleNumericIterator(node, sources.values().iterator().next());
     }
-    
+
+    @Override
+    public Collection<TypeToken<?>> types() {
+      return Lists.newArrayList(NumericType.TYPE);
+    }
+        
   }
+
+  /**
+   * Handles summaries.
+   */
+  protected class NumericSummaryIteratorFactory implements QueryIteratorFactory {
+
+    @Override
+    public Iterator<TimeSeriesValue<?>> newIterator(final QueryNode node,
+                                                    final QueryResult result,
+                                                    final Collection<TimeSeries> sources) {
+      return new DownsampleNumericSummaryIterator(node, result, sources.iterator().next());
+    }
+
+    @Override
+    public Iterator<TimeSeriesValue<?>> newIterator(final QueryNode node,
+                                                    final QueryResult result,
+                                                    final Map<String, TimeSeries> sources) {
+      return new DownsampleNumericSummaryIterator(node, result, sources.values().iterator().next());
+    }
+    
+    @Override
+    public Collection<TypeToken<?>> types() {
+      return Lists.newArrayList(NumericSummaryType.TYPE);
+    }
+  }
+  
 }

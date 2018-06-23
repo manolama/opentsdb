@@ -40,7 +40,7 @@ import net.opentsdb.data.DataShardMerger;
 import net.opentsdb.data.iterators.IteratorGroups;
 import net.opentsdb.data.types.numeric.NumericMergeLargest;
 import net.opentsdb.query.QueryIteratorFactory;
-import net.opentsdb.query.QueryIteratorInterpolatorFactory;
+import net.opentsdb.query.QueryInterpolatorFactory;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.execution.CachingQueryExecutor;
 import net.opentsdb.query.execution.DefaultQueryExecutorFactory;
@@ -49,20 +49,19 @@ import net.opentsdb.query.execution.MultiClusterQueryExecutor;
 import net.opentsdb.query.execution.QueryExecutor;
 import net.opentsdb.query.execution.QueryExecutorFactory;
 import net.opentsdb.query.execution.TimeSlicedCachingExecutor;
-import net.opentsdb.query.execution.cache.QueryCachePlugin;
 import net.opentsdb.query.execution.cache.TimeSeriesCacheKeyGenerator;
 import net.opentsdb.query.execution.cache.DefaultTimeSeriesCacheKeyGenerator;
 import net.opentsdb.query.execution.cache.GuavaLRUCache;
+import net.opentsdb.query.execution.cache.QueryCachePlugin;
 import net.opentsdb.query.execution.cluster.ClusterConfig;
 import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
-import net.opentsdb.query.execution.serdes.TimeSeriesSerdes;
-import net.opentsdb.query.execution.serdes.UglyByteIteratorGroupsSerdes;
 import net.opentsdb.query.plan.DefaultQueryPlannerFactory;
 import net.opentsdb.query.plan.IteratorGroupsSlicePlanner;
 import net.opentsdb.query.plan.QueryPlannnerFactory;
 import net.opentsdb.query.plan.QueryPlanner;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
+import net.opentsdb.query.serdes.TimeSeriesSerdes;
 import net.opentsdb.storage.TimeSeriesDataStore;
 import net.opentsdb.utils.Deferreds;
 import net.opentsdb.utils.JSON;
@@ -125,8 +124,11 @@ public class DefaultRegistry implements Registry {
       throw new IllegalArgumentException("TSDB cannot be null.");
     }
     
-    tsdb.getConfig().register(PLUGIN_CONFIG_KEY, null, false, 
-        "The path to a plugin configuration file.");
+    if (!tsdb.getConfig().hasProperty(PLUGIN_CONFIG_KEY)) {
+      tsdb.getConfig().register(PLUGIN_CONFIG_KEY, null, false, 
+          "The path to a plugin configuration file to override the "
+          + "built-in default.");
+    }
     tsdb.getConfig().register(DEFAULT_CLUSTERS_KEY, null, false, 
         "TODO");
     tsdb.getConfig().register(DEFAULT_GRAPHS_KEY, null, false, "TODO");
@@ -458,7 +460,7 @@ public class DefaultRegistry implements Registry {
     final String config = tsdb.getConfig().getString(PLUGIN_CONFIG_KEY);
     if (Strings.isNullOrEmpty(config)) {
       if (plugins == null) {
-        LOG.info("No plugin config provided. Instantiating empty plugin config.");
+        LOG.info("No plugin config provided. Using the default config.");
         plugins = new PluginsConfig();
       }
     } else {
@@ -490,6 +492,9 @@ public class DefaultRegistry implements Registry {
   /** Sets up default objects in the registry. */
   @SuppressWarnings("unchecked")
   private Deferred<Object> initDefaults() {
+    if (true) {
+      return Deferred.fromResult(null);
+    }
     final DataShardMerger shards_merger = new DataShardMerger();
     shards_merger.registerStrategy(new NumericMergeLargest());
     data_mergers.put(null, shards_merger);
@@ -497,16 +502,6 @@ public class DefaultRegistry implements Registry {
     data_mergers.put("largest", shards_merger);
     
     List<Deferred<Object>> deferreds = Lists.newArrayList();
-    
-    final GuavaLRUCache query_cache = new GuavaLRUCache();
-    deferreds.add(query_cache.initialize(tsdb));
-    
-    registerPlugin(QueryCachePlugin.class, null, query_cache);
-    registerPlugin(QueryCachePlugin.class, "GuavaLRUCache", query_cache);
-    
-    final UglyByteIteratorGroupsSerdes ugly = new UglyByteIteratorGroupsSerdes();
-    serdes.put(null, ugly);
-    serdes.put("UglyByteSerdes", ugly);
     
     final TimeSeriesCacheKeyGenerator key_gen = 
         new DefaultTimeSeriesCacheKeyGenerator();
@@ -652,7 +647,7 @@ public class DefaultRegistry implements Registry {
   }
 
   @Override
-  public QueryIteratorInterpolatorFactory getQueryIteratorInterpolatorFactory(
+  public QueryInterpolatorFactory getQueryIteratorInterpolatorFactory(
       String id) {
     // TODO Auto-generated method stub
     return null;

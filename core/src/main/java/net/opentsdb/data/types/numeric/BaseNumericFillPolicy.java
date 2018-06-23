@@ -15,6 +15,7 @@
 package net.opentsdb.data.types.numeric;
 
 import net.opentsdb.query.QueryFillPolicy;
+import net.opentsdb.query.QueryInterpolatorConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 
 /**
@@ -48,11 +49,11 @@ public class BaseNumericFillPolicy implements QueryFillPolicy<NumericType>,
    * @param policy A non-null policy to implement.
    * @throws IllegalArgumentException if the policy was null.
    */
-  public BaseNumericFillPolicy(final NumericInterpolatorConfig config) {
+  public BaseNumericFillPolicy(final QueryInterpolatorConfig config) {
     if (config == null) {
       throw new IllegalArgumentException("Config cannot be null.");
     }
-    this.config = config;
+    this.config = (NumericInterpolatorConfig) config;
   }
   
   @Override
@@ -120,6 +121,11 @@ public class BaseNumericFillPolicy implements QueryFillPolicy<NumericType>,
   @Override
   public FillWithRealPolicy realPolicy() {
     return config.realFillPolicy();
+  }
+
+  @Override
+  public QueryInterpolatorConfig config() {
+    return config;
   }
 
 }

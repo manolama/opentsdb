@@ -28,11 +28,14 @@ import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 import com.stumbleupon.async.Deferred;
 
-import io.opentracing.Span;
+import io.netty.util.Timeout;
+import io.netty.util.TimerTask;
+import net.opentsdb.core.DefaultTSDB;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.query.context.QueryContext;
+import net.opentsdb.core.TSDBPlugin;
+import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.execution.QueryExecution;
-import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.stats.Span;
 import net.opentsdb.stats.TsdbTrace;
 import net.opentsdb.utils.Bytes.ByteArrayKey;
 import net.opentsdb.utils.Bytes;
@@ -72,7 +75,7 @@ import net.opentsdb.utils.DateTime;
  * 
  * @since 3.0
  */
-public class GuavaLRUCache extends QueryCachePlugin {
+public class GuavaLRUCache implements QueryCachePlugin, TimerTask, TSDBPlugin {
   private static final Logger LOG = LoggerFactory.getLogger(GuavaLRUCache.class);
   
   /** The default size limit in bytes. 128MB. */
@@ -86,6 +89,9 @@ public class GuavaLRUCache extends QueryCachePlugin {
   
   /** A counter to track how many values have been expired out of the cache. */
   private final AtomicLong expired;
+  
+  /** Reference to the TSDB used for metrics. */
+  private TSDB tsdb;
   
   /** The Guava cache implementation. */
   private Cache<ByteArrayKey, ExpiringValue> cache;
@@ -138,14 +144,14 @@ public class GuavaLRUCache extends QueryCachePlugin {
       public LocalExecution() {
         super(null);
         
-        if (context.getTracer() != null) {
-          setSpan(context, 
-              GuavaLRUCache.this.getClass().getSimpleName(), 
-              upstream_span,
-              TsdbTrace.addTags(
-                  "key", Bytes.pretty(key),
-                  "startThread", Thread.currentThread().getName()));
-        }
+//        if (context.getTracer() != null) {
+//          setSpan(context, 
+//              GuavaLRUCache.this.getClass().getSimpleName(), 
+//              upstream_span,
+//              TsdbTrace.addTags(
+//                  "key", Bytes.pretty(key),
+//                  "startThread", Thread.currentThread().getName()));
+//        }
       }
       
       /** Do da work */
@@ -174,7 +180,6 @@ public class GuavaLRUCache extends QueryCachePlugin {
               TsdbTrace.exceptionAnnotation(ex));
           return;
         }
-        
         
         final ByteArrayKey cache_key = new ByteArrayKey(key);
         final ExpiringValue value = cache.getIfPresent(cache_key);
@@ -231,12 +236,12 @@ public class GuavaLRUCache extends QueryCachePlugin {
           }
         }
         
-        setSpan(context, 
-            GuavaLRUCache.this.getClass().getSimpleName(), 
-            upstream_span,
-            TsdbTrace.addTags(
-                "keys", buf.toString(),
-                "startThread", Thread.currentThread().getName()));
+//        setSpan(context, 
+//            GuavaLRUCache.this.getClass().getSimpleName(), 
+//            upstream_span,
+//            TsdbTrace.addTags(
+//                "keys", buf.toString(),
+//                "startThread", Thread.currentThread().getName()));
       }
       
       /** Do da work */
@@ -309,7 +314,8 @@ public class GuavaLRUCache extends QueryCachePlugin {
   public void cache(final byte[] key, 
                     final byte[] data, 
                     final long expiration, 
-                    final TimeUnit units) {
+                    final TimeUnit units,
+                    final Span upstream_span) {
     if (cache == null) {
       throw new IllegalStateException("Cache has not been initialized.");
     }
@@ -341,7 +347,8 @@ public class GuavaLRUCache extends QueryCachePlugin {
   public void cache(final byte[][] keys, 
                     final byte[][] data, 
                     final long[] expirations,
-                    final TimeUnit units) {
+                    final TimeUnit units,
+                    final Span upstream_span) {
     if (cache == null) {
       throw new IllegalStateException("Cache has not been initialized.");
     }
@@ -394,21 +401,6 @@ public class GuavaLRUCache extends QueryCachePlugin {
   @Override
   public String version() {
     return "3.0.0";
-  }
-
-  @Override
-  public void collectStats(final StatsCollector collector) {
-    if (collector == null) {
-      return;
-    }
-    final CacheStats stats = cache.stats();
-    collector.record("executor.plugin.guava.requestCount", stats.requestCount());
-    collector.record("executor.plugin.guava.hitCount", stats.hitCount());
-    collector.record("executor.plugin.guava.hitRate", stats.hitRate());
-    collector.record("executor.plugin.guava.missCount", stats.missCount());
-    collector.record("executor.plugin.guava.missRate", stats.missRate());
-    collector.record("executor.plugin.guava.evictionCount", stats.evictionCount());
-    collector.record("executor.plugin.guava.expiredCount", expired.get());
   }
   
   @VisibleForTesting
@@ -486,5 +478,48 @@ public class GuavaLRUCache extends QueryCachePlugin {
       return DateTime.nanoTime() > expires;
     }
     
+    @Override
+    public String toString() {
+      return new StringBuilder()
+          .append("{value=")
+          .append(Bytes.pretty(value))
+          .append(", expires=")
+          .append(expires)
+          .toString();
+    }
   }
+
+  @Override
+  public void run(final Timeout ignored) throws Exception {
+    try {
+      final CacheStats stats = cache.stats();
+      tsdb.getStatsCollector().setGauge("query.readCache.guava.lru.requestCount", 
+          stats.requestCount(), (String[]) null);
+      tsdb.getStatsCollector().setGauge("query.readCache.guava.lru.hitCount", 
+          stats.hitCount(), (String[]) null);
+      tsdb.getStatsCollector().setGauge("query.readCache.guava.lru.hitRate", 
+          stats.hitRate(), (String[]) null);
+      tsdb.getStatsCollector().setGauge("query.readCache.guava.lru.missCount", 
+          stats.missCount(), (String[]) null);
+      tsdb.getStatsCollector().setGauge("query.readCache.guava.lru.missRate", 
+          stats.missRate(), (String[]) null);
+      tsdb.getStatsCollector().setGauge("query.readCache.guava.lru.evictionCount", 
+          stats.evictionCount(), (String[]) null);
+      tsdb.getStatsCollector().setGauge("query.readCache.guava.lru.expiredCount", 
+          expired.get(), (String[]) null);
+    } catch (Exception e) {
+      LOG.error("Unexpected exception recording LRU stats", e);
+    }
+    
+    tsdb.getMaintenanceTimer().newTimeout(this, 
+        tsdb.getConfig().getInt(DefaultTSDB.MAINT_TIMER_KEY), 
+        TimeUnit.MILLISECONDS);
+  }
+
+  
+  @Override
+  public Deferred<Object> shutdown() {
+    return Deferred.fromResult(null);
+  }
+  
 }

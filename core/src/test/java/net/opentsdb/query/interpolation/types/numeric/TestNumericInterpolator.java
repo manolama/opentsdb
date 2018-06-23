@@ -52,9 +52,10 @@ public class TestNumericInterpolator {
   
   @Before
   public void before() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setType(NumericType.TYPE.toString())
         .build();
   }
   
@@ -66,32 +67,41 @@ public class TestNumericInterpolator {
         .build(), new MillisecondTimeStamp(1000), new MillisecondTimeStamp(5000));
     source.add(1000, 1000);
     
-    NumericLERP lerp = new NumericLERP(source, config);
-    assertTrue(lerp.has_next);
-    assertEquals(1000, lerp.nextReal().msEpoch());
+    NumericInterpolator interpolator = new NumericInterpolator(source, config);
+    assertTrue(interpolator.has_next);
+    assertEquals(1000, interpolator.nextReal().msEpoch());
+    
+    interpolator = new NumericInterpolator(
+        source.iterator(NumericType.TYPE).get(), config);
+    assertTrue(interpolator.has_next);
+    assertEquals(1000, interpolator.nextReal().msEpoch());
     
     // empty source
     source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("foo")
         .build(), new MillisecondTimeStamp(1000), new MillisecondTimeStamp(5000));
-    lerp = new NumericLERP(source, config);
-    assertFalse(lerp.has_next);
+    interpolator = new NumericInterpolator(source, config);
+    assertFalse(interpolator.has_next);
     
     // no such type in source
     TimeSeries mock_source = mock(TimeSeries.class);
     when(mock_source.iterator(any(TypeToken.class)))
         .thenReturn(Optional.<Iterator<TimeSeriesValue<? extends TimeSeriesDataType>>>empty());
-    lerp = new NumericLERP(source, config);
-    assertFalse(lerp.has_next);
+    interpolator = new NumericInterpolator(source, config);
+    assertFalse(interpolator.has_next);
+    
+    interpolator = new NumericInterpolator(
+        (Iterator<TimeSeriesValue<? extends TimeSeriesDataType>>) null, config);
+    assertFalse(interpolator.has_next);
     
     try {
-      new NumericLERP(null, config);
+      new NumericInterpolator((TimeSeries) null, config);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
     try {
-      new NumericLERP(source, null);
+      new NumericInterpolator(source, null);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
   }
@@ -227,9 +237,10 @@ public class TestNumericInterpolator {
 
   @Test
   public void previousOnly() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.PREVIOUS_ONLY)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -274,9 +285,10 @@ public class TestNumericInterpolator {
   
   @Test
   public void nextOnly() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.NEXT_ONLY)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -321,9 +333,10 @@ public class TestNumericInterpolator {
   
   @Test
   public void preferPrevious() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.PREFER_PREVIOUS)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -368,9 +381,10 @@ public class TestNumericInterpolator {
   
   @Test
   public void preferNext() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.PREFER_NEXT)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -415,9 +429,10 @@ public class TestNumericInterpolator {
   
   @Test
   public void fillNone() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NONE)
         .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -462,9 +477,10 @@ public class TestNumericInterpolator {
   
   @Test
   public void fillNull() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NULL)
         .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -509,9 +525,10 @@ public class TestNumericInterpolator {
   
   @Test
   public void fillZero() throws Exception {
-    config = NumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.ZERO)
         .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()
@@ -555,10 +572,11 @@ public class TestNumericInterpolator {
   
   @Test
   public void fillScalar() throws Exception {
-    config = ScalarNumericInterpolatorConfig.newBuilder()
+    config = (NumericInterpolatorConfig) ScalarNumericInterpolatorConfig.newBuilder()
         .setValue(42)
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setType(NumericType.TYPE.toString())
         .build();
     NumericMillisecondShard source = new NumericMillisecondShard(
         BaseTimeSeriesStringId.newBuilder()

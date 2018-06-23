@@ -18,6 +18,9 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
 
+import com.google.common.collect.Lists;
+import com.google.common.reflect.TypeToken;
+
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.types.numeric.NumericType;
@@ -25,6 +28,7 @@ import net.opentsdb.query.QueryIteratorFactory;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
+import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.pojo.RateOptions;
 import net.opentsdb.query.processor.BaseQueryNodeFactory;
 
@@ -37,22 +41,34 @@ public class RateFactory extends BaseQueryNodeFactory {
 
   /**
    * Default ctor.
-   * @param id A non-null and non-empty id.
    */
-  public RateFactory(final String id) {
-    super(id);
+  public RateFactory() {
+    super("rate");
     registerIteratorFactory(NumericType.TYPE, new NumericIteratorFactory());
   }
 
   @Override
   public QueryNode newNode(final QueryPipelineContext context,
+                           final String id,
                            final QueryNodeConfig config) {
     if (config == null) {
       throw new IllegalArgumentException("Config cannot be null.");
     }
-    return new Rate(this, context, (RateOptions) config);
+    return new Rate(this, context, id, (RateOptions) config);
   }
 
+  @Override
+  public QueryNode newNode(QueryPipelineContext context, String id) {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public Class<? extends QueryNodeConfig> nodeConfigClass() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+  
   /**
    * The default numeric iterator factory.
    */
@@ -60,15 +76,24 @@ public class RateFactory extends BaseQueryNodeFactory {
 
     @Override
     public Iterator<TimeSeriesValue<?>> newIterator(final QueryNode node,
+                                                    final QueryResult result,
                                                     final Collection<TimeSeries> sources) {
       return new RateNumericIterator(node, sources.iterator().next());
     }
 
     @Override
     public Iterator<TimeSeriesValue<?>> newIterator(final QueryNode node,
+                                                    final QueryResult result,
                                                     final Map<String, TimeSeries> sources) {
       return new RateNumericIterator(node, sources.values().iterator().next());
     }
+
+    @Override
+    public Collection<TypeToken<?>> types() {
+      return Lists.newArrayList(NumericType.TYPE);
+    }
     
   }
+
+  
 }

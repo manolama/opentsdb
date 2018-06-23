@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017  The OpenTSDB Authors.
+// Copyright (C) 2017-2018  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.LongAdder;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,13 +26,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.stumbleupon.async.Deferred;
 
-import io.opentracing.Span;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.query.context.QueryContext;
+import net.opentsdb.core.TSDBPlugin;
+import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.execution.QueryExecution;
-import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.stats.Span;
 import net.opentsdb.stats.TsdbTrace;
-import net.opentsdb.utils.Bytes;
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.JedisCluster;
 
@@ -44,7 +42,7 @@ import redis.clients.jedis.JedisCluster;
  * 
  * @since 3.0
  */
-public class RedisClusterQueryCache extends QueryCachePlugin {
+public class RedisClusterQueryCache implements QueryCachePlugin, TSDBPlugin {
   private static final Logger LOG = LoggerFactory.getLogger(
       RedisClusterQueryCache.class);
 
@@ -59,20 +57,15 @@ public class RedisClusterQueryCache extends QueryCachePlugin {
   /** Redis flag: Expiration time is in ms. */
   static final byte[] EXP = new byte[] { 'P', 'X' };
   
+  /** The TSDB we belong to. */
+  private TSDB tsdb;
+  
   /** The cluster object. */
   private JedisCluster cluster;
   
-  /** Stats counters */
-  private final LongAdder set_called;
-  private final LongAdder get_called;
-  
-  public RedisClusterQueryCache() {
-    set_called = new LongAdder();
-    get_called = new LongAdder();
-  }
-  
   @Override
   public Deferred<Object> initialize(final TSDB tsdb) {
+    this.tsdb = tsdb;
     // Two or more implementations may be in play so check first
     if (!tsdb.getConfig().hasProperty(HOSTS_KEY)) {
       tsdb.getConfig().register(HOSTS_KEY, (String) null, false /* todo */, 
@@ -153,14 +146,14 @@ public class RedisClusterQueryCache extends QueryCachePlugin {
 
       public LocalExecution() {
         super(null);
-        if (context.getTracer() != null) {
-          setSpan(context, 
-              RedisClusterQueryCache.this.getClass().getSimpleName(), 
-              upstream_span,
-              TsdbTrace.addTags(
-                  "key", Bytes.pretty(key),
-                  "startThread", Thread.currentThread().getName()));
-        }
+//        if (context.getTracer() != null) {
+//          setSpan(context, 
+//              RedisClusterQueryCache.this.getClass().getSimpleName(), 
+//              upstream_span,
+//              TsdbTrace.addTags(
+//                  "key", Bytes.pretty(key),
+//                  "startThread", Thread.currentThread().getName()));
+//        }
       }
       
       /** Do da work */
@@ -194,7 +187,8 @@ public class RedisClusterQueryCache extends QueryCachePlugin {
         Exception ex = null;
         try {
           raw = cluster.get(key);
-          get_called.increment();
+          tsdb.getStatsCollector().incrementCounter("query.cache.redis.get", 
+              (String[]) null);
         } catch (Exception e) {
           LOG.warn("Exception querying Redis for cache data", e);
           ex = e;
@@ -231,14 +225,14 @@ public class RedisClusterQueryCache extends QueryCachePlugin {
 
       public LocalExecution() {
         super(null);
-        if (context.getTracer() != null) {
-          setSpan(context, 
-              RedisClusterQueryCache.this.getClass().getSimpleName(), 
-              upstream_span,
-              TsdbTrace.addTags(
-                  "keys", Integer.toString(keys.length),
-                  "startThread", Thread.currentThread().getName()));
-        }
+//        if (context.getTracer() != null) {
+//          setSpan(context, 
+//              RedisClusterQueryCache.this.getClass().getSimpleName(), 
+//              upstream_span,
+//              TsdbTrace.addTags(
+//                  "keys", Integer.toString(keys.length),
+//                  "startThread", Thread.currentThread().getName()));
+//        }
       }
       
       /** Do da work */
@@ -275,7 +269,8 @@ public class RedisClusterQueryCache extends QueryCachePlugin {
         Exception ex = null;
         try {
           raw = cluster.mget(keys);
-          get_called.increment();
+          tsdb.getStatsCollector().incrementCounter("query.cache.redis.get", 
+              (String[]) null);
         } catch (Exception e) {
           LOG.warn("Exception querying Redis for cache data", e);
           ex = e;
@@ -323,7 +318,8 @@ public class RedisClusterQueryCache extends QueryCachePlugin {
   public void cache(final byte[] key, 
                     final byte[] data, 
                     final long expiration, 
-                    final TimeUnit units) {
+                    final TimeUnit units,
+                    final Span upstream_span) {
     if (cluster == null) {
       throw new IllegalStateException("Cache has not been initialized.");
     }
@@ -342,7 +338,8 @@ public class RedisClusterQueryCache extends QueryCachePlugin {
     }
     try {
       cluster.set(key, data, NX, EXP, expiration);
-      set_called.increment();
+      tsdb.getStatsCollector().incrementCounter("query.cache.redis.set", 
+          (String[]) null);
     } catch (Exception e) {
       LOG.error("Unexpected exception writing to Redis.", e);
     }
@@ -352,7 +349,8 @@ public class RedisClusterQueryCache extends QueryCachePlugin {
   public void cache(final byte[][] keys, 
                     final byte[][] data, 
                     final long[] expirations,
-                    final TimeUnit units) {
+                    final TimeUnit units,
+                    final Span upstream_span) {
     if (cluster == null) {
       throw new IllegalStateException("Cache has not been initialized.");
     }
@@ -385,7 +383,8 @@ public class RedisClusterQueryCache extends QueryCachePlugin {
           continue;
         }
         cluster.set(keys[i], data[i], NX, EXP, expirations[i]);
-        set_called.increment();
+        tsdb.getStatsCollector().incrementCounter("query.cache.redis.set", 
+            (String[]) null);
       } catch (Exception e) {
         LOG.error("Unexpected exception writing to Redis.", e);
       }
@@ -400,17 +399,6 @@ public class RedisClusterQueryCache extends QueryCachePlugin {
   @Override
   public String version() {
     return "3.0.0";
-  }
-
-  @Override
-  public void collectStats(final StatsCollector collector) {
-    if (collector == null) {
-      return;
-    }
-    collector.record("cachingQueryExecutor.Redis.setCalled", 
-        set_called.longValue());
-    collector.record("cachingQueryExecutor.Redis.getCalled", 
-        get_called.longValue());
   }
   
   @Override

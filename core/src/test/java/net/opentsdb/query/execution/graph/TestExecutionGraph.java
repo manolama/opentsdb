@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017  The OpenTSDB Authors.
+// Copyright (C) 2017-2018  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,132 +15,101 @@
 package net.opentsdb.query.execution.graph;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.Collections;
-import org.junit.Before;
+import java.util.List;
+import java.util.Map;
+
 import org.junit.Test;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
-import com.stumbleupon.async.Deferred;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.google.common.collect.Lists;
+import com.google.common.hash.HashCode;
 
-import net.opentsdb.core.DefaultRegistry;
-import net.opentsdb.core.DefaultTSDB;
-import net.opentsdb.query.execution.QueryExecutor;
-import net.opentsdb.query.execution.QueryExecutorFactory;
+import net.opentsdb.core.MockTSDB;
+import net.opentsdb.core.TSDB;
+import net.opentsdb.query.BaseQueryNodeConfig;
+import net.opentsdb.query.QueryNode;
+import net.opentsdb.query.QueryNodeConfig;
+import net.opentsdb.query.QueryNodeFactory;
+import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.utils.JSON;
+import net.opentsdb.utils.YAML;
 
 public class TestExecutionGraph {
 
-  private DefaultTSDB tsdb;
-  private DefaultRegistry registry;
-  private QueryExecutorFactory<?> factory;
-  private QueryExecutor<?> executor_a;
-  private QueryExecutor<?> executor_b;
-  private QueryExecutor<?> executor_c;
-  private ExecutionGraph.Builder builder;
-  
-  @Before
-  public void before() throws Exception {
-    tsdb = mock(DefaultTSDB.class);
-    registry = mock(DefaultRegistry.class);
-    factory = mock(QueryExecutorFactory.class);
-    executor_a = mock(QueryExecutor.class);
-    executor_b = mock(QueryExecutor.class);
-    executor_c = mock(QueryExecutor.class);
-    
-    when(tsdb.getRegistry()).thenReturn(registry);
-    when(registry.getFactory("TimedQueryExecutor"))
-      .thenAnswer(new Answer<QueryExecutorFactory<?>>() {
-      @Override
-      public QueryExecutorFactory<?> answer(InvocationOnMock invocation)
-          throws Throwable {
-        return factory;
-      }
-    });
-    when(factory.newExecutor(any(ExecutionGraphNode.class)))
-      .thenAnswer(new Answer<QueryExecutor<?>>() {
-      @Override
-      public QueryExecutor<?> answer(InvocationOnMock invocation)
-          throws Throwable {
-        final ExecutionGraphNode node = 
-            (ExecutionGraphNode) invocation.getArguments()[0];
-        if (node.getExecutorId().equals("Node1")) {
-          return executor_a;
-        } else if (node.getExecutorId().equals("Node2")) {
-          return executor_b;
-        } else if (node.getExecutorId().equals("Node3")) {
-          return executor_c;
-        }
-        return null;
-      }
-    });
-    when(executor_a.id()).thenReturn("Node1");
-    when(executor_b.id()).thenReturn("Node2");
-    when(executor_c.id()).thenReturn("Node3");
-    
-    builder = ExecutionGraph.newBuilder()
-        .setId("Graph1")
-        .addNode(ExecutionGraphNode.newBuilder()
-          .setExecutorId("Node1")
-          .setExecutorType("TimedQueryExecutor"))
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node2")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"));
-  }
-  
   @Test
   public void builder() throws Exception {
-    ExecutionGraph graph = builder.build();
+    ExecutionGraph graph = ExecutionGraph.newBuilder()
+        .setId("Graph1")
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("N1")
+          .setType("MockFactoryA")
+          .addSource("S1")
+          .addSource("S2"))
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("S1")
+          .setType("MockSourceFactory"))
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("S2")
+          .setType("MockSourceFactory"))
+        .build();
     
     assertEquals("Graph1", graph.getId());
-    assertEquals(2, graph.getNodes().size());
-    assertEquals("Node1", graph.getNodes().get(0).getExecutorId());
-    assertEquals("TimedQueryExecutor", graph.getNodes().get(0).getExecutorType());
-    assertEquals("Node2", graph.getNodes().get(1).getExecutorId());
-    assertEquals("TimedQueryExecutor", graph.getNodes().get(1).getExecutorType());
-    assertTrue(graph.executors.isEmpty());
-    assertTrue(graph.graph.vertexSet().isEmpty());
-    assertNull(graph.tsdb());
-    assertNull(graph.sinkExecutor());
+    assertEquals(3, graph.getNodes().size());
+    assertEquals("N1", graph.getNodes().get(0).getId());
+    assertEquals("MockFactoryA", graph.getNodes().get(0).getType());
+    assertEquals(2, graph.getNodes().get(0).getSources().size());
+    assertEquals("S1", graph.getNodes().get(0).getSources().get(0));
+    assertEquals("S2", graph.getNodes().get(0).getSources().get(1));
+    assertEquals("S1", graph.getNodes().get(1).getId());
+    assertEquals("MockSourceFactory", graph.getNodes().get(1).getType());
+    assertEquals("S2", graph.getNodes().get(2).getId());
+    assertEquals("MockSourceFactory", graph.getNodes().get(2).getType());
     
-    String json = "{\"id\":\"Graph1\",\"nodes\":[{\"executorId\":\"Node1\","
-        + "\"executorType\":\"TimedQueryExecutor\"},{\"executorId\":\"Node2\","
-        + "\"upstream\":\"Node1\",\"executorType\":\"TimedQueryExecutor\"}]}";
+    String json = "{\"id\":\"Graph1\",\"nodes\":[{\"id\":\"N1\","
+        + "\"type\":\"MockFactoryA\",\"sources\":[\"S1\",\"S2\"]},"
+        + "{\"id\":\"S1\",\"type\":\"MockSourceFactory\"},"
+        + "{\"id\":\"S2\",\"type\":\"MockSourceFactory\"}]}";
     graph = JSON.parseToObject(json, ExecutionGraph.class);
     
     assertEquals("Graph1", graph.getId());
-    assertEquals(2, graph.getNodes().size());
-    assertEquals("Node1", graph.getNodes().get(0).getExecutorId());
-    assertEquals("TimedQueryExecutor", graph.getNodes().get(0).getExecutorType());
-    assertEquals("Node2", graph.getNodes().get(1).getExecutorId());
-    assertEquals("TimedQueryExecutor", graph.getNodes().get(1).getExecutorType());
-    assertTrue(graph.executors.isEmpty());
-    assertTrue(graph.graph.vertexSet().isEmpty());
-    assertNull(graph.tsdb());
-    assertNull(graph.sinkExecutor());
+    assertEquals(3, graph.getNodes().size());
+    assertEquals("N1", graph.getNodes().get(0).getId());
+    assertEquals("MockFactoryA", graph.getNodes().get(0).getType());
+    assertEquals(2, graph.getNodes().get(0).getSources().size());
+    assertEquals("S1", graph.getNodes().get(0).getSources().get(0));
+    assertEquals("S2", graph.getNodes().get(0).getSources().get(1));
+    assertEquals("S1", graph.getNodes().get(1).getId());
+    assertEquals("MockSourceFactory", graph.getNodes().get(1).getType());
+    assertEquals("S2", graph.getNodes().get(2).getId());
+    assertEquals("MockSourceFactory", graph.getNodes().get(2).getType());
     
     json = JSON.serializeToString(graph);
     assertTrue(json.contains("\"id\":\"Graph1\""));
     assertTrue(json.contains("\"nodes\":["));
-    assertTrue(json.contains("\"executorId\":\"Node1\""));
-    assertTrue(json.contains("\"executorId\":\"Node2\""));
+    assertTrue(json.contains("\"id\":\"N1\""));
+    assertTrue(json.contains("\"id\":\"S1\""));
+    assertTrue(json.contains("\"id\":\"S2\""));
+    assertTrue(json.contains("\"sources\":[\"S1\",\"S2\"]"));
     
     ExecutionGraph clone = ExecutionGraph.newBuilder(graph).build();
     assertNotSame(clone, graph);
     assertEquals("Graph1", clone.getId());
-    assertEquals(2, clone.getNodes().size());
+    assertEquals(3, clone.getNodes().size());
     assertNotSame(clone.nodes, graph.nodes);
     assertNotSame(clone.nodes.get(0), graph.nodes.get(0));
     assertNotSame(clone.nodes.get(1), graph.nodes.get(1));
@@ -149,23 +118,21 @@ public class TestExecutionGraph {
     graph = ExecutionGraph.newBuilder()
     //.setId("Graph1")
     .addNode(ExecutionGraphNode.newBuilder()
-      .setExecutorId("Node1")
-      .setExecutorType("TimedQueryExecutor"))
+      .setId("Node1")
+      .setType("TimedQueryExecutor"))
     .addNode(ExecutionGraphNode.newBuilder()
-        .setExecutorId("Node2")
-        .setExecutorType("TimedQueryExecutor")
-        .setUpstream("Node1"))
+      .setId("Node2")
+      .setType("TimedQueryExecutor"))
     .build();
     
     graph = ExecutionGraph.newBuilder()
     .setId("")
     .addNode(ExecutionGraphNode.newBuilder()
-      .setExecutorId("Node1")
-      .setExecutorType("TimedQueryExecutor"))
+      .setId("Node1")
+      .setType("TimedQueryExecutor"))
     .addNode(ExecutionGraphNode.newBuilder()
-        .setExecutorId("Node2")
-        .setExecutorType("TimedQueryExecutor")
-        .setUpstream("Node1"))
+        .setId("Node2")
+        .setType("TimedQueryExecutor"))
     .build();
     
     try {
@@ -183,43 +150,62 @@ public class TestExecutionGraph {
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
+    // Unknowns are ok.
     json = "{\"id\":\"Graph1\",\"unkownfield\":42,\"nodes\":"
-        + "[{\"executorId\":\"Node1\",\"executorType\":\"TimedQueryExecutor\"},"
-        + "{\"executorId\":\"Node2\",\"upstream\":\"Node1\",\"executorType\":"
-        + "\"TimedQueryExecutor\"}]}";
-    try {
-      JSON.parseToObject(json, ExecutionGraph.class);
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
+        + "[{\"id\":\"Node1\",\"type\":\"TimedQueryExecutor\"},"
+        + "{\"id\":\"Node2\",\"type\":\"TimedQueryExecutor\"}]}";
+    graph = JSON.parseToObject(json, ExecutionGraph.class);
+    assertEquals(2, graph.getNodes().size());
   }
   
   @Test
   public void hashCodeEqualsCompareTo() throws Exception {
-    final ExecutionGraph g1 = builder.build();
+    final ExecutionGraph g1 = ExecutionGraph.newBuilder()
+        .setId("Graph1")
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("N1")
+          .setType("MockFactoryA")
+          .addSource("S1")
+          .addSource("S2"))
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("S1")
+          .setType("MockSourceFactory"))
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("S2")
+          .setType("MockSourceFactory"))
+        .build();
     
     ExecutionGraph g2 = ExecutionGraph.newBuilder()
         .setId("Graph1")
         .addNode(ExecutionGraphNode.newBuilder()
-          .setExecutorId("Node1")
-          .setExecutorType("TimedQueryExecutor"))
+          .setId("N1")
+          .setType("MockFactoryA")
+          .addSource("S1")
+          .addSource("S2"))
         .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node2")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"))
+          .setId("S1")
+          .setType("MockSourceFactory"))
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("S2")
+          .setType("MockSourceFactory"))
         .build();
     assertEquals(g1.hashCode(), g2.hashCode());
     assertEquals(g1, g2);
     assertEquals(0, g1.compareTo(g2));
     
     g2 = ExecutionGraph.newBuilder()
-        .setId("Graph2")  // <-- Diff
+        .setId("Graph2")  // <-- DIFF
         .addNode(ExecutionGraphNode.newBuilder()
-          .setExecutorId("Node1")
-          .setExecutorType("TimedQueryExecutor"))
+          .setId("N1")
+          .setType("MockFactoryA")
+          .addSource("S1")
+          .addSource("S2"))
         .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node2")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"))
+          .setId("S1")
+          .setType("MockSourceFactory"))
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("S2")
+          .setType("MockSourceFactory"))
         .build();
     assertNotEquals(g1.hashCode(), g2.hashCode());
     assertNotEquals(g1, g2);
@@ -228,12 +214,16 @@ public class TestExecutionGraph {
     g2 = ExecutionGraph.newBuilder()
         .setId("Graph1")
         .addNode(ExecutionGraphNode.newBuilder()
-          .setExecutorId("Node3")  // <-- Diff
-          .setExecutorType("TimedQueryExecutor"))
+          .setId("N1")
+          .setType("MockFactoryA")
+          .addSource("S1")
+          .addSource("S3")) // <-- DIFF
         .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node2")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"))
+          .setId("S3") // <-- DIFF
+          .setType("MockSourceFactory"))
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("S2")
+          .setType("MockSourceFactory"))
         .build();
     assertNotEquals(g1.hashCode(), g2.hashCode());
     assertNotEquals(g1, g2);
@@ -241,13 +231,17 @@ public class TestExecutionGraph {
     
     g2 = ExecutionGraph.newBuilder()
         .setId("Graph1")
-        .addNode(ExecutionGraphNode.newBuilder()  // <-- change order OK!
-            .setExecutorId("Node2")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"))
         .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node1")
-            .setExecutorType("TimedQueryExecutor"))
+          .setId("N1")
+          .setType("MockFactoryA")
+          .addSource("S1")
+          .addSource("S2"))
+        .addNode(ExecutionGraphNode.newBuilder() // ORDER change is ok
+            .setId("S2")
+            .setType("MockSourceFactory"))
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("S1")
+          .setType("MockSourceFactory"))
         .build();
     assertEquals(g1.hashCode(), g2.hashCode());
     assertEquals(g1, g2);
@@ -255,414 +249,352 @@ public class TestExecutionGraph {
   }
   
   @Test
-  public void initialize1Node() throws Exception {
-    builder = ExecutionGraph.newBuilder()
-      .setId(null)
-      .addNode(ExecutionGraphNode.newBuilder()
-          .setExecutorId("Node1")
-          .setExecutorType("TimedQueryExecutor"));
+  public void addNodeConfig() throws Exception {
+    ExecutionGraph graph = ExecutionGraph.newBuilder()
+        .setId("Graph1")
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("N1")
+          .setType("MockFactoryA")
+          .addSource("S1")
+          .addSource("S2"))
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("S1")
+          .setType("MockSourceFactory"))
+        .addNode(ExecutionGraphNode.newBuilder()
+          .setId("S2")
+          .setType("MockSourceFactory"))
+        .build();
     
-    final ExecutionGraph graph = builder.build();
-    assertNull(graph.initialize(tsdb).join());
-    assertSame(tsdb, graph.tsdb());
+    QueryNodeConfig config1 = mock(QueryNodeConfig.class);
+    when(config1.getId()).thenReturn("config1");
+    QueryNodeConfig config2 = mock(QueryNodeConfig.class);
+    when(config2.getId()).thenReturn("config2");
     
-    assertEquals(1, graph.executors.size());
-    assertSame(executor_a, graph.executors.get("Node1"));
-    assertTrue(graph.graph.containsVertex("Node1"));
-    assertSame(executor_a, graph.sinkExecutor());
-    assertSame(graph, graph.nodes.get(0).graph());
+    graph.addNodeConfig(config1);
+    assertEquals(1, graph.nodeConfigs().size());
+    assertSame(config1, graph.nodeConfigs().get("config1"));
+    
+    graph.addNodeConfig(config2);
+    assertEquals(2, graph.nodeConfigs().size());
+    assertSame(config1, graph.nodeConfigs().get("config1"));
+    assertSame(config2, graph.nodeConfigs().get("config2"));
+    
+    graph.setNodeConfigs(Lists.newArrayList(config2));
+    assertEquals(1, graph.nodeConfigs().size());
+    assertSame(config2, graph.nodeConfigs().get("config2"));
+    
     try {
-      graph.getDownstreamExecutor("Node1");
-      fail("Expected IllegalStateException");
-    } catch (IllegalStateException e) { }
-  }
-  
-  @Test
-  public void initialize2Nodes() throws Exception {
-    final ExecutionGraph graph = builder.build();
-    assertNull(graph.initialize(tsdb).join());
-    
-    assertSame(tsdb, graph.tsdb());
-    
-    assertEquals(2, graph.executors.size());
-    assertSame(executor_a, graph.executors.get("Node1"));
-    assertSame(executor_b, graph.executors.get("Node2"));
-    
-    assertTrue(graph.graph.containsVertex("Node1"));
-    assertTrue(graph.graph.containsVertex("Node2"));
-    assertTrue(graph.graph.containsEdge("Node1", "Node2"));
-    
-    assertSame(executor_a, graph.sinkExecutor());
-    assertSame(graph, graph.nodes.get(0).graph());
-    assertSame(graph, graph.nodes.get(1).graph());
-    assertSame(executor_b, graph.getDownstreamExecutor("Node1"));
-  }
-  
-  @Test
-  public void initialize3Nodes() throws Exception {
-    builder = ExecutionGraph.newBuilder()
-        .setId("Graph1")
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node1")
-            .setExecutorType("TimedQueryExecutor"))
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node2")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"))
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node3")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"));
-    final ExecutionGraph graph = builder.build();
-    assertNull(graph.initialize(tsdb).join());
-    
-    assertSame(tsdb, graph.tsdb());
-    
-    assertEquals(3, graph.executors.size());
-    assertSame(executor_a, graph.executors.get("Node1"));
-    assertSame(executor_b, graph.executors.get("Node2"));
-    assertSame(executor_c, graph.executors.get("Node3"));
-    
-    assertTrue(graph.graph.containsVertex("Node1"));
-    assertTrue(graph.graph.containsVertex("Node2"));
-    assertTrue(graph.graph.containsVertex("Node3"));
-    assertTrue(graph.graph.containsEdge("Node1", "Node2"));
-    assertTrue(graph.graph.containsEdge("Node1", "Node3"));
-    
-    assertSame(executor_a, graph.sinkExecutor());
-    assertSame(graph, graph.nodes.get(0).graph());
-    assertSame(graph, graph.nodes.get(1).graph());
-    assertSame(graph, graph.nodes.get(2).graph());
-  }
-  
-  @Test
-  public void initialize3NodesDiffOrder() throws Exception {
-    builder = ExecutionGraph.newBuilder()
-        .setId("Graph1")
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node2")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"))
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node3")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"))
-        .addNode(ExecutionGraphNode.newBuilder() // sink is now last
-            .setExecutorId("Node1")
-            .setExecutorType("TimedQueryExecutor"));
-    final ExecutionGraph graph = builder.build();
-    assertNull(graph.initialize(tsdb).join());
-    
-    assertSame(tsdb, graph.tsdb());
-    
-    assertEquals(3, graph.executors.size());
-    assertSame(executor_a, graph.executors.get("Node1"));
-    assertSame(executor_b, graph.executors.get("Node2"));
-    assertSame(executor_c, graph.executors.get("Node3"));
-    
-    assertTrue(graph.graph.containsVertex("Node1"));
-    assertTrue(graph.graph.containsVertex("Node2"));
-    assertTrue(graph.graph.containsVertex("Node3"));
-    assertTrue(graph.graph.containsEdge("Node1", "Node2"));
-    assertTrue(graph.graph.containsEdge("Node1", "Node3"));
-    
-    assertSame(executor_a, graph.sinkExecutor());
-    assertSame(graph, graph.nodes.get(0).graph());
-    assertSame(graph, graph.nodes.get(1).graph());
-    assertSame(graph, graph.nodes.get(2).graph());
-  }
-  
-  @Test
-  public void initializeDupeId() throws Exception {
-    builder = ExecutionGraph.newBuilder()
-        .setId("Graph1")
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node1")
-            .setExecutorType("TimedQueryExecutor"))
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node2")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"))
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node2")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"));
-    final ExecutionGraph graph = builder.build();
-    final Deferred<Object> deferred = graph.initialize(tsdb);
-    try {
-      deferred.join();
+      graph.addNodeConfig(config2);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
-    // partial init
-    assertSame(tsdb, graph.tsdb());
+    graph.node_configs.clear();
+    when(config2.getId()).thenReturn(null);
+    try {
+      graph.addNodeConfig(config2);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    assertTrue(graph.nodeConfigs().isEmpty());
     
-    assertEquals(0, graph.executors.size());
+    when(config2.getId()).thenReturn("");
+    try {
+      graph.addNodeConfig(config2);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    assertTrue(graph.nodeConfigs().isEmpty());
     
-    assertTrue(graph.graph.containsVertex("Node1"));
-    assertTrue(graph.graph.containsVertex("Node2"));
-    assertFalse(graph.graph.containsVertex("Node3"));
-    assertTrue(graph.graph.containsEdge("Node1", "Node2"));
-    assertFalse(graph.graph.containsEdge("Node1", "Node3"));
+    try {
+      graph.addNodeConfig(null);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    assertTrue(graph.nodeConfigs().isEmpty());
     
-    assertNull(graph.sinkExecutor());
-    assertSame(graph, graph.nodes.get(0).graph());
-    assertSame(graph, graph.nodes.get(1).graph());
-    assertSame(graph, graph.nodes.get(2).graph());
+    try {
+      graph.setNodeConfigs(null);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    assertTrue(graph.nodeConfigs().isEmpty());
   }
   
   @Test
-  public void initializeCycle() throws Exception {
-    builder = ExecutionGraph.newBuilder()
-        .setId("Graph1")
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node1")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node2"))
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node2")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"));
-    final ExecutionGraph graph = builder.build();
-    final Deferred<Object> deferred = graph.initialize(tsdb);
+  public void parse() throws Exception {
+    TSDB tsdb = new MockTSDB();
+    when(tsdb.getRegistry().getQueryNodeFactory("mockfactorya"))
+      .thenReturn(new MockFactoryA());
+    when(tsdb.getRegistry().getQueryNodeFactory("mockfactoryb"))
+      .thenReturn(new MockFactoryB());
+    
+    String json = "{\"id\":\"Graph1\",\"nodes\":[{\"id\":\"N1\","
+        + "\"type\":\"MockFactoryA\",\"sources\":[\"S1\",\"S2\"],\"config\":"
+        + "{\"id\":\"N1\",\"foo\":\"myfoo\",\"bars\":[\"a\",\"b\",\"c\"]}},"
+        + "{\"id\":\"S1\",\"type\":\"MockFactoryB\"},"
+        + "{\"id\":\"S2\",\"type\":\"MockFactoryB\",\"config\":"
+        + "{\"id\":\"S2\",\"mynum\":42,\"settings\":{\"a\":-2.76,\"b\":42.5}}}]}";
+    JsonNode root = JSON.getMapper().readTree(json);
+    ExecutionGraph graph = ExecutionGraph.parse(tsdb, root).build();
+    assertEquals("Graph1", graph.getId());
+    assertEquals(3, graph.getNodes().size());
+   
+    ExecutionGraphNode node = graph.getNodes().get(0);
+    assertEquals("N1", node.getId());
+    assertEquals("MockFactoryA", node.getType());
+    assertEquals(2, node.getSources().size());
+    assertEquals("S1", node.getSources().get(0));
+    assertEquals("S2", node.getSources().get(1));
+    assertTrue(node.getConfig() instanceof MockConfigA);
+    assertEquals("myfoo", ((MockConfigA) node.getConfig()).foo);
+    assertEquals(3, ((MockConfigA) node.getConfig()).bars.size());
+    assertEquals("a", ((MockConfigA) node.getConfig()).bars.get(0));
+    assertEquals("b", ((MockConfigA) node.getConfig()).bars.get(1));
+    assertEquals("c", ((MockConfigA) node.getConfig()).bars.get(2));
+    
+    node = graph.getNodes().get(1);
+    assertEquals("S1", node.getId());
+    assertEquals("MockFactoryB", node.getType());
+    assertNull(node.getSources());
+    
+    node = graph.getNodes().get(2);
+    assertEquals("S2", node.getId());
+    assertEquals("MockFactoryB", node.getType());
+    assertNull(node.getSources());
+    assertTrue(node.getConfig() instanceof MockConfigB);
+    assertEquals(42, ((MockConfigB) node.getConfig()).mynum);
+    assertEquals(2, ((MockConfigB) node.getConfig()).settings.size());
+    assertEquals(-2.76, ((MockConfigB) node.getConfig()).settings.get("a"), 0.001);
+    assertEquals(42.5, ((MockConfigB) node.getConfig()).settings.get("b"), 0.001);
+    
+    // YAML!
+    String yaml = "---\n" +
+        "id: Graph1\n" +
+        "nodes:\n" +
+        "  - \n" +
+        "    id: N1\n" +
+        "    type: MockFactoryA\n" +
+        "    sources:\n" +
+        "      - S1\n" +
+        "      - S2\n" +
+        "    config:\n" +
+        "      foo: myfoo\n" +
+        "      bars:\n" +
+        "        - a\n" +
+        "        - b\n" +
+        "        - c\n" +
+        "  -\n" +
+        "    id: S1\n" +
+        "    type: MockFactoryB\n" +
+        "  -\n" +
+        "    id: S2\n" +
+        "    type: MockFactoryB\n" +
+        "    config:\n" +
+        "      mynum: 42\n" +
+        "      settings:\n" +
+        "        a: -2.76\n" +
+        "        b: 42.5";
+    root = YAML.getMapper().readTree(yaml);
+    graph = ExecutionGraph.parse(tsdb, root).build();
+    assertEquals("Graph1", graph.getId());
+    assertEquals(3, graph.getNodes().size());
+   
+    node = graph.getNodes().get(0);
+    assertEquals("N1", node.getId());
+    assertEquals("MockFactoryA", node.getType());
+    assertEquals(2, node.getSources().size());
+    assertEquals("S1", node.getSources().get(0));
+    assertEquals("S2", node.getSources().get(1));
+    assertTrue(node.getConfig() instanceof MockConfigA);
+    assertEquals("myfoo", ((MockConfigA) node.getConfig()).foo);
+    assertEquals(3, ((MockConfigA) node.getConfig()).bars.size());
+    assertEquals("a", ((MockConfigA) node.getConfig()).bars.get(0));
+    assertEquals("b", ((MockConfigA) node.getConfig()).bars.get(1));
+    assertEquals("c", ((MockConfigA) node.getConfig()).bars.get(2));
+    
+    node = graph.getNodes().get(1);
+    assertEquals("S1", node.getId());
+    assertEquals("MockFactoryB", node.getType());
+    assertNull(node.getSources());
+    
+    node = graph.getNodes().get(2);
+    assertEquals("S2", node.getId());
+    assertEquals("MockFactoryB", node.getType());
+    assertNull(node.getSources());
+    assertTrue(node.getConfig() instanceof MockConfigB);
+    assertEquals(42, ((MockConfigB) node.getConfig()).mynum);
+    assertEquals(2, ((MockConfigB) node.getConfig()).settings.size());
+    assertEquals(-2.76, ((MockConfigB) node.getConfig()).settings.get("a"), 0.001);
+    assertEquals(42.5, ((MockConfigB) node.getConfig()).settings.get("b"), 0.001);
+    
+    // No such node with config
+    json = "{\"id\":\"Graph1\",\"nodes\":[{\"id\":\"N1\","
+        + "\"type\":\"MockFactoryA\",\"sources\":[\"S1\",\"S2\"],\"config\":"
+        + "{\"id\":\"N1\",\"foo\":\"myfoo\",\"bars\":[\"a\",\"b\",\"c\"]}},"
+        + "{\"id\":\"S1\",\"type\":\"MockFactoryB\"},"
+        + "{\"id\":\"S2\",\"type\":\"MockFactoryC\",\"config\":"
+        + "{\"id\":\"S2\",\"mynum\":42,\"settings\":{\"a\":-2.76,\"b\":42.5}}}]}";
+    root = JSON.getMapper().readTree(json);
+    
     try {
-      deferred.join();
+      ExecutionGraph.parse(tsdb, root).build();
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
-    // partial init
-    assertSame(tsdb, graph.tsdb());
-    
-    assertEquals(0, graph.executors.size());
-    
-    assertTrue(graph.graph.containsVertex("Node1"));
-    assertTrue(graph.graph.containsVertex("Node2"));
-    assertFalse(graph.graph.containsEdge("Node1", "Node2"));
-    
-    assertNull(graph.sinkExecutor());
-    assertSame(graph, graph.nodes.get(0).graph());
-    assertSame(graph, graph.nodes.get(1).graph());
+    // No such node, but it's OK because there isn't a config to parse.
+    json = "{\"id\":\"Graph1\",\"nodes\":[{\"id\":\"N1\","
+        + "\"type\":\"MockFactoryA\",\"sources\":[\"S1\",\"S2\"],\"config\":"
+        + "{\"id\":\"N1\",\"foo\":\"myfoo\",\"bars\":[\"a\",\"b\",\"c\"]}},"
+        + "{\"id\":\"S1\",\"type\":\"MockFactoryC\"},"
+        + "{\"id\":\"S2\",\"type\":\"MockFactoryB\",\"config\":"
+        + "{\"id\":\"S2\",\"mynum\":42,\"settings\":{\"a\":-2.76,\"b\":42.5}}}]}";
+    root = JSON.getMapper().readTree(json);
+    graph = ExecutionGraph.parse(tsdb, root).build();
+    assertEquals(3, graph.getNodes().size());
   }
   
-  @Test
-  public void initializeNoFactory() throws Exception {
-    builder = ExecutionGraph.newBuilder()
-        .setId("Graph1")
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node1")
-            .setExecutorType("TimedQueryExecutor"))
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node2")
-            .setExecutorType("MultiClusterQueryExecutor")
-            .setUpstream("Node1"));
-    final ExecutionGraph graph = builder.build();
-    final Deferred<Object> deferred = graph.initialize(tsdb);
-    try {
-      deferred.join();
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
+  @JsonInclude(Include.NON_NULL)
+  @JsonDeserialize(builder = MockConfigA.Builder.class)
+  static class MockConfigA extends BaseQueryNodeConfig {
+    public String foo;
+    public List<String> bars;
     
-    // partial init
-    assertSame(tsdb, graph.tsdb());
-    
-    assertEquals(0, graph.executors.size());
-    
-    assertTrue(graph.graph.containsVertex("Node1"));
-    assertTrue(graph.graph.containsVertex("Node2"));
-    assertTrue(graph.graph.containsEdge("Node1", "Node2"));
-    
-    assertNull(graph.sinkExecutor());
-    assertSame(graph, graph.nodes.get(0).graph());
-    assertSame(graph, graph.nodes.get(1).graph());
-  }
-  
-  @Test
-  public void initializeFactoryReturnedNullExecutor() throws Exception {
-    builder = ExecutionGraph.newBuilder()
-        .setId("Graph1")
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node1")
-            .setExecutorType("TimedQueryExecutor"))
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node4")
-            .setExecutorType("TimedQueryExecutor")
-            .setUpstream("Node1"));
-    final ExecutionGraph graph = builder.build();
-    final Deferred<Object> deferred = graph.initialize(tsdb);
-    try {
-      deferred.join();
-      fail("Expected IllegalStateException");
-    } catch (IllegalStateException e) { }
-    
-    // partial init
-    assertSame(tsdb, graph.tsdb());
-    assertEquals("Node4", graph.nodes.get(1).getExecutorId());
-    
-    assertEquals(0, graph.executors.size());
-    
-    assertTrue(graph.graph.containsVertex("Node1"));
-    assertTrue(graph.graph.containsVertex("Node4"));
-    assertTrue(graph.graph.containsEdge("Node1", "Node4"));
-    
-    assertNull(graph.sinkExecutor());
-    assertSame(graph, graph.nodes.get(0).graph());
-    assertSame(graph, graph.nodes.get(1).graph());
-  }
-  
-  @Test
-  public void initializeTwoSinks() throws Exception {
-    builder = ExecutionGraph.newBuilder()
-        .setId("Graph1")
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node1")
-            .setExecutorType("TimedQueryExecutor"))
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setExecutorId("Node2")
-            .setExecutorType("TimedQueryExecutor"));
-    final ExecutionGraph graph = builder.build();
-    final Deferred<Object> deferred = graph.initialize(tsdb);
-    try {
-      deferred.join();
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    // partial init
-    assertSame(tsdb, graph.tsdb());
-    
-    assertEquals(2, graph.executors.size());
-    assertSame(executor_a, graph.executors.get("Node1"));
-    assertSame(executor_b, graph.executors.get("Node2"));
-    
-    assertTrue(graph.graph.containsVertex("Node1"));
-    assertTrue(graph.graph.containsVertex("Node2"));
-    assertFalse(graph.graph.containsEdge("Node1", "Node2"));
-    
-    assertSame(executor_a, graph.sinkExecutor());
-    assertSame(graph, graph.nodes.get(0).graph());
-    assertSame(graph, graph.nodes.get(1).graph());
-  }
-  
-  @Test
-  public void initializeUnexpectedException() throws Exception {
-    final IllegalStateException ex = new IllegalStateException("Boo!");
-    when(tsdb.getRegistry()).thenThrow(ex);
-    
-    final ExecutionGraph graph = builder.build();
-    final Deferred<Object> deferred = graph.initialize(tsdb);
-    try {
-      deferred.join();
-      fail("Expected IllegalStateException");
-    } catch (IllegalStateException e) { }
-    
-    // partial init
-    assertSame(tsdb, graph.tsdb());
-    
-    assertEquals(0, graph.executors.size());
-    
-    assertTrue(graph.graph.containsVertex("Node1"));
-    assertTrue(graph.graph.containsVertex("Node2"));
-    assertTrue(graph.graph.containsEdge("Node1", "Node2"));
-    
-    assertNull(graph.sinkExecutor());
-    assertSame(graph, graph.nodes.get(0).graph());
-    assertSame(graph, graph.nodes.get(1).graph());
-  }
-  
-  @Test
-  public void initializeNoSuchUpstreamNode() throws Exception {
-    builder = ExecutionGraph.newBuilder()
-      .setId(null)
-      .addNode(ExecutionGraphNode.newBuilder()
-          .setExecutorId("Node1")
-          .setExecutorType("TimedQueryExecutor")
-          .setUpstream("NoSuchNode"));
-    
-    final ExecutionGraph graph = builder.build();
-    try {
-      graph.initialize(tsdb).join();
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-  }
-  
-  @Test
-  public void initializeWithPrefix() throws Exception {
-    factory = mock(QueryExecutorFactory.class);
-    when(registry.getFactory("TimedQueryExecutor"))
-      .thenAnswer(new Answer<QueryExecutorFactory<?>>() {
-      @Override
-      public QueryExecutorFactory<?> answer(InvocationOnMock invocation)
-          throws Throwable {
-        return factory;
-      }
-    });
-    when(factory.newExecutor(any(ExecutionGraphNode.class)))
-      .thenAnswer(new Answer<QueryExecutor<?>>() {
-      @Override
-      public QueryExecutor<?> answer(InvocationOnMock invocation)
-          throws Throwable {
-        final ExecutionGraphNode node = 
-            (ExecutionGraphNode) invocation.getArguments()[0];
-        if (node.getExecutorId().equals("Cluster_Node1")) {
-          return executor_a;
-        } else if (node.getExecutorId().equals("Cluster_Node2")) {
-          return executor_b;
-        }
-        return null;
-      }
-    });
-    when(executor_a.id()).thenReturn("Cluster_Node1");
-    when(executor_b.id()).thenReturn("Cluster_Node2");
-    
-    final ExecutionGraph graph = builder.build();
-    assertNull(graph.initialize(tsdb, "Cluster").join());
-    
-    assertSame(tsdb, graph.tsdb());
-    
-    assertEquals(2, graph.executors.size());
-    assertSame(executor_a, graph.executors.get("Cluster_Node1"));
-    assertSame(executor_b, graph.executors.get("Cluster_Node2"));
-    
-    assertTrue(graph.graph.containsVertex("Cluster_Node1"));
-    assertTrue(graph.graph.containsVertex("Cluster_Node2"));
-    assertTrue(graph.graph.containsEdge("Cluster_Node1", "Cluster_Node2"));
-    assertSame(executor_b, graph.getDownstreamExecutor("Cluster_Node1"));
-    
-    assertSame(executor_a, graph.sinkExecutor());
-    assertSame(graph, graph.nodes.get(0).graph());
-    assertSame(graph, graph.nodes.get(1).graph());
-  }
-  
-  @Test (expected = IllegalArgumentException.class)
-  public void initializeNullTSDB() throws Exception {
-    final ExecutionGraph graph = builder.build();
-    graph.initialize(null);
-  }
+    protected MockConfigA(final Builder builder) {
+      super(builder);
+      foo = builder.foo;
+      bars = builder.bars;
+    }
 
-  @Test
-  public void getDownstreamExecutor() throws Exception {
-    final ExecutionGraph graph = builder.build();
-    assertNull(graph.initialize(tsdb).join());
+    @Override
+    public HashCode buildHashCode() { return null; }
+
+    @Override
+    public int compareTo(QueryNodeConfig o) { return 0; }
+
+    @Override
+    public boolean equals(Object o) { return false; }
+
+    @Override
+    public int hashCode() { return 0; }
     
-    assertSame(executor_b, graph.getDownstreamExecutor("Node1"));
-    
-    try {
-      graph.getDownstreamExecutor(null);
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    try {
-      graph.getDownstreamExecutor("");
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    try {
-      graph.getDownstreamExecutor("Node3");
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-    
-    try {
-      graph.getDownstreamExecutor("Node2");
-      fail("Expected IllegalStateException");
-    } catch (IllegalStateException e) { }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class Builder extends BaseQueryNodeConfig.Builder {
+      @JsonProperty
+      private String foo;
+      @JsonProperty
+      private List<String> bars;
+      
+      public Builder setFoo(final String foo) {
+        this.foo = foo;
+        return this;
+      }
+      
+      public Builder setBars(final List<String> bars) {
+        this.bars = bars;
+        return this;
+      }
+      
+      @Override
+      public QueryNodeConfig build() {
+        return new MockConfigA(this);
+      }
+      
+    }
   }
+  
+  static class MockFactoryA implements QueryNodeFactory {
+
+    @Override
+    public QueryNode newNode(QueryPipelineContext context, String id) {
+      return newNode(context, id, null);
+    }
+
+    @Override
+    public QueryNode newNode(QueryPipelineContext context, String id,
+        QueryNodeConfig config) {
+      return null;
+    }
+
+    @Override
+    public String id() {
+      return "MockFactoryA";
+    }
+
+    @Override
+    public Class<? extends QueryNodeConfig> nodeConfigClass() {
+      return MockConfigA.class;
+    }
+    
+  }
+  
+  @JsonInclude(Include.NON_NULL)
+  @JsonDeserialize(builder = MockConfigB.Builder.class)
+  static class MockConfigB extends BaseQueryNodeConfig {
+    public long mynum;
+    public Map<String, Double> settings;
+    
+    protected MockConfigB(final Builder builder) {
+      super(builder);
+      mynum = builder.mynum;
+      settings = builder.settings;
+    }
+
+    @Override
+    public HashCode buildHashCode() { return null; }
+
+    @Override
+    public int compareTo(QueryNodeConfig o) { return 0; }
+
+    @Override
+    public boolean equals(Object o) { return false; }
+
+    @Override
+    public int hashCode() { return 0; }
+    
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class Builder extends BaseQueryNodeConfig.Builder {
+      @JsonProperty
+      private long mynum;
+      @JsonProperty
+      private Map<String, Double> settings;
+      
+      public Builder setMynum(final long mynum) {
+        this.mynum = mynum;
+        return this;
+      }
+      
+      public Builder setSEttings(final Map<String, Double> settings) {
+        this.settings = settings;
+        return this;
+      }
+      
+      @Override
+      public QueryNodeConfig build() {
+        return new MockConfigB(this);
+      }
+      
+    }
+  }
+  
+  static class MockFactoryB implements QueryNodeFactory {
+
+    @Override
+    public QueryNode newNode(QueryPipelineContext context, String id) {
+      return newNode(context, id, null);
+    }
+
+    @Override
+    public QueryNode newNode(QueryPipelineContext context, String id,
+        QueryNodeConfig config) {
+      return null;
+    }
+
+    @Override
+    public String id() {
+      return "MockFactoryB";
+    }
+
+    @Override
+    public Class<? extends QueryNodeConfig> nodeConfigClass() {
+      return MockConfigB.class;
+    }
+    
+  }
+  
 }

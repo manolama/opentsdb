@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.storage.schemas.tsdb1x;
 
+import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Map;
 
@@ -29,6 +30,7 @@ import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.QuerySourceConfig;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
+import net.opentsdb.rollup.RollupConfig;
 
 /**
  * The base class for collecting Tsdb1x data fetched from storage.
@@ -70,6 +72,9 @@ public class Tsdb1xQueryResult implements QueryResult {
   /** The number of values stored in the result. */
   protected volatile long dps;
   
+  /** The resolution of the data. */
+  protected volatile ChronoUnit resolution;
+  
   /**
    * Default ctor. The node is expected to have a {@link QuerySourceConfig}
    * configuration that will give us a {@link Configuration} config to
@@ -104,6 +109,7 @@ public class Tsdb1xQueryResult implements QueryResult {
     dp_limit = query.getInt(config, Schema.QUERY_DP_LIMIT_KEY);
     reversed = query.getBoolean(config, Schema.QUERY_REVERSE_KEY);
     keep_earliest = query.getBoolean(config, Schema.QUERY_KEEP_FIRST_KEY);
+    resolution = ChronoUnit.SECONDS; // default
   }
   
   @Override
@@ -133,6 +139,16 @@ public class Tsdb1xQueryResult implements QueryResult {
   }
 
   @Override
+  public ChronoUnit resolution() {
+    return resolution;
+  }
+  
+  @Override
+  public RollupConfig rollupConfig() {
+    return schema.rollupConfig();
+  }
+  
+  @Override
   public void close() {
     for (final TimeSeries series : results.values()) {
       series.close();
@@ -161,10 +177,12 @@ public class Tsdb1xQueryResult implements QueryResult {
    * @param tsuid_hash A hash of the TSUID.
    * @param tsuid The non-null and non-empty TSUID.
    * @param sequence The non-null row sequence to add.
+   * @param resolution The highest resolution of the sequence.
    */
   public void addSequence(final long tsuid_hash,
                           final byte[] tsuid, 
-                          final RowSeq sequence) {
+                          final RowSeq sequence,
+                          final ChronoUnit resolution) {
     // TODO - figure out the size for the new TimeSeries objects
     TimeSeries series = results.get(tsuid_hash);
     if (series == null) {
@@ -185,6 +203,10 @@ public class Tsdb1xQueryResult implements QueryResult {
     synchronized (this) {
       bytes += sequence.size();
       dps += sequence.dataPoints();
+      if (this.resolution == null || 
+          resolution.ordinal() < this.resolution.ordinal()) {
+        this.resolution = resolution;
+      }
     }
     
     // since it's a best effort we don't need the lock
@@ -195,4 +217,24 @@ public class Tsdb1xQueryResult implements QueryResult {
       is_full = true;
     }
   }
+
+  /** @return An error message based on the byte or dp limit. Note that 
+   * this method doesn't check to see if we "are" full. If it's not full
+   * then the DP error is returned. */
+  public String resultIsFullErrorMessage() {
+    if (byte_limit > 0 && bytes > byte_limit) {
+      // TODO - properly format in MB or GB or KB...
+      final long mbs = (byte_limit / 1024 / 1024);
+      return "Sorry, you have attempted to fetch more than our maximum "
+          + "amount of " + (mbs > 0 ? mbs : 
+            ((double) byte_limit / 1024. / 1024.)) + "MB from storage. " 
+          + "Please try filtering using more tags or decrease your time range.";
+    }
+    
+    return "Sorry, you have attempted to fetch more than our limit of " 
+      + dp_limit + " data points. Please try filtering "
+      + "using more tags or decrease your time range.";
+  }
+
+  
 }

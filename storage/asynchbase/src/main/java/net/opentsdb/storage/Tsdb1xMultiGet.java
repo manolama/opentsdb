@@ -35,12 +35,13 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.stumbleupon.async.Callback;
+import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.configuration.Configuration;
 import net.opentsdb.core.Const;
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.TimeStamp;
-import net.opentsdb.data.TimeStamp.RelationalOperator;
+import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.pojo.Downsampler;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
@@ -156,6 +157,7 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
   /** An optional tracing child. */
   protected volatile Span child;
   
+  /** The state of this executor. */
   protected volatile State state;
   
   /**
@@ -213,28 +215,28 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
       Collections.sort(tsuids, Bytes.MEMCMP);
     }
     
-    final Configuration config = ((Tsdb1xHBaseDataStore) node.factory())
+    final Configuration config = node.parent()
         .tsdb().getConfig();
     
     if (query.hasKey(Tsdb1xHBaseDataStore.MULTI_GET_CONCURRENT_KEY)) {
       concurrency_multi_get = query.getInt(config, 
           Tsdb1xHBaseDataStore.MULTI_GET_CONCURRENT_KEY);
     } else {
-      concurrency_multi_get = ((Tsdb1xHBaseDataStore) node.factory())
+      concurrency_multi_get = node.parent()
           .dynamicInt(Tsdb1xHBaseDataStore.MULTI_GET_CONCURRENT_KEY);
     }
     if (query.hasKey(Tsdb1xHBaseDataStore.MULTI_GET_BATCH_KEY)) {
       batch_size = query.getInt(config, 
           Tsdb1xHBaseDataStore.MULTI_GET_BATCH_KEY);
     } else {
-      batch_size = ((Tsdb1xHBaseDataStore) node.factory())
+      batch_size = node.parent()
           .dynamicInt(Tsdb1xHBaseDataStore.MULTI_GET_BATCH_KEY);
     }
     if (query.hasKey(Schema.QUERY_REVERSE_KEY)) {
       reversed = query.getBoolean(config, 
           Schema.QUERY_REVERSE_KEY);
     } else {
-      reversed = ((Tsdb1xHBaseDataStore) node.factory())
+      reversed = node.parent()
           .dynamicBoolean(Schema.QUERY_REVERSE_KEY);
     }
     if (query.hasKey(Tsdb1xHBaseDataStore.PRE_AGG_KEY)) {
@@ -318,9 +320,9 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
           tables.add(interval.getTemporalTable());
         }
       }
-      tables.add(((Tsdb1xHBaseDataStore) node.factory()).dataTable());
+      tables.add(node.parent().dataTable());
     } else {
-      tables = Lists.newArrayList(((Tsdb1xHBaseDataStore) node.factory()).dataTable());
+      tables = Lists.newArrayList(node.parent().dataTable());
     }
     state = State.CONTINUE;
   }
@@ -342,13 +344,14 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
     
     while (outstanding < concurrency_multi_get && !advance() && !has_failed) {
       outstanding++;
-      nextBatch(tsuid_idx, (int) timestamp.epoch());
+      nextBatch(tsuid_idx, (int) timestamp.epoch(), child);
     }
     
     // see if we're all done
     if (outstanding == 0 && current_result != null && !has_failed) {
+      final Tsdb1xQueryResult temp = current_result;
       current_result = null;
-      node.onNext(result);
+      node.onNext(temp);
     }
   }
   
@@ -379,7 +382,7 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
     }
     
     if (node.sequenceEnd() != null) {
-      if (ts != null && ts.compare((reversed ? RelationalOperator.LT : RelationalOperator.GT), 
+      if (ts != null && ts.compare((reversed ? Op.LT : Op.GT), 
           node.sequenceEnd())) {
         tsuid_idx = -1;
         // DONE with segment
@@ -387,13 +390,13 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
       }
     }
     if (ts != null && (reversed ? 
-        ts.compare(RelationalOperator.LT, query.getTime().startTime()) : 
-        ts.compare(RelationalOperator.GT, query.getTime().endTime()))) {
+        ts.compare(Op.LT, query.getTime().startTime()) : 
+        ts.compare(Op.GT, query.getTime().endTime()))) {
       // DONE with query!
       return true;
     }
     
-    if (tsuid_idx + batch_size >= tsuids.size()) {
+    if (tsuid_idx >= 0 && tsuid_idx + batch_size >= tsuids.size()) {
       tsuid_idx = 0;
       
       incrementTimestamp();
@@ -402,7 +405,7 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
       }
       
       if (node.sequenceEnd() != null) {
-        if (ts.compare((reversed ? RelationalOperator.LT : RelationalOperator.GT), 
+        if (ts.compare((reversed ? Op.LT : Op.GT), 
             node.sequenceEnd())) {
           tsuid_idx = -1;
           // DONE with segment
@@ -410,8 +413,8 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
         }
       }
       if (reversed ? 
-          ts.compare(RelationalOperator.LT, query.getTime().startTime()) : 
-          ts.compare(RelationalOperator.GT, query.getTime().endTime())) {
+          ts.compare(Op.LT, query.getTime().startTime()) : 
+          ts.compare(Op.GT, query.getTime().endTime())) {
         // DONE with query!
         return true;
       }
@@ -452,8 +455,8 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
    */
   @VisibleForTesting
   synchronized void onComplete() {
-    if (has_failed) {
-      // nothing to do if we already failed.
+    if (has_failed || current_result == null) {
+      // nothing to do if we already failed or called upstream.
       return;
     }
     
@@ -483,13 +486,14 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
       }
       final int idx = tsuid_idx;
       outstanding++;
-      nextBatch(idx, ts);
+      nextBatch(idx, ts, child);
       return;
     }
     
     if (outstanding <= 0) {
       // we're done. Possibly....
-      if ((current_result.timeSeries() == null || current_result.timeSeries().isEmpty()) && 
+      if ((current_result.timeSeries() == null || 
+          current_result.timeSeries().isEmpty()) && 
           rollups_enabled && node.rollupUsage() != RollupUsage.ROLLUP_NOFALLBACK) {
         // we can fallback!
         tsuid_idx = 0;
@@ -501,7 +505,7 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
         }
         while (outstanding < concurrency_multi_get && !advance() && !has_failed) {
           outstanding++;
-          nextBatch(tsuid_idx, (int) fallback_timestamp.epoch());
+          nextBatch(tsuid_idx, (int) fallback_timestamp.epoch(), child);
         }
       } else {
         // no fallback, we're done.
@@ -527,15 +531,27 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
    * of object overhead by using a singleton here.
    */
   class ResponseCB implements Callback<Void, List<GetResultOrException>> {
+    final Span span;
+    
+    ResponseCB(final Span span) {
+      this.span = span;
+    }
+    
     @Override
     public Void call(final List<GetResultOrException> results)
         throws Exception {
       synchronized (Tsdb1xMultiGet.this) {
         outstanding--;
       }
+      if (has_failed) {
+        return null;
+      }
       
       for (final GetResultOrException result : results) {
         if (result.getException() != null) {
+          if (span != null) {
+            span.setErrorTags().finish();
+          }
           onError(result.getException());
           return null;
         }
@@ -544,17 +560,22 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
           continue;
         }
         
-        current_result.decode(result.getCells(), 
-            (rollup_index < 0 || 
-             rollup_index >= node.rollupIntervals().size() 
-               ? null : node.rollupIntervals().get(rollup_index)));
+        if (current_result != null) {
+          current_result.decode(result.getCells(), 
+              (rollup_index < 0 || 
+               rollup_index >= node.rollupIntervals().size() 
+                 ? null : node.rollupIntervals().get(rollup_index)));
+        }
       }
       
+      if (span != null) {
+        span.setSuccessTags().finish();
+      }
       onComplete();
       return null;
     }
   }
-  final ResponseCB response_cb = new ResponseCB();
+  final ResponseCB response_cb = new ResponseCB(null);
   
   /**
    * A callback attached to the multi-gets to catch exceptions and call
@@ -564,17 +585,26 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
    * of object overhead by using a singleton here.
    */
   class ErrorCB implements Callback<Object, Exception> {
+    final Span span;
+    
+    ErrorCB(final Span span) {
+      this.span = span;
+    }
+    
     @Override
     public Object call(final Exception ex) throws Exception {
       synchronized (Tsdb1xMultiGet.this) {
         outstanding--;
       }
       
+      if (span != null) {
+        span.setErrorTags(ex).finish();
+      }
       onError(ex);
       return null;
     }
   }
-  final ErrorCB error_cb = new ErrorCB();
+  final ErrorCB error_cb = new ErrorCB(null);
   
   /**
    * Creates a batch of {@link GetRequest}s and sends them to the HBase
@@ -583,7 +613,19 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
    * @param timestamp The timestamp for each row key.
    */
   @VisibleForTesting
-  void nextBatch(final int tsuid_idx, final int timestamp) {
+  void nextBatch(final int tsuid_idx, 
+                 final int timestamp, 
+                 final Span span) {
+    final Span child;
+    if (span != null) {
+      child = span.newChild(getClass() + "nextBatch()")
+          .withTag("batchSize", batch_size)
+          .withTag("startTsuidIdx", tsuid_idx)
+          .withTag("startTimestamp", timestamp)
+          .start();
+    } else {
+      child = null;
+    }
     final List<GetRequest> requests = Lists.newArrayListWithCapacity(batch_size);
     final byte[] table = rollups_enabled ? tables.get(rollup_index) : tables.get(0);
     
@@ -623,9 +665,15 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
     }
     
     try {
-    ((Tsdb1xHBaseDataStore) node.factory()).client().get(requests)
-      .addCallback(response_cb)
-      .addErrback(error_cb);
+      final Deferred<List<GetResultOrException>> deferred = 
+          node.parent().client().get(requests);
+      if (child == null || !child.isDebug()) {
+        deferred.addCallback(response_cb)
+                .addErrback(error_cb);
+      } else {
+        deferred.addCallback(new ResponseCB(child))
+        .addErrback(new ErrorCB(child));
+      }
     } catch (Exception e) {
       LOG.error("Unexpected exception", e);
       onError(e);

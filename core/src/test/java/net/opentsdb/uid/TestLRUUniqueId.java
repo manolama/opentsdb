@@ -35,9 +35,8 @@ import org.junit.Test;
 import com.google.common.collect.Lists;
 import com.stumbleupon.async.Deferred;
 
-import net.opentsdb.configuration.Configuration;
 import net.opentsdb.configuration.UnitTestConfiguration;
-import net.opentsdb.core.TSDB;
+import net.opentsdb.core.MockTSDB;
 import net.opentsdb.stats.MockTrace;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.StorageException;
@@ -54,17 +53,13 @@ public class TestLRUUniqueId {
   private static final String STRING3 = "web01";
   private static final String STRING4 = "web02";
   
-  private static TSDB tsdb;
-  private static Configuration config;
+  private static MockTSDB tsdb;
   private MockTrace trace;
   private UniqueIdStore store;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    tsdb = mock(TSDB.class);
-    config = UnitTestConfiguration.getConfiguration();
-    
-    when(tsdb.getConfig()).thenReturn(config);
+    tsdb = new MockTSDB();
   }
   
   @Before
@@ -157,8 +152,7 @@ public class TestLRUUniqueId {
     assertEquals(1, lru.idCache().size());
     
     // write only
-    ((UnitTestConfiguration) config).override(
-        "tsd.uid." + DEFAULT_ID + ".metric.mode", "w");
+    tsdb.config.override("tsd.uid." + DEFAULT_ID + ".metric.mode", "w");
     lru = new LRUUniqueId(tsdb, DEFAULT_ID, UniqueIdType.METRIC, store);
     assertEquals(STRING1, lru.getName(UID1, null).join());
     assertEquals(STRING1, lru.getName(UID1, null).join());
@@ -168,8 +162,7 @@ public class TestLRUUniqueId {
     assertEquals(0, lru.idCache().size());
     
     // read only
-    ((UnitTestConfiguration) config).override(
-        "tsd.uid." + DEFAULT_ID + ".metric.mode", "r");
+    tsdb.config.override("tsd.uid." + DEFAULT_ID + ".metric.mode", "r");
     lru = new LRUUniqueId(tsdb, DEFAULT_ID, UniqueIdType.METRIC, store);
     assertEquals(STRING1, lru.getName(UID1, null).join());
     assertEquals(STRING1, lru.getName(UID1, null).join());
@@ -283,6 +276,23 @@ public class TestLRUUniqueId {
   }
   
   @Test
+  public void getNamesSameIDs() throws Exception {
+    when(store.getNames(any(UniqueIdType.class), any(List.class), 
+        any(Span.class)))
+      .thenReturn(Deferred.fromResult(Lists.newArrayList(STRING1, STRING1, STRING1)));
+    LRUUniqueId lru = new LRUUniqueId(tsdb, DEFAULT_ID, 
+        UniqueIdType.METRIC, store);
+    
+    List<String> names = lru.getNames(Lists.newArrayList(UID1, UID1, UID1), null).join();
+    assertEquals(STRING1, names.get(0));
+    assertEquals(STRING1, names.get(1));
+    assertEquals(STRING1, names.get(2));
+    verify(store, times(1)).getNames(eq(UniqueIdType.METRIC), any(List.class), any(Span.class));
+    assertEquals(1, lru.nameCache().size());
+    assertEquals(1, lru.idCache().size());
+  }
+  
+  @Test
   public void getNamesIllegalArgumentException() throws Exception {
     LRUUniqueId lru = new LRUUniqueId(tsdb, DEFAULT_ID, 
         UniqueIdType.METRIC, store);
@@ -387,8 +397,7 @@ public class TestLRUUniqueId {
     assertEquals(2, lru.idCache().size());
     
     // write only
-    ((UnitTestConfiguration) config).override(
-        "tsd.uid." + DEFAULT_ID + ".metric.mode", "w");
+    tsdb.config.override("tsd.uid." + DEFAULT_ID + ".metric.mode", "w");
     lru = new LRUUniqueId(tsdb, DEFAULT_ID, UniqueIdType.METRIC, store);
     names = lru.getNames(Lists.newArrayList(UID1, UID2), null).join();
     assertEquals(STRING1, names.get(0));
@@ -398,8 +407,7 @@ public class TestLRUUniqueId {
     assertEquals(0, lru.idCache().size());
     
     // read only
-    ((UnitTestConfiguration) config).override(
-        "tsd.uid." + DEFAULT_ID + ".metric.mode", "r");
+    tsdb.config.override("tsd.uid." + DEFAULT_ID + ".metric.mode", "r");
     lru = new LRUUniqueId(tsdb, DEFAULT_ID, UniqueIdType.METRIC, store);
     names = lru.getNames(Lists.newArrayList(UID1, UID2), null).join();
     assertEquals(STRING1, names.get(0));
@@ -556,8 +564,7 @@ public class TestLRUUniqueId {
     verify(store, times(1)).getId(UniqueIdType.METRIC, STRING1, null);
     
     // write only
-    ((UnitTestConfiguration) config).override(
-        "tsd.uid." + DEFAULT_ID + ".metric.mode", "w");
+    tsdb.config.override("tsd.uid." + DEFAULT_ID + ".metric.mode", "w");
     lru = new LRUUniqueId(tsdb, DEFAULT_ID, UniqueIdType.METRIC, store);
     assertArrayEquals(UID1, lru.getId(STRING1, null).join());
     assertArrayEquals(UID1, lru.getId(STRING1, null).join());
@@ -567,8 +574,7 @@ public class TestLRUUniqueId {
     verify(store, times(2)).getId(UniqueIdType.METRIC, STRING1, null);
     
     // read only
-    ((UnitTestConfiguration) config).override(
-        "tsd.uid." + DEFAULT_ID + ".metric.mode", "r");
+    tsdb.config.override("tsd.uid." + DEFAULT_ID + ".metric.mode", "r");
     lru = new LRUUniqueId(tsdb, DEFAULT_ID, UniqueIdType.METRIC, store);
     assertArrayEquals(UID1, lru.getId(STRING1, null).join());
     assertArrayEquals(UID1, lru.getId(STRING1, null).join());
@@ -675,6 +681,23 @@ public class TestLRUUniqueId {
   }
   
   @Test
+  public void getIdsSameNames() throws Exception {
+    when(store.getIds(any(UniqueIdType.class), any(List.class), 
+        any(Span.class)))
+      .thenReturn(Deferred.fromResult(Lists.newArrayList(UID1, UID1, UID1)));
+    LRUUniqueId lru = new LRUUniqueId(tsdb, DEFAULT_ID, 
+        UniqueIdType.METRIC, store);
+    
+    List<byte[]> ids = lru.getIds(Lists.newArrayList(STRING1, STRING1, STRING1), null).join();
+    assertArrayEquals(UID1, ids.get(0));
+    assertArrayEquals(UID1, ids.get(1));
+    assertArrayEquals(UID1, ids.get(2));
+    verify(store, times(1)).getIds(eq(UniqueIdType.METRIC), any(List.class), any(Span.class));
+    assertEquals(1, lru.nameCache().size());
+    assertEquals(1, lru.idCache().size());
+  }
+  
+  @Test
   public void getIdsPartialCacheIt() throws Exception {
     when(store.getIds(any(UniqueIdType.class), any(List.class), 
         any(Span.class)))
@@ -769,8 +792,7 @@ public class TestLRUUniqueId {
     assertEquals(2, lru.idCache().size());
     
     // write only
-    ((UnitTestConfiguration) config).override(
-        "tsd.uid." + DEFAULT_ID + ".metric.mode", "w");
+    tsdb.config.override("tsd.uid." + DEFAULT_ID + ".metric.mode", "w");
     lru = new LRUUniqueId(tsdb, DEFAULT_ID, 
         UniqueIdType.METRIC, store);
     ids = lru.getIds(Lists.newArrayList(STRING1, STRING2), null).join();
@@ -781,8 +803,7 @@ public class TestLRUUniqueId {
     assertEquals(0, lru.idCache().size());
     
     // read only
-    ((UnitTestConfiguration) config).override(
-        "tsd.uid." + DEFAULT_ID + ".metric.mode", "r");
+    tsdb.config.override("tsd.uid." + DEFAULT_ID + ".metric.mode", "r");
     lru = new LRUUniqueId(tsdb, DEFAULT_ID, 
         UniqueIdType.METRIC, store);
     ids = lru.getIds(Lists.newArrayList(STRING1, STRING2), null).join();
@@ -860,7 +881,7 @@ public class TestLRUUniqueId {
   }
   
   private static void resetConfig() {
-    final UnitTestConfiguration c = (UnitTestConfiguration) config;
+    final UnitTestConfiguration c = tsdb.config;
     if (c.hasProperty("tsd.uid." + DEFAULT_ID + ".metric.mode")) {
       c.override("tsd.uid." + DEFAULT_ID + ".metric.mode", "rw");
     }

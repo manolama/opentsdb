@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017  The OpenTSDB Authors.
+// Copyright (C) 2017-2018  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,14 +24,17 @@ import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
-import net.opentsdb.data.TimeStamp.RelationalOperator;
+import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.types.numeric.Aggregators;
-import net.opentsdb.data.types.numeric.MutableNumericType;
+import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericAggregator;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryIterator;
-import net.opentsdb.query.QueryIteratorInterpolator;
+import net.opentsdb.query.QueryInterpolator;
+import net.opentsdb.query.QueryInterpolatorConfig;
+import net.opentsdb.query.QueryInterpolatorFactory;
 import net.opentsdb.query.QueryNode;
+import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.processor.groupby.GroupByConfig;
 
 /**
@@ -57,14 +60,14 @@ public class GroupByNumericIterator implements QueryIterator,
   /** The next timestamp to return. */
   private final TimeStamp next_ts = new MillisecondTimeStamp(0);
   
-  /** The next timestamp evaulated when returning the next value. */
+  /** The next timestamp evaluated when returning the next value. */
   private final TimeStamp next_next_ts = new MillisecondTimeStamp(0);
   
   /** The data point set and returned by the iterator. */
-  private final MutableNumericType dp = new MutableNumericType();
+  private final MutableNumericValue dp;
   
   /** The list of interpolators containing the real sources. */
-  private final QueryIteratorInterpolator<NumericType>[] interpolators;
+  private final QueryInterpolator<NumericType>[] interpolators;
   
   /** An array of long values used when all sources return longs. */
   private long[] long_values;
@@ -86,24 +89,28 @@ public class GroupByNumericIterator implements QueryIterator,
   /**
    * Default ctor.
    * @param node The non-null node this iterator belongs to.
+   * @param result The result this source is a part of.
    * @param sources The non-null and non-empty map of sources.
    * @throws IllegalArgumentException if a required parameter or config is 
    * not present.
    */
   public GroupByNumericIterator(final QueryNode node, 
+                                final QueryResult result,
                                 final Map<String, TimeSeries> sources) {
-    this(node, sources == null ? null : sources.values());
+    this(node, result, sources == null ? null : sources.values());
   }
   
   /**
    * Ctor with a collection of source time series.
    * @param node The non-null node this iterator belongs to.
+   * @param result The result this source is a part of.
    * @param sources The non-null and non-empty collection or sources.
    * @throws IllegalArgumentException if a required parameter or config is 
    * not present.
    */
   @SuppressWarnings("unchecked")
   public GroupByNumericIterator(final QueryNode node, 
+                                final QueryResult result,
                                 final Collection<TimeSeries> sources) {
     if (node == null) {
       throw new IllegalArgumentException("Query node cannot be null.");
@@ -117,26 +124,36 @@ public class GroupByNumericIterator implements QueryIterator,
     if (Strings.isNullOrEmpty(((GroupByConfig) node.config()).getAggregator())) {
       throw new IllegalArgumentException("Aggregator cannot be null or empty."); 
     }
-    if (((GroupByConfig) node.config()).getInterpolator() == null) {
-      throw new IllegalArgumentException("Interpolator cannot be null.");
-    }
+    dp = new MutableNumericValue();
     next_ts.setMax();
+    dp.resetNull(next_ts);
     // TODO - better way of supporting aggregators
     aggregator = Aggregators.get(((GroupByConfig) node.config()).getAggregator());
     infectious_nan = ((GroupByConfig) node.config()).getInfectiousNan();
-    interpolators = new QueryIteratorInterpolator[sources.size()];
+    interpolators = new QueryInterpolator[sources.size()];
+    
+    QueryInterpolatorConfig interpolator_config = ((GroupByConfig) node.config()).interpolatorConfig(NumericType.TYPE);
+    if (interpolator_config == null) {
+      throw new IllegalArgumentException("No interpolator config found for type");
+    }
+    
+    QueryInterpolatorFactory factory = node.pipelineContext().tsdb().getRegistry().getPlugin(QueryInterpolatorFactory.class, 
+        interpolator_config.id());
+    if (factory == null) {
+      throw new IllegalArgumentException("No interpolator factory found for: " + 
+          interpolator_config.type() == null ? "Default" : interpolator_config.type());
+    }
+    
     for (final TimeSeries source : sources) {
       if (source == null) {
-        throw new IllegalArgumentException("Null time series are not allowed in the sources.");
+        throw new IllegalArgumentException("Null time series are not "
+            + "allowed in the sources.");
       }
-      interpolators[iterator_max] = (QueryIteratorInterpolator<NumericType>) 
-          ((GroupByConfig) node.config()).getInterpolator()
-            .newInterpolator(NumericType.TYPE, 
-                             source, ((GroupByConfig) node.config())
-                               .getInterpolatorConfig());
+      interpolators[iterator_max] = (QueryInterpolator<NumericType>) 
+          factory.newInterpolator(NumericType.TYPE, source, interpolator_config);
       if (interpolators[iterator_max].hasNext()) {
         has_next = true;
-        if (interpolators[iterator_max].nextReal().compare(RelationalOperator.LT, next_ts)) {
+        if (interpolators[iterator_max].nextReal().compare(Op.LT, next_ts)) {
           next_ts.update(interpolators[iterator_max].nextReal());
         }
       }
@@ -152,7 +169,7 @@ public class GroupByNumericIterator implements QueryIterator,
 
   @Override
   public NumericType value() {
-    return dp;
+    return dp.value();
   }
 
   @Override
@@ -171,43 +188,58 @@ public class GroupByNumericIterator implements QueryIterator,
     next_next_ts.setMax();
     value_idx = 0;
     boolean longs = true;
+    boolean had_nan = false;
     for (int i = 0; i < iterator_max; i++) {
       final TimeSeriesValue<NumericType> v = interpolators[i].next(next_ts);
       if (v == null || v.value() == null) {
         // skip it
       } else if (!v.value().isInteger() && Double.isNaN(v.value().doubleValue())) {
         if (infectious_nan) {
-          longs = false;
-          shiftToDouble();
-          double_values[value_idx] = Double.NaN;
-          value_idx++;
+          if (longs) {
+            longs = false;
+            shiftToDouble();
+          }
+          double_values[value_idx++] = Double.NaN;
         }
+        had_nan = true;
       } else {
         if (v.value().isInteger() && longs) {
-          long_values[value_idx] = v.value().longValue();
+          long_values[value_idx++] = v.value().longValue();
         } else {
           if (longs) {
             longs = false;
             shiftToDouble();
           }
-          double_values[value_idx] = v.value().toDouble();
+          double_values[value_idx++] = v.value().toDouble();
         }
-        value_idx++;
       }
       
       if (interpolators[i].hasNext()) {
         has_next = true;
-        if (interpolators[i].nextReal().compare(RelationalOperator.LT, next_next_ts)) {
+        if (interpolators[i].nextReal().compare(Op.LT, next_next_ts)) {
           next_next_ts.update(interpolators[i].nextReal());
         }
       }
     }
     
     // sum it
-    if (longs) {
-      dp.reset(next_ts, aggregator.run(long_values, value_idx));
+    if (value_idx < 1) {
+      if (had_nan) {
+        dp.reset(next_ts, Double.NaN);
+      } else 
+      if (interpolators[0].fillPolicy().fill() == null) {
+        dp.resetNull(next_ts);
+      } else {
+        dp.reset(next_ts, interpolators[0].fillPolicy().fill());
+      }
     } else {
-      dp.reset(next_ts, aggregator.run(double_values, value_idx));
+      if (longs) {
+        dp.resetTimestamp(next_ts);
+        aggregator.run(long_values, value_idx, dp);
+      } else {
+        dp.resetTimestamp(next_ts);
+        aggregator.run(double_values, value_idx, infectious_nan, dp);
+      }
     }
 
     next_ts.update(next_next_ts);

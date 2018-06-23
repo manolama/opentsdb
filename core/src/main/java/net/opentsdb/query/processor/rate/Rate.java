@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.rate;
 
+import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -39,6 +40,8 @@ import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.pojo.RateOptions;
+import net.opentsdb.query.processor.ProcessorFactory;
+import net.opentsdb.rollup.RollupConfig;
 
 /**
  * A processing node that performs rate conversion on each individual time series
@@ -54,8 +57,9 @@ public class Rate extends AbstractQueryNode {
   
   public Rate(final QueryNodeFactory factory, 
               final QueryPipelineContext context, 
+              final String id,
               final RateOptions config) {
-    super(factory, context);
+    super(factory, context, id);
     if (config == null) {
       throw new IllegalArgumentException("Configuration cannot be null.");
     }
@@ -66,12 +70,7 @@ public class Rate extends AbstractQueryNode {
   public QueryNodeConfig config() {
     return config;
   }
-
-  @Override
-  public String id() {
-    return config.getId();
-  }
-
+  
   @Override
   public void close() {
     // No-op
@@ -167,6 +166,16 @@ public class Rate extends AbstractQueryNode {
     }
     
     @Override
+    public ChronoUnit resolution() {
+      return results.resolution();
+    }
+    
+    @Override
+    public RollupConfig rollupConfig() {
+      return results.rollupConfig();
+    }
+    
+    @Override
     public void close() {
       // NOTE - a race here. Should be idempotent.
       latch.countDown();
@@ -206,7 +215,10 @@ public class Rate extends AbstractQueryNode {
         throw new IllegalArgumentException("Type cannot be null.");
       }
       final Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator = 
-          Rate.this.factory().newIterator(type, Rate.this, 
+          ((ProcessorFactory) Rate.this.factory()).newIterator(
+              type, 
+              Rate.this, 
+              null,
               Lists.newArrayList(source));
       if (iterator != null) {
         return Optional.of(iterator);
@@ -220,8 +232,11 @@ public class Rate extends AbstractQueryNode {
       final List<Iterator<TimeSeriesValue<? extends TimeSeriesDataType>>> iterators = 
           Lists.newArrayListWithCapacity(types.size());
       for (final TypeToken<?> type : types) {
-        iterators.add(Rate.this.factory().newIterator(type, Rate.this, 
-              Lists.newArrayList(source)));
+        iterators.add(((ProcessorFactory) Rate.this.factory()).newIterator(
+            type, 
+            Rate.this, 
+            null,
+            Lists.newArrayList(source)));
       }
       return iterators;
     }

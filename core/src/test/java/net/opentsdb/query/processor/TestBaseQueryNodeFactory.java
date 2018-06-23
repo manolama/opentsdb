@@ -17,7 +17,6 @@ package net.opentsdb.query.processor;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyCollection;
@@ -44,6 +43,7 @@ import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
+import net.opentsdb.query.QueryResult;
 
 public class TestBaseQueryNodeFactory {
 
@@ -51,7 +51,6 @@ public class TestBaseQueryNodeFactory {
   public void ctor() throws Exception {
     QueryNodeFactory factory = new MockNodeFactory("Mock!");
     assertEquals("Mock!", factory.id());
-    assertTrue(factory.types().isEmpty());
     
     try {
       new MockNodeFactory(null);
@@ -103,39 +102,39 @@ public class TestBaseQueryNodeFactory {
     Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator = 
         mock(Iterator.class);
     QueryIteratorFactory mock1 = mock(QueryIteratorFactory.class);
-    when(mock1.newIterator(any(QueryNode.class), anyCollection()))
+    when(mock1.newIterator(any(QueryNode.class), any(QueryResult.class), anyCollection()))
       .thenReturn((Iterator<TimeSeriesValue<? extends TimeSeriesDataType>>) iterator);
     QueryNode node = mock(QueryNode.class);
     MockNodeFactory factory = new MockNodeFactory("Mock!");
     
-    assertNull(factory.newIterator(NumericType.TYPE, node, 
+    assertNull(factory.newIterator(NumericType.TYPE, node, null,
         Lists.newArrayList(mock(TimeSeries.class))));
     
     factory.registerIteratorFactory(NumericType.TYPE, mock1);
     Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> from_factory = 
-        factory.newIterator(NumericType.TYPE, node, 
+        factory.newIterator(NumericType.TYPE, node, null,
             Lists.<TimeSeries>newArrayList(mock(TimeSeries.class)));
     assertSame(iterator, from_factory);
     
     try {
-      factory.newIterator(null, node, 
+      factory.newIterator(null, node, null,
           Lists.newArrayList(mock(TimeSeries.class)));
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
     try {
-      factory.newIterator(NumericType.TYPE, null, 
+      factory.newIterator(NumericType.TYPE, null, null,
           Lists.newArrayList(mock(TimeSeries.class)));
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
     try {
-      factory.newIterator(NumericType.TYPE, node, (Collection) null);
+      factory.newIterator(NumericType.TYPE, node, null,(Collection) null);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
     try {
-      factory.newIterator(NumericType.TYPE, node, Lists.newArrayList());
+      factory.newIterator(NumericType.TYPE, node, null,Lists.newArrayList());
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
   }
@@ -148,35 +147,35 @@ public class TestBaseQueryNodeFactory {
     Map<String, TimeSeries> sources = Maps.newHashMap();
     sources.put("a", mock(TimeSeries.class));
     QueryIteratorFactory mock1 = mock(QueryIteratorFactory.class);
-    when(mock1.newIterator(any(QueryNode.class), anyMap()))
+    when(mock1.newIterator(any(QueryNode.class), any(QueryResult.class), anyMap()))
       .thenReturn((Iterator<TimeSeriesValue<? extends TimeSeriesDataType>>) iterator);
     QueryNode node = mock(QueryNode.class);
     MockNodeFactory factory = new MockNodeFactory("Mock!");
     
-    assertNull(factory.newIterator(NumericType.TYPE, node, sources));
+    assertNull(factory.newIterator(NumericType.TYPE, node, null,sources));
     
     factory.registerIteratorFactory(NumericType.TYPE, mock1);
     Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> from_factory = 
-        factory.newIterator(NumericType.TYPE, node, sources);
+        factory.newIterator(NumericType.TYPE, node, null,sources);
     assertSame(iterator, from_factory);
     
     try {
-      factory.newIterator(null, node, sources);
+      factory.newIterator(null, node, null,sources);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
     try {
-      factory.newIterator(NumericType.TYPE, null, sources);
+      factory.newIterator(NumericType.TYPE, null, null,sources);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
     try {
-      factory.newIterator(NumericType.TYPE, node, (Map) null);
+      factory.newIterator(NumericType.TYPE, node, null,(Map) null);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
     try {
-      factory.newIterator(NumericType.TYPE, node, Maps.newHashMap());
+      factory.newIterator(NumericType.TYPE, node, null,Maps.newHashMap());
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
   }
@@ -190,8 +189,21 @@ public class TestBaseQueryNodeFactory {
 
     @Override
     public QueryNode newNode(final QueryPipelineContext context,
+                             final String id,
                              final QueryNodeConfig config) {
       return mock(QueryNode.class);
+    }
+
+    @Override
+    public QueryNode newNode(QueryPipelineContext context, String id) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Class<? extends QueryNodeConfig> nodeConfigClass() {
+      // TODO Auto-generated method stub
+      return null;
     }
     
   }

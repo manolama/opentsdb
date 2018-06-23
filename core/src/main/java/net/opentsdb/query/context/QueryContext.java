@@ -38,9 +38,10 @@ import com.stumbleupon.async.Deferred;
 import io.netty.util.Timer;
 import io.opentracing.Tracer;
 import net.opentsdb.core.DefaultTSDB;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.TimeStamp;
-import net.opentsdb.data.TimeStamp.RelationalOperator;
+import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.iterators.IteratorStatus;
 import net.opentsdb.data.iterators.TimeSeriesIterator;
 import net.opentsdb.query.execution.QueryExecutor;
@@ -392,7 +393,7 @@ public abstract class QueryContext {
     }
     next_status = IteratorStatus.updateStatus(next_status, status);
     if (timestamp != null && 
-        timestamp.compare(RelationalOperator.LT, next_sync_time)) {
+        timestamp.compare(Op.LT, next_sync_time)) {
       next_sync_time.update(timestamp);
     }
   }
@@ -677,7 +678,7 @@ public abstract class QueryContext {
   }
   
   /** @return The TSDB this context is owned by. */
-  public DefaultTSDB getTSDB() {
+  public TSDB getTSDB() {
     return tsdb;
   }
   

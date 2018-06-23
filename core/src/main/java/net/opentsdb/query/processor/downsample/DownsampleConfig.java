@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017  The OpenTSDB Authors.
+// Copyright (C) 2017-2018  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,14 +19,14 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAmount;
 
 import com.google.common.base.Strings;
+import com.google.common.hash.HashCode;
 
 import net.opentsdb.common.Const;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.ZonedNanoTimeStamp;
-import net.opentsdb.data.TimeStamp.RelationalOperator;
-import net.opentsdb.query.QueryIteratorInterpolatorConfig;
-import net.opentsdb.query.QueryIteratorInterpolatorFactory;
+import net.opentsdb.data.TimeStamp.Op;
+import net.opentsdb.query.BaseQueryNodeConfigWithInterpolators;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.TimeSeriesQuery;
 import net.opentsdb.utils.DateTime;
@@ -45,9 +45,8 @@ import net.opentsdb.utils.DateTime;
  * calendar for hourly and greater intervals, please supply the timezone.
  * @since 3.0
  */
-public class DownsampleConfig implements QueryNodeConfig, TimeSpecification {
-  /** The ID of this config. */
-  private final String id;
+public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators 
+                              implements TimeSpecification {
   
   /** The raw interval string. */
   private final String interval;
@@ -70,12 +69,6 @@ public class DownsampleConfig implements QueryNodeConfig, TimeSpecification {
   /** The query. */
   private final TimeSeriesQuery query;
   
-  /** The interpolator factory. */
-  private final QueryIteratorInterpolatorFactory interpolator;
-  
-  /** The interpolator factory config. */
-  private final QueryIteratorInterpolatorConfig interpolator_config;
-  
   /** The numeric part of the parsed interval. */
   private final int interval_part;
   
@@ -96,25 +89,21 @@ public class DownsampleConfig implements QueryNodeConfig, TimeSpecification {
    * @param builder A non-null builder to pull settings from.
    */
   DownsampleConfig(final Builder builder) {
-    if (Strings.isNullOrEmpty(builder.id)) {
-      throw new IllegalArgumentException("ID cannot be null or empty.");
-    }
+    super(builder);
     if (Strings.isNullOrEmpty(builder.interval)) {
       throw new IllegalArgumentException("Interval cannot be null or empty.");
     }
     if (Strings.isNullOrEmpty(builder.aggregator)) {
       throw new IllegalArgumentException("Aggregator cannot be null or empty.");
     }
-    if (builder.interpolator == null) {
-      throw new IllegalArgumentException("Interpolator factory cannot be null.");
-    }
-    if (builder.interpolator_config == null) {
-      throw new IllegalArgumentException("Interpolator config cannot be null.");
-    }
     if (builder.query == null) {
       throw new IllegalArgumentException("Query cannot be null.");
     }
-    id = builder.id;
+    if (interpolator_configs == null || 
+        interpolator_configs.isEmpty()) {
+      throw new IllegalArgumentException("At least one interpolator "
+          + "config must be present.");
+    }
     interval = builder.interval;
     timezone = builder.timezone != null ? builder.timezone : Const.UTC;
     aggregator = builder.aggregator;
@@ -122,8 +111,6 @@ public class DownsampleConfig implements QueryNodeConfig, TimeSpecification {
     run_all = builder.run_all;
     fill = builder.fill;
     query = builder.query;
-    interpolator = builder.interpolator;
-    interpolator_config = builder.interpolator_config;
     
     if (!run_all) {
       interval_part = DateTime.getDurationInterval(interval);
@@ -144,34 +131,29 @@ public class DownsampleConfig implements QueryNodeConfig, TimeSpecification {
       start = new ZonedNanoTimeStamp(q.getTime().startTime().epoch(), 
           q.getTime().startTime().nanos(), timezone);
       start.snapToPreviousInterval(interval_part, units);
-      if (start.compare(RelationalOperator.LT, q.getTime().startTime())) {
+      if (start.compare(Op.LT, q.getTime().startTime())) {
         nextTimestamp(start);
       }
       end = new ZonedNanoTimeStamp(q.getTime().endTime().epoch(), 
           q.getTime().endTime().nanos(), timezone);
       end.snapToPreviousInterval(interval_part, units);
-      if (end.compare(RelationalOperator.LTE, start)) {
+      if (end.compare(Op.LTE, start)) {
         throw new IllegalArgumentException("Snapped end time: " + end 
             + " must be greater than the start time: " + start);
       }
     } else {
       start = q.getTime().startTime().getCopy();
       start.snapToPreviousInterval(interval_part, units);
-      if (start.compare(RelationalOperator.LT, q.getTime().startTime())) {
+      if (start.compare(Op.LT, q.getTime().startTime())) {
         nextTimestamp(start);
       }
       end = q.getTime().endTime().getCopy();
       end.snapToPreviousInterval(interval_part, units);
-      if (end.compare(RelationalOperator.LTE, start)) {
+      if (end.compare(Op.LTE, start)) {
         throw new IllegalArgumentException("Snapped end time: " + end 
             + " must be greater than the start time: " + start);
       }
     }
-  }
-  
-  @Override
-  public String getId() {
-    return id;
   }
   
   /** @return The non-null and non-empty interval. */
@@ -208,16 +190,6 @@ public class DownsampleConfig implements QueryNodeConfig, TimeSpecification {
   /** @return The time series query. */
   public TimeSeriesQuery query() {
     return query;
-  }
-  
-  /** @return The non-null interpolator factory. */
-  public QueryIteratorInterpolatorFactory interpolator() {
-    return interpolator;
-  }
-  
-  /** @return The optional interpolator config. May be null. */
-  public QueryIteratorInterpolatorConfig interpolatorConfig() {
-    return interpolator_config;
   }
   
   /** @return The numeric part of the raw interval. */
@@ -269,13 +241,24 @@ public class DownsampleConfig implements QueryNodeConfig, TimeSpecification {
     }
   }
   
+  @Override
+  public int compareTo(QueryNodeConfig o) {
+    // TODO Auto-generated method stub
+    return 0;
+  }
+
+  @Override
+  public HashCode buildHashCode() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+  
   /** @return A new builder to work from. */
   public static Builder newBuilder() {
     return new Builder();
   }
   
-  public static class Builder {
-    private String id;
+  public static class Builder extends BaseQueryNodeConfigWithInterpolators.Builder {
     private String interval;
     private ZoneId timezone;
     private String aggregator;
@@ -283,8 +266,6 @@ public class DownsampleConfig implements QueryNodeConfig, TimeSpecification {
     private boolean run_all;
     private boolean fill;
     private TimeSeriesQuery query;
-    private QueryIteratorInterpolatorFactory interpolator;
-    private QueryIteratorInterpolatorConfig interpolator_config;
     
     /**
      * @param id A non-null and on-empty Id for the group by function.
@@ -359,32 +340,12 @@ public class DownsampleConfig implements QueryNodeConfig, TimeSpecification {
       return this;
     }
     
-    /**
-     * @param interpolator The non-null interpolator factory to use.
-     * @return The builder.
-     */
-    public Builder setQueryIteratorInterpolatorFactory(
-        final QueryIteratorInterpolatorFactory interpolator) {
-      this.interpolator = interpolator;
-      return this;
-    }
-    
-    /**
-     * @param interpolator_config An optional interpolator config.
-     * @return The builder.
-     */
-    public Builder setQueryIteratorInterpolatorConfig(
-        final QueryIteratorInterpolatorConfig interpolator_config) {
-      this.interpolator_config = interpolator_config;
-      return this;
-    }
-    
     /** @return The constructed config.
      * @throws IllegalArgumentException if a required parameter is missing or
      * invalid. */
-    public DownsampleConfig build() {
-      return new DownsampleConfig(this);
+    public QueryNodeConfig build() {
+      return (QueryNodeConfig) new DownsampleConfig(this);
     }
   }
-
+  
 }

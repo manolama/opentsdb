@@ -23,8 +23,8 @@ import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.data.MillisecondTimeStamp;
-import net.opentsdb.data.types.numeric.MockNumericIterator;
-import net.opentsdb.data.types.numeric.MutableNumericType;
+import net.opentsdb.data.types.numeric.MockNumericTimeSeries;
+import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.query.context.QueryContext;
 
 /**
@@ -42,36 +42,36 @@ public class ProcessorTestsHelpers {
    * @param a The A series to work with.
    * @param b The B series to work with.
    */
-  public static void setState1(final MockNumericIterator a, 
-      final MockNumericIterator b) {
+  public static void setState1(final MockNumericTimeSeries a, 
+      final MockNumericTimeSeries b) {
     
-    List<List<MutableNumericType>> data = Lists.newArrayListWithCapacity(1);
-    List<MutableNumericType> set = Lists.newArrayListWithCapacity(1);
+    List<List<MutableNumericValue>> data = Lists.newArrayListWithCapacity(1);
+    List<MutableNumericValue> set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(2000), 2));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(2000), 2));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    a.data = data;
+    //a.data = data;
     
     data = Lists.newArrayListWithCapacity(1);
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(2000), 2));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(2000), 2));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    b.data = data;
+    //b.data = data;
   }
   
   /**
@@ -81,11 +81,11 @@ public class ProcessorTestsHelpers {
    * @param a The A series to work with.
    * @param b The B series to work with.
    */
-  public static void setState2(final MockNumericIterator a, 
-      final MockNumericIterator b) {
+  public static void setState2(final MockNumericTimeSeries a, 
+      final MockNumericTimeSeries b) {
     
-    List<List<MutableNumericType>> data = Lists.newArrayListWithCapacity(1);
-    List<MutableNumericType> set = Lists.newArrayListWithCapacity(1);
+    List<List<MutableNumericValue>> data = Lists.newArrayListWithCapacity(1);
+    List<MutableNumericValue> set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
@@ -94,23 +94,23 @@ public class ProcessorTestsHelpers {
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    a.data = data;
+    //a.data = data;
     
     data = Lists.newArrayListWithCapacity(1);
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(2000), 2));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(2000), 2));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    b.data = data;
+    //b.data = data;
   }
 
   /**
@@ -120,12 +120,12 @@ public class ProcessorTestsHelpers {
    * @param a The A series to work with.
    * @param b The B series to work with.
    */
-  public static void setState3(final MockNumericIterator a, 
-      final MockNumericIterator b) {
+  public static void setState3(final MockNumericTimeSeries a, 
+      final MockNumericTimeSeries b) {
     
-    List<List<MutableNumericType>> data = Lists.newArrayListWithCapacity(1);
-    List<MutableNumericType> set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
+    List<List<MutableNumericValue>> data = Lists.newArrayListWithCapacity(1);
+    List<MutableNumericValue> set = Lists.newArrayListWithCapacity(1);
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
@@ -133,23 +133,23 @@ public class ProcessorTestsHelpers {
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    a.data = data;
+    //a.data = data;
     
     data = Lists.newArrayListWithCapacity(1);
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(2000), 2));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(2000), 2));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    b.data = data;
+    //b.data = data;
   }
 
   /**
@@ -159,12 +159,12 @@ public class ProcessorTestsHelpers {
    * @param a The A series to work with.
    * @param b The B series to work with.
    */
-  public static void setState4(final MockNumericIterator a, 
-      final MockNumericIterator b) {
+  public static void setState4(final MockNumericTimeSeries a, 
+      final MockNumericTimeSeries b) {
     
-    List<List<MutableNumericType>> data = Lists.newArrayListWithCapacity(1);
-    List<MutableNumericType> set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
+    List<List<MutableNumericValue>> data = Lists.newArrayListWithCapacity(1);
+    List<MutableNumericValue> set = Lists.newArrayListWithCapacity(1);
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
@@ -174,21 +174,21 @@ public class ProcessorTestsHelpers {
     set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    a.data = data;
+    //a.data = data;
     
     data = Lists.newArrayListWithCapacity(1);
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(2000), 2));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(2000), 2));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    b.data = data;
+    //b.data = data;
   }
 
   /**
@@ -198,12 +198,12 @@ public class ProcessorTestsHelpers {
    * @param a The A series to work with.
    * @param b The B series to work with.
    */
-  public static void setState5(final MockNumericIterator a, 
-      final MockNumericIterator b) {
+  public static void setState5(final MockNumericTimeSeries a, 
+      final MockNumericTimeSeries b) {
     
-    List<List<MutableNumericType>> data = Lists.newArrayListWithCapacity(1);
-    List<MutableNumericType> set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
+    List<List<MutableNumericValue>> data = Lists.newArrayListWithCapacity(1);
+    List<MutableNumericValue> set = Lists.newArrayListWithCapacity(1);
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
@@ -213,7 +213,7 @@ public class ProcessorTestsHelpers {
     set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    a.data = data;
+    //a.data = data;
     
     data = Lists.newArrayListWithCapacity(1);
     set = Lists.newArrayListWithCapacity(1);
@@ -221,13 +221,13 @@ public class ProcessorTestsHelpers {
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(2000), 2));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(2000), 2));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    b.data = data;
+    //b.data = data;
   }
 
   /**
@@ -237,12 +237,12 @@ public class ProcessorTestsHelpers {
    * @param a The A series to work with.
    * @param b The B series to work with.
    */
-  public static void setState6(final MockNumericIterator a, 
-      final MockNumericIterator b) {
+  public static void setState6(final MockNumericTimeSeries a, 
+      final MockNumericTimeSeries b) {
     
-    List<List<MutableNumericType>> data = Lists.newArrayListWithCapacity(1);
-    List<MutableNumericType> set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
+    List<List<MutableNumericValue>> data = Lists.newArrayListWithCapacity(1);
+    List<MutableNumericValue> set = Lists.newArrayListWithCapacity(1);
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
@@ -252,7 +252,7 @@ public class ProcessorTestsHelpers {
     set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    a.data = data;
+    //a.data = data;
     
     data = Lists.newArrayListWithCapacity(1);
     set = Lists.newArrayListWithCapacity(1);
@@ -264,9 +264,9 @@ public class ProcessorTestsHelpers {
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    b.data = data;
+    //b.data = data;
   }
 
   /**
@@ -276,12 +276,12 @@ public class ProcessorTestsHelpers {
    * @param a The A series to work with.
    * @param b The B series to work with.
    */
-  public static void setState7(final MockNumericIterator a, 
-      final MockNumericIterator b) {
+  public static void setState7(final MockNumericTimeSeries a, 
+      final MockNumericTimeSeries b) {
     
-    List<List<MutableNumericType>> data = Lists.newArrayListWithCapacity(1);
-    List<MutableNumericType> set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
+    List<List<MutableNumericValue>> data = Lists.newArrayListWithCapacity(1);
+    List<MutableNumericValue> set = Lists.newArrayListWithCapacity(1);
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
@@ -291,7 +291,7 @@ public class ProcessorTestsHelpers {
     set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    a.data = data;
+    //a.data = data;
     
     data = Lists.newArrayListWithCapacity(1);
     set = Lists.newArrayListWithCapacity(1);
@@ -305,7 +305,7 @@ public class ProcessorTestsHelpers {
     set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    b.data = data;
+    //b.data = data;
   }
 
   /**
@@ -315,22 +315,22 @@ public class ProcessorTestsHelpers {
    * @param a The A series to work with.
    * @param b The B series to work with.
    */
-  public static void setState8(final MockNumericIterator a, 
-      final MockNumericIterator b) {
+  public static void setState8(final MockNumericTimeSeries a, 
+      final MockNumericTimeSeries b) {
     
-    List<List<MutableNumericType>> data = Lists.newArrayListWithCapacity(1);
-    List<MutableNumericType> set = Lists.newArrayListWithCapacity(1);
+    List<List<MutableNumericValue>> data = Lists.newArrayListWithCapacity(1);
+    List<MutableNumericValue> set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(2000), 2));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(2000), 2));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    a.data = data;
+    //a.data = data;
     
     data = Lists.newArrayListWithCapacity(1);
     set = Lists.newArrayListWithCapacity(1);
@@ -344,7 +344,7 @@ public class ProcessorTestsHelpers {
     set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    b.data = data;
+    //b.data = data;
   }
 
   /**
@@ -354,11 +354,11 @@ public class ProcessorTestsHelpers {
    * @param a The A series to work with.
    * @param b The B series to work with.
    */
-  public static void setState9(final MockNumericIterator a, 
-      final MockNumericIterator b) {
+  public static void setState9(final MockNumericTimeSeries a, 
+      final MockNumericTimeSeries b) {
     
-    List<List<MutableNumericType>> data = Lists.newArrayListWithCapacity(1);
-    List<MutableNumericType> set = Lists.newArrayListWithCapacity(1);
+    List<List<MutableNumericValue>> data = Lists.newArrayListWithCapacity(1);
+    List<MutableNumericValue> set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
@@ -367,9 +367,9 @@ public class ProcessorTestsHelpers {
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    a.data = data;
+    //a.data = data;
     
     data = Lists.newArrayListWithCapacity(1);
     set = Lists.newArrayListWithCapacity(1);
@@ -383,7 +383,7 @@ public class ProcessorTestsHelpers {
     set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    b.data = data;
+    //b.data = data;
   }
 
   /**
@@ -393,12 +393,12 @@ public class ProcessorTestsHelpers {
    * @param a The A series to work with.
    * @param b The B series to work with.
    */
-  public static void setState10(final MockNumericIterator a, 
-      final MockNumericIterator b) {
+  public static void setState10(final MockNumericTimeSeries a, 
+      final MockNumericTimeSeries b) {
     
-    List<List<MutableNumericType>> data = Lists.newArrayListWithCapacity(1);
-    List<MutableNumericType> set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
+    List<List<MutableNumericValue>> data = Lists.newArrayListWithCapacity(1);
+    List<MutableNumericValue> set = Lists.newArrayListWithCapacity(1);
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
@@ -406,9 +406,9 @@ public class ProcessorTestsHelpers {
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    a.data = data;
+    //a.data = data;
     
     data = Lists.newArrayListWithCapacity(1);
     set = Lists.newArrayListWithCapacity(1);
@@ -416,13 +416,13 @@ public class ProcessorTestsHelpers {
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(2000), 2));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(2000), 2));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    b.data = data;
+    //b.data = data;
   }
 
   /**
@@ -432,12 +432,12 @@ public class ProcessorTestsHelpers {
    * @param a The A series to work with.
    * @param b The B series to work with.
    */
-  public static void setState11(final MockNumericIterator a, 
-      final MockNumericIterator b) {
+  public static void setState11(final MockNumericTimeSeries a, 
+      final MockNumericTimeSeries b) {
     
-    List<List<MutableNumericType>> data = Lists.newArrayListWithCapacity(1);
-    List<MutableNumericType> set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(1000), 1));
+    List<List<MutableNumericValue>> data = Lists.newArrayListWithCapacity(1);
+    List<MutableNumericValue> set = Lists.newArrayListWithCapacity(1);
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(1000), 1));
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
@@ -445,9 +445,9 @@ public class ProcessorTestsHelpers {
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(3000), 3));
     data.add(set);
-    a.data = data;
+    //a.data = data;
     
     data = Lists.newArrayListWithCapacity(1);
     set = Lists.newArrayListWithCapacity(1);
@@ -455,13 +455,13 @@ public class ProcessorTestsHelpers {
     data.add(set);
     
     set = Lists.newArrayListWithCapacity(1);
-    set.add(new MutableNumericType(new MillisecondTimeStamp(2000), 2));
+    set.add(new MutableNumericValue(new MillisecondTimeStamp(2000), 2));
     data.add(set);
     
     //set = Lists.newArrayListWithCapacity(1);
     //set.add(new MutableNumericType(new MillisecondTimeStamp(3000), 3));
     //data.add(set);
-    b.data = data;
+    //b.data = data;
   }
 
   /**

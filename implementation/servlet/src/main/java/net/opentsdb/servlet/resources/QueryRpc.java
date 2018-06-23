@@ -26,6 +26,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.servlet.AsyncContext;
+import javax.servlet.AsyncEvent;
+import javax.servlet.AsyncListener;
 import javax.servlet.ServletConfig;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.Consumes;
@@ -48,10 +50,16 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 
 import jersey.repackaged.com.google.common.collect.ImmutableMap;
+import net.opentsdb.auth.AuthState;
+import net.opentsdb.auth.Authentication;
+import net.opentsdb.auth.AuthState.AuthStatus;
+import net.opentsdb.common.Const;
 import net.opentsdb.core.DefaultTSDB;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Tags;
 import net.opentsdb.exceptions.QueryExecutionException;
-import net.opentsdb.query.DefaultQueryContextBuilder;
+import net.opentsdb.query.ConvertedQueryResult;
+import net.opentsdb.query.TSDBV2QueryContextBuilder;
 import net.opentsdb.query.TSQuery;
 import net.opentsdb.query.TSSubQuery;
 import net.opentsdb.query.QueryContext;
@@ -63,10 +71,12 @@ import net.opentsdb.query.execution.serdes.JsonV2QuerySerdesOptions;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.query.pojo.RateOptions;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
+import net.opentsdb.query.serdes.SerdesOptions;
 import net.opentsdb.servlet.applications.OpenTSDBApplication;
+import net.opentsdb.servlet.filter.AuthFilter;
 import net.opentsdb.stats.DefaultQueryStats;
 import net.opentsdb.stats.Span;
-import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.stats.StatsCollectorBasic;
 import net.opentsdb.stats.Trace;
 import net.opentsdb.stats.Tracer;
 import net.opentsdb.utils.Bytes;
@@ -169,12 +179,30 @@ final public class QueryRpc {
       throw new WebApplicationException("Unable to pull TSDB instance from "
           + "servlet context.",
           Response.Status.INTERNAL_SERVER_ERROR);
-    } else if (!(obj instanceof DefaultTSDB)) {
+    } else if (!(obj instanceof TSDB)) {
       throw new WebApplicationException("Object stored for as the TSDB was "
           + "of the wrong type: " + obj.getClass(),
           Response.Status.INTERNAL_SERVER_ERROR);
     }
-    final DefaultTSDB tsdb = (DefaultTSDB) obj;
+    final TSDB tsdb = (TSDB) obj;
+    
+    if (tsdb.getStatsCollector() != null) {
+      tsdb.getStatsCollector().incrementCounter("query.new", "endpoint", "2x");
+    }
+    
+    // check auth. 
+    final AuthState auth_state;
+    if (tsdb.getConfig().getBoolean(Authentication.AUTH_ENABLED_KEY)) {
+      if (request.getAttribute(AuthFilter.AUTH_STATE_KEY) == null || 
+          ((AuthState) request.getAttribute(AuthFilter.AUTH_STATE_KEY))
+            .getStatus() != AuthStatus.SUCCESS) {
+        throw new WebApplicationException("Access denied.", 
+            Response.Status.FORBIDDEN);
+      }
+      auth_state = (AuthState) request.getAttribute(AuthFilter.AUTH_STATE_KEY);
+    } else {
+      auth_state = null; // TODO - add an "unknown" auth user.
+    }
     
     // initiate the tracer
     final Trace trace;
@@ -185,6 +213,7 @@ final public class QueryRpc {
       query_span = trace.newSpanWithThread(this.getClass().getSimpleName())
           .withTag("endpoint", "/api/query")
           .withTag("startThread", Thread.currentThread().getName())
+          .withTag("user", auth_state != null ? auth_state.getUser() : "Unkown")
           // TODO - more useful info
           .start();
       request.setAttribute(TRACE_KEY, trace);
@@ -192,7 +221,6 @@ final public class QueryRpc {
       trace = null;
       query_span = null;
     }
-    
     Span parse_span = null;
     if (query_span != null) {
       parse_span = trace.newSpanWithThread("parseAndValidate")
@@ -214,6 +242,7 @@ final public class QueryRpc {
     } catch (Exception e) {
       throw new QueryExecutionException("Invalid query", 400, e);
     }
+    
     if (parse_span != null) {
       parse_span.setTag("Status", "OK")
                 .setTag("finalThread", Thread.currentThread().getName())
@@ -330,7 +359,6 @@ final public class QueryRpc {
       }
     }
     
-    
     // start the Async context and pass it around. 
     // WARNING After this point, make sure to catch all exceptions and dispatch
     // the context, otherwise the client will wait for the timeout handler.
@@ -338,7 +366,7 @@ final public class QueryRpc {
     async.setTimeout((Integer) servlet_config.getServletContext()
         .getAttribute(OpenTSDBApplication.ASYNC_TIMEOUT_ATTRIBUTE));
     
-    final QueryContext ctx = DefaultQueryContextBuilder.newBuilder(tsdb)
+    final QueryContext ctx = TSDBV2QueryContextBuilder.newBuilder(tsdb)
         .setQuery(query)
         .setMode(QueryMode.SINGLE)
         .addQuerySink(new LocalSink(async))
@@ -348,6 +376,42 @@ final public class QueryRpc {
         // TODO - stats
         .build();
     request.setAttribute(CONTEXT_KEY, ctx);
+    class AsyncTimeout implements AsyncListener {
+
+      @Override
+      public void onComplete(AsyncEvent event) throws IOException {
+        // TODO Auto-generated method stub
+        LOG.debug("Yay the async was all done!");
+      }
+
+      @Override
+      public void onTimeout(AsyncEvent event) throws IOException {
+        // TODO Auto-generated method stub
+        LOG.error("The query has timed out");
+        try {
+          ctx.close();
+        } catch (Exception e) {
+          LOG.error("Failed to close the query: ", e);
+        }
+        throw new QueryExecutionException("The query has exceeded "
+            + "the timeout limit.", 504);
+      }
+
+      @Override
+      public void onError(AsyncEvent event) throws IOException {
+        // TODO Auto-generated method stub
+        LOG.error("WTF? An error for the AsyncTimeout?: " + event);
+      }
+
+      @Override
+      public void onStartAsync(AsyncEvent event) throws IOException {
+        // TODO Auto-generated method stub
+        LOG.debug("Starting an async something or other");
+      }
+
+    }
+
+    async.addListener(new AsyncTimeout());
     
     if (setup_span != null) {
       setup_span.setTag("Status", "OK")
@@ -409,11 +473,13 @@ final public class QueryRpc {
     }
     
     final TSQuery ts_query = (TSQuery) request.getAttribute(V2_QUERY_KEY);
-    final JsonV2QuerySerdesOptions options = JsonV2QuerySerdesOptions.newBuilder()
+    final SerdesOptions options = JsonV2QuerySerdesOptions.newBuilder()
         .setMsResolution(ts_query.getMsResolution())
         .setShowQuery(ts_query.getShowQuery())
         .setShowStats(ts_query.getShowStats())
         .setShowSummary(ts_query.getShowSummary())
+        .setStart(query.getTime().startTime())
+        .setEnd(query.getTime().endTime())
         .build();
     
     /** The stream to write to. */
@@ -432,7 +498,16 @@ final public class QueryRpc {
         json.writeStartArray();
         
         final JsonV2QuerySerdes serdes = new JsonV2QuerySerdes(json);
-        serdes.serialize(context, options, output, result);
+        try {
+          // TODO - ug ug ugggg!!!
+          serdes.serialize(context, options, output, result, serdes_span).join();
+        } catch (InterruptedException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        } catch (Exception e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
         
 //        if (options.showSummary()) {
 //          json.writeObjectFieldStart("summary");
@@ -459,6 +534,20 @@ final public class QueryRpc {
                      .finish();
         }
         
+        Object obj = servlet_config.getServletContext()
+            .getAttribute(OpenTSDBApplication.TSD_ATTRIBUTE);
+        if (obj == null) {
+          throw new WebApplicationException("Unable to pull TSDB instance from "
+              + "servlet context.",
+              Response.Status.INTERNAL_SERVER_ERROR);
+        } else if (!(obj instanceof TSDB)) {
+          throw new WebApplicationException("Object stored for as the TSDB was "
+              + "of the wrong type: " + obj.getClass(),
+              Response.Status.INTERNAL_SERVER_ERROR);
+        }
+        final TSDB tsdb = (TSDB) obj;
+        
+        tsdb.getStatsCollector().incrementCounter("query.success", "endpoint", "2x");
         query_success.incrementAndGet();
         LOG.info("Completing query=" 
             + JSON.serializeToString(ImmutableMap.<String, Object>builder()
@@ -470,7 +559,7 @@ final public class QueryRpc {
             .put("query", request.getAttribute(V2_QUERY_KEY))
             .build()));
           
-          QUERY_LOG.info("Completing query=" 
+        QUERY_LOG.info("Completing query=" 
             + JSON.serializeToString(ImmutableMap.<String, Object>builder()
             // TODO - possible upstream headers
             .put("queryId", Bytes.byteArrayToString(query.buildHashCode().asBytes()))
@@ -548,7 +637,7 @@ final public class QueryRpc {
       trace.firstSpan()
         .setTag("status", "Error")
         .setTag("finalThread", Thread.currentThread().getName())
-        .setTag("error", e.getMessage())
+        .setTag("error", e.getMessage() == null ? "null" : e.getMessage())
         .log("exception", e)
         .finish();
     }
@@ -955,7 +1044,7 @@ final public class QueryRpc {
    * @throws WebApplicationException if parsing was unsuccessful
    * @since 2.3
    */
-  public static TSQuery parseQuery(final DefaultTSDB tsdb, 
+  public static TSQuery parseQuery(final TSDB tsdb, 
                                    final HttpServletRequest request,
                                    final List<Object> expressions) {
     final TSQuery data_query = new TSQuery();
@@ -1281,12 +1370,12 @@ TODO - restore!
 //    return query;
 //  }
   
-  /** @param collector Populates the collector with statistics */
-  public void collectStats(final StatsCollector collector) {
-    collector.record("http.query.invalid_requests", query_invalid);
-    collector.record("http.query.exceptions", query_exceptions);
-    collector.record("http.query.success", query_success);
-  }
+//  /** @param collector Populates the collector with statistics */
+//  public void collectStats(final StatsCollector collector) {
+//    collector.record("http.query.invalid_requests", query_invalid);
+//    collector.record("http.query.exceptions", query_exceptions);
+//    collector.record("http.query.success", query_success);
+//  }
   
 //  public static class LastPointQuery {
 //    
