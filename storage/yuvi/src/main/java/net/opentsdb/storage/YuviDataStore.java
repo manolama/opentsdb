@@ -14,10 +14,13 @@
 // limitations under the License.
 package net.opentsdb.storage;
 
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -27,10 +30,12 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
+import com.pinterest.yuvi.chunk.Chunk;
 import com.pinterest.yuvi.chunk.ChunkManager;
 import com.pinterest.yuvi.chunk.QueryAggregation;
 import com.pinterest.yuvi.models.Point;
 import com.pinterest.yuvi.models.TimeSeries;
+import com.pinterest.yuvi.tagstore.Metric;
 import com.pinterest.yuvi.tagstore.Query;
 import com.pinterest.yuvi.tagstore.TagMatcher;
 import com.stumbleupon.async.Deferred;
@@ -55,12 +60,14 @@ import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.QuerySourceConfig;
+import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.pojo.Filter;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
+import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
 
-public class YuviDataStore implements TimeSeriesDataStore, QueryNodeFactory {
+public class YuviDataStore implements TimeSeriesDataStore/*, QueryNodeFactory*/ {
   private static final Logger LOG = LoggerFactory.getLogger(YuviDataStore.class);
   
   private final String id;
@@ -75,48 +82,63 @@ public class YuviDataStore implements TimeSeriesDataStore, QueryNodeFactory {
 
   @Override
   public QueryNode newNode(QueryPipelineContext context,
+                           String id) {
+    throw new UnsupportedOperationException("Nope");
+  }
+  
+  @Override
+  public QueryNode newNode(QueryPipelineContext context,
+                           String id,
                            QueryNodeConfig config) {
-    return new LocalNode(this, context, (QuerySourceConfig) config);
+    return new LocalNode(null, context, (QuerySourceConfig) config, id);
   }
 
   @Override
   public String id() {
     return id;
   }
-
+  
   @Override
-  public Collection<TypeToken<?>> types() {
-    return Lists.newArrayList(NumericType.TYPE);
-  }
-
-  @Override
-  public void registerIteratorFactory(TypeToken<?> type,
-      QueryIteratorFactory factory) {
-    // TODO Auto-generated method stub
-    
-  }
-
-  @Override
-  public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> newIterator(
-      TypeToken<?> type, QueryNode node,
-      Collection<net.opentsdb.data.TimeSeries> sources) {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  @Override
-  public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> newIterator(
-      TypeToken<?> type, QueryNode node,
-      Map<String, net.opentsdb.data.TimeSeries> sources) {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  @Override
-  public Deferred<Object> write(TimeSeriesStringId id, TimeSeriesValue<?> value,
+  public Deferred<Object> write(TimeSeriesStringId id, 
+                                TimeSeriesValue<?> value,
       net.opentsdb.stats.Span span) {
-    // TODO Auto-generated method stub
-    return null;
+    
+    Chunk chunk = factory.manager().getChunk(value.timestamp().epoch());
+    System.out.println("GOT CHUNK: " + chunk);
+    
+    final List<String> tags = Lists.newArrayListWithCapacity(id.tags().size());
+    for (final Entry<String, String> entry : id.tags().entrySet()) {
+      tags.add(entry.getKey() + "=" + entry.getValue());
+    }
+    final Metric metric = new Metric(id.metric(), tags);
+    chunk.addPoint(metric, value.timestamp().epoch(), 
+        ((NumericType) value.value()).toDouble());
+//    final StringBuilder buf = new StringBuilder()
+//        .append("put ")
+//        .append(id.metric())
+//        .append(" ")
+//        .append(value.timestamp().epoch())
+//        .append(" ");
+//    if (((NumericType) value.value()).isInteger()) {
+//      buf.append(((NumericType) value.value()).longValue());
+//    } else {
+//      buf.append(((NumericType) value.value()).doubleValue());
+//    }
+//    if (id.tags() != null) {
+//      buf.append(" ");
+//      int i = 0;
+//      for (final Entry<String, String> entry : id.tags().entrySet()) {
+//        if (i++ > 0) {
+//          buf.append(" ");
+//        }
+//        buf.append(entry.getKey())
+//           .append("=")
+//           .append(entry.getValue());
+//      }
+//    }
+//    factory.manager().addMetric(buf.toString());
+//    System.out.println("WROTE: " + buf.toString());
+    return Deferred.fromResult(null);
   }
 
   @Override
@@ -138,26 +160,40 @@ public class YuviDataStore implements TimeSeriesDataStore, QueryNodeFactory {
     return Deferred.fromResult(null);
   }
   
+  @Override
+  public Class<? extends QueryNodeConfig> nodeConfigClass() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+  
   class LocalNode extends AbstractQueryNode implements SourceNode {
     protected final QuerySourceConfig config;
     
     Query yuviQuery;
     
-    LocalNode(final QueryNodeFactory factory, final QueryPipelineContext context,
-                         final QuerySourceConfig config) {
-      super(factory, context);
+    LocalNode(final QueryNodeFactory factory, 
+              final QueryPipelineContext context,
+              final QuerySourceConfig config,
+              final String id) {
+      super(factory, context, id);
       this.config = config;
-      final TimeSeriesQuery query = (TimeSeriesQuery) config.query();
       List<TagMatcher> tags = Lists.newArrayList();
-      if (!Strings.isNullOrEmpty(query.getMetrics().get(0).getFilter())) {
-        final Filter filter = query.getFilters().get(0);
+      if (!Strings.isNullOrEmpty(config.getFilterId())) {
+        final Filter filter;
+        if (config.getQuery() instanceof TimeSeriesQuery) {
+          filter = ((TimeSeriesQuery) config.getQuery()).getFilter(config.getFilterId());
+        } else if (config.getQuery() instanceof SemanticQuery) {
+          filter = ((SemanticQuery) config.getQuery()).getFilter(config.getFilterId());
+        } else {
+          throw new IllegalStateException("Doh, not supported yet!");
+        }
         // TODO - the rest of em
         tags = filter.getTags().stream()
             .filter(tagValueFilter -> tagValueFilter.getType().equals("wildcard"))
             .map(tagVFilter -> TagMatcher.wildcardMatch(tagVFilter.getTagk(), tagVFilter.getFilter()))
             .collect(Collectors.toList());
       }
-      yuviQuery = new Query(query.getMetrics().get(0).getMetric(), tags);
+      yuviQuery = new Query(config.getMetric(), tags);
     }
     
     @Override
@@ -179,11 +215,13 @@ public class YuviDataStore implements TimeSeriesDataStore, QueryNodeFactory {
 
     @Override
     public void fetchNext(final Span span) {
-      final TimeSeriesQuery query = (TimeSeriesQuery) config.query();
-      final List<TimeSeries> results = ((YuviDataStore) factory).manager().query(yuviQuery, 
-        query.getTime().startTime().epoch(), 
-        query.getTime().endTime().epoch(), 
-        QueryAggregation.NONE);
+      //final TimeSeriesQuery query = (TimeSeriesQuery) config.query();
+      final List<TimeSeries> results = 
+          YuviDataStore.this.factory.manager().query(
+              yuviQuery, 
+              config.startTime().epoch(), 
+              config.endTime().epoch(), 
+              QueryAggregation.NONE);
       onNext(new LocalResult(results));
     }
     
@@ -267,13 +305,25 @@ public class YuviDataStore implements TimeSeriesDataStore, QueryNodeFactory {
       // TODO Auto-generated method stub
       
     }
+
+    
+    @Override
+    public ChronoUnit resolution() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public RollupConfig rollupConfig() {
+      // TODO Auto-generated method stub
+      return null;
+    }
     
   }
   
   class YuviSeries implements net.opentsdb.data.TimeSeries {
     final TimeSeries series;
     TimeSeriesStringId id;
-    
     
     YuviSeries(final TimeSeries series) {
       this.series = series;
@@ -376,5 +426,6 @@ public class YuviDataStore implements TimeSeriesDataStore, QueryNodeFactory {
       
     }
   }
+
   
 }

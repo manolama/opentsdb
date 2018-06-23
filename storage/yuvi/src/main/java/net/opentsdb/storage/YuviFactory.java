@@ -57,11 +57,14 @@ public class YuviFactory implements TimeSeriesDataStoreFactory {
     if (!tsdb.getConfig().hasProperty("yuvi.datafile")) {
       tsdb.getConfig().register("yuvi.datafile", null, false, "The path to a YUVI data file to bootstrap with.");
     }
-    LOG.info("Reading file: " + tsdb.getConfig().getString("yuvi.datafile"));
-    Path filePath = Paths.get(tsdb.getConfig().getString("yuvi.datafile"));
-    //Path filePath = Paths.get("Users/clarsen/Downloads/tc.stat.put_12h_sorted");
-    FileMetricWriter metricWriter = new FileMetricWriter(filePath, manager);
-    metricWriter.start();
+    
+    if (!Strings.isNullOrEmpty(tsdb.getConfig().getString("yuvi.datafile"))) {
+      LOG.info("Reading file: " + tsdb.getConfig().getString("yuvi.datafile"));
+      Path filePath = Paths.get(tsdb.getConfig().getString("yuvi.datafile"));
+      //Path filePath = Paths.get("Users/clarsen/Downloads/tc.stat.put_12h_sorted");
+      FileMetricWriter metricWriter = new FileMetricWriter(filePath, manager);
+      metricWriter.start();
+    }
     LOG.info("Finished initializing Yuvi store.");
     return Deferred.fromResult(null);
   }

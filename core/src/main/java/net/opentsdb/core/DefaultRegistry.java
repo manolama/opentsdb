@@ -63,6 +63,7 @@ import net.opentsdb.query.plan.QueryPlanner;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
 import net.opentsdb.query.serdes.TimeSeriesSerdes;
 import net.opentsdb.storage.TimeSeriesDataStore;
+import net.opentsdb.storage.TimeSeriesDataStoreFactory;
 import net.opentsdb.utils.Deferreds;
 import net.opentsdb.utils.JSON;
 
@@ -492,6 +493,17 @@ public class DefaultRegistry implements Registry {
   /** Sets up default objects in the registry. */
   @SuppressWarnings("unchecked")
   private Deferred<Object> initDefaults() {
+    
+    final TimeSeriesDataStoreFactory factory = 
+        plugins.getDefaultPlugin(TimeSeriesDataStoreFactory.class);
+    if (factory != null) {
+      final TimeSeriesDataStore store = factory.newInstance(tsdb, null);
+      System.out.println("SETTING DEFAULT STORE: " + store);
+      this.data_stores.put(null, store);
+    } else {
+      System.out.println("WTF? No default data factory?");
+    }
+    
     if (true) {
       return Deferred.fromResult(null);
     }
