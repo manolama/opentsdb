@@ -17,16 +17,22 @@ package net.opentsdb.query.processor;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Map;
 
 import org.junit.Before;
 import org.junit.Test;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 
 import net.opentsdb.data.SimpleStringGroupId;
+import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.BaseTimeSeriesStringId;
+import net.opentsdb.data.MockTimeSeries;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.iterators.DefaultIteratorGroups;
 import net.opentsdb.data.iterators.IteratorGroup;
@@ -35,15 +41,68 @@ import net.opentsdb.data.types.annotation.AnnotationType;
 import net.opentsdb.data.types.annotation.MockAnnotationIterator;
 import net.opentsdb.data.types.numeric.MockNumericTimeSeries;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.pojo.Expression;
 import net.opentsdb.query.pojo.Join;
 import net.opentsdb.query.pojo.Join.SetOperator;
+import net.opentsdb.query.processor.JoinConfig.JoinSet;
+import net.opentsdb.query.processor.JoinConfig.JoinType;
 import net.opentsdb.query.processor.expressions.ExpressionProcessorConfig;
+import net.opentsdb.utils.Pair;
 
 public class TestJoiner {
-  private ExpressionProcessorConfig config;
-  private Expression.Builder expression_builder;
-  private Join.Builder join_builder;
+  
+  @Test
+  public void foo() throws Exception {
+    List<JoinSet> joins = Lists.newArrayList();
+    JoinSet set = new JoinSet();
+    set.type = JoinType.INNER;
+    set.metrics = new Pair<String, String>("a", "b");
+    set.joins = Lists.newArrayList(new Pair<String, String>("host", "host"));
+    joins.add(set);
+    
+    JoinConfig config = new JoinConfig(joins);
+    
+    List<TimeSeries> mocks = Lists.newArrayList();
+    mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
+        .setMetric("a")
+        .addTags("host", "1")
+        .build()));
+    mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
+        .setMetric("a")
+        .addTags("host", "2")
+        .build()));
+//    mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
+//        .setMetric("a")
+//        .addTags("host", "2")
+//        .addTags("owner", "bob")
+//        .build()));
+    mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
+        .setMetric("a")
+        .addTags("host", "3")
+        .build()));
+    mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
+        .setMetric("b")
+        .addTags("host", "1")
+        .build()));
+    mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
+        .setMetric("b")
+        .addTags("host", "2")
+        .build()));
+//    mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
+//        .setMetric("b")
+//        .addTags("host", "2")
+//        .addTags("owner", "joe")
+//        .build()));
+
+    QueryResult mock = mock(QueryResult.class);
+    when(mock.timeSeries()).thenReturn(mocks);
+    
+    Joiner joiner = new Joiner(config);
+    joiner.join(Lists.newArrayList(mock));
+    
+    
+  }
   
 //  @Before
 //  public void before() throws Exception {
@@ -415,13 +474,13 @@ public class TestJoiner {
 //    assertEquals("", joiner.joinKey(id));
 //  }
 //  
-  private void setConfig() {
-    if (join_builder != null) {
-      expression_builder.setJoin(join_builder.build());
-    }
-    
-    config = (ExpressionProcessorConfig) ExpressionProcessorConfig.newBuilder()
-        .setExpression(expression_builder.build())
-          .build();
-  }
+//  private void setConfig() {
+//    if (join_builder != null) {
+//      expression_builder.setJoin(join_builder.build());
+//    }
+//    
+//    config = (ExpressionProcessorConfig) ExpressionProcessorConfig.newBuilder()
+//        .setExpression(expression_builder.build())
+//          .build();
+//  }
 }

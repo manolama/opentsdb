@@ -12,6 +12,7 @@
 //see <http://www.gnu.org/licenses/>.
 package net.opentsdb.data;
 
+import com.google.common.hash.HashCode;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -36,4 +37,6 @@ public interface TimeSeriesId {
    * @return A non-null type token.
    */
   public TypeToken<? extends TimeSeriesId> type();
+  
+  public long buildHashCode();
 }

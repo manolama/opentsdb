@@ -323,6 +323,12 @@ public class TSUID implements TimeSeriesByteId {
   }
 
   @Override
+  public long buildHashCode() {
+    // TODO Auto-generated method stub
+    return 0;
+  }
+  
+  @Override
   public String toString() {
     final StringBuilder buf = new StringBuilder()
         .append("alias=")
@@ -346,4 +352,5 @@ public class TSUID implements TimeSeriesByteId {
   public byte[] tsuid() {
     return tsuid;
   }
+
 }

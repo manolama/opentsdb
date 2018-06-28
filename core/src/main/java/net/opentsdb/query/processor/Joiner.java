@@ -26,10 +26,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.hash.Hasher;
 import com.google.common.reflect.TypeToken;
 
+import gnu.trove.iterator.TLongObjectIterator;
+import gnu.trove.map.TLongObjectMap;
+import gnu.trove.map.hash.TLongObjectHashMap;
+import gnu.trove.set.TLongSet;
+import gnu.trove.set.hash.TLongHashSet;
+import net.opentsdb.core.Const;
+import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesGroupId;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.iterators.DefaultIteratorGroups;
@@ -37,8 +46,12 @@ import net.opentsdb.data.iterators.IteratorGroup;
 import net.opentsdb.data.iterators.IteratorGroups;
 import net.opentsdb.data.iterators.TimeSeriesIterators;
 import net.opentsdb.data.iterators.TimeSeriesIterator;
+import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.pojo.Join.SetOperator;
+import net.opentsdb.query.processor.JoinConfig.JoinSet;
+import net.opentsdb.query.processor.JoinConfig.JoinType;
 import net.opentsdb.query.processor.expressions.ExpressionProcessorConfig;
+import net.opentsdb.utils.Pair;
 
 /**
  * A class that performs a join on time series across multiple groups in the
@@ -60,292 +73,477 @@ public class Joiner {
   private static final Logger LOG = LoggerFactory.getLogger(Joiner.class);
   
   /** A non-null config to pull join information from. */
-  final ExpressionProcessorConfig config;
+  final JoinConfig config;
   
   /**
    * Default Ctor.
    * @param config A non-null expression config.
    */
-  public Joiner(final ExpressionProcessorConfig config) {
+  public Joiner(final JoinConfig config) {
     if (config == null) {
-      throw new IllegalArgumentException("Expression config cannot be null.");
+      throw new IllegalArgumentException("Join config cannot be null.");
     }
     this.config = config;
   }
 
-  /**
-   * Computes the join across {@link TimeSeriesGroupId}s and potentially kicks 
-   * any out that don't fulfill the set operator.
-   * @param source A non-null set of grouped iterators where the 
-   * {@link TimeSeriesGroupId} is the variable name used in the expression.
-   * @return A non-null byte map with join keys as the key.
-   */
-  public Map<String, IteratorGroups> join(final IteratorGroups source) {
-    if (source == null) {
-      throw new IllegalArgumentException("Source cannot be null.");
+  public void join(final List<QueryResult> results) {
+    List<HashedJoinSet> joins = Lists.newArrayListWithCapacity(config.joins().size());
+    Map<String, HashedJoinSet> keyed_joins = Maps.newHashMap(); 
+    for (final JoinSet join : config.joins()) {
+      final HashedJoinSet hashed = new HashedJoinSet(join);
+      joins.add(hashed);
+      
+      String key = join.namespaces != null ? 
+          join.namespaces.getKey() + join.metrics.getKey() :
+            join.metrics.getKey();
+      keyed_joins.put(key, hashed);
+      
+      key = join.namespaces != null ? 
+          join.namespaces.getValue() + join.metrics.getValue() :
+            join.metrics.getValue();
+      keyed_joins.put(key, hashed);
     }
     
-    final Map<String, IteratorGroups> joined = Maps.newHashMap();
-    for (final IteratorGroup group : source.groups()) {
-      for (final TimeSeriesIterator<?> it : group.flattenedIterators()) {
-        // TODO - fix up this joiner
-//        try {
-//          final String join_key = joinKey(it.id());
-//          if (join_key != null) {
-//            // find the proper map to dump it in
-//            IteratorGroups joined_group = joined.get(join_key);
-//            if (joined_group == null) {
-//              joined_group = new DefaultIteratorGroups();
-//              joined.put(join_key, joined_group);
-//            }
-//            
-//            joined_group.addIterator(group.id(), it);
-//          }
-//        } catch (IOException e) {
-//          throw new RuntimeException("Unexpected exception while joining", e);
-//        }
+    // TODO - convert byte IDs.
+    
+    // calculate the hashes for every time series and joins.
+    for (final QueryResult result : results) {
+      for (final TimeSeries ts : result.timeSeries()) {
+        final TimeSeriesStringId id = (TimeSeriesStringId) ts.id();
+        
+        final String key;
+        if (Strings.isNullOrEmpty(id.alias())) {
+          key = Strings.isNullOrEmpty(id.namespace()) ? 
+              id.metric() :
+                id.namespace() + id.metric();
+        } else {
+          key = Strings.isNullOrEmpty(id.namespace()) ? 
+              id.alias() :
+                id.namespace() + id.alias();
+        }
+        
+        HashedJoinSet join_set = keyed_joins.get(key);
+        if (join_set == null) {
+          // TODO - log ejection
+          continue;
+        }
+        
+        hash(ts, join_set, key);
       }
     }
     
-    final SetOperator operator = config.getExpression().getJoin() != null ? 
-        config.getExpression().getJoin().getOperator() : SetOperator.UNION;
-    
-    switch (operator) {
-    case UNION:
-      // nothing to do here. Let the caller handle fills for missing values.
-      return joined;
-    case INTERSECTION:
-      return computeIntersection(joined);
-      // TODO - CROSS
-    default:
-      throw new UnsupportedOperationException("Join operator " + operator 
-          + " is not supported yet.");
+    // TODO figure out join order based on the expression if present
+    System.out.println(joins);
+    HashedJoinSet hjs = joins.get(0);
+    for (final Pair<TimeSeries, TimeSeries> pair : hjs) {
+      System.out.println("PAIR: " + 
+         (pair.getKey() == null ? "null" : pair.getKey().id().toString()) + 
+         ", " + 
+         (pair.getValue() == null ? "null" : pair.getValue().id().toString()));
     }
+    System.out.println("DONE ITerating");
   }
   
-  /**
-   * Computes the intersection on the joined data set, comparing all of the 
-   * groups under a join key to make sure each one has at least one value.
-   * @param joins A non-null list of joins to work on.
-   * @return A non-null list of intersected joins.
-   */
-  private Map<String, IteratorGroups> computeIntersection(
-      final Map<String, IteratorGroups> joins) {
+  void hash(TimeSeries ts, 
+            HashedJoinSet join_set, 
+            String key) {
+    final TimeSeriesStringId id = (TimeSeriesStringId) ts.id();
+    Hasher hasher = Const.HASH_FUNCTION().newHasher();
+    final Map<String, String> sorted_tags = id.tags() != null && !id.tags().isEmpty() ? 
+        new TreeMap<String, String>(id.tags()) : null;
     
-    // TODO - join on a specific data type. May not care about annotations or 
-    // others when performing an expression so those can be "grouped".
-    
-    // Ugly but since the iterator sets are immutable, we have to convert to
-    // a map, then back.
-    final Map<String, Map<TimeSeriesGroupId, Map<TimeSeriesStringId, 
-      Map<TypeToken<?>, TimeSeriesIterator<?>>>>> joined = Maps.newHashMap();
-    
-    for (final Entry<String, IteratorGroups> join : joins.entrySet()) {
-      final Map<TimeSeriesGroupId, Map<TimeSeriesStringId, 
-        Map<TypeToken<?>, TimeSeriesIterator<?>>>> group = Maps.newHashMap();
-      joined.put(join.getKey(), group);
-      
-      for (final Entry<TimeSeriesGroupId, IteratorGroup> iterators : 
-          join.getValue()) {
-        final Map<TimeSeriesStringId, Map<TypeToken<?>, 
-          TimeSeriesIterator<?>>> timeseries = Maps.newHashMap();
-        group.put(iterators.getKey(), timeseries);
-        for (final TimeSeriesIterators types : iterators.getValue()) {
-          final Map<TypeToken<?>, TimeSeriesIterator<?>> typed_iterators =
-              Maps.newHashMapWithExpectedSize(types.iterators().size());
-          for (final TimeSeriesIterator<?> iterator : types.iterators()) {
-            typed_iterators.put(iterator.type(), iterator);
-          }
-          timeseries.put(types.id(), typed_iterators);
+    switch (join_set.join.type) {
+    case NATURAL:
+      // full ID
+      if (sorted_tags != null) {
+        for (final Entry<String, String> entry : sorted_tags.entrySet()) {
+          hasher.putString(entry.getValue(), Const.UTF8_CHARSET);
         }
+      }
+      break;
+      
+    default:
+      if (join_set.join.joins != null) {
+        boolean is_left = join_set.left_key.equals(key);
+        
+        boolean matched = true;
+        for (final Pair<String, String> pair : join_set.join.joins) {
+          String value = id.tags().get(is_left ? pair.getKey() : pair.getValue());
+          if (Strings.isNullOrEmpty(value)) {
+            // TODO - log the ejection
+            matched = false;
+            break;
+          }
+          System.out.println("  Add to hash: " + value);
+          hasher.putString(value, Const.UTF8_CHARSET);
+        }
+        if (!matched) {
+          // TODO - log the ejection
+          return;
+        }
+      }
+      
+    }
+    
+    if (join_set.join.type == JoinType.NATURAL || 
+        join_set.join.include_agg_tags && id.aggregatedTags() != null && !id.aggregatedTags().isEmpty()) {
+      List<String> aggs = Lists.newArrayList(id.aggregatedTags());
+      Collections.sort(aggs);
+      for (final String agg : aggs) {
+        hasher.putString(agg, Const.UTF8_CHARSET);
       }
     }
     
-    // now compute the intersections.
-    final Iterator<Entry<String, Map<TimeSeriesGroupId, Map<TimeSeriesStringId, 
-      Map<TypeToken<?>, TimeSeriesIterator<?>>>>>> top_iterator = 
-        joined.entrySet().iterator();
-    while (top_iterator.hasNext()) {
-      final Entry<String, Map<TimeSeriesGroupId, Map<TimeSeriesStringId, 
-        Map<TypeToken<?>, TimeSeriesIterator<?>>>>> join = top_iterator.next();
+    if (join_set.join.type == JoinType.NATURAL ||
+        join_set.join.include_disjoint_tags && id.disjointTags() != null && !id.disjointTags().isEmpty()) {
+      List<String> disj = Lists.newArrayList(id.disjointTags());
+      Collections.sort(disj);
+      for (final String dis : disj) {
+        hasher.putString(dis, Const.UTF8_CHARSET);
+      }
+    }
+    
+    System.out.println("HASHING: " + ts.id() + "  TO " + hasher.hash().asLong());
+    join_set.add(key, hasher.hash().asLong(), ts);
+  }
+  
+  class HashedJoinSet implements Iterable<Pair<TimeSeries, TimeSeries>> {
+    final JoinSet join;
+    final String left_key;
+    final String right_key;
+    
+    TLongObjectMap<List<TimeSeries>> left_map;
+    TLongObjectMap<List<TimeSeries>> right_map;
+    
+    HashedJoinSet(final JoinSet join) {
+      this.join = join;
+      left_key = join.namespaces != null ? 
+          join.namespaces.getKey() + join.metrics.getKey() :
+            join.metrics.getKey();
+      right_key = join.namespaces != null ? 
+          join.namespaces.getValue() + join.metrics.getValue() :
+            join.metrics.getValue();
+    }
+    
+    void add(String key, long hash, TimeSeries ts) {
+      if (key.equals(left_key)) {
+        if (left_map == null) {
+          left_map = new TLongObjectHashMap<List<TimeSeries>>();
+        }
+        List<TimeSeries> series = left_map.get(hash);
+        if (series == null) {
+          series = Lists.newArrayList();
+          left_map.put(hash, series);
+        }
+        series.add(ts);
+      } else {
+        if (right_map == null) {
+          right_map = new TLongObjectHashMap<List<TimeSeries>>();
+        }
+        List<TimeSeries> series = right_map.get(hash);
+        if (series == null) {
+          series = Lists.newArrayList();
+          right_map.put(hash, series);
+        }
+        series.add(ts);
+      }
+    }
+
+    @Override
+    public Iterator<Pair<TimeSeries, TimeSeries>> iterator() {
+      switch(join.type) {
+      case INNER:
+        return new InnerJoin();
+        default:
+          throw new UnsupportedOperationException("GRR!!");
+      }
+    }
+    
+    class InnerJoin implements Iterator<Pair<TimeSeries, TimeSeries>> {
+      TLongObjectIterator<List<TimeSeries>> left_iterator;
+      List<TimeSeries> left_series;
+      int left_idx;
       
-      final Iterator<Entry<TimeSeriesGroupId, Map<TimeSeriesStringId, 
-        Map<TypeToken<?>, TimeSeriesIterator<?>>>>> group_iterator = 
-          join.getValue().entrySet().iterator();
-      while (group_iterator.hasNext()) {
-        final Entry<TimeSeriesGroupId, Map<TimeSeriesStringId, 
-          Map<TypeToken<?>, TimeSeriesIterator<?>>>> group = 
-          group_iterator.next();
-        
-        final Iterator<Entry<TimeSeriesStringId, 
-          Map<TypeToken<?>, TimeSeriesIterator<?>>>> ts_iterator =
-            group.getValue().entrySet().iterator();
-        while (ts_iterator.hasNext()) {
-          final Entry<TimeSeriesStringId, Map<TypeToken<?>, 
-            TimeSeriesIterator<?>>> timeseries = ts_iterator.next();
+      List<TimeSeries> right_series;
+      int right_idx;
+      
+      Pair<TimeSeries, TimeSeries> pair;
+      Pair<TimeSeries, TimeSeries> next;
+      
+      InnerJoin() {
+        left_iterator = left_map == null ? null : left_map.iterator();
+        if (left_iterator != null) {
+          pair = new Pair<TimeSeries, TimeSeries>(null, null);  
+          next = new Pair<TimeSeries, TimeSeries>(null, null);
+          advance();
+        } else {
+          pair = null;
+          next = null;
+        }
+      }
+      
+      @Override
+      public boolean hasNext() {
+        return next != null;
+      }
+
+      @Override
+      public Pair<TimeSeries, TimeSeries> next() {
+        pair.setKey(next.getKey());
+        pair.setValue(next.getValue());
+        advance();
+        return pair;
+      }
+      
+      void advance() {
+        while (left_iterator.hasNext() || 
+              (left_series != null && left_idx < left_series.size())) {
+          // see if there are leftovers in the right array to cross on.
+          if (right_series != null && right_idx + 1 < right_series.size()) {
+            right_idx++;
+            next.setKey(left_series.get(left_idx));
+            next.setValue(right_series.get(right_idx));
+            return;
+          }
           
-          // now check the other groups to see if they have data.
-          for (final Entry<TimeSeriesGroupId, Map<TimeSeriesStringId, 
-              Map<TypeToken<?>, TimeSeriesIterator<?>>>> other_group : 
-                  join.getValue().entrySet()) {
-            if (other_group.getKey().equals(group.getKey())) {
+          // advance if necessary.
+          if (left_series == null || left_idx + 1 >= left_series.size()) {
+            if (left_iterator.hasNext()) {
+              left_iterator.advance();
+              left_series = left_iterator.value();
+            } else {
+              left_series = null;
+              continue;
+            }
+            left_idx = 0;
+          }
+          
+          if (right_series == null) {
+            right_series = right_map.get(left_iterator.key());
+            right_idx = -1;
+            if (right_series == null) {
+              // no match from left to right, iterate to the next left
+              left_series = null;
+              continue;
+            }
+          }
+          
+          // matched a right series..
+          if (right_idx + 1 >= right_series.size()) {
+            // inc left_idx and start over
+            left_idx++;
+            right_idx = -1;
+          }
+          
+          if (left_idx >= left_series.size()) {
+            left_series = null;
+            // exhausted this series, move to the next.
+            continue;
+          }
+          
+          // matched!
+          right_idx++;
+          next.setKey(left_series.get(left_idx));
+          next.setValue(right_series.get(right_idx));
+          
+          if (left_idx + 1 >= left_series.size() && 
+              right_idx + 1 >= right_series.size()) {
+            right_series = null;
+            right_idx = -1;
+          }
+          return;
+        }
+        
+        // all done!
+        next = null;
+      }
+      
+    }
+    
+    class FullOuter implements Iterator<Pair<TimeSeries, TimeSeries>> {
+
+      TLongObjectIterator<List<TimeSeries>> left_iterator;
+      List<TimeSeries> left_series;
+      int left_idx;
+      
+      TLongObjectIterator<List<TimeSeries>> right_iterator;
+      List<TimeSeries> right_series;
+      int right_idx;
+      TLongSet completed;
+      
+      Pair<TimeSeries, TimeSeries> pair;
+      Pair<TimeSeries, TimeSeries> next;
+      
+      FullOuter() {
+        left_iterator = left_map == null ? null : left_map.iterator();
+        right_iterator = right_map == null ? null : right_map.iterator();
+        completed = new TLongHashSet();
+        if (left_iterator != null || right_iterator != null) {
+          pair = new Pair<TimeSeries, TimeSeries>(null, null);  
+          next = new Pair<TimeSeries, TimeSeries>(null, null);
+          advance();
+        } else {
+          pair = null;
+          next = null;
+        }
+      }
+      
+      @Override
+      public boolean hasNext() {
+        return pair != null;
+      }
+
+      @Override
+      public Pair<TimeSeries, TimeSeries> next() {
+        return pair;
+      }
+      
+      void advance() {
+        // exhaust the left hand side first.
+        if (left_iterator != null) {
+          while (left_iterator.hasNext() || 
+              (left_series != null && left_idx < left_series.size())) {
+            // see if there are leftovers in the right array to cross on.
+            if (right_series != null && right_idx + 1 < right_series.size()) {
+              right_idx++;
+              next.setKey(left_series.get(left_idx));
+              next.setValue(right_series.get(right_idx));
+              return;
+            }
+            
+            // advance if necessary.
+            if (left_series == null || left_idx + 1 >= left_series.size()) {
+              if (left_iterator.hasNext()) {
+                left_iterator.advance();
+                left_series = left_iterator.value();
+              } else {
+                left_series = null;
+                continue;
+              }
+              left_idx = 0;
+            }
+            
+            // pull out the matching series on the right
+            if (right_series == null) {
+              right_series = right_map.get(left_iterator.key());
+              right_idx = -1;
+              if (right_series == null) {
+                // no match from left to right, iterate to the next left
+                left_series = null;
+                continue;
+              }
+            }
+            
+            // matched a right series..
+            if (right_idx + 1 >= right_series.size()) {
+              // inc left_idx and start over
+              left_idx++;
+              right_idx = -1;
+            }
+            
+            if (left_idx >= left_series.size()) {
+              left_series = null;
+              completed.add(left_iterator.key());
+              // exhausted this series, move to the next.
               continue;
             }
             
-            final Map<TypeToken<?>, TimeSeriesIterator<?>> other_types = 
-                other_group.getValue().get(timeseries.getKey());
-            if (other_types == null) {
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("[" + join.getKey() + "] kicking out series " 
-                    + timeseries.getKey() + " for group " + group.getKey() 
-                    + " as group " + other_group.getKey() 
-                    + " does not have data.");
-              }
-              ts_iterator.remove();
-              break;
+            // matched!
+            right_idx++;
+            next.setKey(left_series.get(left_idx));
+            next.setValue(right_series.get(right_idx));
+            
+            if (left_idx + 1 >= left_series.size() && 
+                right_idx + 1 >= right_series.size()) {
+              right_series = null;
+              right_idx = -1;
+            }
+            return;
+          }
+        
+          // all done!
+          left_iterator = null;
+          left_series = null;
+          // reset the right to be safe
+          right_idx = -1;
+          right_series = null;
+        } 
+        
+        // WORK RIGHT SIDE!
+        if (right_iterator != null) {
+          while (right_iterator.hasNext() || 
+              (right_series != null && right_idx < right_series.size())) {
+            // see if we have a left series and more to work with.
+            if (left_series != null && left_idx + 1 < left_series.size()) {
+              left_idx++;
+              next.setKey(left_series.get(left_idx));
+              next.setValue(right_series.get(right_idx));
+              return;
             }
             
-            final Iterator<Entry<TypeToken<?>, TimeSeriesIterator<?>>> 
-              type_iterator = timeseries.getValue().entrySet().iterator();
-            while(type_iterator.hasNext()) {
-              final Entry<TypeToken<?>, TimeSeriesIterator<?>> type = 
-                  type_iterator.next();
-              if (!other_types.containsKey(type.getKey())) {
-                if (LOG.isDebugEnabled()) {
-                  LOG.debug("[" + join.getKey() + "] kicking out type " 
-                      + type.getKey() + " for group " + group.getKey() 
-                      + " as group " + other_group.getKey() 
-                      + " does not have data.");
+            // advance if necessary.
+            if (right_series == null || right_idx + 1 >= right_series.size()) {
+              if (right_iterator.hasNext()) {
+                right_iterator.advance();
+                right_series = right_iterator.value();
+                // see if this has been processed already.
+                // TODO - this is a trade-off between making copies of the
+                // source maps where we could delete the entries as we work
+                // vs just keeping a copy of the processed hashes and skipping
+                // them as we go.
+                if (completed.contains(right_iterator.key())) {
+                  right_series = null;
+                  continue;
                 }
-                type_iterator.remove();
-                break;
+              } else {
+                right_series = null;
+                continue;
               }
-              
+              right_idx = 0;
             }
+            
+            // pull out the matching series on the left
+            if (left_series == null) {
+              left_series = left_map.get(right_iterator.key());
+              left_idx = -1;
+              if (left_series == null) {
+                // no match from left to right, iterate to the next right
+                right_series = null;
+                continue;
+              }
+            }
+            
+            // matched a right series..
+            if (left_idx + 1 >= left_series.size()) {
+              // inc right_idx and start over
+              right_idx++;
+              left_idx = -1;
+            }
+            
+            if (right_idx >= right_series.size()) {
+              right_series = null;
+              // exhausted this series, move to the next.
+              continue;
+            }
+            
+            // matched!
+            left_idx++;
+            next.setKey(left_series.get(left_idx));
+            next.setValue(right_series.get(right_idx));
+            
+            if (left_idx + 1 >= left_series.size() && 
+                right_idx + 1 >= right_series.size()) {
+              left_series = null;
+              left_idx = -1;
+            }
+            return;
           }
         }
         
-        if (group.getValue().isEmpty()) {
-          group_iterator.remove();
-        }
-      }
-      
-      // finally if nothing was present we kick it out
-      if (join.getValue().isEmpty()) {
-        top_iterator.remove();
-      }
-    }
-    
-    final Map<String, IteratorGroups> final_joins = Maps.newHashMap();
-    // reverse
-    for (final Entry<String, Map<TimeSeriesGroupId, Map<TimeSeriesStringId, 
-        Map<TypeToken<?>, TimeSeriesIterator<?>>>>> groups : joined.entrySet()) {
-      final IteratorGroups final_groups = new DefaultIteratorGroups();
-      final_joins.put(groups.getKey(), final_groups);
-      for (final Entry<TimeSeriesGroupId, Map<TimeSeriesStringId, 
-          Map<TypeToken<?>, TimeSeriesIterator<?>>>> group : 
-            groups.getValue().entrySet()) {
-        
-        for (final Entry<TimeSeriesStringId, 
-            Map<TypeToken<?>, TimeSeriesIterator<?>>> typed : 
-          group.getValue().entrySet()) {
-          for (final TimeSeriesIterator<?> iterator : typed.getValue().values()) {
-            final_groups.addIterator(group.getKey(), iterator);
-          }
-        }
-      }
-    }
-    
-    return final_joins;
+        // all done!
+        next = null;
+      } 
+    }  
   }
   
-  /**
-   * Generates a join key based on the ID and join configuration.
-   * @param id The ID to use for joining.
-   * @return A valid join key, an empty key if the ID didn't have any tags,
-   * or a null if the ID lacked tags required via the Join config.
-   * @throws IOException If the ID was null.
-   */
-  @VisibleForTesting
-  String joinKey(final TimeSeriesStringId id) throws IOException {
-    if (id == null) {
-      throw new IllegalArgumentException("ID cannot be null");
-    }
-    final StringBuffer buffer = new StringBuffer();
-    
-    final List<String> tag_keys = config.getTagKeys();
-    final boolean include_agg_tags = config.getExpression().getJoin() != null ?
-        config.getExpression().getJoin().getIncludeAggTags() : false;
-    final boolean include_disjoint_tags = config.getExpression().getJoin() != null ?
-        config.getExpression().getJoin().getIncludeDisjointTags() : false;
-    if (tag_keys != null) {
-      for (final String tag_key : tag_keys) {
-        String tag_value = id.tags().get(tag_key);
-        if (tag_value != null) {
-          buffer.append(tag_key);
-          buffer.append(tag_value);
-        } else {
-          boolean matched = false;
-          if (include_agg_tags) {
-            for (final String tag : id.aggregatedTags()) {
-              if (tag_key.equals(tag)) {
-                matched = true;
-                break;
-              }
-            }
-          } if (!matched && include_disjoint_tags) {
-            for (final String tag : id.disjointTags()) {
-              if (tag_key.equals(tag)) {
-                matched = true;
-                break;
-              }
-            }
-          }
-          if (!matched) {
-            if (LOG.isDebugEnabled()) {
-              LOG.debug("Ignoring series " + id + " as it doesn't have the "
-                  + "required tags ");
-            }
-            return null;
-          }
-          buffer.append(tag_key);
-        }
-      }
-    } else {
-      // full join!
-      if (!id.tags().isEmpty()) {
-        // make sure it's sorted is already sorted
-        final Map<String, String> tags;
-        if (id instanceof TreeMap) {
-          tags = id.tags();
-        } else {
-          tags = new TreeMap<String, String>(id.tags());
-        }
-        for (final Entry<String, String> pair : tags.entrySet()) {
-          buffer.append(pair.getKey());
-          buffer.append(pair.getValue());
-        }
-      }
-      
-      if (include_agg_tags && !id.aggregatedTags().isEmpty()) {
-        // not guaranteed of sorting
-        final List<String> sorted = Lists.newArrayList(id.aggregatedTags());
-        Collections.sort(sorted);
-        for (final String tag : sorted) {
-          buffer.append(tag);
-        }
-      }
-      
-      if (include_disjoint_tags && !id.disjointTags().isEmpty()) {
-        // not guaranteed of sorting
-        final List<String> sorted = Lists.newArrayList(id.disjointTags());
-        Collections.sort(sorted);
-        for (final String tag : sorted) {
-          buffer.append(tag);
-        }
-      }
-    }
-    
-    return buffer.toString();
-  }
 }
