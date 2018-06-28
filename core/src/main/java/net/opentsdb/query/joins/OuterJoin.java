@@ -7,7 +7,7 @@ import net.opentsdb.utils.Pair;
 public class OuterJoin extends BaseJoin {
   final boolean disjoint;
   
-  OuterJoin(final HashedJoinSet join, final boolean disjoint) {
+  OuterJoin(final BaseHashedJoinSet join, final boolean disjoint) {
     super(join);
     this.disjoint = disjoint;
     left_iterator = join.left_map == null ? null : join.left_map.iterator();

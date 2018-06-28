@@ -29,6 +29,7 @@ import org.junit.Test;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 
+import gnu.trove.map.TLongObjectMap;
 import net.opentsdb.data.SimpleStringGroupId;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.BaseTimeSeriesStringId;
@@ -118,7 +119,7 @@ public class TestJoiner {
     
     System.out.println("-------------");
     // TODO figure out join order based on the expression if present
-    HashedJoinSet hjs = !joiner.joins.isEmpty() ? joiner.joins.get(0) : null;
+    KeyedHashedJoinSet hjs = !joiner.joins.isEmpty() ? joiner.joins.get(0) : null;
     if (hjs != null) {
       int i = 0;
       for (final Pair<TimeSeries, TimeSeries> pair : hjs) {
@@ -133,7 +134,22 @@ public class TestJoiner {
       }
       System.out.println("DONE Iterating");
     } else {
+      TLongObjectMap<List<TimeSeries>> left = joiner.default_joins.get("a");
+      TLongObjectMap<List<TimeSeries>> right = joiner.default_joins.get("b");
       
+      final SimpleHashedJoinSet shjs = new SimpleHashedJoinSet(default_join.type, left, right);
+      int i = 0;
+      for (final Pair<TimeSeries, TimeSeries> pair : shjs) {
+        System.out.println("PAIR: " + 
+           (pair.getKey() == null ? "null" : pair.getKey().id().toString()) + 
+           ", " + 
+           (pair.getValue() == null ? "null" : pair.getValue().id().toString()));
+        if (i++ > 20) {
+          System.out.println("OOOOPS!");
+          return;
+        }
+      }
+      System.out.println("DONE Iterating");
     }
   }
   

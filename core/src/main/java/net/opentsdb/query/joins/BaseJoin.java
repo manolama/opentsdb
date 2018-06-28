@@ -9,7 +9,7 @@ import net.opentsdb.data.TimeSeries;
 import net.opentsdb.utils.Pair;
 
 public abstract class BaseJoin implements Iterator<Pair<TimeSeries, TimeSeries>> {
-  final HashedJoinSet join;
+  final BaseHashedJoinSet join;
   
   TLongObjectIterator<List<TimeSeries>> left_iterator;
   List<TimeSeries> left_series;
@@ -24,7 +24,7 @@ public abstract class BaseJoin implements Iterator<Pair<TimeSeries, TimeSeries>>
   Pair<TimeSeries, TimeSeries> pair;
   Pair<TimeSeries, TimeSeries> next;
   
-  BaseJoin(final HashedJoinSet join) {
+  BaseJoin(final BaseHashedJoinSet join) {
     this.join = join;
   }
   

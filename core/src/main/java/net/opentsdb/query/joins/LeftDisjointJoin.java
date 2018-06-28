@@ -5,7 +5,7 @@ import net.opentsdb.utils.Pair;
 
 public class LeftDisjointJoin extends BaseJoin {
 
-  public LeftDisjointJoin(final HashedJoinSet join) {
+  public LeftDisjointJoin(final BaseHashedJoinSet join) {
     super(join);
     left_iterator = join.left_map == null ? null : join.left_map.iterator();
     if (left_iterator != null) {

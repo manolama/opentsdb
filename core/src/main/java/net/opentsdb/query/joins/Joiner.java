@@ -76,8 +76,8 @@ public class Joiner {
   /** A non-null config to pull join information from. */
   final JoinConfig config;
   
-  List<HashedJoinSet> joins;
-  Map<String, HashedJoinSet> keyed_joins;
+  List<KeyedHashedJoinSet> joins;
+  Map<String, KeyedHashedJoinSet> keyed_joins;
   Map<String, TLongObjectMap<List<TimeSeries>>> default_joins;
   
   /**
@@ -98,21 +98,18 @@ public class Joiner {
   }
 
   public void join(final List<QueryResult> results) {
-    
     if (config.joins() != null) {
-      for (final JoinSet join : config.joins()) {
-        final HashedJoinSet hashed = new HashedJoinSet(join);
-        joins.add(hashed);
-        
-        String key = join.namespaces != null ? 
+      for (final JoinSet join : config.joins()) { 
+        String left_key = join.namespaces != null ? 
             join.namespaces.getKey() + join.metrics.getKey() :
               join.metrics.getKey();
-        keyed_joins.put(key, hashed);
-        
-        key = join.namespaces != null ? 
+        String right_key = join.namespaces != null ? 
             join.namespaces.getValue() + join.metrics.getValue() :
               join.metrics.getValue();
-        keyed_joins.put(key, hashed);
+        final KeyedHashedJoinSet hashed = new KeyedHashedJoinSet(join, left_key, right_key);
+        joins.add(hashed);    
+        keyed_joins.put(left_key, hashed);
+        keyed_joins.put(right_key, hashed);
       }
     }
     
@@ -134,7 +131,7 @@ public class Joiner {
                 id.namespace() + id.alias();
         }
         
-        HashedJoinSet join_set = keyed_joins.get(key);
+        KeyedHashedJoinSet join_set = keyed_joins.get(key);
         if (join_set == null) {
           if (config.default_join != null) {
             TLongObjectMap<List<TimeSeries>> default_join = default_joins.get(key);
@@ -153,15 +150,15 @@ public class Joiner {
     }
   }
   
-  void hash(TimeSeries ts, 
-            HashedJoinSet join_set, 
+  void hash(TimeSeries ts,
+            KeyedHashedJoinSet join_set, 
             String key) {
     final TimeSeriesStringId id = (TimeSeriesStringId) ts.id();
     Hasher hasher = Const.HASH_FUNCTION().newHasher();
     final Map<String, String> sorted_tags = id.tags() != null && !id.tags().isEmpty() ? 
         new TreeMap<String, String>(id.tags()) : null;
     
-    switch (join_set.join.type) {
+    switch (join_set.set.type) {
     case NATURAL:
       // full ID
       if (sorted_tags != null) {
@@ -172,11 +169,11 @@ public class Joiner {
       break;
       
     default:
-      if (join_set.join.joins != null) {
+      if (join_set.set.joins != null) {
         boolean is_left = join_set.left_key.equals(key);
         
         boolean matched = true;
-        for (final Pair<String, String> pair : join_set.join.joins) {
+        for (final Pair<String, String> pair : join_set.set.joins) {
           String value = id.tags().get(is_left ? pair.getKey() : pair.getValue());
           if (Strings.isNullOrEmpty(value)) {
             // TODO - log the ejection
@@ -194,8 +191,8 @@ public class Joiner {
       
     }
     
-    if (join_set.join.type == JoinType.NATURAL || 
-        join_set.join.include_agg_tags && id.aggregatedTags() != null && !id.aggregatedTags().isEmpty()) {
+    if (join_set.set.type == JoinType.NATURAL || 
+        join_set.set.include_agg_tags && id.aggregatedTags() != null && !id.aggregatedTags().isEmpty()) {
       List<String> aggs = Lists.newArrayList(id.aggregatedTags());
       Collections.sort(aggs);
       for (final String agg : aggs) {
@@ -203,8 +200,8 @@ public class Joiner {
       }
     }
     
-    if (join_set.join.type == JoinType.NATURAL ||
-        join_set.join.include_disjoint_tags && id.disjointTags() != null && !id.disjointTags().isEmpty()) {
+    if (join_set.set.type == JoinType.NATURAL ||
+        join_set.set.include_disjoint_tags && id.disjointTags() != null && !id.disjointTags().isEmpty()) {
       List<String> disj = Lists.newArrayList(id.disjointTags());
       Collections.sort(disj);
       for (final String dis : disj) {

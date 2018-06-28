@@ -5,7 +5,7 @@ import net.opentsdb.utils.Pair;
 
 public class InnerJoin extends BaseJoin {
     
-  public InnerJoin(final HashedJoinSet join) {
+  public InnerJoin(final BaseHashedJoinSet join) {
     super(join);
     left_iterator = join.left_map == null ? null : join.left_map.iterator();
     if (left_iterator != null) {
@@ -36,7 +36,7 @@ public class InnerJoin extends BaseJoin {
     while (left_iterator.hasNext() || 
           (left_series != null && left_idx < left_series.size())) {
       // see if there are leftovers in the right array to cross on.
-      if (right_series != null && right_idx + 1 < right_series.size()) {
+      if (left_series != null && right_series != null && right_idx + 1 < right_series.size()) {
         right_idx++;
         next.setKey(left_series.get(left_idx));
         next.setValue(right_series.get(right_idx));

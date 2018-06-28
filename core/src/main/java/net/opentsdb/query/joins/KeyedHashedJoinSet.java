@@ -9,25 +9,20 @@ import gnu.trove.map.TLongObjectMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.query.joins.JoinConfig.JoinSet;
+import net.opentsdb.query.joins.JoinConfig.JoinType;
 import net.opentsdb.utils.Pair;
 
-public class HashedJoinSet implements Iterable<Pair<TimeSeries, TimeSeries>> {
+public class KeyedHashedJoinSet extends BaseHashedJoinSet {
 
-  final JoinSet join;
+  final JoinSet set;
   final String left_key;
   final String right_key;
   
-  TLongObjectMap<List<TimeSeries>> left_map;
-  TLongObjectMap<List<TimeSeries>> right_map;
-  
-  HashedJoinSet(final JoinSet join) {
-    this.join = join;
-    left_key = join.namespaces != null ? 
-        join.namespaces.getKey() + join.metrics.getKey() :
-          join.metrics.getKey();
-    right_key = join.namespaces != null ? 
-        join.namespaces.getValue() + join.metrics.getValue() :
-          join.metrics.getValue();
+  KeyedHashedJoinSet(final JoinSet set, final String left_key, final String right_key) {
+    super(set.type);
+    this.set = set;
+    this.left_key = left_key;
+    this.right_key = right_key;
   }
   
   void add(String key, long hash, TimeSeries ts) {
@@ -51,27 +46,6 @@ public class HashedJoinSet implements Iterable<Pair<TimeSeries, TimeSeries>> {
         right_map.put(hash, series);
       }
       series.add(ts);
-    }
-  }
-
-  @Override
-  public Iterator<Pair<TimeSeries, TimeSeries>> iterator() {
-    switch(join.type) {
-    case INNER:
-    case NATURAL:
-    case LEFT:
-    case RIGHT:
-      return new InnerJoin(this);
-    case OUTER:
-      return new OuterJoin(this, false);
-    case OUTER_DISJOINT:
-      return new OuterJoin(this, true);
-    case LEFT_DISJOINT:
-      return new LeftDisjointJoin(this);
-    case RIGHT_DISJOINT:
-      return new RightDisjointJoin(this);
-      default:
-        throw new UnsupportedOperationException("GRR!!");
     }
   }
   
