@@ -12,7 +12,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package net.opentsdb.query.processor;
+package net.opentsdb.query.joins;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -42,11 +42,12 @@ import net.opentsdb.data.types.annotation.MockAnnotationIterator;
 import net.opentsdb.data.types.numeric.MockNumericTimeSeries;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryResult;
+import net.opentsdb.query.joins.JoinConfig.DefaultJoin;
+import net.opentsdb.query.joins.JoinConfig.JoinSet;
+import net.opentsdb.query.joins.JoinConfig.JoinType;
 import net.opentsdb.query.pojo.Expression;
 import net.opentsdb.query.pojo.Join;
 import net.opentsdb.query.pojo.Join.SetOperator;
-import net.opentsdb.query.processor.JoinConfig.JoinSet;
-import net.opentsdb.query.processor.JoinConfig.JoinType;
 import net.opentsdb.query.processor.expressions.ExpressionProcessorConfig;
 import net.opentsdb.utils.Pair;
 
@@ -61,8 +62,12 @@ public class TestJoiner {
     set.joins = Lists.newArrayList(new Pair<String, String>("host", "host"));
     joins.add(set);
     
-    JoinConfig config = new JoinConfig(joins);
+    DefaultJoin default_join = new DefaultJoin();
+    default_join.type = JoinType.INNER;
+    default_join.tags = Lists.newArrayList("host");
     
+    JoinConfig config = new JoinConfig(default_join, null);
+    set.type = JoinType.INNER;
     List<TimeSeries> mocks = Lists.newArrayList();
     mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
@@ -82,6 +87,12 @@ public class TestJoiner {
         .addTags("host", "3")
         .build()));
     mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
+        .setMetric("a")
+        .addTags("host", "3")
+        .addTags("owner", "sudip")
+        .build()));
+    // right side
+    mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
         .setMetric("b")
         .addTags("host", "1")
         .build()));
@@ -89,19 +100,41 @@ public class TestJoiner {
         .setMetric("b")
         .addTags("host", "2")
         .build()));
-//    mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("b")
-//        .addTags("host", "2")
-//        .addTags("owner", "joe")
-//        .build()));
-
+    mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
+        .setMetric("b")
+        .addTags("host", "2")
+        .addTags("owner", "joe")
+        .build()));
+    mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
+        .setMetric("b")
+        .addTags("host", "4")
+        .build()));
+    
     QueryResult mock = mock(QueryResult.class);
     when(mock.timeSeries()).thenReturn(mocks);
     
     Joiner joiner = new Joiner(config);
     joiner.join(Lists.newArrayList(mock));
     
-    
+    System.out.println("-------------");
+    // TODO figure out join order based on the expression if present
+    HashedJoinSet hjs = !joiner.joins.isEmpty() ? joiner.joins.get(0) : null;
+    if (hjs != null) {
+      int i = 0;
+      for (final Pair<TimeSeries, TimeSeries> pair : hjs) {
+        System.out.println("PAIR: " + 
+           (pair.getKey() == null ? "null" : pair.getKey().id().toString()) + 
+           ", " + 
+           (pair.getValue() == null ? "null" : pair.getValue().id().toString()));
+        if (i++ > 20) {
+          System.out.println("OOOOPS!");
+          return;
+        }
+      }
+      System.out.println("DONE Iterating");
+    } else {
+      
+    }
   }
   
 //  @Before
