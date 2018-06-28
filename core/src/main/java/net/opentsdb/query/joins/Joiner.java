@@ -47,8 +47,6 @@ import net.opentsdb.data.iterators.IteratorGroups;
 import net.opentsdb.data.iterators.TimeSeriesIterators;
 import net.opentsdb.data.iterators.TimeSeriesIterator;
 import net.opentsdb.query.QueryResult;
-import net.opentsdb.query.joins.JoinConfig.DefaultJoin;
-import net.opentsdb.query.joins.JoinConfig.JoinSet;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
 import net.opentsdb.query.pojo.Join.SetOperator;
 import net.opentsdb.query.processor.expressions.ExpressionProcessorConfig;
@@ -75,10 +73,7 @@ public class Joiner {
   
   /** A non-null config to pull join information from. */
   final JoinConfig config;
-  
-  List<KeyedHashedJoinSet> joins;
-  Map<String, KeyedHashedJoinSet> keyed_joins;
-  Map<String, TLongObjectMap<List<TimeSeries>>> default_joins;
+  KeyedHashedJoinSet join_set;
   
   /**
    * Default Ctor.
@@ -89,29 +84,11 @@ public class Joiner {
       throw new IllegalArgumentException("Join config cannot be null.");
     }
     this.config = config;
-    joins = Lists.newArrayListWithCapacity(
-        config.joins != null ? config.joins().size() + 1 : 1);
-    keyed_joins = Maps.newHashMap();
-    if (config.default_join != null) {
-      default_joins = Maps.newHashMap();
-    }
   }
 
-  public void join(final List<QueryResult> results) {
-    if (config.joins() != null) {
-      for (final JoinSet join : config.joins()) { 
-        String left_key = join.namespaces != null ? 
-            join.namespaces.getKey() + join.metrics.getKey() :
-              join.metrics.getKey();
-        String right_key = join.namespaces != null ? 
-            join.namespaces.getValue() + join.metrics.getValue() :
-              join.metrics.getValue();
-        final KeyedHashedJoinSet hashed = new KeyedHashedJoinSet(join, left_key, right_key);
-        joins.add(hashed);    
-        keyed_joins.put(left_key, hashed);
-        keyed_joins.put(right_key, hashed);
-      }
-    }
+  public void join(final List<QueryResult> results, 
+                   final String left_key, final String right_key) {
+    join_set = new KeyedHashedJoinSet(config.type, left_key, right_key);
     
     // TODO - convert byte IDs.
     
@@ -130,22 +107,7 @@ public class Joiner {
               id.alias() :
                 id.namespace() + id.alias();
         }
-        
-        KeyedHashedJoinSet join_set = keyed_joins.get(key);
-        if (join_set == null) {
-          if (config.default_join != null) {
-            TLongObjectMap<List<TimeSeries>> default_join = default_joins.get(key);
-            if (default_join == null) {
-              default_join = new TLongObjectHashMap<List<TimeSeries>>();
-              default_joins.put(key, default_join);
-            }
-            hash(ts, config.default_join, default_join);
-          } else {
-            // TODO - log ejection
-          }
-        } else {
-          hash(ts, join_set, key);
-        }
+        hash(ts, join_set, key);
       }
     }
   }
@@ -158,7 +120,7 @@ public class Joiner {
     final Map<String, String> sorted_tags = id.tags() != null && !id.tags().isEmpty() ? 
         new TreeMap<String, String>(id.tags()) : null;
     
-    switch (join_set.set.type) {
+    switch (config.type) {
     case NATURAL:
       // full ID
       if (sorted_tags != null) {
@@ -169,11 +131,11 @@ public class Joiner {
       break;
       
     default:
-      if (join_set.set.joins != null) {
+      if (config.joins != null) {
         boolean is_left = join_set.left_key.equals(key);
         
         boolean matched = true;
-        for (final Pair<String, String> pair : join_set.set.joins) {
+        for (final Pair<String, String> pair : config.joins) {
           String value = id.tags().get(is_left ? pair.getKey() : pair.getValue());
           if (Strings.isNullOrEmpty(value)) {
             // TODO - log the ejection
@@ -191,8 +153,8 @@ public class Joiner {
       
     }
     
-    if (join_set.set.type == JoinType.NATURAL || 
-        join_set.set.include_agg_tags && id.aggregatedTags() != null && !id.aggregatedTags().isEmpty()) {
+    if (config.type == JoinType.NATURAL || 
+        config.include_agg_tags && id.aggregatedTags() != null && !id.aggregatedTags().isEmpty()) {
       List<String> aggs = Lists.newArrayList(id.aggregatedTags());
       Collections.sort(aggs);
       for (final String agg : aggs) {
@@ -200,8 +162,8 @@ public class Joiner {
       }
     }
     
-    if (join_set.set.type == JoinType.NATURAL ||
-        join_set.set.include_disjoint_tags && id.disjointTags() != null && !id.disjointTags().isEmpty()) {
+    if (config.type == JoinType.NATURAL ||
+        config.include_disjoint_tags && id.disjointTags() != null && !id.disjointTags().isEmpty()) {
       List<String> disj = Lists.newArrayList(id.disjointTags());
       Collections.sort(disj);
       for (final String dis : disj) {
@@ -213,71 +175,71 @@ public class Joiner {
     join_set.add(key, hasher.hash().asLong(), ts);
   }
   
-  void hash(TimeSeries ts, 
-      DefaultJoin join,
-      TLongObjectMap<List<TimeSeries>> map) {
-    final TimeSeriesStringId id = (TimeSeriesStringId) ts.id();
-    Hasher hasher = Const.HASH_FUNCTION().newHasher();
-    final Map<String, String> sorted_tags = id.tags() != null && !id.tags().isEmpty() ? 
-      new TreeMap<String, String>(id.tags()) : null;
-    
-    switch (join.type) {
-    case NATURAL:
-      // full ID
-      if (sorted_tags != null) {
-        for (final Entry<String, String> entry : sorted_tags.entrySet()) {
-          hasher.putString(entry.getValue(), Const.UTF8_CHARSET);
-        }
-      }
-      break;
-    
-    default:
-      if (join.tags != null) {
-        boolean matched = true;
-        for (final String tagk : join.tags) {
-          String value = id.tags().get(tagk);
-          if (Strings.isNullOrEmpty(value)) {
-            // TODO - log the ejection
-            matched = false;
-            break;
-          }
-          System.out.println("  Add to hash: " + value);
-          hasher.putString(value, Const.UTF8_CHARSET);
-        }
-        if (!matched) {
-          // TODO - log the ejection
-          return;
-        }
-      }
-      
-    }
-    
-    if (join.type == JoinType.NATURAL || 
-      join.include_agg_tags && id.aggregatedTags() != null && !id.aggregatedTags().isEmpty()) {
-      List<String> aggs = Lists.newArrayList(id.aggregatedTags());
-      Collections.sort(aggs);
-      for (final String agg : aggs) {
-        hasher.putString(agg, Const.UTF8_CHARSET);
-      }
-    }
-    
-    if (join.type == JoinType.NATURAL ||
-      join.include_disjoint_tags && id.disjointTags() != null && !id.disjointTags().isEmpty()) {
-      List<String> disj = Lists.newArrayList(id.disjointTags());
-      Collections.sort(disj);
-      for (final String dis : disj) {
-        hasher.putString(dis, Const.UTF8_CHARSET);
-      }
-    }
-    
-    final long key = hasher.hash().asLong();
-    System.out.println("HASHING: " + ts.id() + "  TO " + key);
-    List<TimeSeries> series = map.get(key);
-    if (series == null) {
-      series = Lists.newArrayList(ts);
-      map.put(key, series);
-    } else {
-      series.add(ts);
-    }
-  }
+//  void hash(TimeSeries ts, 
+//      DefaultJoin join,
+//      TLongObjectMap<List<TimeSeries>> map) {
+//    final TimeSeriesStringId id = (TimeSeriesStringId) ts.id();
+//    Hasher hasher = Const.HASH_FUNCTION().newHasher();
+//    final Map<String, String> sorted_tags = id.tags() != null && !id.tags().isEmpty() ? 
+//      new TreeMap<String, String>(id.tags()) : null;
+//    
+//    switch (join.type) {
+//    case NATURAL:
+//      // full ID
+//      if (sorted_tags != null) {
+//        for (final Entry<String, String> entry : sorted_tags.entrySet()) {
+//          hasher.putString(entry.getValue(), Const.UTF8_CHARSET);
+//        }
+//      }
+//      break;
+//    
+//    default:
+//      if (join.tags != null) {
+//        boolean matched = true;
+//        for (final String tagk : join.tags) {
+//          String value = id.tags().get(tagk);
+//          if (Strings.isNullOrEmpty(value)) {
+//            // TODO - log the ejection
+//            matched = false;
+//            break;
+//          }
+//          System.out.println("  Add to hash: " + value);
+//          hasher.putString(value, Const.UTF8_CHARSET);
+//        }
+//        if (!matched) {
+//          // TODO - log the ejection
+//          return;
+//        }
+//      }
+//      
+//    }
+//    
+//    if (join.type == JoinType.NATURAL || 
+//      join.include_agg_tags && id.aggregatedTags() != null && !id.aggregatedTags().isEmpty()) {
+//      List<String> aggs = Lists.newArrayList(id.aggregatedTags());
+//      Collections.sort(aggs);
+//      for (final String agg : aggs) {
+//        hasher.putString(agg, Const.UTF8_CHARSET);
+//      }
+//    }
+//    
+//    if (join.type == JoinType.NATURAL ||
+//      join.include_disjoint_tags && id.disjointTags() != null && !id.disjointTags().isEmpty()) {
+//      List<String> disj = Lists.newArrayList(id.disjointTags());
+//      Collections.sort(disj);
+//      for (final String dis : disj) {
+//        hasher.putString(dis, Const.UTF8_CHARSET);
+//      }
+//    }
+//    
+//    final long key = hasher.hash().asLong();
+//    System.out.println("HASHING: " + ts.id() + "  TO " + key);
+//    List<TimeSeries> series = map.get(key);
+//    if (series == null) {
+//      series = Lists.newArrayList(ts);
+//      map.put(key, series);
+//    } else {
+//      series.add(ts);
+//    }
+//  }
 }

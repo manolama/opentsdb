@@ -8,19 +8,15 @@ import com.google.common.collect.Lists;
 import gnu.trove.map.TLongObjectMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import net.opentsdb.data.TimeSeries;
-import net.opentsdb.query.joins.JoinConfig.JoinSet;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
 import net.opentsdb.utils.Pair;
 
 public class KeyedHashedJoinSet extends BaseHashedJoinSet {
-
-  final JoinSet set;
   final String left_key;
   final String right_key;
   
-  KeyedHashedJoinSet(final JoinSet set, final String left_key, final String right_key) {
-    super(set.type);
-    this.set = set;
+  KeyedHashedJoinSet(final JoinType type, final String left_key, final String right_key) {
+    super(type);
     this.left_key = left_key;
     this.right_key = right_key;
   }

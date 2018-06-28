@@ -43,8 +43,6 @@ import net.opentsdb.data.types.annotation.MockAnnotationIterator;
 import net.opentsdb.data.types.numeric.MockNumericTimeSeries;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryResult;
-import net.opentsdb.query.joins.JoinConfig.DefaultJoin;
-import net.opentsdb.query.joins.JoinConfig.JoinSet;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
 import net.opentsdb.query.pojo.Expression;
 import net.opentsdb.query.pojo.Join;
@@ -56,19 +54,22 @@ public class TestJoiner {
   
   @Test
   public void foo() throws Exception {
-    List<JoinSet> joins = Lists.newArrayList();
-    JoinSet set = new JoinSet();
-    set.type = JoinType.INNER;
-    set.metrics = new Pair<String, String>("a", "b");
-    set.joins = Lists.newArrayList(new Pair<String, String>("host", "host"));
-    joins.add(set);
+//    List<JoinSet> joins = Lists.newArrayList();
+//    JoinSet set = new JoinSet();
+//    set.type = JoinType.INNER;
+//    set.metrics = new Pair<String, String>("a", "b");
+//    set.joins = Lists.newArrayList(new Pair<String, String>("host", "host"));
+//    joins.add(set);
+//    
+//    DefaultJoin default_join = new DefaultJoin();
+//    default_join.type = JoinType.INNER;
+//    default_join.tags = Lists.newArrayList("host");
     
-    DefaultJoin default_join = new DefaultJoin();
-    default_join.type = JoinType.INNER;
-    default_join.tags = Lists.newArrayList("host");
+    List<Pair<String, String>> joins = Lists.newArrayList(
+        new Pair<String, String>("host", "host"));
     
-    JoinConfig config = new JoinConfig(default_join, null);
-    set.type = JoinType.INNER;
+    JoinConfig config = new JoinConfig(JoinType.INNER, joins);
+//    set.type = JoinType.INNER;
     List<TimeSeries> mocks = Lists.newArrayList();
     mocks.add(new MockTimeSeries(BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
@@ -115,11 +116,11 @@ public class TestJoiner {
     when(mock.timeSeries()).thenReturn(mocks);
     
     Joiner joiner = new Joiner(config);
-    joiner.join(Lists.newArrayList(mock));
+    joiner.join(Lists.newArrayList(mock), "a", "b");
     
     System.out.println("-------------");
     // TODO figure out join order based on the expression if present
-    KeyedHashedJoinSet hjs = !joiner.joins.isEmpty() ? joiner.joins.get(0) : null;
+    KeyedHashedJoinSet hjs = joiner.join_set;
     if (hjs != null) {
       int i = 0;
       for (final Pair<TimeSeries, TimeSeries> pair : hjs) {
@@ -134,22 +135,22 @@ public class TestJoiner {
       }
       System.out.println("DONE Iterating");
     } else {
-      TLongObjectMap<List<TimeSeries>> left = joiner.default_joins.get("a");
-      TLongObjectMap<List<TimeSeries>> right = joiner.default_joins.get("b");
-      
-      final SimpleHashedJoinSet shjs = new SimpleHashedJoinSet(default_join.type, left, right);
-      int i = 0;
-      for (final Pair<TimeSeries, TimeSeries> pair : shjs) {
-        System.out.println("PAIR: " + 
-           (pair.getKey() == null ? "null" : pair.getKey().id().toString()) + 
-           ", " + 
-           (pair.getValue() == null ? "null" : pair.getValue().id().toString()));
-        if (i++ > 20) {
-          System.out.println("OOOOPS!");
-          return;
-        }
-      }
-      System.out.println("DONE Iterating");
+//      TLongObjectMap<List<TimeSeries>> left = joiner.default_joins.get("a");
+//      TLongObjectMap<List<TimeSeries>> right = joiner.default_joins.get("b");
+//      
+//      final SimpleHashedJoinSet shjs = new SimpleHashedJoinSet(default_join.type, left, right);
+//      int i = 0;
+//      for (final Pair<TimeSeries, TimeSeries> pair : shjs) {
+//        System.out.println("PAIR: " + 
+//           (pair.getKey() == null ? "null" : pair.getKey().id().toString()) + 
+//           ", " + 
+//           (pair.getValue() == null ? "null" : pair.getValue().id().toString()));
+//        if (i++ > 20) {
+//          System.out.println("OOOOPS!");
+//          return;
+//        }
+//      }
+//      System.out.println("DONE Iterating");
     }
   }
   

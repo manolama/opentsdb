@@ -31,66 +31,22 @@ public class JoinConfig {
     NATURAL
   }
   
-  final DefaultJoin default_join;
-  final List<JoinSet> joins;
-  final Map<String, List<JoinSet>> nsm_to_join_sets;
+  JoinType type;
+  List<Pair<String, String>> joins;
+  boolean include_agg_tags;
+  boolean include_disjoint_tags;
   
-  public JoinConfig(final DefaultJoin default_join, final List<JoinSet> joins) {
-    this.default_join = default_join;
+  public JoinConfig(final JoinType type, final List<Pair<String, String>> joins) {
+    this.type = type;
     this.joins = joins;
-    nsm_to_join_sets = Maps.newHashMap();
-    if (joins != null) {
-      for (final JoinSet join : joins) {
-        String nm_key = join.namespaces != null ? 
-            join.namespaces.getKey() + join.metrics.getKey() :
-              join.metrics.getKey();
-        
-        List<JoinSet> sets = nsm_to_join_sets.get(nm_key);
-        if (sets == null) {
-          sets = Lists.newArrayList();
-          nsm_to_join_sets.put(nm_key, sets);
-        }
-        if (!sets.contains(join)) {
-          sets.add(join);
-        }
-        
-        nm_key = join.namespaces != null ? 
-            join.namespaces.getValue() + join.metrics.getValue() :
-              join.metrics.getValue();
-            
-        sets = nsm_to_join_sets.get(nm_key);
-        if (sets == null) {
-          sets = Lists.newArrayList();
-          nsm_to_join_sets.put(nm_key, sets);
-        }
-        if (!sets.contains(join)) {
-          sets.add(join);
-        }
-      }
-    }
   }
   
-  public List<JoinSet> joins() {
+  public JoinType type() {
+    return type;
+  }
+  
+  public List<Pair<String, String>> joins() {
     return joins;
   }
   
-  public Map<String, List<JoinSet>> metric_to_join_sets() {
-    return nsm_to_join_sets;
-  }
-  
-  public static class JoinSet {
-    JoinType type;
-    Pair<String, String> namespaces;
-    Pair<String, String> metrics;
-    List<Pair<String, String>> joins;
-    boolean include_agg_tags;
-    boolean include_disjoint_tags;
-  }
-  
-  public static class DefaultJoin {
-    JoinType type;
-    List<String> tags;
-    boolean include_agg_tags;
-    boolean include_disjoint_tags;
-  }
 }
