@@ -20,9 +20,67 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.io.StringReader;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.jexl2.JexlInfo;
+import org.apache.commons.jexl2.parser.ASTAdditiveNode;
+import org.apache.commons.jexl2.parser.ASTAdditiveOperator;
+import org.apache.commons.jexl2.parser.ASTAmbiguous;
+import org.apache.commons.jexl2.parser.ASTAndNode;
+import org.apache.commons.jexl2.parser.ASTArrayAccess;
+import org.apache.commons.jexl2.parser.ASTArrayLiteral;
+import org.apache.commons.jexl2.parser.ASTAssignment;
+import org.apache.commons.jexl2.parser.ASTBitwiseAndNode;
+import org.apache.commons.jexl2.parser.ASTBitwiseComplNode;
+import org.apache.commons.jexl2.parser.ASTBitwiseOrNode;
+import org.apache.commons.jexl2.parser.ASTBitwiseXorNode;
+import org.apache.commons.jexl2.parser.ASTBlock;
+import org.apache.commons.jexl2.parser.ASTConstructorNode;
+import org.apache.commons.jexl2.parser.ASTDivNode;
+import org.apache.commons.jexl2.parser.ASTEQNode;
+import org.apache.commons.jexl2.parser.ASTERNode;
+import org.apache.commons.jexl2.parser.ASTEmptyFunction;
+import org.apache.commons.jexl2.parser.ASTFalseNode;
+import org.apache.commons.jexl2.parser.ASTForeachStatement;
+import org.apache.commons.jexl2.parser.ASTFunctionNode;
+import org.apache.commons.jexl2.parser.ASTGENode;
+import org.apache.commons.jexl2.parser.ASTGTNode;
+import org.apache.commons.jexl2.parser.ASTIdentifier;
+import org.apache.commons.jexl2.parser.ASTIfStatement;
+import org.apache.commons.jexl2.parser.ASTJexlScript;
+import org.apache.commons.jexl2.parser.ASTLENode;
+import org.apache.commons.jexl2.parser.ASTLTNode;
+import org.apache.commons.jexl2.parser.ASTMapEntry;
+import org.apache.commons.jexl2.parser.ASTMapLiteral;
+import org.apache.commons.jexl2.parser.ASTMethodNode;
+import org.apache.commons.jexl2.parser.ASTModNode;
+import org.apache.commons.jexl2.parser.ASTMulNode;
+import org.apache.commons.jexl2.parser.ASTNENode;
+import org.apache.commons.jexl2.parser.ASTNRNode;
+import org.apache.commons.jexl2.parser.ASTNotNode;
+import org.apache.commons.jexl2.parser.ASTNullLiteral;
+import org.apache.commons.jexl2.parser.ASTNumberLiteral;
+import org.apache.commons.jexl2.parser.ASTOrNode;
+import org.apache.commons.jexl2.parser.ASTReference;
+import org.apache.commons.jexl2.parser.ASTReferenceExpression;
+import org.apache.commons.jexl2.parser.ASTReturnStatement;
+import org.apache.commons.jexl2.parser.ASTSizeFunction;
+import org.apache.commons.jexl2.parser.ASTSizeMethod;
+import org.apache.commons.jexl2.parser.ASTStringLiteral;
+import org.apache.commons.jexl2.parser.ASTTernaryNode;
+import org.apache.commons.jexl2.parser.ASTTrueNode;
+import org.apache.commons.jexl2.parser.ASTUnaryMinusNode;
+import org.apache.commons.jexl2.parser.ASTVar;
+import org.apache.commons.jexl2.parser.ASTWhileStatement;
+import org.apache.commons.jexl2.parser.JexlNode;
+import org.apache.commons.jexl2.parser.Parser;
+import org.apache.commons.jexl2.parser.ParserVisitor;
+import org.apache.commons.jexl2.parser.SimpleNode;
+import org.apache.commons.jexl2.parser.Token;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -152,6 +210,531 @@ public class TestJoiner {
 //      }
 //      System.out.println("DONE Iterating");
     }
+  }
+  
+  @Test
+  public void ooos() throws Exception {
+    int v = 1 + (3 + 4) * 2;
+    System.out.println(v);
+  }
+  
+  @Test
+  public void jexly() throws Exception {
+    
+    //String exp = "(a + (b + c)) > b && c > d";
+    //String exp = "a + b + c";
+    //String exp = "(a + (b + c)) * d";
+    //String exp = "(a && b) || (c && true)";
+    String exp = "a.foo % b.foo";
+    exp = Expression.JEXL_ENGINE.cleanExpression(exp);
+    
+    Parser parser = new Parser(new StringReader(exp)); //$NON-NLS-1$
+    ASTJexlScript script = parser.JexlScript();//parser.parse(new StringReader(exp), null);
+    //script.childrenAccept(new MyVisitor(), null);
+    JexlNode root = script;
+    System.out.println("KIDS: " + root.jjtGetNumChildren());
+    System.out.println("KID: " + root.jjtGetChild(0));
+    MyVisitor v = new MyVisitor();
+    //root.childrenAccept(v, null);
+    dumpNode(root, v);
+    System.out.println("---------------");
+    System.out.println(v.root);
+  }
+  
+  void dumpNode(final JexlNode node, final MyVisitor v) {
+//    if (node instanceof ASTIdentifier) {
+//      System.out.println("  Ref: " + ((ASTIdentifier) node).getRegister());
+//    } else if (node instanceof ASTAdditiveOperator) {
+//      
+//    }
+    System.out.println(node.getClass());
+    node.childrenAccept(v, null);    
+    
+    int c = node.jjtGetNumChildren();
+    for (int i = 0; i < c; i++) {
+      dumpNode(node.jjtGetChild(i), v);
+    }
+  }
+  
+  static enum IdAccumulator {
+    NONE,
+    LEFT,
+    RIGHT
+  }
+  
+  class MyVisitor implements ParserVisitor {
+    class Binary {
+      String op;
+      Object left;
+      Object right;
+      
+      public String toString() {
+        return "[" + left + "] " + op + " [" + right + "]";
+      }
+    }
+    
+    class Id {
+      String id;
+      public String toString() {
+        return id;
+      }
+    }
+    
+    class NumericLiteral {
+      String number;
+      public String toString() {
+        return number;
+      }
+    }
+    
+    class Bool {
+      boolean bool;
+      public String toString() {
+        return Boolean.toString(bool);
+      }
+    }
+    
+    Binary root;
+    IdAccumulator accumulator = IdAccumulator.NONE;
+    Deque<Object> stack = new ArrayDeque<Object>();
+    
+    @Override
+    public Object visit(SimpleNode node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTJexlScript node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("ROOT");
+      //node.childrenAccept(this, data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTBlock node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTAmbiguous node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTIfStatement node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTWhileStatement node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTForeachStatement node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTReturnStatement node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTAssignment node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTVar node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTReference node, Object data) {
+      if (node.image != null) {
+        System.out.println("  Ref: " + node.image);
+      }
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTTernaryNode node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTOrNode node, Object data) {
+      System.out.println("  OR: " + node.image);
+      Binary b = new Binary();
+      b.op = "||";
+      addBinary(b);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTAndNode node, Object data) {
+      System.out.println("  AND: " + node.image);
+      Binary b = new Binary();
+      b.op = "&&";
+      addBinary(b);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTBitwiseOrNode node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTBitwiseXorNode node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTBitwiseAndNode node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTEQNode node, Object data) {
+      System.out.println("  EQ: " + node.image);
+      Binary b = new Binary();
+      b.op = "==";
+      addBinary(b);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTNENode node, Object data) {
+      System.out.println("  NEQ: " + node.image);
+      Binary b = new Binary();
+      b.op = "!=";
+      addBinary(b);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTLTNode node, Object data) {
+      System.out.println("  LT: " + node.image);
+      Binary b = new Binary();
+      b.op = "<";
+      addBinary(b);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTGTNode node, Object data) {
+      System.out.println("  GT: " + node.image);
+      Binary b = new Binary();
+      b.op = ">";
+      addBinary(b);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTLENode node, Object data) {
+      System.out.println("  LE: " + node.image);
+      Binary b = new Binary();
+      b.op = "<=";
+      addBinary(b);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTGENode node, Object data) {
+      System.out.println("  GE: " + node.image);
+      Binary b = new Binary();
+      b.op = ">=";
+      addBinary(b);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTERNode node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTNRNode node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTAdditiveNode node, Object data) {
+     // Object obj = node.childrenAccept(this, data);
+      //System.out.println("  Response from node: " + obj);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTAdditiveOperator node, Object data) {
+      System.out.println("  AdditiveOperator: " + node.image);
+      Binary b = new Binary();
+      b.op = node.image;
+      addBinary(b);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTMulNode node, Object data) {
+      System.out.println("  MulNode: " + node.image);
+      Binary b = new Binary();
+      b.op = "*";
+      addBinary(b);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTDivNode node, Object data) {
+      System.out.println("  DivOp: " + node.image);
+      Binary b = new Binary();
+      b.op = "/";
+      addBinary(b);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTModNode node, Object data) {
+      System.out.println("  ModNode: " + node.image);
+      Binary b = new Binary();
+      b.op = "%";
+      addBinary(b);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTUnaryMinusNode node, Object data) {
+      // don't need to do anything here as the numeric literal will
+      // check the parent
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTBitwiseComplNode node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTNotNode node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTIdentifier node, Object data) {
+      System.out.println("  Identifier: " + node.image);
+
+      Object extant = stack.pop();
+      if (extant instanceof Binary) {
+        if (accumulator == IdAccumulator.LEFT) {
+          ((Id) ((Binary) extant).left).id += "." + node.image;
+        } else if (accumulator == IdAccumulator.RIGHT) {
+          ((Id) ((Binary) extant).right).id += "." + node.image;
+        }
+        
+        Id id = new Id();
+        if (node.jjtGetParent() instanceof ASTUnaryMinusNode) {
+          id.id = "-" + node.image;
+        } else {
+          id.id = node.image;
+        }
+        
+        if (((Binary) extant).left == null) {
+          ((Binary) extant).left = id;
+          accumulator = IdAccumulator.LEFT;
+          stack.push(extant);
+        } else {
+          ((Binary) extant).right = id;
+          accumulator = IdAccumulator.RIGHT;
+        }
+      }
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTNullLiteral node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTTrueNode node, Object data) {
+      System.out.println("  True: " + node.image);
+      Bool bool = new Bool();
+      if (node.jjtGetParent() instanceof ASTNotNode) {
+        bool.bool = false;
+      } else {
+        bool.bool = true;
+      }
+      
+      Object extant = stack.pop();
+      if (extant instanceof Binary) {
+        if (((Binary) extant).left == null) {
+          ((Binary) extant).left = bool;
+          stack.push(extant);
+        } else {
+          ((Binary) extant).right = bool;
+        }
+      }
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTFalseNode node, Object data) {
+      System.out.println("  False: " + node.image);
+      Bool bool = new Bool();
+      if (node.jjtGetParent() instanceof ASTNotNode) {
+        bool.bool = true;
+      } else {
+        bool.bool = false;
+      }
+      
+      Object extant = stack.pop();
+      if (extant instanceof Binary) {
+        if (((Binary) extant).left == null) {
+          ((Binary) extant).left = bool;
+          stack.push(extant);
+        } else {
+          ((Binary) extant).right = bool;
+        }
+      }
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTNumberLiteral node, Object data) {
+      System.out.println("  NumericLiteral: " + node.image);      
+
+      NumericLiteral lit = new NumericLiteral();
+      lit.number = node.image;
+      
+      Object extant = stack.pop();
+      if (extant instanceof Binary) {
+        if (((Binary) extant).left == null) {
+          ((Binary) extant).left = lit;
+          stack.push(extant);
+        } else {
+          ((Binary) extant).right = lit;
+        }
+      }
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTStringLiteral node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTArrayLiteral node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTMapLiteral node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTMapEntry node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTEmptyFunction node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTSizeFunction node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTFunctionNode node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTMethodNode node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTSizeMethod node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTConstructorNode node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTArrayAccess node, Object data) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTReferenceExpression node, Object data) {
+      System.out.println("   Ref exp: " + node.image);
+      return null;
+    }
+    
+    void addBinary(Binary b) {
+      accumulator = IdAccumulator.NONE;
+      if (root == null) {
+        root = b;
+      }
+      
+      if (stack.isEmpty()) {
+        stack.push(b);
+      } else {
+        final Object extant = stack.pop();
+        if (extant instanceof Id) {
+          b.left = extant;
+        } else {
+          if (((Binary) extant).left == null) {
+            ((Binary) extant).left = b;
+            stack.push(extant);
+            stack.push(b);
+          } else {
+            ((Binary) extant).right = b;
+            stack.push(b);
+          }
+        }
+      }
+    }
+    
   }
   
 //  @Before
