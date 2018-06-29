@@ -225,7 +225,7 @@ public class TestJoiner {
     //String exp = "a + b + c";
     //String exp = "(a + (b + c)) * d";
     //String exp = "(a && b) || (c && true)";
-    String exp = "a.foo % b.foo";
+    String exp = "(a.foo.meep % b.bar.moo.p) - a.foo.meep";
     exp = Expression.JEXL_ENGINE.cleanExpression(exp);
     
     Parser parser = new Parser(new StringReader(exp)); //$NON-NLS-1$
@@ -248,7 +248,17 @@ public class TestJoiner {
 //      
 //    }
     System.out.println(node.getClass());
-    node.childrenAccept(v, null);    
+    node.childrenAccept(v, null);
+    
+    if (node instanceof ASTReference) {
+      System.out.println(" RESET IDS here");
+//      v.last = null;
+      if (v.accumulator == IdAccumulator.LEFT) {
+        v.accumulator = IdAccumulator.RIGHT;
+      } else {
+        v.accumulator = IdAccumulator.NONE;
+      }
+    }
     
     int c = node.jjtGetNumChildren();
     for (int i = 0; i < c; i++) {
@@ -295,6 +305,7 @@ public class TestJoiner {
     }
     
     Binary root;
+    Binary last;
     IdAccumulator accumulator = IdAccumulator.NONE;
     Deque<Object> stack = new ArrayDeque<Object>();
     
@@ -362,9 +373,9 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTReference node, Object data) {
-      if (node.image != null) {
-        System.out.println("  Ref: " + node.image);
-      }
+      accumulator = IdAccumulator.NONE;
+      last = null;
+      System.out.println("   Reset Ref...");
       return null;
     }
 
@@ -540,23 +551,30 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTIdentifier node, Object data) {
-      System.out.println("  Identifier: " + node.image);
+      System.out.println("  Identifier: " + node.image + "  " + accumulator);
 
+      if (stack.isEmpty()) {
+        if (last != null && accumulator == IdAccumulator.RIGHT) {
+          ((Id) last.right).id += "." + node.image;
+        } else {
+          if (last == null) {
+            System.out.println("              ID: last was null");
+          }
+        }
+        System.out.println("     ID stack was empty");
+        return null;
+      }
+      
       Object extant = stack.pop();
       if (extant instanceof Binary) {
         if (accumulator == IdAccumulator.LEFT) {
           ((Id) ((Binary) extant).left).id += "." + node.image;
-        } else if (accumulator == IdAccumulator.RIGHT) {
-          ((Id) ((Binary) extant).right).id += "." + node.image;
+          stack.push(extant);
+          return null;
         }
         
         Id id = new Id();
-        if (node.jjtGetParent() instanceof ASTUnaryMinusNode) {
-          id.id = "-" + node.image;
-        } else {
-          id.id = node.image;
-        }
-        
+        id.id = node.image;
         if (((Binary) extant).left == null) {
           ((Binary) extant).left = id;
           accumulator = IdAccumulator.LEFT;
@@ -564,6 +582,7 @@ public class TestJoiner {
         } else {
           ((Binary) extant).right = id;
           accumulator = IdAccumulator.RIGHT;
+          last = (Binary) extant;
         }
       }
       return null;
@@ -712,6 +731,8 @@ public class TestJoiner {
     
     void addBinary(Binary b) {
       accumulator = IdAccumulator.NONE;
+      last = null;
+      
       if (root == null) {
         root = b;
       }
