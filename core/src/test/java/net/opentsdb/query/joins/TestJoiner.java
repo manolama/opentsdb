@@ -222,22 +222,24 @@ public class TestJoiner {
   public void jexly() throws Exception {
     
     //String exp = "(a + (b + c)) > b && c > d";
-    //String exp = "a + b + c";
+    //String exp = "a.foo + (b + c.w.a.b.2)";
+    String exp = "a - b + c - d";
     //String exp = "(a + (b + c)) * d";
     //String exp = "(a && b) || (c && true)";
-    String exp = "(a.foo.meep % b.bar.moo.p) - a.foo.meep";
+    //String exp = "(a.foo.meep % b.bar.moo.p) - a.foo.meep";
     exp = Expression.JEXL_ENGINE.cleanExpression(exp);
     
     Parser parser = new Parser(new StringReader(exp)); //$NON-NLS-1$
     ASTJexlScript script = parser.JexlScript();//parser.parse(new StringReader(exp), null);
     //script.childrenAccept(new MyVisitor(), null);
     JexlNode root = script;
-    System.out.println("KIDS: " + root.jjtGetNumChildren());
-    System.out.println("KID: " + root.jjtGetChild(0));
+//    System.out.println("KIDS: " + root.jjtGetNumChildren());
+//    System.out.println("KID: " + root.jjtGetChild(0));
     MyVisitor v = new MyVisitor();
-    //root.childrenAccept(v, null);
-    dumpNode(root, v);
+    root.childrenAccept(v, null);
+    //dumpNode(root, v);
     System.out.println("---------------");
+    System.out.println("root: " + System.identityHashCode(v.root));
     System.out.println(v.root);
   }
   
@@ -248,17 +250,17 @@ public class TestJoiner {
 //      
 //    }
     System.out.println(node.getClass());
-    node.childrenAccept(v, null);
+    //node.childrenAccept(v, null);
     
-    if (node instanceof ASTReference) {
-      System.out.println(" RESET IDS here");
-//      v.last = null;
-      if (v.accumulator == IdAccumulator.LEFT) {
-        v.accumulator = IdAccumulator.RIGHT;
-      } else {
-        v.accumulator = IdAccumulator.NONE;
-      }
-    }
+//    if (node instanceof ASTReference) {
+//      System.out.println(" RESET IDS here");
+////      v.last = null;
+//      if (v.accumulator == IdAccumulator.LEFT) {
+//        v.accumulator = IdAccumulator.RIGHT;
+//      } else {
+//        v.accumulator = IdAccumulator.NONE;
+//      }
+//    }
     
     int c = node.jjtGetNumChildren();
     for (int i = 0; i < c; i++) {
@@ -305,18 +307,16 @@ public class TestJoiner {
     }
     
     Binary root;
-    Binary last;
-    IdAccumulator accumulator = IdAccumulator.NONE;
-    Deque<Object> stack = new ArrayDeque<Object>();
     
     @Override
     public Object visit(SimpleNode node, Object data) {
-      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTJexlScript node, Object data) {
+      System.out.println("[" + node + "]  data: " + data);
       // TODO Auto-generated method stub
       System.out.println("ROOT");
       //node.childrenAccept(this, data);
@@ -331,7 +331,7 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTAmbiguous node, Object data) {
-      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
@@ -361,7 +361,7 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTAssignment node, Object data) {
-      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
@@ -373,10 +373,19 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTReference node, Object data) {
-      accumulator = IdAccumulator.NONE;
-      last = null;
-      System.out.println("   Reset Ref...");
-      return null;
+      System.out.println("[" + node + "]  data: " + data);
+      if (node.jjtGetNumChildren() > 1) {
+        final StringBuilder buf = new StringBuilder();
+        for (int i = 0; i < node.jjtGetNumChildren(); i++) {
+          if (i > 0) {
+            buf.append(".");
+          }
+          buf.append((String) node.jjtGetChild(i).jjtAccept(this, data));
+        }
+        return buf.toString();
+      } else {
+        return node.jjtGetChild(0).jjtAccept(this, data);
+      }
     }
 
     @Override
@@ -387,19 +396,13 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTOrNode node, Object data) {
-      System.out.println("  OR: " + node.image);
-      Binary b = new Binary();
-      b.op = "||";
-      addBinary(b);
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTAndNode node, Object data) {
-      System.out.println("  AND: " + node.image);
-      Binary b = new Binary();
-      b.op = "&&";
-      addBinary(b);
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
@@ -423,55 +426,37 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTEQNode node, Object data) {
-      System.out.println("  EQ: " + node.image);
-      Binary b = new Binary();
-      b.op = "==";
-      addBinary(b);
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTNENode node, Object data) {
-      System.out.println("  NEQ: " + node.image);
-      Binary b = new Binary();
-      b.op = "!=";
-      addBinary(b);
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTLTNode node, Object data) {
-      System.out.println("  LT: " + node.image);
-      Binary b = new Binary();
-      b.op = "<";
-      addBinary(b);
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTGTNode node, Object data) {
-      System.out.println("  GT: " + node.image);
-      Binary b = new Binary();
-      b.op = ">";
-      addBinary(b);
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTLENode node, Object data) {
-      System.out.println("  LE: " + node.image);
-      Binary b = new Binary();
-      b.op = "<=";
-      addBinary(b);
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTGENode node, Object data) {
-      System.out.println("  GE: " + node.image);
-      Binary b = new Binary();
-      b.op = ">=";
-      addBinary(b);
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
@@ -489,44 +474,94 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTAdditiveNode node, Object data) {
-     // Object obj = node.childrenAccept(this, data);
-      //System.out.println("  Response from node: " + obj);
-      return null;
+      System.out.println("[" + node + "]  data: " + data + "  Kids: " + node.jjtGetNumChildren());
+      
+      // kids can be one of:
+      // Refer -> ID
+      // Op
+      // Ref -> Function
+      // Numeric
+      
+      Binary b = new Binary();
+      System.out.println("       INIT NODE: " + System.identityHashCode(b));
+      if (data != null && data instanceof Binary) {
+        final Binary up = (Binary) data;
+        if (up.left == null) {
+          up.left = b;
+        } else {
+          up.right = b;
+        }
+      } else if (root == null) {
+        root = b;
+      }
+      
+      for (int i = 0; i < node.jjtGetNumChildren(); i++) {
+        final JexlNode n = node.jjtGetChild(i);
+        System.out.println("    AN Kid: " + n);
+        if (n instanceof ASTAdditiveOperator && b.op != null) {
+          // rotate the tree
+          Binary new_node = new Binary();
+          new_node.left = b;
+          if (root == b) {
+            root = new_node;
+          }
+          b = new_node;
+          System.out.println("       NEW B: " + System.identityHashCode(b));
+        }
+        
+        Object response = n.jjtAccept(this, b);
+        if (response != null) {
+          System.out.println("     response: " + response.getClass());
+          if (response instanceof String) {
+            if (b.left == null) {
+              b.left = response;
+            } else if (b.op == null) {
+              b.left += "." + response;
+            } else if (b.right == null) {
+              b.right = response;
+            } else {
+              b.right += "." + response;
+            }
+          } else if (response instanceof NumericLiteral) {
+            if (b.left == null) {
+              b.left = response;
+            } else {
+              b.right = response;
+            }
+          }
+        }
+      }
+      
+      return b;
     }
 
     @Override
     public Object visit(ASTAdditiveOperator node, Object data) {
-      System.out.println("  AdditiveOperator: " + node.image);
-      Binary b = new Binary();
+      Binary b = (Binary) data;
       b.op = node.image;
-      addBinary(b);
-      return null;
+      Object obj = node.childrenAccept(this, b);
+      if (obj != null ) {
+        System.out.println("  ADD Ret: " + obj);
+      }
+//      addBinary(b);
+      return b;
     }
 
     @Override
     public Object visit(ASTMulNode node, Object data) {
-      System.out.println("  MulNode: " + node.image);
-      Binary b = new Binary();
-      b.op = "*";
-      addBinary(b);
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTDivNode node, Object data) {
-      System.out.println("  DivOp: " + node.image);
-      Binary b = new Binary();
-      b.op = "/";
-      addBinary(b);
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTModNode node, Object data) {
-      System.out.println("  ModNode: " + node.image);
-      Binary b = new Binary();
-      b.op = "%";
-      addBinary(b);
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
@@ -551,41 +586,31 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTIdentifier node, Object data) {
-      System.out.println("  Identifier: " + node.image + "  " + accumulator);
+      System.out.println("[" + node + "]  data: " + data + "  " + node.image);
+      //System.out.println("  Identifier: " + node.image + "  " + data);
 
-      if (stack.isEmpty()) {
-        if (last != null && accumulator == IdAccumulator.RIGHT) {
-          ((Id) last.right).id += "." + node.image;
-        } else {
-          if (last == null) {
-            System.out.println("              ID: last was null");
-          }
-        }
-        System.out.println("     ID stack was empty");
-        return null;
-      }
+//      if (data instanceof Binary) {
+//        Binary b = (Binary) data;
+//        if (b.op == null) {
+//          // left side
+//          if (b.left == null) {
+//            b.left = new Id();
+//            ((Id) b.left).id = node.image;
+//          } else {
+//            ((Id) b.left).id += "." + node.image;
+//          }
+//        } else {
+//          // right side
+//          if (b.right == null) {
+//            b.right = new Id();
+//            ((Id) b.right).id = node.image;
+//          } else {
+//            ((Id) b.right).id += "." + node.image;
+//          }
+//        }
+//      }
       
-      Object extant = stack.pop();
-      if (extant instanceof Binary) {
-        if (accumulator == IdAccumulator.LEFT) {
-          ((Id) ((Binary) extant).left).id += "." + node.image;
-          stack.push(extant);
-          return null;
-        }
-        
-        Id id = new Id();
-        id.id = node.image;
-        if (((Binary) extant).left == null) {
-          ((Binary) extant).left = id;
-          accumulator = IdAccumulator.LEFT;
-          stack.push(extant);
-        } else {
-          ((Binary) extant).right = id;
-          accumulator = IdAccumulator.RIGHT;
-          last = (Binary) extant;
-        }
-      }
-      return null;
+      return node.image;
     }
 
     @Override
@@ -596,65 +621,25 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTTrueNode node, Object data) {
-      System.out.println("  True: " + node.image);
-      Bool bool = new Bool();
-      if (node.jjtGetParent() instanceof ASTNotNode) {
-        bool.bool = false;
-      } else {
-        bool.bool = true;
-      }
-      
-      Object extant = stack.pop();
-      if (extant instanceof Binary) {
-        if (((Binary) extant).left == null) {
-          ((Binary) extant).left = bool;
-          stack.push(extant);
-        } else {
-          ((Binary) extant).right = bool;
-        }
-      }
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTFalseNode node, Object data) {
-      System.out.println("  False: " + node.image);
-      Bool bool = new Bool();
-      if (node.jjtGetParent() instanceof ASTNotNode) {
-        bool.bool = true;
-      } else {
-        bool.bool = false;
-      }
-      
-      Object extant = stack.pop();
-      if (extant instanceof Binary) {
-        if (((Binary) extant).left == null) {
-          ((Binary) extant).left = bool;
-          stack.push(extant);
-        } else {
-          ((Binary) extant).right = bool;
-        }
-      }
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTNumberLiteral node, Object data) {
-      System.out.println("  NumericLiteral: " + node.image);      
-
-      NumericLiteral lit = new NumericLiteral();
-      lit.number = node.image;
-      
-      Object extant = stack.pop();
-      if (extant instanceof Binary) {
-        if (((Binary) extant).left == null) {
-          ((Binary) extant).left = lit;
-          stack.push(extant);
-        } else {
-          ((Binary) extant).right = lit;
-        }
+      System.out.println("[" + node + "]  data: " + data);
+      if (node.jjtGetParent() instanceof ASTReference) {
+        return node.image;
       }
-      return null;
+      NumericLiteral n = new NumericLiteral();
+      n.number = node.image;
+      return n;
     }
 
     @Override
@@ -725,35 +710,11 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTReferenceExpression node, Object data) {
-      System.out.println("   Ref exp: " + node.image);
-      return null;
-    }
-    
-    void addBinary(Binary b) {
-      accumulator = IdAccumulator.NONE;
-      last = null;
-      
-      if (root == null) {
-        root = b;
+      System.out.println("[" + node + "]  data: " + data + " KIDS: " + node.jjtGetChild(0));
+      if (node.jjtGetNumChildren() > 1) {
+        System.out.println("WTF? MORE THAN ONE!!!");
       }
-      
-      if (stack.isEmpty()) {
-        stack.push(b);
-      } else {
-        final Object extant = stack.pop();
-        if (extant instanceof Id) {
-          b.left = extant;
-        } else {
-          if (((Binary) extant).left == null) {
-            ((Binary) extant).left = b;
-            stack.push(extant);
-            stack.push(b);
-          } else {
-            ((Binary) extant).right = b;
-            stack.push(b);
-          }
-        }
-      }
+      return node.jjtGetChild(0).jjtAccept(this, data);
     }
     
   }
