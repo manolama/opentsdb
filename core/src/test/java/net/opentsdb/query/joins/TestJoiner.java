@@ -223,9 +223,10 @@ public class TestJoiner {
     
     //String exp = "(a + (b + c)) > b && c > d";
     //String exp = "a.foo + (b + c.w.a.b.2)";
-    String exp = "a - b + c - d";
+    //String exp = "a - (b + c) - d";
+    //String exp = "a.foo + d.bert / b.up * c.doi - 2.44";
     //String exp = "(a + (b + c)) * d";
-    //String exp = "(a && b) || (c && true)";
+    String exp = "(a && b) || !(c && true)";
     //String exp = "(a.foo.meep % b.bar.moo.p) - a.foo.meep";
     exp = Expression.JEXL_ENGINE.cleanExpression(exp);
     
@@ -303,6 +304,20 @@ public class TestJoiner {
       boolean bool;
       public String toString() {
         return Boolean.toString(bool);
+      }
+    }
+    
+    class Not {
+      Object child;
+      public String toString() {
+        return "!" + child.toString();
+      }
+    }
+    
+    class Negate {
+      Object child;
+      public String toString() {
+        return "-" + child.toString();
       }
     }
     
@@ -397,13 +412,17 @@ public class TestJoiner {
     @Override
     public Object visit(ASTOrNode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "||";
+      return handleBinaryNode(b, node, data);
     }
 
     @Override
     public Object visit(ASTAndNode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "&&";
+      return handleBinaryNode(b, node, data);
     }
 
     @Override
@@ -427,37 +446,49 @@ public class TestJoiner {
     @Override
     public Object visit(ASTEQNode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "==";
+      return handleBinaryNode(b, node, data);
     }
 
     @Override
     public Object visit(ASTNENode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "!=";
+      return handleBinaryNode(b, node, data);
     }
 
     @Override
     public Object visit(ASTLTNode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "<";
+      return handleBinaryNode(b, node, data);
     }
 
     @Override
     public Object visit(ASTGTNode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = ">";
+      return handleBinaryNode(b, node, data);
     }
 
     @Override
     public Object visit(ASTLENode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "<=";
+      return handleBinaryNode(b, node, data);
     }
 
     @Override
     public Object visit(ASTGENode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = ">=";
+      return handleBinaryNode(b, node, data);
     }
 
     @Override
@@ -483,56 +514,57 @@ public class TestJoiner {
       // Numeric
       
       Binary b = new Binary();
-      System.out.println("       INIT NODE: " + System.identityHashCode(b));
-      if (data != null && data instanceof Binary) {
-        final Binary up = (Binary) data;
-        if (up.left == null) {
-          up.left = b;
-        } else {
-          up.right = b;
-        }
-      } else if (root == null) {
-        root = b;
-      }
-      
-      for (int i = 0; i < node.jjtGetNumChildren(); i++) {
-        final JexlNode n = node.jjtGetChild(i);
-        System.out.println("    AN Kid: " + n);
-        if (n instanceof ASTAdditiveOperator && b.op != null) {
-          // rotate the tree
-          Binary new_node = new Binary();
-          new_node.left = b;
-          if (root == b) {
-            root = new_node;
-          }
-          b = new_node;
-          System.out.println("       NEW B: " + System.identityHashCode(b));
-        }
-        
-        Object response = n.jjtAccept(this, b);
-        if (response != null) {
-          System.out.println("     response: " + response.getClass());
-          if (response instanceof String) {
-            if (b.left == null) {
-              b.left = response;
-            } else if (b.op == null) {
-              b.left += "." + response;
-            } else if (b.right == null) {
-              b.right = response;
-            } else {
-              b.right += "." + response;
-            }
-          } else if (response instanceof NumericLiteral) {
-            if (b.left == null) {
-              b.left = response;
-            } else {
-              b.right = response;
-            }
-          }
-        }
-      }
-      
-      return b;
+      return handleBinaryNode(b, node, data);
+//      System.out.println("       INIT NODE: " + System.identityHashCode(b));
+//      if (data != null && data instanceof Binary) {
+//        final Binary up = (Binary) data;
+//        if (up.left == null) {
+//          up.left = b;
+//        } else {
+//          up.right = b;
+//        }
+//      } else if (root == null) {
+//        root = b;
+//      }
+//      
+//      for (int i = 0; i < node.jjtGetNumChildren(); i++) {
+//        final JexlNode n = node.jjtGetChild(i);
+//        System.out.println("    AN Kid: " + n);
+//        if (n instanceof ASTAdditiveOperator && b.op != null) {
+//          // rotate the tree
+//          Binary new_node = new Binary();
+//          new_node.left = b;
+//          if (root == b) {
+//            root = new_node;
+//          }
+//          b = new_node;
+//          System.out.println("       NEW B: " + System.identityHashCode(b));
+//        }
+//        
+//        Object response = n.jjtAccept(this, b);
+//        if (response != null) {
+//          System.out.println("     response: " + response.getClass());
+//          if (response instanceof String) {
+//            if (b.left == null) {
+//              b.left = response;
+//            } else if (b.op == null) {
+//              b.left += "." + response;
+//            } else if (b.right == null) {
+//              b.right = response;
+//            } else {
+//              b.right += "." + response;
+//            }
+//          } else if (response instanceof NumericLiteral) {
+//            if (b.left == null) {
+//              b.left = response;
+//            } else {
+//              b.right = response;
+//            }
+//          }
+//        }
+//      }
+//      
+//      return b;
     }
 
     @Override
@@ -550,19 +582,83 @@ public class TestJoiner {
     @Override
     public Object visit(ASTMulNode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      System.out.println("[" + node + "]  data: " + data + "  Kids: " + node.jjtGetNumChildren());
+      
+      // kids can be one of:
+      // Refer -> ID
+      // Op
+      // Ref -> Function
+      // Numeric
+      
+      Binary b = new Binary();
+      b.op = "*";
+      return handleBinaryNode(b, node, data);
+//      System.out.println("       INIT NODE: " + System.identityHashCode(b));
+//      if (data != null && data instanceof Binary) {
+//        final Binary up = (Binary) data;
+//        if (up.left == null) {
+//          up.left = b;
+//        } else {
+//          up.right = b;
+//        }
+//      } else if (root == null) {
+//        root = b;
+//      }
+//      
+//      for (int i = 0; i < node.jjtGetNumChildren(); i++) {
+//        final JexlNode n = node.jjtGetChild(i);
+//        System.out.println("    AN Kid: " + n);
+//        if (n instanceof ASTAdditiveOperator && b.op != null) {
+//          // rotate the tree
+//          Binary new_node = new Binary();
+//          new_node.left = b;
+//          if (root == b) {
+//            root = new_node;
+//          }
+//          b = new_node;
+//          System.out.println("       NEW B: " + System.identityHashCode(b));
+//        }
+//        
+//        Object response = n.jjtAccept(this, b);
+//        if (response != null) {
+//          System.out.println("     response: " + response.getClass());
+//          if (response instanceof String) {
+//            if (b.left == null) {
+//              b.left = response;
+//            } else if (b.op == null) {
+//              b.left += "." + response;
+//            } else if (b.right == null) {
+//              b.right = response;
+//            } else {
+//              b.right += "." + response;
+//            }
+//          } else if (response instanceof NumericLiteral) {
+//            if (b.left == null) {
+//              b.left = response;
+//            } else {
+//              b.right = response;
+//            }
+//          }
+//        }
+//      }
+//      
+//      return b;
     }
 
     @Override
     public Object visit(ASTDivNode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "/";
+      return handleBinaryNode(b, node, data);
     }
 
     @Override
     public Object visit(ASTModNode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "%";
+      return handleBinaryNode(b, node, data);
     }
 
     @Override
@@ -580,8 +676,13 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTNotNode node, Object data) {
-      // TODO Auto-generated method stub
-      return null;
+      System.out.println("[" + node + "]  data: " + data);
+      if (node.jjtGetNumChildren() > 1) {
+        System.out.println("WTF?? More than one not child???");
+      }
+      Not n = new Not();
+      n.child = node.jjtGetChild(0).jjtAccept(this, data);
+      return n;
     }
 
     @Override
@@ -622,7 +723,9 @@ public class TestJoiner {
     @Override
     public Object visit(ASTTrueNode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Bool b = new Bool();
+      b.bool = true;
+      return b;
     }
 
     @Override
@@ -717,6 +820,58 @@ public class TestJoiner {
       return node.jjtGetChild(0).jjtAccept(this, data);
     }
     
+    Object handleBinaryNode(Binary b, JexlNode node, Object data) {
+      System.out.println("       INIT NODE: " + System.identityHashCode(b));
+      if (data != null && data instanceof Binary) {
+        final Binary up = (Binary) data;
+        if (up.left == null) {
+          up.left = b;
+        } else {
+          up.right = b;
+        }
+      } else if (root == null) {
+        root = b;
+      }
+      
+      for (int i = 0; i < node.jjtGetNumChildren(); i++) {
+        final JexlNode n = node.jjtGetChild(i);
+        System.out.println("    AN Kid: " + n);
+        if (n instanceof ASTAdditiveOperator && b.op != null) {
+          // rotate the tree
+          Binary new_node = new Binary();
+          new_node.left = b;
+          if (root == b) {
+            root = new_node;
+          }
+          b = new_node;
+          System.out.println("       NEW B: " + System.identityHashCode(b));
+        }
+        
+        Object response = n.jjtAccept(this, b);
+        if (response != null) {
+          System.out.println("     response: " + response.getClass());
+          if (response instanceof String) {
+            if (b.left == null) {
+              b.left = response;
+            } else if (b.op == null) {
+              b.left += "." + response;
+            } else if (b.right == null) {
+              b.right = response;
+            } else {
+              b.right += "." + response;
+            }
+          } else {
+            if (b.left == null) {
+              b.left = response;
+            } else {
+              b.right = response;
+            }
+          }
+        }
+      }
+      
+      return b;
+    }
   }
   
 //  @Before
