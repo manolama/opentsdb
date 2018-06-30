@@ -221,28 +221,29 @@ public class TestJoiner {
   @Test
   public void jexly() throws Exception {
     
-    //String exp = "a + b";
+    String exp = "a * b / c.fo";
     //String exp = "(a + (b + c)) > b && c > d";
     //String exp = "a.foo + (b + c.w.a.b.2)";
-    String exp = "a - (b + c) - d";
+    //String exp = "a - (b + c) - d";
     //String exp = "a.foo + d.bert / b.up * c.doi - 2.44";
     //String exp = "(a + (b + c)) * d";
     //String exp = "(a && b) || !(c && true)";
-    //String exp = "(a.foo.meep % b.bar.moo.p) - a.foo.meep";
+    //String exp = "a / -c";
+    //String exp = "!(a.foo.meep % b.bar.moo.p) - a.foo.meep";
     exp = Expression.JEXL_ENGINE.cleanExpression(exp);
     
     Parser parser = new Parser(new StringReader(exp)); //$NON-NLS-1$
     ASTJexlScript script = parser.JexlScript();//parser.parse(new StringReader(exp), null);
     //script.childrenAccept(new MyVisitor(), null);
     JexlNode root = script;
-//    System.out.println("KIDS: " + root.jjtGetNumChildren());
-//    System.out.println("KID: " + root.jjtGetChild(0));
-    MyVisitor v = new MyVisitor();
-    root.childrenAccept(v, null);
+    System.out.println("KIDS: " + root.jjtGetNumChildren());
+    System.out.println("KID: " + root.jjtGetChild(0));
+    MyVisitor2 v = new MyVisitor2();
+    Object obj = root.jjtGetChild(0).jjtAccept(v, null);
     //dumpNode(root, v);
     System.out.println("---------------");
-    System.out.println("root: " + System.identityHashCode(v.root));
-    System.out.println(v.root);
+    //System.out.println("root: " + System.identityHashCode(v.root));
+    System.out.println(obj);
   }
   
   void dumpNode(final JexlNode node, final MyVisitor v) {
@@ -276,14 +277,34 @@ public class TestJoiner {
     RIGHT
   }
   
-  class MyVisitor implements ParserVisitor {
+  class MyVisitor2 implements ParserVisitor {
+
     class Binary {
       String op;
       Object left;
       Object right;
       
       public String toString() {
-        return "[" + left + "] " + op + " [" + right + "]";
+        final StringBuilder buf = new StringBuilder();
+        if (left instanceof Binary) {
+          buf.append("(")
+             .append(left)
+             .append(")");
+        } else {
+          buf.append(left);
+        }
+        buf.append(" ")
+           .append(op)
+           .append(" ");
+        if (right instanceof Binary) {
+          buf.append("(")
+             .append(right)
+             .append(")");
+        } else {
+          buf.append(right);
+        }
+        return buf.toString();
+        //return "(" + left + ") " + op + " (" + right + ")";
       }
       
       void setLeft(final Object v) {
@@ -297,19 +318,26 @@ public class TestJoiner {
       }
       
       void setRight(final Object v) {
+        if (v == left) {
+          System.out.println("   LEFT WAS this node alreay!");
+          return;
+        }
         if (right == null) {
           right = v;
         } else if (right instanceof String && v instanceof String) {
           right += "." + (String) v;
+        } else if (right == this) {
+          System.out.println("------------- WTF? Right was this!?!?!?!");
+          right = v;
         } else if (right != v) {
           System.out.println("************** Right was: " + right + "   Replace with: " + v);
           right = v;
-          throw new RuntimeException("RIGHT Already set! " + v.getClass());
+          //throw new RuntimeException("RIGHT Already set! " + v.getClass());
         }
       }
       
       void rotate(final Object v) {
-        if (left == null) {
+        if (left == null || left == v) {
           left = v;
         } else if (right == null) {
           right = v;
@@ -343,14 +371,495 @@ public class TestJoiner {
     class Not {
       Object child;
       public String toString() {
-        return "!" + child.toString();
+        return "!" + 
+            (child instanceof Binary ? ("(" + child + ")") : child.toString());
       }
     }
     
     class Negate {
       Object child;
       public String toString() {
-        return "-" + child.toString();
+        return "-" + (child instanceof Binary ? ("(" + child + ")") : child.toString());
+      }
+    }
+    
+    @Override
+    public Object visit(SimpleNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTJexlScript node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTBlock node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTAmbiguous node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTIfStatement node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTWhileStatement node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTForeachStatement node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTReturnStatement node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTAssignment node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTVar node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTReference node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      if (node.jjtGetNumChildren() > 1) {
+        final StringBuilder buf = new StringBuilder();
+        for (int i = 0; i < node.jjtGetNumChildren(); i++) {
+          if (i > 0) {
+            buf.append(".");
+          }
+          buf.append((String) node.jjtGetChild(i).jjtAccept(this, data));
+        }
+        return buf.toString();
+      } else {
+        return node.jjtGetChild(0).jjtAccept(this, data);
+      }
+    }
+
+    @Override
+    public Object visit(ASTTernaryNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTOrNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTAndNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTBitwiseOrNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTBitwiseXorNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTBitwiseAndNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTEQNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTNENode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTLTNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTGTNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTLENode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTGENode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTERNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTNRNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTAdditiveNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTAdditiveOperator node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTMulNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      Binary b = new Binary();
+      b.op = "*";
+      b.left = node.jjtGetChild(0).jjtAccept(this, data);
+      b.right = node.jjtGetChild(1).jjtAccept(this, data);
+      return b;
+    }
+
+    @Override
+    public Object visit(ASTDivNode node, Object data) {
+      System.out.println("[" + node + "]  data: " + data);
+      Binary b = new Binary();
+      b.op = "/";
+      b.left = node.jjtGetChild(0).jjtAccept(this, data);
+      b.right = node.jjtGetChild(1).jjtAccept(this, data);
+      return b;
+    }
+
+    @Override
+    public Object visit(ASTModNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      Binary b = new Binary();
+      b.op = "%";
+      b.left = node.jjtGetChild(0).jjtAccept(this, data);
+      b.right = node.jjtGetChild(1).jjtAccept(this, data);
+      return b;
+    }
+
+    @Override
+    public Object visit(ASTUnaryMinusNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTBitwiseComplNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTNotNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTIdentifier node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return node.image;
+    }
+
+    @Override
+    public Object visit(ASTNullLiteral node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTTrueNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTFalseNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTNumberLiteral node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTStringLiteral node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTArrayLiteral node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTMapLiteral node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTMapEntry node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTEmptyFunction node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTSizeFunction node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTFunctionNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTMethodNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTSizeMethod node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTConstructorNode node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTArrayAccess node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+
+    @Override
+    public Object visit(ASTReferenceExpression node, Object data) {
+      // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
+      return null;
+    }
+    
+  }
+  
+  class MyVisitor implements ParserVisitor {
+    class Binary {
+      String op;
+      Object left;
+      Object right;
+      
+      public String toString() {
+        final StringBuilder buf = new StringBuilder();
+        if (left instanceof Binary) {
+          buf.append("(")
+             .append(left)
+             .append(")");
+        } else {
+          buf.append(left);
+        }
+        buf.append(" ")
+           .append(op)
+           .append(" ");
+        if (right instanceof Binary) {
+          buf.append("(")
+             .append(right)
+             .append(")");
+        } else {
+          buf.append(right);
+        }
+        return buf.toString();
+        //return "(" + left + ") " + op + " (" + right + ")";
+      }
+      
+      void setLeft(final Object v) {
+        if (left == null) {
+          left = v;
+        } else if (left instanceof String && v instanceof String) {
+          left += "." + (String) v;
+        } else {
+          throw new RuntimeException("LEFT Already set!");
+        }
+      }
+      
+      void setRight(final Object v) {
+        if (v == left) {
+          System.out.println("   LEFT WAS this node alreay!");
+          return;
+        }
+        if (right == null) {
+          right = v;
+        } else if (right instanceof String && v instanceof String) {
+          right += "." + (String) v;
+        } else if (right == this) {
+          System.out.println("------------- WTF? Right was this!?!?!?!");
+          right = v;
+        } else if (right != v) {
+          System.out.println("************** Right was: " + right + "   Replace with: " + v);
+          right = v;
+          //throw new RuntimeException("RIGHT Already set! " + v.getClass());
+        }
+      }
+      
+      void rotate(final Object v) {
+        if (left == null || left == v) {
+          left = v;
+        } else if (right == null) {
+          right = v;
+        } else {
+          throw new RuntimeException("Node already full!!!");
+        }
+      }
+    }
+    
+    class Id {
+      String id;
+      public String toString() {
+        return id;
+      }
+    }
+    
+    class NumericLiteral {
+      String number;
+      public String toString() {
+        return number;
+      }
+    }
+    
+    class Bool {
+      boolean bool;
+      public String toString() {
+        return Boolean.toString(bool);
+      }
+    }
+    
+    class Not {
+      Object child;
+      public String toString() {
+        return "!" + 
+            (child instanceof Binary ? ("(" + child + ")") : child.toString());
+      }
+    }
+    
+    class Negate {
+      Object child;
+      public String toString() {
+        return "-" + (child instanceof Binary ? ("(" + child + ")") : child.toString());
       }
     }
     
@@ -358,6 +867,7 @@ public class TestJoiner {
     
     @Override
     public Object visit(SimpleNode node, Object data) {
+      System.out.println("[" + node + "]  data: " + data);
       System.out.println("[" + node + "]  data: " + data);
       return null;
     }
@@ -368,17 +878,20 @@ public class TestJoiner {
       // TODO Auto-generated method stub
       System.out.println("ROOT");
       //node.childrenAccept(this, data);
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTBlock node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTAmbiguous node, Object data) {
+      System.out.println("[" + node + "]  data: " + data);
       System.out.println("[" + node + "]  data: " + data);
       return null;
     }
@@ -386,29 +899,34 @@ public class TestJoiner {
     @Override
     public Object visit(ASTIfStatement node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTWhileStatement node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTForeachStatement node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTReturnStatement node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTAssignment node, Object data) {
+      System.out.println("[" + node + "]  data: " + data);
       System.out.println("[" + node + "]  data: " + data);
       return null;
     }
@@ -416,6 +934,7 @@ public class TestJoiner {
     @Override
     public Object visit(ASTVar node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
@@ -439,6 +958,7 @@ public class TestJoiner {
     @Override
     public Object visit(ASTTernaryNode node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
@@ -461,18 +981,21 @@ public class TestJoiner {
     @Override
     public Object visit(ASTBitwiseOrNode node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTBitwiseXorNode node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTBitwiseAndNode node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
@@ -527,12 +1050,14 @@ public class TestJoiner {
     @Override
     public Object visit(ASTERNode node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTNRNode node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
@@ -604,19 +1129,13 @@ public class TestJoiner {
     public Object visit(ASTAdditiveOperator node, Object data) {
       Binary b = (Binary) data;
       b.op = node.image;
-//      Object obj = node.childrenAccept(this, b);
-//      if (obj != null ) {
-//        System.out.println("  ADD Ret: " + obj);
-//      }
-//      addBinary(b);
       return b;
     }
 
     @Override
     public Object visit(ASTMulNode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      System.out.println("[" + node + "]  data: " + data + "  Kids: " + node.jjtGetNumChildren());
-      
+
       // kids can be one of:
       // Refer -> ID
       // Op
@@ -696,14 +1215,19 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTUnaryMinusNode node, Object data) {
-      // don't need to do anything here as the numeric literal will
-      // check the parent
-      return null;
+      System.out.println("[" + node + "]  data: " + data);
+      if (node.jjtGetNumChildren() > 1) {
+        System.out.println(" WTF??? Many children?!?!?!");
+      }
+      Negate n = new Negate();
+      n.child = node.jjtGetChild(0).jjtAccept(this, data);
+      return n;
     }
 
     @Override
     public Object visit(ASTBitwiseComplNode node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
@@ -727,6 +1251,7 @@ public class TestJoiner {
     @Override
     public Object visit(ASTNullLiteral node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
@@ -760,66 +1285,77 @@ public class TestJoiner {
     @Override
     public Object visit(ASTStringLiteral node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTArrayLiteral node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTMapLiteral node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTMapEntry node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTEmptyFunction node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTSizeFunction node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTFunctionNode node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTMethodNode node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTSizeMethod node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTConstructorNode node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
     @Override
     public Object visit(ASTArrayAccess node, Object data) {
       // TODO Auto-generated method stub
+      System.out.println("[" + node + "]  data: " + data);
       return null;
     }
 
@@ -834,14 +1370,9 @@ public class TestJoiner {
     
     Object handleBinaryNode(Binary b, JexlNode node, Object data) {
       System.out.println("       INIT NODE: " + System.identityHashCode(b));
-      if (data != null && data instanceof Binary) {
+      if (data != null && data instanceof Binary && data != b) {
         final Binary up = (Binary) data;
         up.rotate(b);
-//        if (up.left == null) {
-//          up.left = b;
-//        } else {
-//          up.right = b;
-//        }
       } else if (root == null) {
         root = b;
       }
@@ -861,7 +1392,9 @@ public class TestJoiner {
         }
         
         Object response = n.jjtAccept(this, b);
-        if (response != null) {
+        if (response == null) {
+          System.out.println(" RESPONSE WSA NULL!!! ****************");
+        } else {
           System.out.println("     response: " + response.getClass());
           if (response instanceof String) {
             if (b.left == null || b.op == null) {
