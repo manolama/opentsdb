@@ -221,12 +221,13 @@ public class TestJoiner {
   @Test
   public void jexly() throws Exception {
     
+    //String exp = "a + b";
     //String exp = "(a + (b + c)) > b && c > d";
     //String exp = "a.foo + (b + c.w.a.b.2)";
-    //String exp = "a - (b + c) - d";
+    String exp = "a - (b + c) - d";
     //String exp = "a.foo + d.bert / b.up * c.doi - 2.44";
     //String exp = "(a + (b + c)) * d";
-    String exp = "(a && b) || !(c && true)";
+    //String exp = "(a && b) || !(c && true)";
     //String exp = "(a.foo.meep % b.bar.moo.p) - a.foo.meep";
     exp = Expression.JEXL_ENGINE.cleanExpression(exp);
     
@@ -283,6 +284,38 @@ public class TestJoiner {
       
       public String toString() {
         return "[" + left + "] " + op + " [" + right + "]";
+      }
+      
+      void setLeft(final Object v) {
+        if (left == null) {
+          left = v;
+        } else if (left instanceof String && v instanceof String) {
+          left += "." + (String) v;
+        } else {
+          throw new RuntimeException("LEFT Already set!");
+        }
+      }
+      
+      void setRight(final Object v) {
+        if (right == null) {
+          right = v;
+        } else if (right instanceof String && v instanceof String) {
+          right += "." + (String) v;
+        } else if (right != v) {
+          System.out.println("************** Right was: " + right + "   Replace with: " + v);
+          right = v;
+          throw new RuntimeException("RIGHT Already set! " + v.getClass());
+        }
+      }
+      
+      void rotate(final Object v) {
+        if (left == null) {
+          left = v;
+        } else if (right == null) {
+          right = v;
+        } else {
+          throw new RuntimeException("Node already full!!!");
+        }
       }
     }
     
@@ -571,10 +604,10 @@ public class TestJoiner {
     public Object visit(ASTAdditiveOperator node, Object data) {
       Binary b = (Binary) data;
       b.op = node.image;
-      Object obj = node.childrenAccept(this, b);
-      if (obj != null ) {
-        System.out.println("  ADD Ret: " + obj);
-      }
+//      Object obj = node.childrenAccept(this, b);
+//      if (obj != null ) {
+//        System.out.println("  ADD Ret: " + obj);
+//      }
 //      addBinary(b);
       return b;
     }
@@ -688,29 +721,6 @@ public class TestJoiner {
     @Override
     public Object visit(ASTIdentifier node, Object data) {
       System.out.println("[" + node + "]  data: " + data + "  " + node.image);
-      //System.out.println("  Identifier: " + node.image + "  " + data);
-
-//      if (data instanceof Binary) {
-//        Binary b = (Binary) data;
-//        if (b.op == null) {
-//          // left side
-//          if (b.left == null) {
-//            b.left = new Id();
-//            ((Id) b.left).id = node.image;
-//          } else {
-//            ((Id) b.left).id += "." + node.image;
-//          }
-//        } else {
-//          // right side
-//          if (b.right == null) {
-//            b.right = new Id();
-//            ((Id) b.right).id = node.image;
-//          } else {
-//            ((Id) b.right).id += "." + node.image;
-//          }
-//        }
-//      }
-      
       return node.image;
     }
 
@@ -731,7 +741,9 @@ public class TestJoiner {
     @Override
     public Object visit(ASTFalseNode node, Object data) {
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Bool b = new Bool();
+      b.bool = false;
+      return b;
     }
 
     @Override
@@ -824,11 +836,12 @@ public class TestJoiner {
       System.out.println("       INIT NODE: " + System.identityHashCode(b));
       if (data != null && data instanceof Binary) {
         final Binary up = (Binary) data;
-        if (up.left == null) {
-          up.left = b;
-        } else {
-          up.right = b;
-        }
+        up.rotate(b);
+//        if (up.left == null) {
+//          up.left = b;
+//        } else {
+//          up.right = b;
+//        }
       } else if (root == null) {
         root = b;
       }
@@ -851,21 +864,31 @@ public class TestJoiner {
         if (response != null) {
           System.out.println("     response: " + response.getClass());
           if (response instanceof String) {
-            if (b.left == null) {
-              b.left = response;
-            } else if (b.op == null) {
-              b.left += "." + response;
-            } else if (b.right == null) {
-              b.right = response;
+            if (b.left == null || b.op == null) {
+              b.setLeft(response);
             } else {
-              b.right += "." + response;
+              b.setRight(response);
             }
-          } else {
+//            if (b.left == null) {
+//              b.left = response;
+//            } else if (b.op == null) {
+//              b.left += "." + response;
+//            } else if (b.right == null) {
+//              b.right = response;
+//            } else {
+//              b.right += "." + response;
+//            }
+          } else if (response != b) {
             if (b.left == null) {
-              b.left = response;
+              b.setLeft(response);
             } else {
-              b.right = response;
+              b.setRight(response);
             }
+//            if (b.left == null) {
+//              b.left = response;
+//            } else {
+//              b.right = response;
+//            }
           }
         }
       }
