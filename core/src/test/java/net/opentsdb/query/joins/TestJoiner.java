@@ -26,6 +26,7 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.jexl2.JexlException;
 import org.apache.commons.jexl2.JexlInfo;
 import org.apache.commons.jexl2.parser.ASTAdditiveNode;
 import org.apache.commons.jexl2.parser.ASTAdditiveOperator;
@@ -220,8 +221,10 @@ public class TestJoiner {
   
   @Test
   public void jexly() throws Exception {
+    // TODO - collapse literals like (1 + 2) * a
     
-    String exp = "a * b / c.fo";
+    String exp = "a + (b + (c.foo + r))";
+    //String exp = "-(a * b) / -42 * 2 ";
     //String exp = "(a + (b + c)) > b && c > d";
     //String exp = "a.foo + (b + c.w.a.b.2)";
     //String exp = "a - (b + c) - d";
@@ -379,6 +382,9 @@ public class TestJoiner {
     class Negate {
       Object child;
       public String toString() {
+        if (child == null) {
+          return "-null";
+        }
         return "-" + (child instanceof Binary ? ("(" + child + ")") : child.toString());
       }
     }
@@ -572,9 +578,44 @@ public class TestJoiner {
 
     @Override
     public Object visit(ASTAdditiveNode node, Object data) {
-      // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Object left = node.jjtGetChild(0).jjtAccept(this, data);
+      System.out.println("left: " + left);
+      for (int c = 2, size = node.jjtGetNumChildren(); c < size; c += 2) {
+        Object right = node.jjtGetChild(c).jjtAccept(this, data);
+        System.out.println("right: " + right);
+        try {
+            JexlNode op = node.jjtGetChild(c - 1);
+            if (op instanceof ASTAdditiveOperator) {
+                String which = op.image;
+                if ("+".equals(which)) {
+                  Binary b = new Binary();
+                  b.op = "+";
+                  b.left = left;
+                  b.right = right;
+                  left = b;
+                    //left = arithmetic.add(left, right);
+                    continue;
+                }
+                if ("-".equals(which)) {
+                  Binary b = new Binary();
+                  b.op = "-";
+                  b.left = left;
+                  b.right = right;
+                  left = b;
+                    //left = arithmetic.subtract(left, right);
+                    continue;
+                }
+                throw new UnsupportedOperationException("unknown operator " + which);
+            }
+            throw new IllegalArgumentException("unknown operator " + op);
+        } catch (ArithmeticException xrt) {
+            //JexlNode xnode = findNullOperand(xrt, node, left, right);
+            //throw new JexlException(xnode, "+/- error", xrt);
+        }
+      }
+      
+      return left;
     }
 
     @Override
@@ -620,7 +661,9 @@ public class TestJoiner {
     public Object visit(ASTUnaryMinusNode node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Negate n = new Negate();
+      n.child = node.jjtGetChild(0).jjtAccept(this, data);
+      return n;
     }
 
     @Override
@@ -669,7 +712,9 @@ public class TestJoiner {
     public Object visit(ASTNumberLiteral node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      NumericLiteral n = new NumericLiteral();
+      n.number = node.image;
+      return n;
     }
 
     @Override
@@ -753,7 +798,7 @@ public class TestJoiner {
     public Object visit(ASTReferenceExpression node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      return node.jjtGetChild(0).jjtAccept(this, data);
     }
     
   }
