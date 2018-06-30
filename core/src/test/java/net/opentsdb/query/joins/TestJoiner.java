@@ -223,14 +223,14 @@ public class TestJoiner {
   public void jexly() throws Exception {
     // TODO - collapse literals like (1 + 2) * a
     
-    String exp = "a + (b + (c.foo + r))";
+    //String exp = "a + (b + (c.foo + r))";
     //String exp = "-(a * b) / -42 * 2 ";
     //String exp = "(a + (b + c)) > b && c > d";
-    //String exp = "a.foo + (b + c.w.a.b.2)";
+    //String exp = "a.foo11 + (b + c.w.a.b.2)";
     //String exp = "a - (b + c) - d";
     //String exp = "a.foo + d.bert / b.up * c.doi - 2.44";
     //String exp = "(a + (b + c)) * d";
-    //String exp = "(a && b) || !(c && true)";
+    String exp = "(a && b) || !(c && true)";
     //String exp = "a / -c";
     //String exp = "!(a.foo.meep % b.bar.moo.p) - a.foo.meep";
     exp = Expression.JEXL_ENGINE.cleanExpression(exp);
@@ -470,7 +470,12 @@ public class TestJoiner {
           if (i > 0) {
             buf.append(".");
           }
-          buf.append((String) node.jjtGetChild(i).jjtAccept(this, data));
+          Object obj = node.jjtGetChild(i).jjtAccept(this, data);
+          if (obj instanceof NumericLiteral) {
+            buf.append(((NumericLiteral) obj).number);
+          } else {
+            buf.append((String) obj);
+          }
         }
         return buf.toString();
       } else {
@@ -489,14 +494,22 @@ public class TestJoiner {
     public Object visit(ASTOrNode node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "||";
+      b.left = node.jjtGetChild(0).jjtAccept(this, data);
+      b.right = node.jjtGetChild(1).jjtAccept(this, data);
+      return b;
     }
 
     @Override
     public Object visit(ASTAndNode node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "&&";
+      b.left = node.jjtGetChild(0).jjtAccept(this, data);
+      b.right = node.jjtGetChild(1).jjtAccept(this, data);
+      return b;
     }
 
     @Override
@@ -524,42 +537,66 @@ public class TestJoiner {
     public Object visit(ASTEQNode node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "==";
+      b.left = node.jjtGetChild(0).jjtAccept(this, data);
+      b.right = node.jjtGetChild(1).jjtAccept(this, data);
+      return b;
     }
 
     @Override
     public Object visit(ASTNENode node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "!=";
+      b.left = node.jjtGetChild(0).jjtAccept(this, data);
+      b.right = node.jjtGetChild(1).jjtAccept(this, data);
+      return b;
     }
 
     @Override
     public Object visit(ASTLTNode node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "<";
+      b.left = node.jjtGetChild(0).jjtAccept(this, data);
+      b.right = node.jjtGetChild(1).jjtAccept(this, data);
+      return b;
     }
 
     @Override
     public Object visit(ASTGTNode node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = ">";
+      b.left = node.jjtGetChild(0).jjtAccept(this, data);
+      b.right = node.jjtGetChild(1).jjtAccept(this, data);
+      return b;
     }
 
     @Override
     public Object visit(ASTLENode node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = "<=";
+      b.left = node.jjtGetChild(0).jjtAccept(this, data);
+      b.right = node.jjtGetChild(1).jjtAccept(this, data);
+      return b;
     }
 
     @Override
     public Object visit(ASTGENode node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Binary b = new Binary();
+      b.op = ">=";
+      b.left = node.jjtGetChild(0).jjtAccept(this, data);
+      b.right = node.jjtGetChild(1).jjtAccept(this, data);
+      return b;
     }
 
     @Override
@@ -677,7 +714,9 @@ public class TestJoiner {
     public Object visit(ASTNotNode node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Not n = new Not();
+      n.child = node.jjtGetChild(0).jjtAccept(this, data);
+      return n;
     }
 
     @Override
@@ -698,14 +737,18 @@ public class TestJoiner {
     public Object visit(ASTTrueNode node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Bool b = new Bool();
+      b.bool = true;
+      return b;
     }
 
     @Override
     public Object visit(ASTFalseNode node, Object data) {
       // TODO Auto-generated method stub
       System.out.println("[" + node + "]  data: " + data);
-      return null;
+      Bool b = new Bool();
+      b.bool = false;
+      return b;
     }
 
     @Override
