@@ -1,7 +1,5 @@
 package net.opentsdb.query.processor.expressions;
 
-import java.util.Collection;
-
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
@@ -15,13 +13,13 @@ public class ExpressionFactory extends BaseQueryNodeFactory {
   }
 
   @Override
-  public Collection<QueryNode> newNodes(QueryPipelineContext context,
+  public QueryNode newNode(QueryPipelineContext context,
       String id) {
     throw new UnsupportedOperationException("Config is required.");
   }
 
   @Override
-  public Collection<QueryNode> newNodes(QueryPipelineContext context, String id,
+  public QueryNode newNode(QueryPipelineContext context, String id,
       QueryNodeConfig config) {
     // TODO Auto-generated method stub
     return null;
