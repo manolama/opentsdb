@@ -75,13 +75,13 @@ public class TestAbstractQueryPipelineContext {
     when(tsdb.getRegistry().getQueryNodeFactory("MockSourceFactory".toLowerCase()))
       .thenReturn(new MockSourceFactory());
     
-    final QueryNodeFactory null_factory = mock(QueryNodeFactory.class);
+    final SingleQueryNodeFactory null_factory = mock(SingleQueryNodeFactory.class);
     when(tsdb.getRegistry().getQueryNodeFactory("MockFactoryY".toLowerCase()))
       .thenReturn(null_factory);
     when(null_factory.newNode(any(QueryPipelineContext.class), anyString()))
       .thenReturn(null);
     
-    final QueryNodeFactory ex_factory = mock(QueryNodeFactory.class);
+    final SingleQueryNodeFactory ex_factory = mock(SingleQueryNodeFactory.class);
     when(tsdb.getRegistry().getQueryNodeFactory("MockFactoryZ".toLowerCase()))
       .thenReturn(ex_factory);
     when(ex_factory.newNode(any(QueryPipelineContext.class), anyString()))
@@ -1298,7 +1298,7 @@ public class TestAbstractQueryPipelineContext {
     return map;
   }
   
-  static class MockFactoryA implements QueryNodeFactory {
+  static class MockFactoryA implements SingleQueryNodeFactory {
 
     @Override
     public QueryNode newNode(QueryPipelineContext context, String id) {
@@ -1358,7 +1358,7 @@ public class TestAbstractQueryPipelineContext {
     }
   }
   
-  static class MockFactoryB implements QueryNodeFactory {
+  static class MockFactoryB implements SingleQueryNodeFactory {
 
     @Override
     public QueryNode newNode(QueryPipelineContext context, String id) {
@@ -1418,7 +1418,7 @@ public class TestAbstractQueryPipelineContext {
     }
   }
 
-  static class MockSourceFactory implements QueryNodeFactory {
+  static class MockSourceFactory implements SingleQueryNodeFactory {
 
     @Override
     public QueryNode newNode(QueryPipelineContext context, String id) {

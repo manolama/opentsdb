@@ -557,7 +557,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     }
     
     // second pass to build the graph.
-    for (final ExecutionGraphNode node : execution_graph.getNodes()) {
+    for (final ExecutionGraphNode node : nodes) {
       if (node != null && 
           node.getSources() != null && 
           !node.getSources().isEmpty()) {
@@ -604,6 +604,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     if (child != null) {
       child.setSuccessTags().finish();
     }
+    System.out.println("** GRAPH ** " + graph);
   }
   
   /**

@@ -3,6 +3,9 @@ package net.opentsdb.query.processor.expressions;
 import java.io.StringReader;
 import java.util.List;
 
+import org.apache.commons.jexl2.DebugInfo;
+import org.apache.commons.jexl2.JexlException;
+import org.apache.commons.jexl2.JexlInfo;
 import org.apache.commons.jexl2.parser.ASTAdditiveNode;
 import org.apache.commons.jexl2.parser.ASTAdditiveOperator;
 import org.apache.commons.jexl2.parser.ASTAmbiguous;
@@ -68,6 +71,7 @@ import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
+import net.opentsdb.query.joins.JoinConfig;
 
 public class ExpressionNodeBuilder implements ParserVisitor {
 
@@ -104,6 +108,7 @@ public class ExpressionNodeBuilder implements ParserVisitor {
     ExpOp op;
     boolean negate;
     boolean not;
+    JoinConfig join;
     
     protected ExpNodeConfig(Builder builder) {
       super(builder);
@@ -122,6 +127,10 @@ public class ExpressionNodeBuilder implements ParserVisitor {
     
     public void setNot(boolean not) {
       this.not = not;
+    }
+    
+    public void setJoin(JoinConfig join) {
+      this.join = join;
     }
     
     @Override
@@ -228,12 +237,14 @@ public class ExpressionNodeBuilder implements ParserVisitor {
   List<ExpNodeConfig> nodes = Lists.newArrayList();
   String exp_id;
   
-  void parse(final String exp, String id) {
+  List<ExpNodeConfig> parse(final String exp, String id) {
     exp_id = id;
     
-    Parser parser = new Parser(new StringReader(exp)); //$NON-NLS-1$
+    JexlInfo debug = new DebugInfo(null, 0, 0);
+    StringReader rdr = new StringReader(exp);
+    Parser parser = new Parser(rdr);
     try {
-      ASTJexlScript script = parser.JexlScript();
+      ASTJexlScript script = parser.parse(rdr, debug);
       if (script.jjtGetNumChildren() > 1) {
         throw new RuntimeException("WTF? A script with more than one root???");
       }
@@ -244,9 +255,11 @@ public class ExpressionNodeBuilder implements ParserVisitor {
         System.out.println("Root node can't be of type: " + obj.getClass());
       }
     } catch (ParseException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
+      System.out.println("DEBUG: " + debug.debugString());
+      throw new JexlException.Parsing(debug, exp, e);
     }
+    
+    return nodes;
   }
   
   interface ExpNode {

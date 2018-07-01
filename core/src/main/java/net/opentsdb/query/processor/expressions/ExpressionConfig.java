@@ -53,6 +53,16 @@ public class ExpressionConfig extends BaseQueryNodeConfigWithInterpolators {
     private JoinConfig joinConfig;
     private Map<String, Map<TypeToken<?>, QueryInterpolatorConfig>> variable_interp_configs;
     
+    public Builder setExpression(final String expression) {
+      this.expression = expression;
+      return this;
+    }
+    
+    public Builder setJoinConfig(final JoinConfig join) {
+      this.joinConfig = join;
+      return this;
+    }
+    
     @Override
     public QueryNodeConfig build() {
       return new ExpressionConfig(this);
