@@ -38,10 +38,13 @@ public class SemanticQueryContext implements QueryContext {
   /** A local span for tracing. */
   private Span local_span;
   
+  private QueryMode mode;
+  
   SemanticQueryContext(final Builder builder) {
     tsdb = builder.tsdb;
     query = builder.query;
     stats = builder.stats;
+    mode = builder.mode;
     if (stats != null && stats.trace() != null) {
       local_span = stats.trace().newSpan("Query Context Initialization")
           .asChildOf(stats.querySpan())
@@ -59,7 +62,7 @@ public class SemanticQueryContext implements QueryContext {
 
   @Override
   public QueryMode mode() {
-    return query.getMode();
+    return mode;
   }
 
   @Override
@@ -94,6 +97,7 @@ public class SemanticQueryContext implements QueryContext {
     private TSDB tsdb;
     private SemanticQuery query;
     private QueryStats stats;
+    private QueryMode mode;
     
     public QueryContextBuilder setTSDB(final TSDB tsdb) {
       this.tsdb = tsdb;
@@ -123,7 +127,7 @@ public class SemanticQueryContext implements QueryContext {
 
     @Override
     public QueryContextBuilder setMode(QueryMode mode) {
-      // TODO Auto-generated method stub
+      this.mode = mode;
       return this;
     }
 

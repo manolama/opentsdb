@@ -108,7 +108,6 @@ public class ExpressionNodeBuilder implements ParserVisitor {
     ExpOp op;
     boolean negate;
     boolean not;
-    JoinConfig join;
     
     protected ExpNodeConfig(Builder builder) {
       super(builder);
@@ -127,10 +126,6 @@ public class ExpressionNodeBuilder implements ParserVisitor {
     
     public void setNot(boolean not) {
       this.not = not;
-    }
-    
-    public void setJoin(JoinConfig join) {
-      this.join = join;
     }
     
     @Override

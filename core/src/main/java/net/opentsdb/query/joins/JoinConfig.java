@@ -12,7 +12,7 @@ import net.opentsdb.utils.Pair;
 
 public class JoinConfig {
 
-  static enum JoinType {
+  public static enum JoinType {
     /* Present in A and B. Cross product */
     INNER,
     /* Present in A or B. Cross product */

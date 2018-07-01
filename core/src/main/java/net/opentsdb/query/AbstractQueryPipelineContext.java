@@ -565,6 +565,8 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
         for (final String source : node.getSources()) {
           try {
             graph.addDagEdge(query_node, map.get(source));
+          } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Failed to add node: " + node, e);
           } catch (CycleFoundException e) {
             throw new IllegalArgumentException("A cycle was detected "
                 + "adding node: " + node, e);

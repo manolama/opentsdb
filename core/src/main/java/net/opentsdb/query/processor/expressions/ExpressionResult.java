@@ -42,7 +42,7 @@ public class ExpressionResult implements QueryResult {
   Deferred<Object> join() {
     if ((node.exp_config.left_type == BranchType.SUB_EXP || node.exp_config.left_type == BranchType.VARIABLE) &&
         (node.exp_config.right_type == BranchType.SUB_EXP || node.exp_config.right_type == BranchType.VARIABLE)) {
-      final Joiner joiner = new Joiner(node.exp_config.join);
+      final Joiner joiner = new Joiner(node.config.joinConfig);
       Iterable<Pair<TimeSeries, TimeSeries>> joins = joiner.join(results, node.exp_config.left, node.exp_config.right);
       time_series = Lists.newArrayList();
       for (final Pair<TimeSeries, TimeSeries> pair : joins) {
