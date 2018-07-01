@@ -57,7 +57,7 @@ public class TestSemanticQuery {
             .setId("e1")
             .setType("Expression")
             .setConfig(new ExpressionConfig.Builder()
-                .setExpression("sys.if.out + sys.if.in")
+                .setExpression("(sys.'if'.out) * (sys.'if'.in)")
                 .setId("e1")
                 .build()))
         .build();

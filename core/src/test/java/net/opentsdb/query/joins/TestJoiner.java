@@ -228,11 +228,12 @@ public class TestJoiner {
     //String exp = "(a + (b + c)) > b && c > d";
     //String exp = "a.foo11 + (b + c.w.a.b.2)";
     //String exp = "a - (b + c) - d";
-    //String exp = "a.foo + d.bert / b.up * c.doi - 2.44";
+    //String exp = "a.foo.goober.nut + d.bert.up / b.up * c.doi - 2.44";
     //String exp = "(a + (b + c)) * d";
-    String exp = "(a && b) || !(c && true)";
+    //String exp = "(a && b) || !(c && true)";
     //String exp = "a / -c";
-    //String exp = "!(a.foo.meep % b.bar.moo.p) - a.foo.meep";
+    String exp = "!(a.'if'.meep % b.bar.moo.p) - a.foo.meep";
+    //String exp = "(sys.if.out) * (sys.if.in)";
     exp = Expression.JEXL_ENGINE.cleanExpression(exp);
     
     Parser parser = new Parser(new StringReader(exp)); //$NON-NLS-1$

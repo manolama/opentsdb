@@ -359,6 +359,15 @@ public class ExpressionNodeBuilder implements ParserVisitor {
         builder.setRight(((ExpNodeConfig) obj).getId())
                .setRightType(BranchType.SUB_EXP);
       }
+    } else if (obj instanceof String) {
+      // handle the funky "escape keywords" case. e.g. "sys.'if'.out"
+      if (is_left) {
+        builder.setLeft((String) obj)
+               .setLeftType(BranchType.VARIABLE);
+      } else {
+        builder.setRight((String) obj)
+               .setRightType(BranchType.VARIABLE);
+      }
     } else {
       throw new RuntimeException("NEED TO HANDLE: " + obj.getClass());
     }
@@ -437,7 +446,9 @@ public class ExpressionNodeBuilder implements ParserVisitor {
         Object obj = node.jjtGetChild(i).jjtAccept(this, data);
         if (obj instanceof NumericLiteral) {
           buf.append(((NumericLiteral) obj).number);
-        } else {
+        } else if (obj instanceof Identifier) {
+          buf.append(((Identifier) obj).id);
+        } else if (obj instanceof String) {
           buf.append((String) obj);
         }
       }
