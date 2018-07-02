@@ -195,6 +195,8 @@ public abstract class BaseQueryNodeConfigWithInterpolators
    * @return The config if present, null if not.
    */
   public QueryInterpolatorConfig interpolatorConfig(final TypeToken<?> type) {
+    System.out.println("CONFIGS: " + interpolator_configs);
+    System.out.println("NUM CONFIG: " + interpolator_configs.get(type));
     return interpolator_configs == null ? null :
       interpolator_configs.get(type);
   }

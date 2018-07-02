@@ -48,6 +48,7 @@ public class ExpressionResult implements QueryResult {
       for (final Pair<TimeSeries, TimeSeries> pair : joins) {
         time_series.add(new ExpressionTimeSeries(node, pair.getKey(), pair.getValue()));
       }
+      System.out.println("JOINED: " + time_series.size());
     } else {
       // TODO - one sided join so filter and apply.
     }

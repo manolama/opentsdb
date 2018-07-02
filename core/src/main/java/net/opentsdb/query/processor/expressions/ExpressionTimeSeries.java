@@ -38,7 +38,12 @@ public class ExpressionTimeSeries implements TimeSeries {
     this.right = right;
     if (left != null && right != null) {
       // TODO  return joined ID;
-      id = null;
+      //id = null;
+      if (left.id().type() == Const.TS_BYTE_ID) {
+        id = new ByteIdOverride((TimeSeriesByteId) left.id());
+      } else {
+        id = new StringIdOverride((TimeSeriesStringId) left.id());
+      }
     } else if (left == null) {
       if (right.id().type() == Const.TS_BYTE_ID) {
         id = new ByteIdOverride((TimeSeriesByteId) right.id());
@@ -64,6 +69,7 @@ public class ExpressionTimeSeries implements TimeSeries {
       TypeToken<?> type) {
     // TODO Auto-generated method stub
     if (type == NumericType.TYPE) {
+      System.out.println(" RET NUMERIC");
       return Optional.of(new ExpressionNumericTypeIterator(this));
     }
     return Optional.empty();

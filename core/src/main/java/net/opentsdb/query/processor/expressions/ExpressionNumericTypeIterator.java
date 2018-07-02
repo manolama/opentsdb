@@ -52,15 +52,17 @@ public class ExpressionNumericTypeIterator implements QueryIterator,
       left_literal = buildLiteral(series.node.exp_config.left, series.node.exp_config.left_type);
     } else {
       // TODO - get the specific config if present
-      QueryInterpolatorConfig interpolator_config = series.node.config.interpolatorConfig(NumericType.TYPE);
+      QueryInterpolatorConfig interpolator_config = series.node.config
+          .interpolatorConfig(NumericType.TYPE);
       QueryInterpolatorFactory factory = series.node.pipelineContext().tsdb()
           .getRegistry().getPlugin(QueryInterpolatorFactory.class, 
               interpolator_config.id());
       if (factory == null) {
         throw new IllegalArgumentException("No interpolator factory found for: " + 
-            interpolator_config.id() == null ? "Default" : interpolator_config.id());
+            (interpolator_config.id() == null ? "Default" : interpolator_config.id()));
       }
       
+      System.out.println("   LEFT SERIES: " + series.left);
       left_interpolator = (QueryInterpolator<NumericType>) factory.newInterpolator(NumericType.TYPE, series.left, interpolator_config);
       left_literal = null;
       has_next = left_interpolator.hasNext();
@@ -82,6 +84,8 @@ public class ExpressionNumericTypeIterator implements QueryIterator,
         throw new IllegalArgumentException("No interpolator factory found for: " + 
             interpolator_config.id() == null ? "Default" : interpolator_config.id());
       }
+      
+      System.out.println("   RIGHT SERIES: " + series.right);
       right_interpolator = (QueryInterpolator<NumericType>) factory.newInterpolator(NumericType.TYPE, series.right, interpolator_config);
       right_literal = null;
       if (!has_next) {
@@ -108,6 +112,9 @@ public class ExpressionNumericTypeIterator implements QueryIterator,
     if (left_interpolator != null && right_interpolator != null) {
       TimeSeriesValue<NumericType> l = left_interpolator.next(next_ts);
       TimeSeriesValue<NumericType> r = right_interpolator.next(next_ts);
+      
+      System.out.println("   L: " + l);
+      System.out.println("   R: " + r);
       // TODO - nulls??
       setValue(l.value(), r.value());
       
@@ -138,6 +145,8 @@ public class ExpressionNumericTypeIterator implements QueryIterator,
       next_next_ts.update(right_interpolator.nextReal());
     }
     
+    next_ts.update(next_next_ts);
+
     return dp;
   }
 
