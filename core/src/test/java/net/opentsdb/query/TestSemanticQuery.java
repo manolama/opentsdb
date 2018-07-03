@@ -60,19 +60,27 @@ public class TestSemanticQuery {
                 .setStart("1h-ago")
                 .build())
             )
-//        .addNode(ExecutionGraphNode.newBuilder()
-//            .setId("sys.if.in")
-//            .setType("DataSource")
-//            .setConfig(QuerySourceConfig.newBuilder()
-//                .setMetric("sys.if.in")
-//                .setStart("1h-ago")
-//                .build())
-//            )
+        .addNode(ExecutionGraphNode.newBuilder()
+            .setId("sys.if.in")
+            .setType("DataSource")
+            .setConfig(QuerySourceConfig.newBuilder()
+                .setMetric("sys.if.in")
+                .setStart("1h-ago")
+                .build())
+            )
+        .addNode(ExecutionGraphNode.newBuilder()
+            .setId("web.requests")
+            .setType("DataSource")
+            .setConfig(QuerySourceConfig.newBuilder()
+                .setMetric("web.requests")
+                .setStart("1h-ago")
+                .build())
+            )
         .addNode(ExecutionGraphNode.newBuilder()
             .setId("e1")
             .setType("Expression")
             .setConfig(new ExpressionConfig.Builder()
-                .setExpression("sys.if.out * 4200")
+                .setExpression("web.requests / (sys.if.out + sys.if.in) * 100")
                 .setJoinConfig(jc)
                 .addInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
                     .setFillPolicy(FillPolicy.NONE)
@@ -100,7 +108,7 @@ public class TestSemanticQuery {
           while (it.hasNext()) {
             TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
             System.out.println("Class: " + v.getClass() + ")  " + v.timestamp().epoch() + " " + (v.value().isInteger() ? Long.toString(v.value().longValue()) : Double.toString(v.value().doubleValue())));
-            break;
+            //break;
           }
         }
       }
@@ -250,6 +258,15 @@ public class TestSemanticQuery {
         .build();
     
     ctx.fetchNext(null);
+  }
+  
+  @Test
+  public void meh() throws Exception {
+    long a = 40;
+    long b = 10;
+    
+    System.out.println(a % b);
+    System.out.println(a / b);
   }
   
 }

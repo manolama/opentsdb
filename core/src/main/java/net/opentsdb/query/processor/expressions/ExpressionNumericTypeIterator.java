@@ -250,14 +250,14 @@ public class ExpressionNumericTypeIterator implements QueryIterator,
         // TOOD - overflow
         dp.resetValue(left.longValue() + right.longValue());
       } else {
-        dp.resetValue(left.doubleValue() + right.doubleValue());
+        dp.resetValue(left.toDouble() + right.toDouble());
       }
       break;
     case SUBTRACT:
       if (left.isInteger() && right.isInteger()) {
         dp.resetValue(left.longValue() - right.longValue());
       } else {
-        dp.resetValue(left.doubleValue() - right.doubleValue());
+        dp.resetValue(left.toDouble() - right.toDouble());
       }
       break;
     case MULTIPLY:
@@ -265,14 +265,16 @@ public class ExpressionNumericTypeIterator implements QueryIterator,
         // TOOD - overflow
         dp.resetValue(left.longValue() * right.longValue());
       } else {
-        dp.resetValue(left.doubleValue() * right.doubleValue());
+        dp.resetValue(left.toDouble() * right.toDouble());
       }
       break;
     case DIVIDE:
-      if (left.isInteger() && right.isInteger()) {
+      if (left.isInteger() && right.isInteger() && 
+          left.longValue() % right.longValue() == 0) {
+        System.out.println("    DIV by ints");
         dp.resetValue(left.longValue() / right.longValue());
       } else {
-        dp.resetValue(left.doubleValue() / right.doubleValue());
+        dp.resetValue(left.toDouble() / right.toDouble());
       }
       break;
     case MOD:
