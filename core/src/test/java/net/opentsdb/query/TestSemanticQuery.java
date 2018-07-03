@@ -72,7 +72,7 @@ public class TestSemanticQuery {
             .setId("e1")
             .setType("Expression")
             .setConfig(new ExpressionConfig.Builder()
-                .setExpression("(sys.if.out) + (sys.if.in)")
+                .setExpression("(sys.if.out) % (sys.if.in)")
                 .setJoinConfig(jc)
                 .addInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
                     .setFillPolicy(FillPolicy.NONE)
@@ -95,6 +95,7 @@ public class TestSemanticQuery {
       public void onNext(QueryResult next) {
         System.out.println("RESULT: " + next.timeSeries().size());
         for (final TimeSeries ts : next.timeSeries()) {
+          System.out.println("[SERIES] " + ts.id());
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
             TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
