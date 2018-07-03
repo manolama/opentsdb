@@ -113,8 +113,8 @@ public class ExpressionNumericTypeIterator implements QueryIterator,
       TimeSeriesValue<NumericType> l = left_interpolator.next(next_ts);
       TimeSeriesValue<NumericType> r = right_interpolator.next(next_ts);
       
-      System.out.println("   L: " + l);
-      System.out.println("   R: " + r);
+//      System.out.println("   L: " + l);
+//      System.out.println("   R: " + r);
       // TODO - nulls??
       setValue(l.value(), r.value());
       

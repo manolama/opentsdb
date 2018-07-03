@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Map.Entry;
 import java.util.TreeMap;
 
@@ -31,15 +32,20 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.hash.Hasher;
 import com.google.common.reflect.TypeToken;
+import com.stumbleupon.async.Callback;
+import com.stumbleupon.async.Deferred;
 
 import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.map.TLongObjectMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.TLongSet;
 import gnu.trove.set.hash.TLongHashSet;
-import net.opentsdb.core.Const;
+import net.opentsdb.common.Const;
+import net.opentsdb.data.BaseTimeSeriesByteId;
 import net.opentsdb.data.TimeSeries;
+import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesGroupId;
+import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.iterators.DefaultIteratorGroups;
 import net.opentsdb.data.iterators.IteratorGroup;
@@ -50,7 +56,11 @@ import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
 import net.opentsdb.query.pojo.Join.SetOperator;
 import net.opentsdb.query.processor.expressions.ExpressionProcessorConfig;
+import net.opentsdb.stats.Span;
+import net.opentsdb.storage.TimeSeriesDataStore;
+import net.opentsdb.utils.ByteSet;
 import net.opentsdb.utils.Pair;
+import net.opentsdb.utils.Bytes.ByteMap;
 
 /**
  * A class that performs a join on time series across multiple groups in the
@@ -175,6 +185,202 @@ public class Joiner {
     
     System.out.println("HASHING: " + ts.id() + "  TO " + hasher.hash().asLong());
     join_set.add(key, hasher.hash().asLong(), ts);
+  }
+  
+  public TimeSeriesId joinIds(final TimeSeries left, final TimeSeries right, final String alias) {
+    if (left != null && right != null) {
+      // NOTE: We assume both are of the same type. Need to verify that
+      // upstream.
+      
+    } else if (left == null) {
+      if (right.id().type() == Const.TS_BYTE_ID) {
+        return new ByteIdOverride((TimeSeriesByteId) right, alias);
+      } else {
+        return new StringIdOverride((TimeSeriesStringId) right, alias);
+      }
+    } else if (right == null) {
+      if (left.id().type() == Const.TS_BYTE_ID) {
+        return new ByteIdOverride((TimeSeriesByteId) left, alias);
+      } else {
+        return new StringIdOverride((TimeSeriesStringId) left, alias);
+      }
+    }
+    return null;
+  }
+
+  TimeSeriesId joinByteIds(final TimeSeriesByteId left, final TimeSeriesByteId right, final String alias) {
+    BaseTimeSeriesByteId.Builder builder = BaseTimeSeriesByteId.newBuilder(left.dataStore())
+        .setAlias(alias.getBytes(Const.UTF8_CHARSET));
+    switch (config.type) {
+    case INNER:
+    case OUTER:
+    case OUTER_DISJOINT:
+    case NATURAL:
+    case LEFT:
+    case LEFT_DISJOINT:
+      builder.setNamespace(left.namespace())
+             .setMetric(left.metric());
+             
+      break;
+    case RIGHT:
+    case RIGHT_DISJOINT:
+      builder.setNamespace(right.namespace())
+             .setMetric(right.metric());
+      default:
+        throw new UnsupportedOperationException("Don't support: " + config.type + " yet");
+    }
+    
+    return builder.build();
+  }
+  
+  class ByteIdOverride implements TimeSeriesByteId {
+    final TimeSeriesByteId id;
+    final String alias;
+    ByteIdOverride(final TimeSeriesByteId id, final String alias) {
+      this.id = id;
+      this.alias = alias;
+    }
+    
+    @Override
+    public boolean encoded() {
+      return id.encoded();
+    }
+
+    @Override
+    public TypeToken<? extends TimeSeriesId> type() {
+      return id.type();
+    }
+
+    @Override
+    public long buildHashCode() {
+      // TODO Auto-generated method stub
+      return 0;
+    }
+
+    @Override
+    public int compareTo(TimeSeriesByteId o) {
+      // TODO Auto-generated method stub
+      return 0;
+    }
+
+    @Override
+    public TimeSeriesDataStore dataStore() {
+      return id.dataStore();
+    }
+
+    @Override
+    public byte[] alias() {
+      return alias.getBytes(Const.UTF8_CHARSET);
+    }
+
+    @Override
+    public byte[] namespace() {
+      return id.namespace();
+    }
+
+    @Override
+    public byte[] metric() {
+      return id.metric();
+    }
+
+    @Override
+    public ByteMap<byte[]> tags() {
+      return id.tags();
+    }
+
+    @Override
+    public List<byte[]> aggregatedTags() {
+      return id.aggregatedTags();
+    }
+
+    @Override
+    public List<byte[]> disjointTags() {
+      return id.disjointTags();
+    }
+
+    @Override
+    public ByteSet uniqueIds() {
+      return id.uniqueIds();
+    }
+
+    @Override
+    public Deferred<TimeSeriesStringId> decode(boolean cache, Span span) {
+      return id.decode(cache, span).addCallback(
+          new Callback<TimeSeriesStringId, TimeSeriesStringId>() {
+        @Override
+        public TimeSeriesStringId call(TimeSeriesStringId arg)
+            throws Exception {
+          return new StringIdOverride(arg, alias);
+        }
+      });
+    }
+    
+  }
+  
+  class StringIdOverride implements TimeSeriesStringId {
+    final TimeSeriesStringId id;
+    final String alias;
+    StringIdOverride(final TimeSeriesStringId id, final String alias) {
+      this.id = id;
+      this.alias = alias;
+    }
+    @Override
+    public boolean encoded() {
+      return false;
+    }
+
+    @Override
+    public TypeToken<? extends TimeSeriesId> type() {
+      return id.type();
+    }
+
+    @Override
+    public long buildHashCode() {
+      // TODO Auto-generated method stub
+      return 0;
+    }
+
+    @Override
+    public int compareTo(TimeSeriesStringId o) {
+      // TODO Auto-generated method stub
+      return 0;
+    }
+
+    @Override
+    public String alias() {
+      return alias;
+    }
+
+    @Override
+    public String namespace() {
+      return id.namespace();
+    }
+
+    @Override
+    public String metric() {
+      return id.metric();
+    }
+
+    @Override
+    public Map<String, String> tags() {
+      return id.tags();
+    }
+
+    @Override
+    public List<String> aggregatedTags() {
+      return id.aggregatedTags();
+    }
+
+    @Override
+    public List<String> disjointTags() {
+      return id.disjointTags();
+    }
+
+    @Override
+    public Set<String> uniqueIds() {
+      return id.uniqueIds();
+    }
+    
   }
   
 }

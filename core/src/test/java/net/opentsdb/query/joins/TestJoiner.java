@@ -26,6 +26,12 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 
+import org.antlr.v4.runtime.ANTLRInputStream;
+import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.tree.ErrorNode;
+import org.antlr.v4.runtime.tree.ParseTree;
+import org.antlr.v4.runtime.tree.RuleNode;
+import org.antlr.v4.runtime.tree.TerminalNode;
 import org.apache.commons.jexl2.JexlException;
 import org.apache.commons.jexl2.JexlInfo;
 import org.apache.commons.jexl2.parser.ASTAdditiveNode;
@@ -101,6 +107,38 @@ import net.opentsdb.data.types.annotation.AnnotationType;
 import net.opentsdb.data.types.annotation.MockAnnotationIterator;
 import net.opentsdb.data.types.numeric.MockNumericTimeSeries;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.expressions.parser.MetricExpressionLexer;
+import net.opentsdb.expressions.parser.MetricExpressionParser;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Addsub_arith_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.AndContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Arith_operands_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.ArithmeticContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Arithmetic_operands_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Divmul_arith_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.LogicalContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.LogicalOperandsContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_expr_and_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_expr_not_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_expr_or_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_operand_and_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_operand_not_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_operand_or_orruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.LogicopContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Main_relational_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.MetricContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Minus_metric_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Mod_arith_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.ModuloContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.NotContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.OrContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Paren_arith_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Paren_logical_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Paren_relational_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.ProgContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.RelationalContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Relational_operands_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.RelationalopContext;
+import net.opentsdb.expressions.parser.MetricExpressionVisitor;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
 import net.opentsdb.query.pojo.Expression;
@@ -248,6 +286,17 @@ public class TestJoiner {
     System.out.println("---------------");
     //System.out.println("root: " + System.identityHashCode(v.root));
     System.out.println(obj);
+  }
+  
+  @Test
+  public void antlry() throws Exception {
+    String exp = "(a + (b + d) + v) + c";
+    MetricExpressionLexer lexer = new MetricExpressionLexer(new ANTLRInputStream(exp));
+    CommonTokenStream tokens = new CommonTokenStream(lexer);
+    MetricExpressionParser parser = new MetricExpressionParser(tokens);
+    AntlrVisitor v = new AntlrVisitor();
+    System.out.println("RESULT: " + parser.prog().accept(v));
+    System.out.println("DONE!");
   }
   
   void dumpNode(final JexlNode node, final MyVisitor v) {
@@ -1517,6 +1566,335 @@ public class TestJoiner {
       
       return b;
     }
+  }
+  
+  class AntlrVisitor implements MetricExpressionVisitor<Object> {
+
+    class Binary {
+      String op;
+      Object left;
+      Object right;
+      Binary(String op, Object left, Object right) {
+        this.op = op;
+        this.left = left;
+        this.right = right;
+      }
+      public String toString() {
+        final StringBuilder buf = new StringBuilder();
+        if (left instanceof Binary) {
+          buf.append("(")
+             .append(left)
+             .append(")");
+        } else {
+          buf.append(left);
+        }
+        buf.append(" ")
+           .append(op)
+           .append(" ");
+        if (right instanceof Binary) {
+          buf.append("(")
+             .append(right)
+             .append(")");
+        } else {
+          buf.append(right);
+        }
+        return buf.toString();
+        //return "(" + left + ") " + op + " (" + right + ")";
+      }
+      
+      void setLeft(final Object v) {
+        if (left == null) {
+          left = v;
+        } else if (left instanceof String && v instanceof String) {
+          left += "." + (String) v;
+        } else {
+          throw new RuntimeException("LEFT Already set!");
+        }
+      }
+      
+      void setRight(final Object v) {
+        if (v == left) {
+          System.out.println("   LEFT WAS this node alreay!");
+          return;
+        }
+        if (right == null) {
+          right = v;
+        } else if (right instanceof String && v instanceof String) {
+          right += "." + (String) v;
+        } else if (right == this) {
+          System.out.println("------------- WTF? Right was this!?!?!?!");
+          right = v;
+        } else if (right != v) {
+          System.out.println("************** Right was: " + right + "   Replace with: " + v);
+          right = v;
+          //throw new RuntimeException("RIGHT Already set! " + v.getClass());
+        }
+      }
+      
+      void rotate(final Object v) {
+        if (left == null || left == v) {
+          left = v;
+        } else if (right == null) {
+          right = v;
+        } else {
+          throw new RuntimeException("Node already full!!!");
+        }
+      }
+    }
+    
+    @Override
+    public Object visit(ParseTree arg0) {
+      System.out.println(arg0.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitChildren(RuleNode arg0) {
+      // TODO Auto-generated method stub
+      System.out.println(arg0.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitErrorNode(ErrorNode arg0) {
+      // TODO Auto-generated method stub
+      System.out.println(arg0.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitTerminal(TerminalNode arg0) {
+      // TODO Auto-generated method stub
+      System.out.println(arg0.getClass() + " Text: " + arg0.getText());
+      return arg0.getText();
+    }
+
+    @Override
+    public Object visitLogicalOperands(LogicalOperandsContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitLogical_expr_or_rule(Logical_expr_or_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitRelational_operands_rule(
+        Relational_operands_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitArithmetic(ArithmeticContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass() + " Kids: " + ctx.getChildCount());
+      return ctx.getChild(0).accept(this);
+    }
+
+    @Override
+    public Object visitMod_arith_rule(Mod_arith_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitMain_relational_rule(Main_relational_ruleContext ctx) {
+      System.out.println(ctx.getClass());
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visitNot(NotContext ctx) {
+      System.out.println(ctx.getClass());
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visitLogical_operand_and_rule(
+        Logical_operand_and_ruleContext ctx) {
+      System.out.println(ctx.getClass());
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public Object visitRelationalop(RelationalopContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitAnd(AndContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitLogicop(LogicopContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitMinus_metric_rule(Minus_metric_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitArithmetic_operands_rule(
+        Arithmetic_operands_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      return ctx.getChild(0).accept(this);
+    }
+
+    @Override
+    public Object visitAddsub_arith_rule(Addsub_arith_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass() + " Kids: " + ctx.getChildCount());
+      Object left = ctx.getChild(0).accept(this);
+      for (int i = 2; i < ctx.getChildCount(); i += 2) {
+        Object right = ctx.getChild(i).accept(this);
+        Object op = ctx.getChild(i - 1).accept(this);
+        left = new Binary((String) op, left, right);
+      }
+      return left;
+    }
+
+    @Override
+    public Object visitParen_logical_rule(Paren_logical_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitArith_operands_rule(Arith_operands_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      return ctx.getChild(0).accept(this);
+    }
+
+    @Override
+    public Object visitParen_relational_rule(Paren_relational_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitOr(OrContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitParen_arith_rule(Paren_arith_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      if (ctx.getChildCount() != 3) {
+        throw new RuntimeException("Should always be 3?");
+      }
+      return ctx.getChild(1).accept(this);
+//      for (int i = 0; i < ctx.getChildCount(); i++) {
+//        System.out.println("   CHILD: " + ctx.getChild(i).getClass() + " [" + ctx.getChild(i) + "]");
+//        //ctx.getChild(i).accept(this);
+//      }
+//      
+//      for (int i = 0; i < ctx.getChildCount(); i++) {
+//        //System.out.println("   CHILD: " + ctx.getChild(i).getClass() + " [" + ctx.getChild(i) + "]");
+//        ctx.getChild(i).accept(this);
+//      }
+    }
+
+    @Override
+    public Object visitLogical_expr_and_rule(Logical_expr_and_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitDivmul_arith_rule(Divmul_arith_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitProg(ProgContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass() + " Kids: " + ctx.getChildCount());
+      return ctx.getChild(0).accept(this);
+    }
+
+    @Override
+    public Object visitLogical(LogicalContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitLogical_operand_or_orrule(
+        Logical_operand_or_orruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitLogical_operand_not_rule(
+        Logical_operand_not_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitMetric(MetricContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass() + "  Kids: "+ ctx.getChildCount());
+      return ctx.getChild(0).accept(this);
+    }
+
+    @Override
+    public Object visitRelational(RelationalContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitLogical_expr_not_rule(Logical_expr_not_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+
+    @Override
+    public Object visitModulo(ModuloContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass());
+      return null;
+    }
+    
   }
   
 //  @Before
