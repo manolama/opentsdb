@@ -72,7 +72,7 @@ public class TestSemanticQuery {
             .setId("e1")
             .setType("Expression")
             .setConfig(new ExpressionConfig.Builder()
-                .setExpression("(sys.'if'.out) + (sys.'if'.in)")
+                .setExpression("(sys.if.out) + (sys.if.in)")
                 .setJoinConfig(jc)
                 .addInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
                     .setFillPolicy(FillPolicy.NONE)

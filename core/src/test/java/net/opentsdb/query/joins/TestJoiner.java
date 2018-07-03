@@ -295,14 +295,14 @@ public class TestJoiner {
     //String exp = "a - (b + c) - d";
     //String exp = "a.foo.goober.nut + (d.bert.up / b.up) * c.doi - 2.44";
     //String exp = "(a + (b + c)) * d";
-    String exp = "!(a + b)";
+    String exp = "a > c && !(a > b)";
     //String exp = "a % b";
     //String exp = "(a && b) || !(c && true)";
     //String exp = "a * c / d";
     //String exp = "!(a.'if'.meep % b.bar.moo.p) - a.foo.meep";
     //String exp = "(a + (b + d) + v) + c";
-    //String exp = "a > 1 || (b > 3 && c > 3)";  // TODO fix me
-    //String exp = "a > (b + c) && v > 2 || (a < b)"; // TODO fix me too
+    //String exp = "a > 1 || (b > 3 && c > 3)";
+    //String exp = "a > (b + c) && v > 2 || (a < b)";
     MetricExpressionLexer lexer = new MetricExpressionLexer(new ANTLRInputStream(exp));
     CommonTokenStream tokens = new CommonTokenStream(lexer);
     MetricExpressionParser parser = new MetricExpressionParser(tokens);
@@ -1747,7 +1747,11 @@ public class TestJoiner {
         Relational_operands_ruleContext ctx) {
       // TODO Auto-generated method stub
       System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
-      return ctx.getChild(0).accept(this);
+      if (ctx.getChildCount() > 0) {
+        return ctx.getChild(0).accept(this);
+      }
+      System.out.println(" WTF?????: " + ctx.getText());
+      return null;
     }
 
     @Override
@@ -1878,6 +1882,9 @@ public class TestJoiner {
     public Object visitArith_operands_rule(Arith_operands_ruleContext ctx) {
       // TODO Auto-generated method stub
       System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      for (int i = 0; i < ctx.getChildCount(); i++) {
+        System.out.println("   " + ctx.getChild(i).getClass());
+      }
       return ctx.getChild(0).accept(this);
     }
 

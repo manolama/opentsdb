@@ -3,77 +3,50 @@ package net.opentsdb.query.processor.expressions;
 import java.io.StringReader;
 import java.util.List;
 
-import org.apache.commons.jexl2.DebugInfo;
-import org.apache.commons.jexl2.JexlException;
-import org.apache.commons.jexl2.JexlInfo;
-import org.apache.commons.jexl2.parser.ASTAdditiveNode;
-import org.apache.commons.jexl2.parser.ASTAdditiveOperator;
-import org.apache.commons.jexl2.parser.ASTAmbiguous;
-import org.apache.commons.jexl2.parser.ASTAndNode;
-import org.apache.commons.jexl2.parser.ASTArrayAccess;
-import org.apache.commons.jexl2.parser.ASTArrayLiteral;
-import org.apache.commons.jexl2.parser.ASTAssignment;
-import org.apache.commons.jexl2.parser.ASTBitwiseAndNode;
-import org.apache.commons.jexl2.parser.ASTBitwiseComplNode;
-import org.apache.commons.jexl2.parser.ASTBitwiseOrNode;
-import org.apache.commons.jexl2.parser.ASTBitwiseXorNode;
-import org.apache.commons.jexl2.parser.ASTBlock;
-import org.apache.commons.jexl2.parser.ASTConstructorNode;
-import org.apache.commons.jexl2.parser.ASTDivNode;
-import org.apache.commons.jexl2.parser.ASTEQNode;
-import org.apache.commons.jexl2.parser.ASTERNode;
-import org.apache.commons.jexl2.parser.ASTEmptyFunction;
-import org.apache.commons.jexl2.parser.ASTFalseNode;
-import org.apache.commons.jexl2.parser.ASTForeachStatement;
-import org.apache.commons.jexl2.parser.ASTFunctionNode;
-import org.apache.commons.jexl2.parser.ASTGENode;
-import org.apache.commons.jexl2.parser.ASTGTNode;
-import org.apache.commons.jexl2.parser.ASTIdentifier;
-import org.apache.commons.jexl2.parser.ASTIfStatement;
-import org.apache.commons.jexl2.parser.ASTJexlScript;
-import org.apache.commons.jexl2.parser.ASTLENode;
-import org.apache.commons.jexl2.parser.ASTLTNode;
-import org.apache.commons.jexl2.parser.ASTMapEntry;
-import org.apache.commons.jexl2.parser.ASTMapLiteral;
-import org.apache.commons.jexl2.parser.ASTMethodNode;
-import org.apache.commons.jexl2.parser.ASTModNode;
-import org.apache.commons.jexl2.parser.ASTMulNode;
-import org.apache.commons.jexl2.parser.ASTNENode;
-import org.apache.commons.jexl2.parser.ASTNRNode;
-import org.apache.commons.jexl2.parser.ASTNotNode;
-import org.apache.commons.jexl2.parser.ASTNullLiteral;
-import org.apache.commons.jexl2.parser.ASTNumberLiteral;
-import org.apache.commons.jexl2.parser.ASTOrNode;
-import org.apache.commons.jexl2.parser.ASTReference;
-import org.apache.commons.jexl2.parser.ASTReferenceExpression;
-import org.apache.commons.jexl2.parser.ASTReturnStatement;
-import org.apache.commons.jexl2.parser.ASTSizeFunction;
-import org.apache.commons.jexl2.parser.ASTSizeMethod;
-import org.apache.commons.jexl2.parser.ASTStringLiteral;
-import org.apache.commons.jexl2.parser.ASTTernaryNode;
-import org.apache.commons.jexl2.parser.ASTTrueNode;
-import org.apache.commons.jexl2.parser.ASTUnaryMinusNode;
-import org.apache.commons.jexl2.parser.ASTVar;
-import org.apache.commons.jexl2.parser.ASTWhileStatement;
-import org.apache.commons.jexl2.parser.JexlNode;
-import org.apache.commons.jexl2.parser.ParseException;
-import org.apache.commons.jexl2.parser.Parser;
-import org.apache.commons.jexl2.parser.ParserVisitor;
-import org.apache.commons.jexl2.parser.SimpleNode;
+import org.antlr.v4.runtime.ANTLRInputStream;
+import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.tree.ErrorNode;
+import org.antlr.v4.runtime.tree.ParseTree;
+import org.antlr.v4.runtime.tree.RuleNode;
+import org.antlr.v4.runtime.tree.TerminalNode;
 
 import com.google.common.collect.Lists;
 import com.google.common.hash.HashCode;
 
-import net.opentsdb.query.AbstractQueryNode;
+import net.opentsdb.expressions.parser.MetricExpressionLexer;
+import net.opentsdb.expressions.parser.MetricExpressionParser;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Addsub_arith_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.AndContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Arith_operands_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.ArithmeticContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Arithmetic_operands_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Divmul_arith_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.LogicalContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.LogicalOperandsContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_expr_and_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_expr_not_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_expr_or_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_operands_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.LogicopContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Main_relational_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.MetricContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Minus_metric_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Mod_arith_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.ModuloContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.NotContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.OrContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Paren_arith_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Paren_logical_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Paren_relational_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.ProgContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.RelationalContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Relational_operands_ruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.RelationalopContext;
+import net.opentsdb.expressions.parser.MetricExpressionVisitor;
 import net.opentsdb.query.BaseQueryNodeConfig;
-import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
-import net.opentsdb.query.QueryNodeFactory;
-import net.opentsdb.query.QueryPipelineContext;
-import net.opentsdb.query.QueryResult;
-import net.opentsdb.query.joins.JoinConfig;
 
-public class ExpressionNodeBuilder implements ParserVisitor {
+public class ExpressionNodeBuilder implements MetricExpressionVisitor<Object> {
 
   static enum BranchType {
     VARIABLE,
@@ -85,19 +58,37 @@ public class ExpressionNodeBuilder implements ParserVisitor {
   }
   
   static enum ExpOp {
-    OR,
-    AND,
-    EQ,
-    NE,
-    LT,
-    GT,
-    LE,
-    GE,
-    ADD,
-    SUBTRACT,
-    MULTIPLY,
-    DIVIDE,
-    MOD,
+    OR(new String[] { "||", "OR" }),
+    AND(new String[] { "&&", "AND" }),
+    EQ(new String[] { "==" }),
+    NE(new String[] { "!=" }),
+    LT(new String[] { "<" }),
+    GT(new String[] { ">" }),
+    LE(new String[] { "<=" }),
+    GE(new String[] { ">=" }),
+    ADD(new String[] { "+" }),
+    SUBTRACT(new String[] { "-" }),
+    MULTIPLY(new String[] { "*" }),
+    DIVIDE(new String[] { "/" }),
+    MOD(new String[] { "%" });
+    
+    private final String[] symbols;
+    
+    ExpOp(final String[] symbols) {
+      this.symbols = symbols;
+    }
+    
+    static public ExpOp parse(final String symbol) {
+      for (int i = 0; i < values().length; i++) {
+        final ExpOp op = values()[i];
+        for (final String op_symbol : op.symbols) {
+          if (op_symbol.equals(symbol)) {
+            return op;
+          }
+        }
+      }
+      throw new RuntimeException("Unrecognized symbol: " + symbol);
+    }
   }
   
   static class ExpNodeConfig extends BaseQueryNodeConfig {
@@ -235,24 +226,28 @@ public class ExpressionNodeBuilder implements ParserVisitor {
   List<ExpNodeConfig> parse(final String exp, String id) {
     exp_id = id;
     
-    JexlInfo debug = new DebugInfo(null, 0, 0);
-    StringReader rdr = new StringReader(exp);
-    Parser parser = new Parser(rdr);
-    try {
-      ASTJexlScript script = parser.parse(rdr, debug);
-      if (script.jjtGetNumChildren() > 1) {
-        throw new RuntimeException("WTF? A script with more than one root???");
-      }
-      Object obj = script.jjtAccept(this, null);
-      if (obj instanceof ExpNodeConfig) {
-        //nodes.add((ExpNodeConfig) obj);
-      } else {
-        System.out.println("Root node can't be of type: " + obj.getClass());
-      }
-    } catch (ParseException e) {
-      System.out.println("DEBUG: " + debug.debugString());
-      throw new JexlException.Parsing(debug, exp, e);
-    }
+    MetricExpressionLexer lexer = new MetricExpressionLexer(new ANTLRInputStream(exp));
+    CommonTokenStream tokens = new CommonTokenStream(lexer);
+    MetricExpressionParser parser = new MetricExpressionParser(tokens);
+    nodes.add((ExpNodeConfig) parser.prog().accept(this));
+//    JexlInfo debug = new DebugInfo(null, 0, 0);
+//    StringReader rdr = new StringReader(exp);
+//    Parser parser = new Parser(rdr);
+//    try {
+//      ASTJexlScript script = parser.parse(rdr, debug);
+//      if (script.jjtGetNumChildren() > 1) {
+//        throw new RuntimeException("WTF? A script with more than one root???");
+//      }
+//      Object obj = script.jjtAccept(this, null);
+//      if (obj instanceof ExpNodeConfig) {
+//        //nodes.add((ExpNodeConfig) obj);
+//      } else {
+//        System.out.println("Root node can't be of type: " + obj.getClass());
+//      }
+//    } catch (ParseException e) {
+//      System.out.println("DEBUG: " + debug.debugString());
+//      throw new JexlException.Parsing(debug, exp, e);
+//    }
     
     return nodes;
   }
@@ -367,392 +362,229 @@ public class ExpressionNodeBuilder implements ParserVisitor {
       throw new RuntimeException("NEED TO HANDLE: " + obj.getClass());
     }
   }
-  
+
   @Override
-  public Object visit(SimpleNode node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visit(ParseTree tree) {
+    throw new UnsupportedOperationException("Can't visit " 
+        + tree.getClass());
   }
 
   @Override
-  public Object visit(ASTJexlScript node, Object data) {
-    if (node.jjtGetNumChildren() > 1) {
-      throw new RuntimeException("WTF? A script with more than one root???");
+  public Object visitChildren(RuleNode node) {
+    throw new UnsupportedOperationException("Can't visit " 
+        + node.getClass());
+  }
+
+  @Override
+  public Object visitTerminal(TerminalNode node) {
+    // this is a variable or operand (or parens).
+    return node.getText();
+  }
+
+  @Override
+  public Object visitErrorNode(ErrorNode node) {
+    throw new RuntimeException("Error parsing: " + node.getText());
+  }
+
+  @Override
+  public Object visitProg(ProgContext ctx) {
+    return ctx.getChild(0).accept(this);
+  }
+
+  @Override
+  public Object visitArithmetic(ArithmeticContext ctx) {
+    return ctx.getChild(0).accept(this);
+  }
+
+  @Override
+  public Object visitLogical(LogicalContext ctx) {
+    Object left = ctx.getChild(0).accept(this);
+    for (int i = 2; i < ctx.getChildCount(); i += 2) {
+      Object right = ctx.getChild(i).accept(this);
+      Object op = ctx.getChild(i - 1).accept(this);
+      left = newBinary(ExpOp.parse((String) op), left, right);
     }
-    return node.jjtGetChild(0).jjtAccept(this, data);
-  }
-
-  @Override
-  public Object visit(ASTBlock node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTAmbiguous node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTIfStatement node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTWhileStatement node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTForeachStatement node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTReturnStatement node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTAssignment node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTVar node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTReference node, Object data) {
-    if (node.jjtGetNumChildren() > 1) {
-      final StringBuilder buf = new StringBuilder();
-      for (int i = 0; i < node.jjtGetNumChildren(); i++) {
-        if (i > 0) {
-          buf.append(".");
-        }
-        Object obj = node.jjtGetChild(i).jjtAccept(this, data);
-        if (obj instanceof NumericLiteral) {
-          buf.append(((NumericLiteral) obj).number);
-        } else if (obj instanceof Identifier) {
-          buf.append(((Identifier) obj).id);
-        } else if (obj instanceof String) {
-          buf.append((String) obj);
-        }
-      }
-      return buf.toString();
-    } else {
-      return node.jjtGetChild(0).jjtAccept(this, data);
-    }
-  }
-
-  @Override
-  public Object visit(ASTTernaryNode node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTOrNode node, Object data) {
-    return newBinary(ExpOp.OR, 
-        node.jjtGetChild(0).jjtAccept(this, data),
-        node.jjtGetChild(1).jjtAccept(this, data));
-  }
-
-  @Override
-  public Object visit(ASTAndNode node, Object data) {
-    return newBinary(ExpOp.AND, 
-        node.jjtGetChild(0).jjtAccept(this, data),
-        node.jjtGetChild(1).jjtAccept(this, data));
-  }
-
-  @Override
-  public Object visit(ASTBitwiseOrNode node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTBitwiseXorNode node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTBitwiseAndNode node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTEQNode node, Object data) {
-    return newBinary(ExpOp.EQ, 
-        node.jjtGetChild(0).jjtAccept(this, data),
-        node.jjtGetChild(1).jjtAccept(this, data));
-  }
-
-  @Override
-  public Object visit(ASTNENode node, Object data) {
-    return newBinary(ExpOp.NE, 
-        node.jjtGetChild(0).jjtAccept(this, data),
-        node.jjtGetChild(1).jjtAccept(this, data));
-  }
-
-  @Override
-  public Object visit(ASTLTNode node, Object data) {
-    return newBinary(ExpOp.LT, 
-        node.jjtGetChild(0).jjtAccept(this, data),
-        node.jjtGetChild(1).jjtAccept(this, data));
-  }
-
-  @Override
-  public Object visit(ASTGTNode node, Object data) {
-    return newBinary(ExpOp.GT, 
-        node.jjtGetChild(0).jjtAccept(this, data),
-        node.jjtGetChild(1).jjtAccept(this, data));
-  }
-
-  @Override
-  public Object visit(ASTLENode node, Object data) {
-    return newBinary(ExpOp.LE, 
-        node.jjtGetChild(0).jjtAccept(this, data),
-        node.jjtGetChild(1).jjtAccept(this, data));
-  }
-
-  @Override
-  public Object visit(ASTGENode node, Object data) {
-    return newBinary(ExpOp.GE, 
-        node.jjtGetChild(0).jjtAccept(this, data),
-        node.jjtGetChild(1).jjtAccept(this, data));
-  }
-
-  @Override
-  public Object visit(ASTERNode node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTNRNode node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTAdditiveNode node, Object data) {
-    Object left = node.jjtGetChild(0).jjtAccept(this, data);
-    System.out.println("left: " + left);
-    for (int c = 2, size = node.jjtGetNumChildren(); c < size; c += 2) {
-      Object right = node.jjtGetChild(c).jjtAccept(this, data);
-      System.out.println("right: " + right);
-      try {
-          JexlNode op = node.jjtGetChild(c - 1);
-          System.out.println("  op: " + op.image);
-          if (op instanceof ASTAdditiveOperator) {
-              String which = op.image;
-              if ("+".equals(which)) {
-//                Binary b = new Binary();
-//                b.op = "+";
-//                b.left = left;
-//                b.right = right;
-//                left = b;
-                left = newBinary(ExpOp.ADD, left, right);
-                System.out.println("left is now: " + left);
-                  //left = arithmetic.add(left, right);
-                continue;
-              }
-              if ("-".equals(which)) {
-//                Binary b = new Binary();
-//                b.op = "-";
-//                b.left = left;
-//                b.right = right;
-//                left = b;
-                left = newBinary(ExpOp.SUBTRACT, left, right);
-                  //left = arithmetic.subtract(left, right);
-                  continue;
-              }
-              throw new UnsupportedOperationException("unknown operator " + which);
-          }
-          throw new IllegalArgumentException("unknown operator " + op);
-      } catch (ArithmeticException xrt) {
-          //JexlNode xnode = findNullOperand(xrt, node, left, right);
-          //throw new JexlException(xnode, "+/- error", xrt);
-      }
-    }
-    System.out.println("RET LEFT: " + left);
     return left;
   }
 
   @Override
-  public Object visit(ASTAdditiveOperator node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visitRelational(RelationalContext ctx) {
+    return ctx.getChild(0).accept(this);
   }
 
   @Override
-  public Object visit(ASTMulNode node, Object data) {
-    return newBinary(ExpOp.MULTIPLY, 
-        node.jjtGetChild(0).jjtAccept(this, data),
-        node.jjtGetChild(1).jjtAccept(this, data));
+  public Object visitParen_logical_rule(Paren_logical_ruleContext ctx) {
+    // catch exceptions
+    ctx.getChild(0).accept(this);
+    ctx.getChild(2).accept(this);
+    return ctx.getChild(1).accept(this);
   }
 
   @Override
-  public Object visit(ASTDivNode node, Object data) {
-    return newBinary(ExpOp.DIVIDE, 
-        node.jjtGetChild(0).jjtAccept(this, data),
-        node.jjtGetChild(1).jjtAccept(this, data));
+  public Object visitLogical_operands_rule(Logical_operands_ruleContext ctx) {
+    return ctx.getChild(0).accept(this);
   }
 
   @Override
-  public Object visit(ASTModNode node, Object data) {
-    return newBinary(ExpOp.MOD, 
-        node.jjtGetChild(0).jjtAccept(this, data),
-        node.jjtGetChild(1).jjtAccept(this, data));
-  }
-
-  @Override
-  public Object visit(ASTUnaryMinusNode node, Object data) {
-    Object obj = node.jjtGetChild(0).jjtAccept(this, data);
-    if (obj instanceof NumericLiteral) {
-      ((NumericLiteral) obj).number = "-" + ((NumericLiteral) obj).number;
-      return obj;
-    } else if (obj instanceof ExpNodeConfig) {
-      ((ExpNodeConfig) obj).setNegate(true);
-      return obj;
-    } else if (obj instanceof Bool) {
-      // weird but parser allows it
-      ((Bool) obj).bool = !((Bool) obj).bool;
-      return obj;
-    } else {
-      throw new RuntimeException("Can't negate " + obj.getClass());
+  public Object visitLogical_expr_and_rule(Logical_expr_and_ruleContext ctx) {
+    Object left = ctx.getChild(0).accept(this);
+    for (int i = 2; i < ctx.getChildCount(); i += 2) {
+      Object right = ctx.getChild(i).accept(this);
+      Object op = ctx.getChild(i - 1).accept(this);
+      left = newBinary(ExpOp.parse((String) op), left, right);
     }
+    return left;
   }
 
   @Override
-  public Object visit(ASTBitwiseComplNode node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
-  }
-
-  @Override
-  public Object visit(ASTNotNode node, Object data) {
-    Object obj = node.jjtGetChild(0).jjtAccept(this, data);
-    if (obj instanceof NumericLiteral) {
-      // weird but parser allows it
-      ((NumericLiteral) obj).number = "-" + ((NumericLiteral) obj).number;
-      return obj;
-    } else if (obj instanceof Bool) {
-      ((Bool) obj).bool = !((Bool) obj).bool;
-      return obj;
-    } else if (obj instanceof ExpNodeConfig) {
-      ((ExpNodeConfig) obj).setNot(true);
-      return obj;
-    } else {
-      throw new RuntimeException("Can't negate " + obj.getClass());
+  public Object visitLogical_expr_or_rule(Logical_expr_or_ruleContext ctx) {
+    Object left = ctx.getChild(0).accept(this);
+    for (int i = 2; i < ctx.getChildCount(); i += 2) {
+      Object right = ctx.getChild(i).accept(this);
+      Object op = ctx.getChild(i - 1).accept(this);
+      left = newBinary(ExpOp.parse((String) op), left, right);
     }
+    return left;
   }
 
   @Override
-  public Object visit(ASTIdentifier node, Object data) {
-    return new Identifier(node.image);
+  public Object visitLogical_expr_not_rule(Logical_expr_not_ruleContext ctx) {
+    final Object child = ctx.getChild(1).accept(this);
+    if (child instanceof ExpNodeConfig) {
+      ((ExpNodeConfig) child).not = true;
+    } else {
+      throw new RuntimeException("Response from the child of the not was a " + child.getClass());
+    }
+    return child;
   }
 
   @Override
-  public Object visit(ASTNullLiteral node, Object data) {
-    return new Null();
+  public Object visitLogicalOperands(LogicalOperandsContext ctx) {
+    return ctx.getChild(0).accept(this);
   }
 
   @Override
-  public Object visit(ASTTrueNode node, Object data) {
-    return new Bool(true);
+  public Object visitArith_operands_rule(Arith_operands_ruleContext ctx) {
+    return ctx.getChild(0).accept(this);
   }
 
   @Override
-  public Object visit(ASTFalseNode node, Object data) {
-    return new Bool(false);
+  public Object visitParen_arith_rule(Paren_arith_ruleContext ctx) {
+    // catch errors
+    ctx.getChild(0).accept(this);
+    ctx.getChild(2).accept(this);
+    return ctx.getChild(1).accept(this);
   }
 
   @Override
-  public Object visit(ASTNumberLiteral node, Object data) {
-    return new NumericLiteral(node.image);
+  public Object visitMinus_metric_rule(Minus_metric_ruleContext ctx) {
+    final Object child = ctx.getChild(1).accept(this);
+    if (child instanceof ExpNodeConfig) {
+      ((ExpNodeConfig) child).negate = true;
+    } else {
+      throw new RuntimeException("Response from the child of the minus was a " + child.getClass());
+    }
+    return child;
   }
 
   @Override
-  public Object visit(ASTStringLiteral node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visitMod_arith_rule(Mod_arith_ruleContext ctx) {
+    Object left = ctx.getChild(0).accept(this);
+    for (int i = 2; i < ctx.getChildCount(); i += 2) {
+      Object right = ctx.getChild(i).accept(this);
+      Object op = ctx.getChild(i - 1).accept(this);
+      left = newBinary(ExpOp.parse((String) op), left, right);
+    }
+    return left;
   }
 
   @Override
-  public Object visit(ASTArrayLiteral node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visitAddsub_arith_rule(Addsub_arith_ruleContext ctx) {
+    Object left = ctx.getChild(0).accept(this);
+    for (int i = 2; i < ctx.getChildCount(); i += 2) {
+      Object right = ctx.getChild(i).accept(this);
+      Object op = ctx.getChild(i - 1).accept(this);
+      left = newBinary(ExpOp.parse((String) op), left, right);
+    }
+    return left;
   }
 
   @Override
-  public Object visit(ASTMapLiteral node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visitDivmul_arith_rule(Divmul_arith_ruleContext ctx) {
+    Object left = ctx.getChild(0).accept(this);
+    for (int i = 2; i < ctx.getChildCount(); i += 2) {
+      Object right = ctx.getChild(i).accept(this);
+      Object op = ctx.getChild(i - 1).accept(this);
+      left = newBinary(ExpOp.parse((String) op), left, right);
+    }
+    return left;
   }
 
   @Override
-  public Object visit(ASTMapEntry node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visitArithmetic_operands_rule(
+      Arithmetic_operands_ruleContext ctx) {
+    return ctx.getChild(0).accept(this);
   }
 
   @Override
-  public Object visit(ASTEmptyFunction node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visitParen_relational_rule(Paren_relational_ruleContext ctx) {
+    // catch exceptions
+    ctx.getChild(0).accept(this);
+    ctx.getChild(2).accept(this);
+    return ctx.getChild(1).accept(this);
   }
 
   @Override
-  public Object visit(ASTSizeFunction node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visitMain_relational_rule(Main_relational_ruleContext ctx) {
+    Object left = ctx.getChild(0).accept(this);
+    for (int i = 2; i < ctx.getChildCount(); i += 2) {
+      Object right = ctx.getChild(i).accept(this);
+      Object op = ctx.getChild(i - 1).accept(this);
+      left = newBinary(ExpOp.parse((String) op), left, right);
+    }
+    return left;
   }
 
   @Override
-  public Object visit(ASTFunctionNode node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visitRelational_operands_rule(
+      Relational_operands_ruleContext ctx) {
+    return ctx.getChild(0).accept(this);
   }
 
   @Override
-  public Object visit(ASTMethodNode node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visitLogicop(LogicopContext ctx) {
+    return ctx.getChild(0).accept(this);
   }
 
   @Override
-  public Object visit(ASTSizeMethod node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visitRelationalop(RelationalopContext ctx) {
+    return ctx.getChild(0).accept(this);
   }
 
   @Override
-  public Object visit(ASTConstructorNode node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visitAnd(AndContext ctx) {
+    // TODO Auto-generated method stub
+    return null;
   }
 
   @Override
-  public Object visit(ASTArrayAccess node, Object data) {
-    throw new UnsupportedOperationException(node.getClass() 
-        + " is not supported for expressions.");
+  public Object visitOr(OrContext ctx) {
+    return ctx.getChild(0).accept(this);
   }
 
   @Override
-  public Object visit(ASTReferenceExpression node, Object data) {
-    return node.jjtGetChild(0).jjtAccept(this, data);
+  public Object visitNot(NotContext ctx) {
+    return ctx.getChild(0).accept(this);
   }
 
+  @Override
+  public Object visitModulo(ModuloContext ctx) {
+    return ctx.getChild(0).accept(this);
+  }
+
+  @Override
+  public Object visitMetric(MetricContext ctx) {
+    return ctx.getChild(0).accept(this);
+  }
+  
 }
