@@ -271,7 +271,6 @@ public class ExpressionNumericTypeIterator implements QueryIterator,
     case DIVIDE:
       if (left.isInteger() && right.isInteger() && 
           left.longValue() % right.longValue() == 0) {
-        System.out.println("    DIV by ints");
         dp.resetValue(left.longValue() / right.longValue());
       } else {
         dp.resetValue(left.toDouble() / right.toDouble());
