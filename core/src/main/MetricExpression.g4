@@ -12,9 +12,8 @@ logicalExpression : '(' logicalExpression ')'                         #paren_log
                     | not logicalExpression                           #logical_expr_not_rule
                     | logicalExpression and logicalExpression         #logical_expr_and_rule
                     | logicalExpression or logicalExpression          #logical_expr_or_rule
-                    | not logicalOperands                             #logical_operand_not_rule
-                    | logicalOperands and logicalOperands             #logical_operand_and_rule
-                    | logicalOperands or logicalOperands              #logical_operand_or_orrule
+                    | logicalOperands                                 #logical_operands_rule
+
 
            ;
 

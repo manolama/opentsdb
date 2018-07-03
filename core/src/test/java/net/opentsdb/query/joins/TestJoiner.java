@@ -120,9 +120,7 @@ import net.opentsdb.expressions.parser.MetricExpressionParser.LogicalOperandsCon
 import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_expr_and_ruleContext;
 import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_expr_not_ruleContext;
 import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_expr_or_ruleContext;
-import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_operand_and_ruleContext;
-import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_operand_not_ruleContext;
-import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_operand_or_orruleContext;
+import net.opentsdb.expressions.parser.MetricExpressionParser.Logical_operands_ruleContext;
 import net.opentsdb.expressions.parser.MetricExpressionParser.LogicopContext;
 import net.opentsdb.expressions.parser.MetricExpressionParser.Main_relational_ruleContext;
 import net.opentsdb.expressions.parser.MetricExpressionParser.MetricContext;
@@ -290,10 +288,25 @@ public class TestJoiner {
   
   @Test
   public void antlry() throws Exception {
-    String exp = "(a + (b + d) + v) + c";
+    //String exp = "a + (b + (c.foo + r))";
+    //String exp = "-(a * b) / -42 * 2 ";
+    //String exp = "(a + (b + c)) > b && c > d";
+    //String exp = "a.foo11 + (b + c.w.a.b.2)";
+    //String exp = "a - (b + c) - d";
+    //String exp = "a.foo.goober.nut + (d.bert.up / b.up) * c.doi - 2.44";
+    //String exp = "(a + (b + c)) * d";
+    String exp = "!(a + b)";
+    //String exp = "a % b";
+    //String exp = "(a && b) || !(c && true)";
+    //String exp = "a * c / d";
+    //String exp = "!(a.'if'.meep % b.bar.moo.p) - a.foo.meep";
+    //String exp = "(a + (b + d) + v) + c";
+    //String exp = "a > 1 || (b > 3 && c > 3)";  // TODO fix me
+    //String exp = "a > (b + c) && v > 2 || (a < b)"; // TODO fix me too
     MetricExpressionLexer lexer = new MetricExpressionLexer(new ANTLRInputStream(exp));
     CommonTokenStream tokens = new CommonTokenStream(lexer);
     MetricExpressionParser parser = new MetricExpressionParser(tokens);
+    
     AntlrVisitor v = new AntlrVisitor();
     System.out.println("RESULT: " + parser.prog().accept(v));
     System.out.println("DONE!");
@@ -1642,6 +1655,45 @@ public class TestJoiner {
       }
     }
     
+    class Id {
+      String id;
+      public String toString() {
+        return id;
+      }
+    }
+    
+    class NumericLiteral {
+      String number;
+      public String toString() {
+        return number;
+      }
+    }
+    
+    class Bool {
+      boolean bool;
+      public String toString() {
+        return Boolean.toString(bool);
+      }
+    }
+    
+    class Not {
+      Object child;
+      public String toString() {
+        return "!" + 
+            (child instanceof Binary ? ("(" + child + ")") : child.toString());
+      }
+    }
+    
+    class Negate {
+      Object child;
+      public String toString() {
+        if (child == null) {
+          return "-null";
+        }
+        return "-" + (child instanceof Binary ? ("(" + child + ")") : child.toString());
+      }
+    }
+    
     @Override
     public Object visit(ParseTree arg0) {
       System.out.println(arg0.getClass());
@@ -1659,7 +1711,8 @@ public class TestJoiner {
     public Object visitErrorNode(ErrorNode arg0) {
       // TODO Auto-generated method stub
       System.out.println(arg0.getClass());
-      return null;
+      System.out.println("*** ERROR: " + arg0.getText());
+      throw new RuntimeException("Parse failure: " + arg0.getText());
     }
 
     @Override
@@ -1673,22 +1726,28 @@ public class TestJoiner {
     public Object visitLogicalOperands(LogicalOperandsContext ctx) {
       // TODO Auto-generated method stub
       System.out.println(ctx.getClass());
-      return null;
+      return ctx.getChild(0).accept(this);
     }
 
     @Override
     public Object visitLogical_expr_or_rule(Logical_expr_or_ruleContext ctx) {
       // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      Object left = ctx.getChild(0).accept(this);
+      for (int i = 2; i < ctx.getChildCount(); i += 2) {
+        Object right = ctx.getChild(i).accept(this);
+        Object op = ctx.getChild(i - 1).accept(this);
+        left = new Binary((String) op, left, right);
+      }
+      return left;
     }
 
     @Override
     public Object visitRelational_operands_rule(
         Relational_operands_ruleContext ctx) {
       // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      return ctx.getChild(0).accept(this);
     }
 
     @Override
@@ -1702,14 +1761,30 @@ public class TestJoiner {
     public Object visitMod_arith_rule(Mod_arith_ruleContext ctx) {
       // TODO Auto-generated method stub
       System.out.println(ctx.getClass());
-      return null;
+      Object left = ctx.getChild(0).accept(this);
+      for (int i = 2; i < ctx.getChildCount(); i += 2) {
+        Object right = ctx.getChild(i).accept(this);
+        Object op = ctx.getChild(i - 1).accept(this);
+        left = new Binary((String) op, left, right);
+      }
+      return left;
     }
 
     @Override
     public Object visitMain_relational_rule(Main_relational_ruleContext ctx) {
-      System.out.println(ctx.getClass());
-      // TODO Auto-generated method stub
-      return null;
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      
+      for (int i = 0; i < ctx.getChildCount(); i++) {
+        System.out.println("   NODE: " + ctx.getChild(i).getClass());
+      }
+      
+      Object left = ctx.getChild(0).accept(this);
+      for (int i = 2; i < ctx.getChildCount(); i += 2) {
+        Object right = ctx.getChild(i).accept(this);
+        Object op = ctx.getChild(i - 1).accept(this);
+        left = new Binary((String) op, left, right);
+      }
+      return left;
     }
 
     @Override
@@ -1719,26 +1794,35 @@ public class TestJoiner {
       return null;
     }
 
-    @Override
-    public Object visitLogical_operand_and_rule(
-        Logical_operand_and_ruleContext ctx) {
-      System.out.println(ctx.getClass());
-      // TODO Auto-generated method stub
-      return null;
-    }
+//    @Override
+//    public Object visitLogical_operand_and_rule(
+//        Logical_operand_and_ruleContext ctx) {
+//      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+//      for (int i = 0; i < ctx.getChildCount(); i++) {
+//        System.out.println("   NODE: " + ctx.getChild(i).getClass());
+//      }
+//      
+//      Object left = ctx.getChild(0).accept(this);
+//      for (int i = 2; i < ctx.getChildCount(); i += 2) {
+//        Object right = ctx.getChild(i).accept(this);
+//        Object op = ctx.getChild(i - 1).accept(this);
+//        left = new Binary((String) op, left, right);
+//      }
+//      return left;
+//    }
 
     @Override
     public Object visitRelationalop(RelationalopContext ctx) {
       // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      return ctx.getChild(0).accept(this);
     }
 
     @Override
     public Object visitAnd(AndContext ctx) {
       // TODO Auto-generated method stub
       System.out.println(ctx.getClass());
-      return null;
+      return ctx.getChild(0).accept(this);
     }
 
     @Override
@@ -1751,8 +1835,10 @@ public class TestJoiner {
     @Override
     public Object visitMinus_metric_rule(Minus_metric_ruleContext ctx) {
       // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
+      System.out.println(ctx.getClass() + " Kids: " + ctx.getChildCount());
+      Negate n = new Negate();
+      n.child = ctx.getChild(1).accept(this);
+      return n;
     }
 
     @Override
@@ -1779,8 +1865,13 @@ public class TestJoiner {
     @Override
     public Object visitParen_logical_rule(Paren_logical_ruleContext ctx) {
       // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      for (int i = 0; i < ctx.getChildCount(); i++) {
+        System.out.println("      " + ctx.getChild(i).accept(this));
+      }
+      ctx.getChild(0).accept(this);
+      ctx.getChild(2).accept(this);
+      return ctx.getChild(1).accept(this);
     }
 
     @Override
@@ -1793,15 +1884,21 @@ public class TestJoiner {
     @Override
     public Object visitParen_relational_rule(Paren_relational_ruleContext ctx) {
       // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
+      System.out.println(ctx.getClass() + " 000000000 Kids: " + ctx.getChildCount());
+      for (int i = 0; i < ctx.getChildCount(); i++) {
+        System.out.println("    Kid: " + ctx.getChild(i).getClass());
+        ctx.getChild(i).accept(this);
+      }
+      ctx.getChild(0).accept(this);
+      ctx.getChild(2).accept(this);
+      return ctx.getChild(1).accept(this);
     }
 
     @Override
     public Object visitOr(OrContext ctx) {
       // TODO Auto-generated method stub
       System.out.println(ctx.getClass());
-      return null;
+      return ctx.getChild(0).accept(this);
     }
 
     @Override
@@ -1811,30 +1908,36 @@ public class TestJoiner {
       if (ctx.getChildCount() != 3) {
         throw new RuntimeException("Should always be 3?");
       }
+      // catch errors
+      ctx.getChild(0).accept(this);
+      ctx.getChild(2).accept(this);
       return ctx.getChild(1).accept(this);
-//      for (int i = 0; i < ctx.getChildCount(); i++) {
-//        System.out.println("   CHILD: " + ctx.getChild(i).getClass() + " [" + ctx.getChild(i) + "]");
-//        //ctx.getChild(i).accept(this);
-//      }
-//      
-//      for (int i = 0; i < ctx.getChildCount(); i++) {
-//        //System.out.println("   CHILD: " + ctx.getChild(i).getClass() + " [" + ctx.getChild(i) + "]");
-//        ctx.getChild(i).accept(this);
-//      }
     }
 
     @Override
     public Object visitLogical_expr_and_rule(Logical_expr_and_ruleContext ctx) {
       // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      Object left = ctx.getChild(0).accept(this);
+      for (int i = 2; i < ctx.getChildCount(); i += 2) {
+        Object right = ctx.getChild(i).accept(this);
+        Object op = ctx.getChild(i - 1).accept(this);
+        left = new Binary((String) op, left, right);
+      }
+      return left;
     }
 
     @Override
     public Object visitDivmul_arith_rule(Divmul_arith_ruleContext ctx) {
       // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      Object left = ctx.getChild(0).accept(this);
+      for (int i = 2; i < ctx.getChildCount(); i += 2) {
+        Object right = ctx.getChild(i).accept(this);
+        Object op = ctx.getChild(i - 1).accept(this);
+        left = new Binary((String) op, left, right);
+      }
+      return left;
     }
 
     @Override
@@ -1847,25 +1950,34 @@ public class TestJoiner {
     @Override
     public Object visitLogical(LogicalContext ctx) {
       // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      return ctx.getChild(0).accept(this);
     }
 
-    @Override
-    public Object visitLogical_operand_or_orrule(
-        Logical_operand_or_orruleContext ctx) {
-      // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
-    }
-
-    @Override
-    public Object visitLogical_operand_not_rule(
-        Logical_operand_not_ruleContext ctx) {
-      // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
-    }
+//    @Override
+//    public Object visitLogical_operand_or_orrule(
+//        Logical_operand_or_orruleContext ctx) {
+//      // TODO Auto-generated method stub
+//      System.out.println("**********" + ctx.getClass() + " Kids: " + ctx.getChildCount());
+//      for (int i = 0; i < ctx.getChildCount(); i++) {
+//        System.out.println("      NODE: " + ctx.getChild(i).getClass());
+//      }
+//      Object left = ctx.getChild(0).accept(this);
+//      for (int i = 2; i < ctx.getChildCount(); i += 2) {
+//        Object right = ctx.getChild(i).accept(this);
+//        Object op = ctx.getChild(i - 1).accept(this);
+//        left = new Binary((String) op, left, right);
+//      }
+//      return left;
+//    }
+//
+//    @Override
+//    public Object visitLogical_operand_not_rule(
+//        Logical_operand_not_ruleContext ctx) {
+//      // TODO Auto-generated method stub
+//      System.out.println(ctx.getClass());
+//      return null;
+//    }
 
     @Override
     public Object visitMetric(MetricContext ctx) {
@@ -1877,15 +1989,17 @@ public class TestJoiner {
     @Override
     public Object visitRelational(RelationalContext ctx) {
       // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      return ctx.getChild(0).accept(this);
     }
 
     @Override
     public Object visitLogical_expr_not_rule(Logical_expr_not_ruleContext ctx) {
       // TODO Auto-generated method stub
-      System.out.println(ctx.getClass());
-      return null;
+      System.out.println(ctx.getClass() + "  Kids: " + ctx.getChildCount());
+      Not not = new Not();
+      not.child = ctx.getChild(1).accept(this);
+      return not;
     }
 
     @Override
@@ -1893,6 +2007,13 @@ public class TestJoiner {
       // TODO Auto-generated method stub
       System.out.println(ctx.getClass());
       return null;
+    }
+
+    @Override
+    public Object visitLogical_operands_rule(Logical_operands_ruleContext ctx) {
+      // TODO Auto-generated method stub
+      System.out.println(ctx.getClass() + "   Kids: " + ctx.getChildCount());
+      return ctx.getChild(0).accept(this);
     }
     
   }
