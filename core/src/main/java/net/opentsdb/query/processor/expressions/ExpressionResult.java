@@ -40,17 +40,23 @@ public class ExpressionResult implements QueryResult {
   }
   
   Deferred<Object> join() {
+    Iterable<Pair<TimeSeries, TimeSeries>> joins;
     if ((node.exp_config.left_type == BranchType.SUB_EXP || node.exp_config.left_type == BranchType.VARIABLE) &&
         (node.exp_config.right_type == BranchType.SUB_EXP || node.exp_config.right_type == BranchType.VARIABLE)) {
-      Iterable<Pair<TimeSeries, TimeSeries>> joins = node.joiner.join(results, node.exp_config.left, node.exp_config.right);
-      time_series = Lists.newArrayList();
-      for (final Pair<TimeSeries, TimeSeries> pair : joins) {
-        time_series.add(new ExpressionTimeSeries(node, pair.getKey(), pair.getValue()));
-      }
-      System.out.println("JOINED: " + time_series.size());
+      joins = node.joiner.join(results, node.exp_config.left, node.exp_config.right);
+    } else if (node.exp_config.left_type == BranchType.SUB_EXP || node.exp_config.left_type == BranchType.VARIABLE) {
+      // left
+      joins = node.joiner.join(results, node.exp_config.left);
     } else {
-      // TODO - one sided join so filter and apply.
+      // right
+      joins = node.joiner.join(results, node.exp_config.right);
     }
+    
+    time_series = Lists.newArrayList();
+    for (final Pair<TimeSeries, TimeSeries> pair : joins) {
+      time_series.add(new ExpressionTimeSeries(node, pair.getKey(), pair.getValue()));
+    }
+    System.out.println("JOINED: " + time_series.size());
     return Deferred.fromResult(null);
   }
   
@@ -86,7 +92,7 @@ public class ExpressionResult implements QueryResult {
   @Override
   public ChronoUnit resolution() {
     // TODO Auto-generated method stub
-    return null;
+    return ChronoUnit.SECONDS;
   }
 
   @Override

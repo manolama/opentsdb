@@ -359,7 +359,23 @@ public class ExpressionNodeBuilder implements MetricExpressionVisitor<Object> {
   @Override
   public Object visitTerminal(TerminalNode node) {
     // this is a variable or operand (or parens).
-    return node.getText();
+    final String text = node.getText();
+    // TODO - stupid
+    if (text.contains(".")) {
+      try {
+        Double.parseDouble(text);
+        return new NumericLiteral(text);
+      } catch (NumberFormatException e) { 
+        return text;
+      }
+    } else {
+      try {
+        Long.parseLong(text);
+        return new NumericLiteral(text);
+      } catch (NumberFormatException e) { 
+        return text;
+      }
+    }
   }
 
   @Override

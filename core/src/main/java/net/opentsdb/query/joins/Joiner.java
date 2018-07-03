@@ -86,7 +86,6 @@ public class Joiner {
   
   /** A non-null config to pull join information from. */
   final JoinConfig config;
-  KeyedHashedJoinSet join_set;
   
   /**
    * Default Ctor.
@@ -101,7 +100,8 @@ public class Joiner {
 
   public Iterable<Pair<TimeSeries, TimeSeries>> join(final List<QueryResult> results, 
                    final String left_key, final String right_key) {
-    join_set = new KeyedHashedJoinSet(config.type, left_key, right_key);
+    final KeyedHashedJoinSet join_set = 
+        new KeyedHashedJoinSet(config.type, left_key, right_key);
     
     // TODO - convert byte IDs.
     
@@ -121,6 +121,35 @@ public class Joiner {
                 id.namespace() + id.alias();
         }
         hash(ts, join_set, key);
+      }
+    }
+    
+    return join_set;
+  }
+  
+  public Iterable<Pair<TimeSeries, TimeSeries>> join(final List<QueryResult> results, final String filter) {
+    final List<Pair<TimeSeries, TimeSeries>> join_set = Lists.newArrayList();
+    
+    // TODO - convert byte IDs.
+    
+    // calculate the hashes for every time series and joins.
+    for (final QueryResult result : results) {
+      for (final TimeSeries ts : result.timeSeries()) {
+        final TimeSeriesStringId id = (TimeSeriesStringId) ts.id();
+        
+        final String key;
+        if (Strings.isNullOrEmpty(id.alias())) {
+          key = Strings.isNullOrEmpty(id.namespace()) ? 
+           id.metric() :
+             id.namespace() + id.metric();
+        } else {
+          key = Strings.isNullOrEmpty(id.namespace()) ? 
+           id.alias() :
+             id.namespace() + id.alias();
+        }
+        if (key.equals(filter)) {
+          join_set.add(new Pair<TimeSeries, TimeSeries>(ts, null));
+        }
       }
     }
     

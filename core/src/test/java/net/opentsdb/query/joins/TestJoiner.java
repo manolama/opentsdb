@@ -215,7 +215,7 @@ public class TestJoiner {
     
     System.out.println("-------------");
     // TODO figure out join order based on the expression if present
-    KeyedHashedJoinSet hjs = joiner.join_set;
+    KeyedHashedJoinSet hjs = null;//joiner.join_set;
     if (hjs != null) {
       int i = 0;
       for (final Pair<TimeSeries, TimeSeries> pair : hjs) {

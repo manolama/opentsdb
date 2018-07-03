@@ -60,19 +60,19 @@ public class TestSemanticQuery {
                 .setStart("1h-ago")
                 .build())
             )
-        .addNode(ExecutionGraphNode.newBuilder()
-            .setId("sys.if.in")
-            .setType("DataSource")
-            .setConfig(QuerySourceConfig.newBuilder()
-                .setMetric("sys.if.in")
-                .setStart("1h-ago")
-                .build())
-            )
+//        .addNode(ExecutionGraphNode.newBuilder()
+//            .setId("sys.if.in")
+//            .setType("DataSource")
+//            .setConfig(QuerySourceConfig.newBuilder()
+//                .setMetric("sys.if.in")
+//                .setStart("1h-ago")
+//                .build())
+//            )
         .addNode(ExecutionGraphNode.newBuilder()
             .setId("e1")
             .setType("Expression")
             .setConfig(new ExpressionConfig.Builder()
-                .setExpression("(sys.if.out) % (sys.if.in)")
+                .setExpression("sys.if.out * 4200")
                 .setJoinConfig(jc)
                 .addInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
                     .setFillPolicy(FillPolicy.NONE)
@@ -99,7 +99,8 @@ public class TestSemanticQuery {
           Iterator<TimeSeriesValue<?>> it = ts.iterator(NumericType.TYPE).get();
           while (it.hasNext()) {
             TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
-            System.out.println(v);
+            System.out.println("Class: " + v.getClass() + ")  " + v.timestamp().epoch() + " " + (v.value().isInteger() ? Long.toString(v.value().longValue()) : Double.toString(v.value().doubleValue())));
+            break;
           }
         }
       }

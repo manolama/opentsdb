@@ -74,6 +74,7 @@ public class ExpressionNumericTypeIterator implements QueryIterator,
     if (series.right == null) {
       right_interpolator = null;
       right_literal = buildLiteral(series.node.exp_config.right, series.node.exp_config.right_type);
+      System.out.println("RIGHT is null........");
     } else {
       // TODO - get the specific config if present
       QueryInterpolatorConfig interpolator_config = series.node.config.interpolatorConfig(NumericType.TYPE);
@@ -129,24 +130,25 @@ public class ExpressionNumericTypeIterator implements QueryIterator,
         }
       }
     } else if (left_interpolator == null) {
+      TimeSeriesValue<NumericType> r = right_interpolator.next(next_ts);
+      // TODO - nulls??
+      setValue(left_literal, r.value());
+      if (right_interpolator.hasNext()) {
+        has_next = true;
+        next_next_ts.update(right_interpolator.nextReal());
+      }
+    } else {
       TimeSeriesValue<NumericType> l = left_interpolator.next(next_ts);
       // TODO - nulls??
       setValue(l.value(), right_literal);
-      
+      System.out.println("RIGHT LITERAL: " + right_literal);
       if (left_interpolator.hasNext()) {
         has_next = true;
         next_next_ts.update(left_interpolator.nextReal());
       }
-    } else {
-      TimeSeriesValue<NumericType> r = right_interpolator.next(next_ts);
-      // TODO - nulls??
-      setValue(left_literal, r.value());
-      has_next = true;
-      next_next_ts.update(right_interpolator.nextReal());
     }
     
     next_ts.update(next_next_ts);
-
     return dp;
   }
 

@@ -33,6 +33,7 @@ public class BinaryExpressionNode extends AbstractQueryNode {
     result = new ExpressionResult(this);
     need_two_sources = (exp_config.left_type == BranchType.SUB_EXP || exp_config.left_type == BranchType.VARIABLE) &&
         (exp_config.right_type == BranchType.SUB_EXP || exp_config.right_type == BranchType.VARIABLE);
+    System.out.println("   NEed two sources: " + need_two_sources);
     joiner = new Joiner(config.joinConfig);
   }
 
@@ -60,7 +61,6 @@ public class BinaryExpressionNode extends AbstractQueryNode {
     // TODO - track the source properly
     result.add(next);
     if (!need_two_sources || (need_two_sources && result.results.size() == 2)) {
-      
       class JoinedCB implements Callback<Object, Object> {
         @Override
         public Object call(Object arg) throws Exception {
