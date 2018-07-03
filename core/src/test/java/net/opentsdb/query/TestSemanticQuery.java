@@ -119,10 +119,13 @@ public class TestSemanticQuery {
     SemanticQueryContext ctx = (SemanticQueryContext) new SemanticQueryContext.Builder()
         .setTSDB(tsdb)
         .setMode(QueryMode.SINGLE)
+        //.setQuerySinks(Lists.newArrayList(new LocalSink()))
         .setQuery(query)
         .build();
     
     ctx.fetchNext(null);
+    
+    Thread.sleep(100);
   }
   
   @Test

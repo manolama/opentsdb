@@ -37,7 +37,7 @@ public class ExpressionTimeSeries implements TimeSeries {
     this.left = left;
     this.right = right;
     // TODO - id from joiner.
-    id = null;
+    id = node.joiner.joinIds(left, right, node.id());
   }
   
   @Override

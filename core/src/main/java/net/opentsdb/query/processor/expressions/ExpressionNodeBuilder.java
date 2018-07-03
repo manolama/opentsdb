@@ -229,26 +229,7 @@ public class ExpressionNodeBuilder implements MetricExpressionVisitor<Object> {
     MetricExpressionLexer lexer = new MetricExpressionLexer(new ANTLRInputStream(exp));
     CommonTokenStream tokens = new CommonTokenStream(lexer);
     MetricExpressionParser parser = new MetricExpressionParser(tokens);
-    nodes.add((ExpNodeConfig) parser.prog().accept(this));
-//    JexlInfo debug = new DebugInfo(null, 0, 0);
-//    StringReader rdr = new StringReader(exp);
-//    Parser parser = new Parser(rdr);
-//    try {
-//      ASTJexlScript script = parser.parse(rdr, debug);
-//      if (script.jjtGetNumChildren() > 1) {
-//        throw new RuntimeException("WTF? A script with more than one root???");
-//      }
-//      Object obj = script.jjtAccept(this, null);
-//      if (obj instanceof ExpNodeConfig) {
-//        //nodes.add((ExpNodeConfig) obj);
-//      } else {
-//        System.out.println("Root node can't be of type: " + obj.getClass());
-//      }
-//    } catch (ParseException e) {
-//      System.out.println("DEBUG: " + debug.debugString());
-//      throw new JexlException.Parsing(debug, exp, e);
-//    }
-    
+    parser.prog().accept(this);
     return nodes;
   }
   

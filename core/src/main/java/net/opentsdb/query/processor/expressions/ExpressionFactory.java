@@ -40,6 +40,8 @@ public class ExpressionFactory implements MultiQueryNodeFactory, TSDBPlugin {
           (ExpressionConfig) config, enc);
       query_nodes.add(node);
       
+      System.out.println("        [FACTORY] new node: " + node);
+      
       ExecutionGraphNode.Builder builder = ExecutionGraphNode.newBuilder()
           .setConfig(enc)
           .setId(enc.getId());

@@ -402,6 +402,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   
   @Override
   public void onNext(final QueryResult next) {
+    System.out.println("AQP got result: " + next);
     if (context.mode() == QueryMode.SINGLE) {
       synchronized(this) {
         if (single_results == null) {

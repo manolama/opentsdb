@@ -30,6 +30,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.hash.Hasher;
 import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Callback;
@@ -42,6 +43,7 @@ import gnu.trove.set.TLongSet;
 import gnu.trove.set.hash.TLongHashSet;
 import net.opentsdb.common.Const;
 import net.opentsdb.data.BaseTimeSeriesByteId;
+import net.opentsdb.data.BaseTimeSeriesStringId;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesGroupId;
@@ -59,6 +61,7 @@ import net.opentsdb.query.processor.expressions.ExpressionProcessorConfig;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.TimeSeriesDataStore;
 import net.opentsdb.utils.ByteSet;
+import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.Pair;
 import net.opentsdb.utils.Bytes.ByteMap;
 
@@ -154,7 +157,7 @@ public class Joiner {
             matched = false;
             break;
           }
-          System.out.println("  Add to hash: " + value);
+          //System.out.println("  Add to hash: " + value);
           hasher.putString(value, Const.UTF8_CHARSET);
         }
         if (!matched) {
@@ -183,7 +186,7 @@ public class Joiner {
       }
     }
     
-    System.out.println("HASHING: " + ts.id() + "  TO " + hasher.hash().asLong());
+    //System.out.println("HASHING: " + ts.id() + "  TO " + hasher.hash().asLong());
     join_set.add(key, hasher.hash().asLong(), ts);
   }
   
@@ -191,26 +194,35 @@ public class Joiner {
     if (left != null && right != null) {
       // NOTE: We assume both are of the same type. Need to verify that
       // upstream.
-      
+      if (left.id().type() == Const.TS_BYTE_ID) {
+        return joinByteIds((TimeSeriesByteId) left.id(), (TimeSeriesByteId) right.id(), alias);        
+      } else {
+        return joinByteIds((TimeSeriesStringId) left.id(), (TimeSeriesStringId) right.id(), alias);
+      }
     } else if (left == null) {
       if (right.id().type() == Const.TS_BYTE_ID) {
-        return new ByteIdOverride((TimeSeriesByteId) right, alias);
+        return new ByteIdOverride((TimeSeriesByteId) right.id(), alias);
       } else {
-        return new StringIdOverride((TimeSeriesStringId) right, alias);
+        return new StringIdOverride((TimeSeriesStringId) right.id(), alias);
       }
     } else if (right == null) {
       if (left.id().type() == Const.TS_BYTE_ID) {
-        return new ByteIdOverride((TimeSeriesByteId) left, alias);
+        return new ByteIdOverride((TimeSeriesByteId) left.id(), alias);
       } else {
-        return new StringIdOverride((TimeSeriesStringId) left, alias);
+        return new StringIdOverride((TimeSeriesStringId) left.id(), alias);
       }
+    } else {
+      throw new IllegalStateException("WTF?");
     }
-    return null;
   }
 
   TimeSeriesId joinByteIds(final TimeSeriesByteId left, final TimeSeriesByteId right, final String alias) {
     BaseTimeSeriesByteId.Builder builder = BaseTimeSeriesByteId.newBuilder(left.dataStore())
         .setAlias(alias.getBytes(Const.UTF8_CHARSET));
+    
+    ByteSet agg_tags = new ByteSet();
+    ByteSet disj_tags = new ByteSet();
+    
     switch (config.type) {
     case INNER:
     case OUTER:
@@ -220,16 +232,153 @@ public class Joiner {
     case LEFT_DISJOINT:
       builder.setNamespace(left.namespace())
              .setMetric(left.metric());
-             
+      for (final byte[] tag : left.aggregatedTags()) {
+        agg_tags.add(tag);
+      }
+      
+      for (final byte[] tag : left.disjointTags()) {
+        disj_tags.add(tag);
+      }
+      
+      for (final Entry<byte[], byte[]> entry : left.tags()) {
+        byte[] tagv = right.tags().get(entry.getKey());
+        if (tagv == null) {
+          agg_tags.add(entry.getKey());
+        } else if (Bytes.memcmp(entry.getValue(), tagv) == 0) {
+          builder.addTags(entry.getKey(), tagv);
+        } else {
+          // TODO - I'd like to promote but for now we'll take the left
+          builder.addTags(entry.getKey(), entry.getValue());
+        }
+      }
+      
       break;
     case RIGHT:
     case RIGHT_DISJOINT:
       builder.setNamespace(right.namespace())
              .setMetric(right.metric());
+      
+      for (final byte[] tag : right.aggregatedTags()) {
+        agg_tags.add(tag);
+      }
+      
+      for (final byte[] tag : right.disjointTags()) {
+        disj_tags.add(tag);
+      }
+      
+      for (final Entry<byte[], byte[]> entry : right.tags()) {
+        byte[] tagv = left.tags().get(entry.getKey());
+        if (tagv == null) {
+          agg_tags.add(entry.getKey());
+        } else if (Bytes.memcmp(entry.getValue(), tagv) == 0) {
+          builder.addTags(entry.getKey(), tagv);
+        } else {
+          // TODO - I'd like to promote but for now we'll take the right
+          builder.addTags(entry.getKey(), entry.getValue());
+        }
+      }
+      
       default:
         throw new UnsupportedOperationException("Don't support: " + config.type + " yet");
     }
     
+    for (final byte[] tag : agg_tags) {
+      builder.addAggregatedTag(tag);
+    }
+    
+    for (final byte[] tag : disj_tags) {
+      builder.addDisjointTag(tag);
+    }
+    
+    for (final byte[] tsuid : left.uniqueIds()) {
+      builder.addUniqueId(tsuid);
+    }
+    for (final byte[] tsuid : right.uniqueIds()) {
+      builder.addUniqueId(tsuid);
+    }
+    return builder.build();
+  }
+  
+  TimeSeriesId joinByteIds(final TimeSeriesStringId left, final TimeSeriesStringId right, final String alias) {
+    BaseTimeSeriesStringId.Builder builder = BaseTimeSeriesStringId.newBuilder()
+        .setAlias(alias);
+    
+    Set<String> agg_tags = Sets.newHashSet();
+    Set<String> disj_tags = Sets.newHashSet();
+    
+    switch (config.type) {
+    case INNER:
+    case OUTER:
+    case OUTER_DISJOINT:
+    case NATURAL:
+    case LEFT:
+    case LEFT_DISJOINT:
+      builder.setNamespace(left.namespace())
+             .setMetric(left.metric());
+      for (final String tag : left.aggregatedTags()) {
+        agg_tags.add(tag);
+      }
+      
+      for (final String tag : left.disjointTags()) {
+        disj_tags.add(tag);
+      }
+      
+      for (final Entry<String, String> entry : left.tags().entrySet()) {
+        String tagv = right.tags().get(entry.getKey());
+        if (tagv == null) {
+          agg_tags.add(entry.getKey());
+        } else if (entry.getValue().equals(tagv)) {
+          builder.addTags(entry.getKey(), tagv);
+        } else {
+          // TODO - I'd like to promote but for now we'll take the left
+          builder.addTags(entry.getKey(), entry.getValue());
+        }
+      }
+      
+      break;
+    case RIGHT:
+    case RIGHT_DISJOINT:
+      builder.setNamespace(right.namespace())
+             .setMetric(right.metric());
+      
+      for (final String tag : right.aggregatedTags()) {
+        agg_tags.add(tag);
+      }
+      
+      for (final String tag : right.disjointTags()) {
+        disj_tags.add(tag);
+      }
+      
+      for (final Entry<String, String> entry : right.tags().entrySet()) {
+        String tagv = left.tags().get(entry.getKey());
+        if (tagv == null) {
+          agg_tags.add(entry.getKey());
+        } else if (entry.getValue().equals(tagv)) {
+          builder.addTags(entry.getKey(), tagv);
+        } else {
+          // TODO - I'd like to promote but for now we'll take the right
+          builder.addTags(entry.getKey(), entry.getValue());
+        }
+      }
+      
+      default:
+        throw new UnsupportedOperationException("Don't support: " + config.type + " yet");
+    }
+    
+    for (final String tag : agg_tags) {
+      builder.addAggregatedTag(tag);
+    }
+    
+    for (final String tag : disj_tags) {
+      builder.addDisjointTag(tag);
+    }
+    
+    for (final String tsuid : left.uniqueIds()) {
+      builder.addUniqueId(tsuid);
+    }
+    for (final String tsuid : right.uniqueIds()) {
+      builder.addUniqueId(tsuid);
+    }
     return builder.build();
   }
   

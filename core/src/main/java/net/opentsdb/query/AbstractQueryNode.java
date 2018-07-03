@@ -83,6 +83,7 @@ public abstract class AbstractQueryNode implements QueryNode {
       child = null;
     }
     upstream = context.upstream(this);
+    System.out.println("[INIT]  UPSTREAMS OF: " + this + " => " + upstream);
     downstream = context.downstream(this);
     downstream_sources = context.downstreamSources(this);
     if (child != null) {
@@ -130,6 +131,7 @@ public abstract class AbstractQueryNode implements QueryNode {
       throw new IllegalArgumentException("Result cannot be null.");
     }
     
+    System.out.println("UPSTREAMS OF: " + this + " => " + upstream);
     for (final QueryNode node : upstream) {
       try {
         node.onNext(result);

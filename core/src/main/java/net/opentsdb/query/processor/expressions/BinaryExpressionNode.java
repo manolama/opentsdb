@@ -11,6 +11,7 @@ import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
+import net.opentsdb.query.joins.Joiner;
 import net.opentsdb.query.processor.expressions.ExpressionNodeBuilder.BranchType;
 import net.opentsdb.query.processor.expressions.ExpressionNodeBuilder.ExpNodeConfig;
 
@@ -21,6 +22,7 @@ public class BinaryExpressionNode extends AbstractQueryNode {
   final ExpNodeConfig exp_config;
   ExpressionResult result;
   final boolean need_two_sources;
+  final Joiner joiner;
   
   public BinaryExpressionNode(QueryNodeFactory factory,
       QueryPipelineContext context, String id, final ExpressionConfig config, 
@@ -31,6 +33,7 @@ public class BinaryExpressionNode extends AbstractQueryNode {
     result = new ExpressionResult(this);
     need_two_sources = (exp_config.left_type == BranchType.SUB_EXP || exp_config.left_type == BranchType.VARIABLE) &&
         (exp_config.right_type == BranchType.SUB_EXP || exp_config.right_type == BranchType.VARIABLE);
+    joiner = new Joiner(config.joinConfig);
   }
 
   @Override
@@ -53,6 +56,7 @@ public class BinaryExpressionNode extends AbstractQueryNode {
 
   @Override
   public void onNext(QueryResult next) {
+    System.out.println("[PRE CALLBACK] UPSTREAMS OF: " + this + " => " + upstream);
     // TODO - track the source properly
     result.add(next);
     if (!need_two_sources || (need_two_sources && result.results.size() == 2)) {
@@ -60,8 +64,14 @@ public class BinaryExpressionNode extends AbstractQueryNode {
       class JoinedCB implements Callback<Object, Object> {
         @Override
         public Object call(Object arg) throws Exception {
+          System.out.println("JOIN GOOD. send up");
+          try {
+            System.out.println("[POST CALLBACK] UPSTREAMS OF: " + this + " => " + upstream);
           sendUpstream(result);
           completeUpstream(0, 0); // TODO - fix me
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
           return null;
         }
       }
