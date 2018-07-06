@@ -33,12 +33,7 @@
           <version>${project.version}</version>
           <type>test-jar</type>
         </dependency>
-      
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-jexl</artifactId>
-            <version>2.1.1</version>
-        </dependency>
+        
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-math3</artifactId>
@@ -61,6 +56,19 @@
           <groupId>net.openhft</groupId>
           <artifactId>zero-allocation-hashing</artifactId>
           <version>0.6</version>
+        </dependency>
+        
+        <!-- used for fast primitive maps. May try others. -->
+        <dependency>
+          <groupId>net.sf.trove4j</groupId>
+          <artifactId>trove4j</artifactId>
+          <version>3.0.3</version>
+        </dependency>
+        
+        <dependency>
+          <groupId>org.antlr</groupId>
+          <artifactId>antlr4</artifactId>
+          <version>4.5</version>
         </dependency>
 
       </dependencies>
@@ -98,11 +106,7 @@
         <groupId>com.fasterxml.jackson.dataformat</groupId>
         <artifactId>jackson-dataformat-yaml</artifactId>
       </dependency>
-
-      <dependency>
-        <groupId>org.apache.commons</groupId>
-        <artifactId>commons-jexl</artifactId>
-      </dependency>
+    
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-math3</artifactId>
@@ -121,6 +125,16 @@
       <dependency>
         <groupId>net.openhft</groupId>
         <artifactId>zero-allocation-hashing</artifactId>
+      </dependency>
+      
+      <dependency>
+        <groupId>net.sf.trove4j</groupId>
+        <artifactId>trove4j</artifactId>
+      </dependency>
+      
+      <dependency>
+        <groupId>org.antlr</groupId>
+        <artifactId>antlr4</artifactId>
       </dependency>
       
       <!-- TESTING Deps. -->
@@ -185,6 +199,31 @@
             </execution>
           </executions>
         </plugin>
+        
+        <plugin>
+          <groupId>org.antlr</groupId>
+          <artifactId>antlr4-maven-plugin</artifactId>
+          <version>4.5</version>
+          <configuration>
+            <arguments>
+              <argument>-package</argument>
+              <argument>net.opentsdb.expressions.parser</argument>
+              <argument>-no-listener</argument>
+              <argument>-visitor</argument>
+            </arguments>
+   
+            <outputDirectory>${project.build.directory}/generated-sources/antlr4/net/opentsdb/expressions/parser</outputDirectory>
+          </configuration>
+          <executions>
+            <execution>
+              <id>antlr</id>
+              <goals>
+                <goal>antlr4</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+        
       </plugins>
     </build>
 </project>
