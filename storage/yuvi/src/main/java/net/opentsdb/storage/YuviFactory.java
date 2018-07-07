@@ -17,6 +17,9 @@ package net.opentsdb.storage;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +28,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
 import com.pinterest.yuvi.chunk.ChunkManager;
+import com.pinterest.yuvi.chunk.OffHeapChunkManagerTask;
 import com.pinterest.yuvi.writer.FileMetricWriter;
 import com.stumbleupon.async.Deferred;
 
@@ -39,7 +43,9 @@ public class YuviFactory implements TimeSeriesDataStoreFactory {
   private TSDB tsdb;
   
   private ChunkManager manager;
-  
+  OffHeapChunkManagerTask offHeapChunkManagerTask;
+  ScheduledExecutorService offHeapChunkManagerScheduler;
+
   protected volatile YuviDataStore default_client;
   
   /** A map of non-default clients. */
@@ -64,7 +70,22 @@ public class YuviFactory implements TimeSeriesDataStoreFactory {
       //Path filePath = Paths.get("Users/clarsen/Downloads/tc.stat.put_12h_sorted");
       FileMetricWriter metricWriter = new FileMetricWriter(filePath, manager);
       metricWriter.start();
+      offHeapChunkManagerScheduler = null;
+      offHeapChunkManagerTask = null;
+    } else {
+      offHeapChunkManagerScheduler =
+          Executors.newScheduledThreadPool(1);
+      
+      offHeapChunkManagerTask =
+          new OffHeapChunkManagerTask(manager,
+              OffHeapChunkManagerTask.DEFAULT_METRICS_DELAY_SECS,
+              12 * 3600);
+      
+      offHeapChunkManagerScheduler.scheduleAtFixedRate(offHeapChunkManagerTask,
+          60,
+          60, TimeUnit.MINUTES);
     }
+    
     LOG.info("Finished initializing Yuvi store.");
     return Deferred.fromResult(null);
   }

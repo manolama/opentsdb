@@ -104,7 +104,7 @@ public class YuviDataStore implements TimeSeriesDataStore/*, QueryNodeFactory*/ 
       net.opentsdb.stats.Span span) {
     
     Chunk chunk = factory.manager().getChunk(value.timestamp().epoch());
-    System.out.println("GOT CHUNK: " + chunk);
+    //System.out.println("GOT CHUNK: " + chunk);
     
     final List<String> tags = Lists.newArrayListWithCapacity(id.tags().size());
     for (final Entry<String, String> entry : id.tags().entrySet()) {
@@ -426,6 +426,5 @@ public class YuviDataStore implements TimeSeriesDataStore/*, QueryNodeFactory*/ 
       
     }
   }
-
   
 }
