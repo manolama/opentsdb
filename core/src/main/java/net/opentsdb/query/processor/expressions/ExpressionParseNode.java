@@ -93,14 +93,17 @@ public class ExpressionParseNode extends BaseQueryNodeConfig {
     }
   }
   
+  /** ID shadow needed to allow for overrides. */
+  private String id;
+  
   /** The left operand. */
-  private final String left;
+  private final Object left;
   
   /** The type of the left operand. */
   private final OperandType left_type;
   
   /** The right operand. */
-  private final String right;
+  private final Object right;
   
   /** The type of the right operand. */
   private final OperandType right_type;
@@ -120,6 +123,7 @@ public class ExpressionParseNode extends BaseQueryNodeConfig {
    */
   protected ExpressionParseNode(final Builder builder) {
     super(builder);
+    this.id = super.getId();
     left = builder.left;
     left_type = builder.left_type;
     right = builder.right;
@@ -130,7 +134,7 @@ public class ExpressionParseNode extends BaseQueryNodeConfig {
   }
   
   /** @return The left operand. */
-  public String left() {
+  public Object left() {
     return left;
   }
   
@@ -140,7 +144,7 @@ public class ExpressionParseNode extends BaseQueryNodeConfig {
   }
   
   /** @return The right operand. */
-  public String right() {
+  public Object right() {
     return right;
   }
   
@@ -200,7 +204,9 @@ public class ExpressionParseNode extends BaseQueryNodeConfig {
   
   public String toString() {
     return new StringBuilder()
-        .append("{left=")
+        .append("{id=")
+        .append(id)
+        .append(", left=")
         .append(left)
         .append(", leftType=")
         .append(left_type)
@@ -218,20 +224,33 @@ public class ExpressionParseNode extends BaseQueryNodeConfig {
         .toString();
   }
   
+  @Override
+  public String getId() {
+    return id;
+  }
+  
+  /**
+   * Package private method to override the ID
+   * @param id A non-null ID to set.
+   */
+  void overrideId(final String id) {
+    this.id = id;
+  }
+  
   static Builder newBuilder() {
     return new Builder();
   }
   
   static class Builder extends BaseQueryNodeConfig.Builder {
-    private String left;
+    private Object left;
     private OperandType left_type;
-    private String right;
+    private Object right;
     private OperandType right_type;
     private ExpressionOp op;
     private boolean negate;
     private boolean not;
     
-    public Builder setLeft(final String left) {
+    public Builder setLeft(final Object left) {
       this.left = left;
       return this;
     }
@@ -241,7 +260,7 @@ public class ExpressionParseNode extends BaseQueryNodeConfig {
       return this;
     }
     
-    public Builder setRight(final String right) {
+    public Builder setRight(final Object right) {
       this.right = right;
       return this;
     }
