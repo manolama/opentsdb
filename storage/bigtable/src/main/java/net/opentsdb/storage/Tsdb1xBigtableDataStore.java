@@ -1,0 +1,294 @@
+// This file is part of OpenTSDB.
+// Copyright (C) 2018  The OpenTSDB Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package net.opentsdb.storage;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+
+import com.google.cloud.bigtable.config.BigtableOptions;
+import com.google.cloud.bigtable.config.CredentialOptions;
+import com.google.cloud.bigtable.grpc.BigtableDataClient;
+import com.google.cloud.bigtable.grpc.BigtableInstanceName;
+import com.google.cloud.bigtable.grpc.BigtableSession;
+import com.google.cloud.bigtable.grpc.async.AsyncExecutor;
+import com.google.common.base.Strings;
+import com.stumbleupon.async.Deferred;
+
+import net.opentsdb.common.Const;
+import net.opentsdb.configuration.Configuration;
+import net.opentsdb.core.TSDB;
+import net.opentsdb.data.TimeSeriesStringId;
+import net.opentsdb.data.TimeSeriesValue;
+import net.opentsdb.query.QueryNode;
+import net.opentsdb.query.QueryNodeConfig;
+import net.opentsdb.query.QueryPipelineContext;
+import net.opentsdb.query.QuerySourceConfig;
+import net.opentsdb.stats.Span;
+import net.opentsdb.storage.schemas.tsdb1x.Schema;
+import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStore;
+import net.opentsdb.uid.UniqueIdStore;
+
+public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
+  
+  /** Config keys */
+  public static final String CONFIG_PREFIX = "tsd.storage.";
+  public static final String DATA_TABLE_KEY = "data_table";
+  public static final String UID_TABLE_KEY = "uid_table";
+  public static final String TREE_TABLE_KEY = "tree_table";
+  public static final String META_TABLE_KEY = "meta_table";
+  
+  /** Bigtable config keys. */
+  public static final String PROJECT_ID_KEY = "google.bigtable.project.id";
+  public static final String INSTANCE_ID_KEY = "google.bigtable.instance.id";
+  public static final String ZONE_ID_KEY = "google.bigtable.zone.id";
+  public static final String SERVICE_ACCOUNT_ENABLE_KEY = 
+      "google.bigtable.auth.service.account.enable";
+  public static final String JSON_KEYFILE_KEY = "google.bigtable.auth.json.keyfile";
+  public static final String CHANNEL_COUNT_KEY = "google.bigtable.grpc.channel.count";
+  
+  // TODO  - move to common location
+  public static final String MULTI_GET_CONCURRENT_KEY = "tsd.query.multiget.concurrent";
+  public static final String MULTI_GET_BATCH_KEY = "tsd.query.multiget.batch_size";
+  public static final String EXPANSION_LIMIT_KEY = 
+      "tsd.query.filter.expansion_limit";
+  public static final String ROLLUP_USAGE_KEY = 
+      "tsd.query.rollups.default_usage";
+  public static final String SKIP_NSUN_TAGK_KEY = "tsd.query.skip_unresolved_tagks";
+  public static final String SKIP_NSUN_TAGV_KEY = "tsd.query.skip_unresolved_tagvs";
+  public static final String SKIP_NSUI_KEY = "tsd.query.skip_unresolved_ids";
+  public static final String ALLOW_DELETE_KEY = "tsd.query.allow_delete";
+  public static final String DELETE_KEY = "tsd.query.delete";
+  public static final String PRE_AGG_KEY = "tsd.query.pre_agg";
+  public static final String FUZZY_FILTER_KEY = "tsd.query.enable_fuzzy_filter";
+  public static final String ROWS_PER_SCAN_KEY = "tsd.query.rows_per_scan";
+  public static final String MAX_MG_CARDINALITY_KEY = "tsd.query.multiget.max_cardinality";
+  
+  protected final TSDB tsdb;
+  protected final String id;
+  
+  protected BigtableSession session;
+  protected AsyncExecutor executor;
+  
+  protected Schema schema;
+  
+  protected final Tsdb1xBigtableUniqueIdStore uid_store;
+  
+  /** Name of the table in which timeseries are stored.  */
+  protected final byte[] data_table;
+  
+  /** Name of the table in which UID information is stored. */
+  protected final byte[] uid_table;
+  
+  /** Name of the table where tree data is stored. */
+  protected final byte[] tree_table;
+  
+  /** Name of the table where meta data is stored. */
+  protected final byte[] meta_table;
+  
+  Tsdb1xBigtableDataStore(final Tsdb1xBigtableFactory factory,
+                          final String id,
+                          final Schema schema) {
+    this.tsdb = factory.tsdb();
+    this.id = id;
+    this.schema = schema;
+    
+    // We'll sync on the config object to avoid race conditions if 
+    // multiple instances of this client are being loaded.
+    final Configuration config = tsdb.getConfig();
+    synchronized(config) {
+      if (!config.hasProperty(getConfigKey(DATA_TABLE_KEY))) {
+        System.out.println("REGISTERED: " + getConfigKey(DATA_TABLE_KEY));
+        config.register(getConfigKey(DATA_TABLE_KEY), "tsdb", false, 
+            "The name of the raw data table for OpenTSDB.");
+      }
+      
+      if (!config.hasProperty(getConfigKey(UID_TABLE_KEY))) {
+        config.register(getConfigKey(UID_TABLE_KEY), "tsdb-uid", false, 
+            "The name of the UID mapping table for OpenTSDB.");
+      }
+      
+      if (!config.hasProperty(getConfigKey(TREE_TABLE_KEY))) {
+        config.register(getConfigKey(TREE_TABLE_KEY), "tsdb-tree", false, 
+            "The name of the Tree table for OpenTSDB.");
+      }
+      
+      if (!config.hasProperty(getConfigKey(META_TABLE_KEY))) {
+        config.register(getConfigKey(META_TABLE_KEY), "tsdb-meta", false, 
+            "The name of the Meta data table for OpenTSDB.");
+      }
+      
+      // bigtable configs
+      if (!config.hasProperty(PROJECT_ID_KEY)) {
+        config.register(PROJECT_ID_KEY, null, false, 
+            "The project ID hosting the Bigtable cluster");
+      }
+      if (!config.hasProperty(INSTANCE_ID_KEY)) {
+        config.register(INSTANCE_ID_KEY, null, false, 
+            "The cluster ID assigned to the Bigtable cluster at creation.");
+      }
+      if (!config.hasProperty(ZONE_ID_KEY)) {
+        config.register(ZONE_ID_KEY, null, false, 
+            "The name of the zone where the Bigtable cluster is operating.");
+      }
+      if (!config.hasProperty(SERVICE_ACCOUNT_ENABLE_KEY)) {
+        config.register(SERVICE_ACCOUNT_ENABLE_KEY, true, false, 
+            "Whether or not to use a Google cloud service account to connect.");
+      }
+      if (!config.hasProperty(JSON_KEYFILE_KEY)) {
+        config.register(JSON_KEYFILE_KEY, null, false, 
+            "The full path to the JSON formatted key file associated with "
+            + "the service account you want to use for Bigtable access. "
+            + "Download this from your cloud console.");
+      }
+      if (!config.hasProperty(CHANNEL_COUNT_KEY)) {
+        config.register(CHANNEL_COUNT_KEY, 
+            Runtime.getRuntime().availableProcessors(), false, 
+            "The number of sockets opened to the Bigtable API for handling "
+            + "RPCs. For higher throughput consider increasing the "
+            + "channel count.");
+      }
+    }
+    
+    final BigtableInstanceName table_namer = new BigtableInstanceName(
+        config.getString(PROJECT_ID_KEY), config.getString(INSTANCE_ID_KEY));
+    
+    data_table = (table_namer.toTableNameStr(
+        config.getString(getConfigKey(DATA_TABLE_KEY))))
+          .getBytes(Const.ISO_8859_CHARSET);
+    uid_table = (table_namer.toTableNameStr(
+        config.getString(getConfigKey(UID_TABLE_KEY))))
+          .getBytes(Const.ISO_8859_CHARSET);
+    tree_table = (table_namer.toTableNameStr(
+        config.getString(getConfigKey(TREE_TABLE_KEY))))
+          .getBytes(Const.ISO_8859_CHARSET);
+    meta_table = (table_namer.toTableNameStr(
+        config.getString(getConfigKey(META_TABLE_KEY))))
+          .getBytes(Const.ISO_8859_CHARSET);
+    
+    try {
+      final CredentialOptions creds = CredentialOptions.jsonCredentials(
+          new FileInputStream(config.getString(JSON_KEYFILE_KEY)));
+      
+      session = new BigtableSession(new BigtableOptions.Builder()
+          .setProjectId(config.getString(PROJECT_ID_KEY))
+          .setInstanceId(config.getString(INSTANCE_ID_KEY))
+          .setCredentialOptions(creds)
+          .setUserAgent("OpenTSDB_3x")
+          .setAdminHost(BigtableOptions.BIGTABLE_ADMIN_HOST_DEFAULT)
+          .setAppProfileId(BigtableOptions.BIGTABLE_APP_PROFILE_DEFAULT)
+          .setPort(BigtableOptions.BIGTABLE_PORT_DEFAULT)
+          .setDataHost(BigtableOptions.BIGTABLE_DATA_HOST_DEFAULT)
+          .build());
+    } catch (IOException e) {
+      throw new StorageException("WTF?", e);
+    }
+    
+    executor = session.createAsyncExecutor();
+    
+    uid_store = new Tsdb1xBigtableUniqueIdStore(this);
+    tsdb.getRegistry().registerSharedObject(Strings.isNullOrEmpty(id) ? 
+        "default_uidstore" : id + "_uidstore", uid_store);
+  }
+  
+  @Override
+  public QueryNode newNode(final QueryPipelineContext context, 
+                           final String id,
+                           final QueryNodeConfig config) {
+    return new Tsdb1xBigtableQueryNode(this, context, id, (QuerySourceConfig) config);
+  }
+
+  @Override
+  public Deferred<Object> write(final TimeSeriesStringId id, 
+                                final TimeSeriesValue<?> value,
+                                final Span span) {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public String id() {
+    return "Bigtable";
+  }
+
+  public Deferred<Object> shutdown() {
+    try {
+      session.close();
+    } catch (IOException e) {
+      Deferred.fromError(e);
+    }
+    return Deferred.fromResult(null);
+  }
+
+  /**
+   * Prepends the {@link #CONFIG_PREFIX} and the current data store ID to
+   * the given suffix.
+   * @param suffix A non-null and non-empty suffix.
+   * @return A non-null and non-empty config string.
+   */
+  public String getConfigKey(final String suffix) {
+    if (Strings.isNullOrEmpty(suffix)) {
+      throw new IllegalArgumentException("Suffix cannot be null.");
+    }
+    if (Strings.isNullOrEmpty(id)) {
+      return CONFIG_PREFIX + suffix;
+    } else {
+      return CONFIG_PREFIX + id + "." + suffix;
+    }
+  }
+
+
+  /** @return The schema assigned to this store. */
+  Schema schema() {
+    return schema;
+  }
+  
+  /** @return The data table. */
+  byte[] dataTable() {
+    return data_table;
+  }
+  
+  /** @return The UID table. */
+  byte[] uidTable() {
+    return uid_table;
+  }
+  
+  /** @return The Bigtable executor. */
+  AsyncExecutor executor() {
+    return executor;
+  }
+
+  /** @return The TSDB reference. */
+  TSDB tsdb() {
+    return tsdb;
+  }
+  
+  /** @return The UID store. */
+  UniqueIdStore uidStore() {
+    return uid_store;
+  }
+
+  String dynamicString(final String key) {
+    return tsdb.getConfig().getString(key);
+  }
+  
+  int dynamicInt(final String key) {
+    return tsdb.getConfig().getInt(key);
+  }
+  
+  boolean dynamicBoolean(final String key) {
+    return tsdb.getConfig().getBoolean(key);
+  }
+
+}
