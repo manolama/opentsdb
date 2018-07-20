@@ -62,7 +62,7 @@ import net.opentsdb.query.plan.QueryPlannnerFactory;
 import net.opentsdb.query.plan.QueryPlanner;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
 import net.opentsdb.query.serdes.TimeSeriesSerdes;
-import net.opentsdb.storage.TimeSeriesDataStore;
+import net.opentsdb.storage.ReadableTimeSeriesDataStore;
 import net.opentsdb.storage.TimeSeriesDataStoreFactory;
 import net.opentsdb.utils.Deferreds;
 import net.opentsdb.utils.JSON;
@@ -103,7 +103,7 @@ public class DefaultRegistry implements Registry {
   
   private final Map<String, QueryNodeFactory> node_factories;
   
-  private final Map<String, TimeSeriesDataStore> data_stores;
+  private final Map<String, ReadableTimeSeriesDataStore> data_stores;
   
   /** A concurrent map of shared objects used by various plugins such as 
    * connection pools, etc. */
@@ -259,11 +259,11 @@ public class DefaultRegistry implements Registry {
     return factory;
   }
   
-  public TimeSeriesDataStore getDefaultStore() {
+  public ReadableTimeSeriesDataStore getDefaultStore() {
     return data_stores.get(null);
   }
   
-  public TimeSeriesDataStore getStore(final String id) {
+  public ReadableTimeSeriesDataStore getStore(final String id) {
     return data_stores.get(id);
   }
   

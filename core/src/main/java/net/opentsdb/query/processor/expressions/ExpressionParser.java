@@ -15,6 +15,8 @@
 package net.opentsdb.query.processor.expressions;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -36,6 +38,7 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 import net.opentsdb.expressions.parser.MetricExpressionLexer;
 import net.opentsdb.expressions.parser.MetricExpressionParser;
@@ -79,34 +82,45 @@ import net.opentsdb.query.processor.expressions.ExpressionParseNode.OperandType;
 public class ExpressionParser extends DefaultErrorStrategy 
     implements MetricExpressionVisitor<Object> {
 
-  /** The expression. */
-  private final String expression;
+  /** The expression config. */
+  private final ExpressionConfig config;
   
-  /** An ID for the expression. */
-  private final String expression_id;
+  /** The expression used for variable extraction. */
+  private final String expression;
   
   /** A counter used to increment on nodes in the graph. */
   private int cntr = 0;
   
   /** The list of nodes generated after parsing. */
-  private List<ExpressionParseNode> nodes = Lists.newArrayList();
+  private final List<ExpressionParseNode> nodes;
+  
+  /** The set of variables extracted when parsing the expression. */
+  private final Set<String> variables;
   
   /**
    * Default ctor.
-   * @param expression A non-null and non-empty expression.
-   * @param expression_id A non-null and non-empty expression ID.
+   * @param config The non-null expression config to parse.
    */
-  public ExpressionParser(final String expression, 
-                          final String expression_id) {
-    if (Strings.isNullOrEmpty(expression)) {
-      throw new IllegalArgumentException("Expression cannot be null "
-          + "or empty.");
+  public ExpressionParser(final ExpressionConfig config) {
+    if (config == null) {
+      throw new IllegalArgumentException("Expression config cannot "
+          + "be null.");
     }
-    if (Strings.isNullOrEmpty(expression_id)) {
-      throw new IllegalArgumentException("Expression ID cannot be null.");
-    }
+    this.config = config;
+    nodes = Lists.newArrayList();
+    expression = null;
+    variables = null;
+  }
+  
+  /**
+   * Protected ctor used by {@link #parseVariables(String)}.
+   * @param expression The non-null and non-empty expression.
+   */
+  protected ExpressionParser(final String expression) {
+    config = null;
+    nodes = null;
     this.expression = expression;
-    this.expression_id = expression_id;
+    variables = Sets.newHashSet();
   }
   
   /**
@@ -116,7 +130,7 @@ public class ExpressionParser extends DefaultErrorStrategy
    */
   public List<ExpressionParseNode> parse() {
     final MetricExpressionLexer lexer = new MetricExpressionLexer(
-        new ANTLRInputStream(expression));
+        new ANTLRInputStream(config.getExpression()));
     final CommonTokenStream tokens = new CommonTokenStream(lexer);
     final MetricExpressionParser parser = new MetricExpressionParser(tokens);
     parser.removeErrorListeners(); // suppress logging to stderr.
@@ -125,12 +139,42 @@ public class ExpressionParser extends DefaultErrorStrategy
     
     if (nodes.size() < 1) {
       throw new ParseCancellationException("Unable to extract an "
-          + "expression from '" + expression + "'");
+          + "expression from '" + config.getExpression() + "'");
     }
     
     // reset the ID on the last node as it's the root
-    nodes.get(nodes.size() - 1).overrideId(expression_id);
+    nodes.get(nodes.size() - 1).overrideId(config.getId());
+    nodes.get(nodes.size() - 1).overrideAs(config.getAs());
     return nodes;
+  }
+  
+  /**
+   * Parses the expression and returns the literal variable names.
+   * @param expression The non-null and non-empty expression to parse.
+   * @return The non-null set of 1 or more variables.
+   * @throws IllegalArgumentException if the expression was null.
+   */
+  public static Set<String> parseVariables(final String expression) {
+    if (Strings.isNullOrEmpty(expression)) {
+      throw new IllegalArgumentException("Expression cannot be null "
+          + "or empty.");
+    }
+    final MetricExpressionLexer lexer = new MetricExpressionLexer(
+        new ANTLRInputStream(expression));
+    final CommonTokenStream tokens = new CommonTokenStream(lexer);
+    final MetricExpressionParser parser = new MetricExpressionParser(tokens);
+    
+    final ExpressionParser listener = new ExpressionParser(expression);
+    parser.removeErrorListeners(); // suppress logging to stderr.
+    parser.setErrorHandler(listener);
+    parser.prog().accept(listener);
+    
+    if (listener.variables.size() < 1) {
+      throw new ParseCancellationException("Unable to extract an "
+          + "expression from '" + expression + "'");
+    }
+    
+    return listener.variables;
   }
   
   /** Helper class. */
@@ -164,6 +208,21 @@ public class ExpressionParser extends DefaultErrorStrategy
     public double doubleValue() {
       return Double.longBitsToDouble(number);
     }
+  
+    @Override
+    public boolean equals(final Object o) {
+      if (o == null) {
+        return false;
+      }
+      if (o == this) {
+        return true;
+      }
+      if (!(o instanceof NumericLiteral)) {
+        return false;
+      }
+      return Objects.equals(is_integer, ((NumericLiteral) o).is_integer) &&
+             Objects.equals(number, ((NumericLiteral) o).number);
+    }
   }
   
   /** Helper class. */
@@ -185,6 +244,17 @@ public class ExpressionParser extends DefaultErrorStrategy
   Object newBinary(final ExpressionOp op, 
                    final Object left, 
                    final Object right) {
+    // if we're only parsing the variables, don't worry about instantiating
+    // a node.
+    if (config == null) {
+      if (left instanceof String) {
+        variables.add((String) left);
+      }
+      if (right instanceof String) {
+        variables.add((String) right);
+      }
+      return null;
+    }
     
     // shrug.
     if (left instanceof Null && right instanceof Null) {
@@ -259,7 +329,7 @@ public class ExpressionParser extends DefaultErrorStrategy
         .setExpressionOp(op);
     setBranch(builder, left, true);
     setBranch(builder, right, false);
-    builder.setId(expression_id + "_SubExp#" + cntr++);
+    builder.setId(config.getId() + "_SubExp#" + cntr++);
     final ExpressionParseNode config = (ExpressionParseNode) builder.build();
     nodes.add(config);
     return config;
@@ -578,7 +648,7 @@ public class ExpressionParser extends DefaultErrorStrategy
           buf.append(tokens.getText(ex.getStartToken(), ex.getOffendingToken()));
         }
       } else {
-        buf.append(expression);
+        buf.append(config == null ? expression : config.getExpression());
       }
       buf.append("'");
     } else if (e instanceof InputMismatchException) {

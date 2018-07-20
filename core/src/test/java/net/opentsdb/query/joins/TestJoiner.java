@@ -45,7 +45,7 @@ import net.opentsdb.data.BaseTimeSeriesByteId;
 import net.opentsdb.data.BaseTimeSeriesStringId;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
-import net.opentsdb.storage.TimeSeriesDataStore;
+import net.opentsdb.storage.ReadableTimeSeriesDataStore;
 import net.opentsdb.utils.Pair;
 import net.opentsdb.utils.Bytes.ByteMap;
 
@@ -679,7 +679,7 @@ public class TestJoiner extends BaseJoinTest {
     
     // extra tags will hash to the same value
     TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_L_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -728,7 +728,7 @@ public class TestJoiner extends BaseJoinTest {
     
     // extra tags will hash to the same value
     TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_R_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -766,7 +766,7 @@ public class TestJoiner extends BaseJoinTest {
     
     // extra tags will hash to the same value
     TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_R_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -805,7 +805,7 @@ public class TestJoiner extends BaseJoinTest {
     
     // extra tags will be kicked out.
     TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_L_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -854,7 +854,7 @@ public class TestJoiner extends BaseJoinTest {
     
     // extra tags will be kicked out.
     TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_R_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -900,7 +900,7 @@ public class TestJoiner extends BaseJoinTest {
     
     // extra tags will be kicked out.
     TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_R_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -951,7 +951,7 @@ public class TestJoiner extends BaseJoinTest {
     assertSame(ts, set.left_map.get(hash).get(0));
     
     // missing some tags will fail.
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_L_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -995,7 +995,7 @@ public class TestJoiner extends BaseJoinTest {
     assertNull(set.right_map);
        
     // still nothing of course.
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_L_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -1029,7 +1029,7 @@ public class TestJoiner extends BaseJoinTest {
     
     // extra tags now hash to something different.
     TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_L_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -1078,7 +1078,7 @@ public class TestJoiner extends BaseJoinTest {
     
     // extra tags now hash to something different.
     TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_L_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -1123,7 +1123,7 @@ public class TestJoiner extends BaseJoinTest {
     
     // extra tags now hash to something different.
     TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_L_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -1163,7 +1163,7 @@ public class TestJoiner extends BaseJoinTest {
     
     // extra tags now hash to something different.
     TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_L_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -1212,7 +1212,7 @@ public class TestJoiner extends BaseJoinTest {
     
     // cross falls back to normal hashing
     TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_L_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -1260,7 +1260,7 @@ public class TestJoiner extends BaseJoinTest {
     
     // cross falls back to normal hashing
     TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataStore.class))
+    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(ReadableTimeSeriesDataStore.class))
         .setMetric(METRIC_L_BYTES)
         .addTags(HOST, WEB01)
         .addTags(OWNER, TYRION)
@@ -1304,7 +1304,7 @@ public class TestJoiner extends BaseJoinTest {
     id = (TimeSeriesStringId) joiner.joinIds(L_1, null, ALIAS2);
     assertEquals(ALIAS2, id.alias());
     assertEquals(NAMESPACE, id.namespace());
-    assertEquals(METRIC_L, id.metric());
+    assertEquals(ALIAS2, id.metric());
     assertEquals(1, id.tags().size());
     assertEquals("web01", id.tags().get("host"));
     assertTrue(id.aggregatedTags().isEmpty());
@@ -1314,7 +1314,7 @@ public class TestJoiner extends BaseJoinTest {
     id = (TimeSeriesStringId) joiner.joinIds(null, R_1, ALIAS2);
     assertEquals(ALIAS2, id.alias());
     assertEquals(NAMESPACE, id.namespace());
-    assertEquals(METRIC_R, id.metric());
+    assertEquals(ALIAS2, id.metric());
     assertEquals(1, id.tags().size());
     assertEquals("web01", id.tags().get("host"));
     assertTrue(id.aggregatedTags().isEmpty());
@@ -1348,7 +1348,7 @@ public class TestJoiner extends BaseJoinTest {
     id = (TimeSeriesStringId) joiner.joinIds(L_1, ts, ALIAS2);
     assertEquals(ALIAS2, id.alias());
     assertEquals(NAMESPACE, id.namespace());
-    assertEquals(METRIC_L, id.metric());
+    assertEquals(ALIAS2, id.metric());
     assertEquals(0, id.tags().size());
     assertEquals(1, id.aggregatedTags().size());
     assertTrue(id.aggregatedTags().contains("host"));
@@ -1397,7 +1397,7 @@ public class TestJoiner extends BaseJoinTest {
     id = (TimeSeriesStringId) joiner.joinIds(L_1, R_1, ALIAS2);
     assertEquals(ALIAS2, id.alias());
     assertEquals(NAMESPACE, id.namespace());
-    assertEquals(METRIC_L, id.metric());
+    assertEquals(ALIAS2, id.metric());
     assertEquals(1, id.tags().size());
     assertEquals("web01", id.tags().get("host"));
     assertTrue(id.aggregatedTags().isEmpty());
@@ -1414,7 +1414,7 @@ public class TestJoiner extends BaseJoinTest {
     id = (TimeSeriesStringId) joiner.joinIds(L_1, R_1, ALIAS2);
     assertEquals(ALIAS2, id.alias());
     assertEquals(NAMESPACE, id.namespace());
-    assertEquals(METRIC_R, id.metric());
+    assertEquals(ALIAS2, id.metric());
     assertEquals(1, id.tags().size());
     assertEquals("web01", id.tags().get("host"));
     assertTrue(id.aggregatedTags().isEmpty());
@@ -1446,7 +1446,7 @@ public class TestJoiner extends BaseJoinTest {
     id = (TimeSeriesByteId) joiner.joinIds(L_1, null, ALIAS2);
     assertArrayEquals(ALIAS2_BYTES, id.alias());
     assertArrayEquals(NAMESPACE_BYTES, id.namespace());
-    assertArrayEquals(METRIC_L_BYTES, id.metric());
+    assertArrayEquals(ALIAS2_BYTES, id.metric());
     assertEquals(1, id.tags().size());
     assertArrayEquals(WEB01, id.tags().get(HOST));
     assertTrue(id.aggregatedTags().isEmpty());
@@ -1456,7 +1456,7 @@ public class TestJoiner extends BaseJoinTest {
     id = (TimeSeriesByteId) joiner.joinIds(null, R_1, ALIAS2);
     assertArrayEquals(ALIAS2_BYTES, id.alias());
     assertArrayEquals(NAMESPACE_BYTES, id.namespace());
-    assertArrayEquals(METRIC_R_BYTES, id.metric());
+    assertArrayEquals(ALIAS2_BYTES, id.metric());
     assertEquals(1, id.tags().size());
     assertArrayEquals(WEB01, id.tags().get(HOST));
     assertTrue(id.aggregatedTags().isEmpty());
@@ -1490,7 +1490,7 @@ public class TestJoiner extends BaseJoinTest {
     id = (TimeSeriesByteId) joiner.joinIds(L_1, ts, ALIAS2);
     assertArrayEquals(ALIAS2_BYTES, id.alias());
     assertArrayEquals(NAMESPACE_BYTES, id.namespace());
-    assertArrayEquals(METRIC_L_BYTES, id.metric());
+    assertArrayEquals(ALIAS2_BYTES, id.metric());
     assertEquals(0, id.tags().size());
     assertEquals(1, id.aggregatedTags().size());
     assertTrue(id.aggregatedTags().contains(HOST));
@@ -1539,7 +1539,7 @@ public class TestJoiner extends BaseJoinTest {
     id = (TimeSeriesByteId) joiner.joinIds(L_1, R_1, ALIAS2);
     assertArrayEquals(ALIAS2_BYTES, id.alias());
     assertArrayEquals(NAMESPACE_BYTES, id.namespace());
-    assertArrayEquals(METRIC_L_BYTES, id.metric());
+    assertArrayEquals(ALIAS2_BYTES, id.metric());
     assertEquals(1, id.tags().size());
     assertArrayEquals(WEB01, id.tags().get(HOST));
     assertTrue(id.aggregatedTags().isEmpty());
@@ -1556,7 +1556,7 @@ public class TestJoiner extends BaseJoinTest {
     id = (TimeSeriesByteId) joiner.joinIds(L_1, R_1, ALIAS2);
     assertArrayEquals(ALIAS2_BYTES, id.alias());
     assertArrayEquals(NAMESPACE_BYTES, id.namespace());
-    assertArrayEquals(METRIC_R_BYTES, id.metric());
+    assertArrayEquals(ALIAS2_BYTES, id.metric());
     assertEquals(1, id.tags().size());
     assertArrayEquals(WEB01, id.tags().get(HOST));
     assertTrue(id.aggregatedTags().isEmpty());
@@ -1995,6 +1995,145 @@ public class TestJoiner extends BaseJoinTest {
     } catch (IllegalStateException e) { }
   }
 
+  @Test
+  public void joinStringAlias() throws Exception {
+    // See the various joins for details.
+    setStringIds();
+    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
+        .setType(JoinType.INNER)
+        .addJoins("host", "host")
+        .setId(ID)
+        .build();
+    
+    Joiner joiner = new Joiner(config);
+    Iterator<Pair<TimeSeries, TimeSeries>> iterator = 
+        joiner.join(singleResult(Const.TS_STRING_ID), 
+            (NAMESPACE + ALIAS_L).getBytes(Const.UTF8_CHARSET), 
+            (NAMESPACE + ALIAS_R).getBytes(Const.UTF8_CHARSET),
+            true).iterator();
+    int pairs = 0;
+    while (iterator.hasNext()) {
+      final Pair<TimeSeries, TimeSeries> pair = iterator.next();
+      assertNotNull(pair.getKey());
+      assertNotNull(pair.getValue());
+      pairs++;
+    }
+    assertEquals(9, pairs);
+    
+    // fallback left
+    iterator = joiner.join(singleResult(Const.TS_STRING_ID), 
+            (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+            (NAMESPACE + ALIAS_R).getBytes(Const.UTF8_CHARSET),
+            true).iterator();
+    pairs = 0;
+    while (iterator.hasNext()) {
+      final Pair<TimeSeries, TimeSeries> pair = iterator.next();
+      assertNotNull(pair.getKey());
+      assertNotNull(pair.getValue());
+      pairs++;
+    }
+    assertEquals(9, pairs);
+    
+    // fallback right
+    iterator = joiner.join(singleResult(Const.TS_STRING_ID), 
+            (NAMESPACE + ALIAS_L).getBytes(Const.UTF8_CHARSET), 
+            (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+            true).iterator();
+    pairs = 0;
+    while (iterator.hasNext()) {
+      final Pair<TimeSeries, TimeSeries> pair = iterator.next();
+      assertNotNull(pair.getKey());
+      assertNotNull(pair.getValue());
+      pairs++;
+    }
+    assertEquals(9, pairs);
+    
+    // fallback both
+    iterator = joiner.join(singleResult(Const.TS_STRING_ID), 
+            (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+            (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+            true).iterator();
+    pairs = 0;
+    while (iterator.hasNext()) {
+      final Pair<TimeSeries, TimeSeries> pair = iterator.next();
+      assertNotNull(pair.getKey());
+      assertNotNull(pair.getValue());
+      pairs++;
+    }
+    assertEquals(9, pairs);
+  }
+  
+  @Test
+  public void joinByteAlias() throws Exception {
+    // See the various joins for details.
+    setByteIds();
+    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
+        .setType(JoinType.INNER)
+        .addJoins("host", "host")
+        .setId(ID)
+        .build();
+    
+    Joiner joiner = new Joiner(config);
+    ByteMap<byte[]> encoded_joins = new ByteMap<byte[]>();
+    encoded_joins.put(HOST, HOST);
+    joiner.setEncodedJoins(encoded_joins);
+    Iterator<Pair<TimeSeries, TimeSeries>> iterator = 
+        joiner.join(singleResult(Const.TS_BYTE_ID), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, ALIAS_L_BYTES), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, ALIAS_R_BYTES),
+            true).iterator();
+    int pairs = 0;
+    while (iterator.hasNext()) {
+      final Pair<TimeSeries, TimeSeries> pair = iterator.next();
+      assertNotNull(pair.getKey());
+      assertNotNull(pair.getValue());
+      pairs++;
+    }
+    assertEquals(9, pairs);
+    
+    // fallback left
+    iterator = joiner.join(singleResult(Const.TS_BYTE_ID), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, ALIAS_R_BYTES),
+            true).iterator();
+    pairs = 0;
+    while (iterator.hasNext()) {
+      final Pair<TimeSeries, TimeSeries> pair = iterator.next();
+      assertNotNull(pair.getKey());
+      assertNotNull(pair.getValue());
+      pairs++;
+    }
+    assertEquals(9, pairs);
+    
+    // fallback right
+    iterator = joiner.join(singleResult(Const.TS_BYTE_ID), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, ALIAS_L_BYTES), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_R_BYTES),
+            true).iterator();
+    pairs = 0;
+    while (iterator.hasNext()) {
+      final Pair<TimeSeries, TimeSeries> pair = iterator.next();
+      assertNotNull(pair.getKey());
+      assertNotNull(pair.getValue());
+      pairs++;
+    }
+    assertEquals(9, pairs);
+    
+    // fallback left
+    iterator = joiner.join(singleResult(Const.TS_BYTE_ID), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_R_BYTES),
+            true).iterator();
+    pairs = 0;
+    while (iterator.hasNext()) {
+      final Pair<TimeSeries, TimeSeries> pair = iterator.next();
+      assertNotNull(pair.getKey());
+      assertNotNull(pair.getValue());
+      pairs++;
+    }
+    assertEquals(9, pairs);
+  }
+  
   @Test
   public void joinFilterString() throws Exception {
     // See the various joins for details.

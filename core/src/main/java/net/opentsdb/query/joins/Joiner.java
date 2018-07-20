@@ -93,7 +93,10 @@ public class Joiner {
    * Executes the configured join on the result set using the given keys
    * to match results on. The keys can be either the namespace + alias or
    * namespace + metric where the namespace can be null. Joins are 
-   * performed by hashing on the IDs and the join tags.
+   * performed by hashing on the IDs and the join tags. Note that if the 
+   * the "use_alias" flag is present but the alias fails to match either
+   * key, we will fall back to the metric name. This is for use with 
+   * sub-expressions.
    * @param results A non-null and non-empty list of results.
    * @param left_key A non-null and non-empty left join key.
    * @param right_key A non-null and non-empty right join key.
@@ -120,7 +123,8 @@ public class Joiner {
     }
     
     if (results.get(0).idType() == Const.TS_BYTE_ID && 
-        encoded_joins == null) {
+        encoded_joins == null &&
+        config.getType() != JoinType.NATURAL) {
       throw new IllegalStateException("Received a result with encoded "
           + "IDs but the local encoded tags map was null.");
     }
@@ -137,11 +141,25 @@ public class Joiner {
           final TimeSeriesByteId id = (TimeSeriesByteId) ts.id();
           final byte[] key;
           if (use_alias) {
+            final byte[] local_key;
             if (id.namespace() == null || id.namespace().length < 1) {
-              key = id.alias();
+              local_key = id.alias();
             } else {
-              key = com.google.common.primitives.Bytes.concat(
+              local_key = com.google.common.primitives.Bytes.concat(
                   id.namespace(), id.alias());
+            }
+            
+            if (Bytes.memcmp(local_key, left_key) != 0 && 
+                Bytes.memcmp(local_key, right_key) != 0) {
+              // we didn't match on the alias so try the metric.
+              if (id.namespace() == null || id.namespace().length < 1) {
+                key = id.metric();
+              } else {
+                key = com.google.common.primitives.Bytes.concat(
+                    id.namespace(), id.metric());
+              }
+            } else {
+              key = local_key;
             }
           } else {
             if (id.namespace() == null || id.namespace().length < 1) {
@@ -151,6 +169,7 @@ public class Joiner {
                   id.namespace(), id.metric());
             }
           }
+          
           if (Bytes.memcmp(key, left_key) != 0 && 
               Bytes.memcmp(key, right_key) != 0) {
             // TODO - log ejection
@@ -162,9 +181,19 @@ public class Joiner {
           final TimeSeriesStringId id = (TimeSeriesStringId) ts.id();
           final String key;
           if (use_alias) {
-            key = Strings.isNullOrEmpty(id.namespace()) ? 
+            final String local_key = Strings.isNullOrEmpty(id.namespace()) ? 
                 id.alias() :
                   id.namespace() + id.alias();
+            byte[] key_in_bytes = local_key.getBytes(Const.UTF8_CHARSET);
+            if (Bytes.memcmp(key_in_bytes, left_key) != 0 && 
+                Bytes.memcmp(key_in_bytes, right_key) != 0) {
+              // we didn't match on the alias so try the metric.
+              key = Strings.isNullOrEmpty(id.namespace()) ? 
+                  id.metric() :
+                    id.namespace() + id.metric();
+            } else {
+              key = local_key;
+            }
           } else {
             key = Strings.isNullOrEmpty(id.namespace()) ? 
                 id.metric() :
@@ -212,7 +241,8 @@ public class Joiner {
     }
     
     if (results.get(0).idType() == Const.TS_BYTE_ID && 
-        encoded_joins == null) {
+        encoded_joins == null &&
+        config.getType() != JoinType.NATURAL) {
       throw new IllegalStateException("Received a result with encoded "
           + "IDs but the local encoded tags map was null.");
     }
@@ -227,11 +257,24 @@ public class Joiner {
           final TimeSeriesByteId id = (TimeSeriesByteId) ts.id();
           final byte[] key;
           if (use_alias) {
+            final byte[] local_key;
             if (id.namespace() == null || id.namespace().length < 1) {
-              key = id.alias();
+              local_key = id.alias();
             } else {
-              key = com.google.common.primitives.Bytes.concat(
+              local_key = com.google.common.primitives.Bytes.concat(
                   id.namespace(), id.alias());
+            }
+            
+            if (Bytes.memcmp(filter, local_key) != 0) {
+              // we didn't match on the alias so try the metric.
+              if (id.namespace() == null || id.namespace().length < 1) {
+                key = id.metric();
+              } else {
+                key = com.google.common.primitives.Bytes.concat(
+                    id.namespace(), id.metric());
+              }
+            } else {
+              key = local_key;
             }
           } else {
             if (id.namespace() == null || id.namespace().length < 1) {
@@ -244,18 +287,20 @@ public class Joiner {
           
           if (Bytes.memcmp(filter, key) == 0) {
             boolean satisfied_joins = true;
-            for (final Entry<byte[], byte[]> tags : encoded_joins) {
-              if (left) {
-                if (!id.tags().containsKey(tags.getKey())) {
-                  satisfied_joins = false;
-                  break;
-                  // TODO - log ejection
-                }
-              } else {
-                if (!id.tags().containsKey(tags.getValue())) {
-                  satisfied_joins = false;
-                  break;
-                  // TODO - log ejection
+            if (encoded_joins != null) {
+              for (final Entry<byte[], byte[]> tags : encoded_joins) {
+                if (left) {
+                  if (!id.tags().containsKey(tags.getKey())) {
+                    satisfied_joins = false;
+                    break;
+                    // TODO - log ejection
+                  }
+                } else {
+                  if (!id.tags().containsKey(tags.getValue())) {
+                    satisfied_joins = false;
+                    break;
+                    // TODO - log ejection
+                  }
                 }
               }
             }
@@ -270,9 +315,18 @@ public class Joiner {
           final TimeSeriesStringId id = (TimeSeriesStringId) ts.id();
           final String key;
           if (use_alias) {
-            key = Strings.isNullOrEmpty(id.namespace()) ? 
+            final String local_key = Strings.isNullOrEmpty(id.namespace()) ? 
                 id.alias() :
                   id.namespace() + id.alias();
+            byte[] key_in_bytes = local_key.getBytes(Const.UTF8_CHARSET);
+            if (Bytes.memcmp(filter, key_in_bytes) != 0) {
+              // we didn't match on the alias so try the metric.
+              key = Strings.isNullOrEmpty(id.namespace()) ? 
+                  id.metric() :
+                    id.namespace() + id.metric();
+            } else {
+              key = local_key;
+            }
           } else {
             key = Strings.isNullOrEmpty(id.namespace()) ? 
                 id.metric() :
@@ -317,22 +371,20 @@ public class Joiner {
    * Because of that, joins can produce more than one series with the
    * same join ID in one join.
    * <p>
-   * When both IDs share the same metric, that metric is returned. If
-   * the metrics are different, the alias is substituted unless the
-   * join type is a LEFT or RIGHT, in which case the left or right is
-   * chosen.
+   * The resulting time series metric will be the value of as.
    * @param left The left hand ID. May be null.
    * @param right The right hand ID. May be null.
-   * @param alias A non-null and non-empty alias.
+   * @param as A non-null and non-empty name for the metric.
    * @return The joined ID.
    * @throws IllegalArgumentException if the alias was null or empty or
    * all IDs were null.
    */
   public TimeSeriesId joinIds(final TimeSeries left, 
                               final TimeSeries right, 
-                              final String alias) {
-    if (Strings.isNullOrEmpty(alias)) {
-      throw new IllegalArgumentException("Alias cannot be null or empty.");
+                              final String as) {
+    if (Strings.isNullOrEmpty(as)) {
+      throw new IllegalArgumentException("As (new metric name) cannot "
+          + "be null or empty.");
     }
     if (left == null && right == null) {
       throw new IllegalArgumentException("At least one ID must not be null.");
@@ -343,22 +395,22 @@ public class Joiner {
       // upstream.
       if (left.id().type() == Const.TS_BYTE_ID) {
         return joinIds((TimeSeriesByteId) left.id(), 
-            (TimeSeriesByteId) right.id(), alias);        
+            (TimeSeriesByteId) right.id(), as);        
       } else {
         return joinIds((TimeSeriesStringId) left.id(), 
-            (TimeSeriesStringId) right.id(), alias);
+            (TimeSeriesStringId) right.id(), as);
       }
     } else if (left == null) {
       if (right.id().type() == Const.TS_BYTE_ID) {
-        return new ByteIdOverride((TimeSeriesByteId) right.id(), alias);
+        return new ByteIdOverride((TimeSeriesByteId) right.id(), as);
       } else {
-        return new StringIdOverride((TimeSeriesStringId) right.id(), alias);
+        return new StringIdOverride((TimeSeriesStringId) right.id(), as);
       }
     } else {
       if (left.id().type() == Const.TS_BYTE_ID) {
-        return new ByteIdOverride((TimeSeriesByteId) left.id(), alias);
+        return new ByteIdOverride((TimeSeriesByteId) left.id(), as);
       } else {
-        return new StringIdOverride((TimeSeriesStringId) left.id(), alias);
+        return new StringIdOverride((TimeSeriesStringId) left.id(), as);
       }
     }
   }
@@ -367,16 +419,18 @@ public class Joiner {
    * Joins the byte IDs.
    * @param left Left ID.
    * @param right Right ID.
-   * @param alias A non-null and non-empty alias.
+   * @param as A non-null and non-empty name to use for the metric.
    * @return The joined ID.
    */
   @VisibleForTesting
   TimeSeriesId joinIds(final TimeSeriesStringId left, 
                        final TimeSeriesStringId right, 
-                       final String alias) {
+                       final String as) {
     final BaseTimeSeriesStringId.Builder builder = BaseTimeSeriesStringId
         .newBuilder()
-        .setAlias(alias);
+        .setNamespace(left.namespace())
+        .setAlias(as)
+        .setMetric(as);
     
     final Set<String> agg_tags = Sets.newHashSet();
     final Set<String> disj_tags = Sets.newHashSet();
@@ -441,36 +495,6 @@ public class Joiner {
       }
     }
     
-    switch (config.type) {
-    case INNER:
-    case OUTER:
-    case OUTER_DISJOINT:
-    case NATURAL:
-    case CROSS:
-    case LEFT:
-    case LEFT_DISJOINT:
-      builder.setNamespace(left.namespace());
-      if (config.type == JoinType.LEFT || 
-          config.type == JoinType.LEFT_DISJOINT) {
-        builder.setMetric(left.metric());
-      } else {
-        if (!left.metric().equals(right.metric())) {
-          builder.setMetric(alias);
-        } else {
-          builder.setMetric(left.metric());
-        }
-      }
-      break;
-    case RIGHT:
-    case RIGHT_DISJOINT:
-      builder.setNamespace(right.namespace())
-             .setMetric(right.metric());
-      break;
-      default:
-        throw new UnsupportedOperationException("We do not support: " 
-            + config.type + " yet");
-    }
-    
     for (final String tag : agg_tags) {
       builder.addAggregatedTag(tag);
     }
@@ -490,16 +514,19 @@ public class Joiner {
    * Joins the byte IDs.
    * @param left Left ID.
    * @param right Right ID.
-   * @param alias A non-null and non-empty alias.
+   * @param as A non-null and non-empty name for the metric.
    * @return The joined ID.
    */
   @VisibleForTesting
   TimeSeriesId joinIds(final TimeSeriesByteId left, 
                        final TimeSeriesByteId right, 
-                       final String alias) {
+                       final String as) {
     final BaseTimeSeriesByteId.Builder builder = BaseTimeSeriesByteId
         .newBuilder(left.dataStore())
-        .setAlias(alias.getBytes(Const.UTF8_CHARSET));
+        .setNamespace(left.namespace())
+        .setAlias(as.getBytes(Const.UTF8_CHARSET))
+        .setMetric(as.getBytes(Const.UTF8_CHARSET))
+        .setSkipMetric(true);
     
     final ByteSet agg_tags = new ByteSet();
     final ByteSet disj_tags = new ByteSet();
@@ -562,36 +589,6 @@ public class Joiner {
         // promote to agg tags
         disj_tags.add(entry.getKey());
       }
-    }
-    
-    switch (config.type) {
-    case INNER:
-    case OUTER:
-    case OUTER_DISJOINT:
-    case NATURAL:
-    case CROSS:
-    case LEFT:
-    case LEFT_DISJOINT:
-      builder.setNamespace(left.namespace());
-      if (config.type == JoinType.LEFT || 
-          config.type == JoinType.LEFT_DISJOINT) {
-        builder.setMetric(left.metric());
-      } else {
-        if (!left.metric().equals(right.metric())) {
-          builder.setMetric(alias.getBytes(Const.UTF8_CHARSET));
-        } else {
-          builder.setMetric(left.metric());
-        }
-      }
-      break;
-    case RIGHT:
-    case RIGHT_DISJOINT:
-      builder.setNamespace(right.namespace())
-             .setMetric(right.metric());
-      break;
-      default:
-        throw new UnsupportedOperationException("We do not support: " 
-            + config.type + " yet");
     }
     
     for (final byte[] tag : agg_tags) {

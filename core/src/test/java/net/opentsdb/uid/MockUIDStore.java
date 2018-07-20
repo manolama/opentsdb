@@ -24,7 +24,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.stumbleupon.async.Deferred;
 
-import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.auth.AuthState;
+import net.opentsdb.data.TimeSeriesDatumId;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.StorageException;
 import net.opentsdb.utils.ByteSet;
@@ -131,17 +132,42 @@ public class MockUIDStore implements UniqueIdStore {
   }
   
   @Override
-  public Deferred<byte[]> getOrCreateId(UniqueIdType type, String name,
-      TimeSeriesId id, Span span) {
-    // TODO Auto-generated method stub
-    return null;
+  public Deferred<IdOrError> getOrCreateId(final AuthState auth,
+      final UniqueIdType type, 
+      final String name,
+      final TimeSeriesDatumId id,
+      final Span span) {
+    if (name_to_ex.get(type).contains(name)) {
+      return Deferred.fromError(new StorageException("Boo!"));
+    }
+    
+    final byte[] uid = name_to_id.get(type).get(name);
+    if (uid != null) {
+      return Deferred.fromResult(IdOrError.wrapId(uid));
+    }
+    
+    return Deferred.fromResult(IdOrError.wrapRejected("Mock can't assign: " + name));
   }
   
   @Override
-  public Deferred<List<byte[]>> getOrCreateIds(UniqueIdType type,
-      List<String> names, TimeSeriesId id, Span span) {
-    // TODO Auto-generated method stub
-    return null;
+  public Deferred<List<IdOrError>> getOrCreateIds(final AuthState auth,
+      final UniqueIdType type, 
+      final List<String> names,
+      final TimeSeriesDatumId id,
+      final Span span) {
+    final List<IdOrError> uids = Lists.newArrayListWithCapacity(names.size());
+    for (final String name : names) {
+      if (name_to_ex.get(type).contains(name)) {
+        return Deferred.fromError(new StorageException("Boo!"));
+      }
+      final byte[] uid = name_to_id.get(type).get(name);
+      if (uid != null) {
+        uids.add(IdOrError.wrapId(uid));
+      } else {
+        uids.add(IdOrError.wrapRejected("Mock can't assign: " + name));
+      }
+    }
+    return Deferred.fromResult(uids);
   }
   
   @Override
@@ -166,7 +192,7 @@ public class MockUIDStore implements UniqueIdStore {
   }
   
   @Override
-  public Charset characterSet() {
+  public Charset characterSet(final UniqueIdType type) {
     return charset;
   }
   

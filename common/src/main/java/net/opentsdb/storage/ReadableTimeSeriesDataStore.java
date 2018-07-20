@@ -20,10 +20,8 @@ import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesStringId;
-import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
-import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.stats.Span;
 
@@ -42,9 +40,8 @@ import net.opentsdb.stats.Span;
  * 
  * @since 3.0
  */
-public interface TimeSeriesDataStore {
+public interface ReadableTimeSeriesDataStore {
   
-
   /**
    * Instantiates a new node using the given context and the default
    * configuration for this node.
@@ -78,19 +75,6 @@ public interface TimeSeriesDataStore {
   public Class<? extends QueryNodeConfig> nodeConfigClass();
   
   /**
-   * Writes the given value to the data store.
-   * @param id A non-null ID for the value.
-   * @param value A non-null value to write.
-   * @param trace An optional tracer.
-   * @param span An optional span for tracing.
-   * @return A deferred resolving to null on success or an exception if the 
-   * value was unable to be written.
-   */
-  public Deferred<Object> write(final TimeSeriesStringId id,
-                                         final TimeSeriesValue<?> value, 
-                                         final Span span);
-  
-  /**
    * For stores that are able to encode time series IDs, this method should
    * resolve the IDs to a string ID suitable for display or further 
    * processing.
@@ -104,13 +88,29 @@ public interface TimeSeriesDataStore {
                                                     final Span span);
 
   /**
-   * TODO - doc
-   * @param join_keys
-   * @param span
-   * @return
+   * Converts the tag keys to byte arrays for stores that perform UID
+   * encoding of strings.
+   * @param join_keys A non-null and non-empty list of tag keys.
+   * @param span An optional tracing span.
+   * @return A non-null deferred resolving to a non-null list of results
+   * of the same length and order as the given list. May resolve to an
+   * exception.
    */
   public Deferred<List<byte[]>> encodeJoinKeys(final List<String> join_keys, 
                                                final Span span);
+  
+  /**
+   * Converts the given metric names to byte arrays for stores that perform
+   * UID encoding of strings.
+   * @param join_metrics A non-null and non-emtpy list of of metrics.
+   * @param spanAn optional tracing span.
+   * @return A non-null deferred resolving to a non-null list of results
+   * of the same length and order as the given list. May resolve to an
+   * exception.
+   */
+  public Deferred<List<byte[]>> encodeJoinMetrics(
+      final List<String> join_metrics, 
+      final Span span);
   
   /**
    * Releases resources held by the store. 

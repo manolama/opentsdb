@@ -34,6 +34,7 @@ import net.opentsdb.configuration.UnitTestConfiguration;
 import net.opentsdb.core.MockTSDB;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.stats.MockTrace;
+import net.opentsdb.storage.DatumIdValidator;
 import net.opentsdb.uid.LRUUniqueId;
 import net.opentsdb.uid.MockUIDStore;
 import net.opentsdb.uid.UniqueId;
@@ -106,6 +107,7 @@ public class SchemaBase {
   public static UniqueId tag_names;
   public static UniqueId tag_values;
   public static MockTrace trace;
+  public static DatumIdValidator id_validator;
   
   protected FakeTaskTimer timer;
   protected Map<String, String> tags;
@@ -117,6 +119,7 @@ public class SchemaBase {
     store = mock(Tsdb1xDataStore.class);
     uid_store = spy(new MockUIDStore(Const.ISO_8859_CHARSET));
     uid_factory = mock(UniqueIdFactory.class);
+    id_validator = mock(DatumIdValidator.class);
     
     // return the default
     when(tsdb.registry.getDefaultPlugin(Tsdb1xDataStoreFactory.class))
@@ -127,6 +130,8 @@ public class SchemaBase {
       .thenReturn(uid_store);
     when(tsdb.registry.getPlugin(UniqueIdFactory.class, "LRU"))
       .thenReturn(uid_factory);
+    when(tsdb.registry.getDefaultPlugin(DatumIdValidator.class))
+      .thenReturn(id_validator);
     
     metrics = new LRUUniqueId(tsdb, null, UniqueIdType.METRIC, uid_store);
     tag_names = new LRUUniqueId(tsdb, null, UniqueIdType.TAGK, uid_store);
@@ -282,23 +287,23 @@ public class SchemaBase {
     final int tk = schema.tagkWidth();
     final int tv = schema.tagvWidth();
     
-    final byte[] key = new byte[Const.SALT_WIDTH() + m + 4 
+    final byte[] key = new byte[schema.salt_width + m + 4 
        + (tags.length / 2) * tk + (tags.length / 2) * tv];
     byte[] uid = metrics.getId(metric, null).join();
     
     // metrics first
     if (uid != null) {
-      System.arraycopy(uid, 0, key, Const.SALT_WIDTH(), m);
+      System.arraycopy(uid, 0, key, schema.salt_width, m);
     } else {
       throw new IllegalArgumentException("No METRIC UID was mocked for: " + metric);
     }
     
     // timestamp
-    System.arraycopy(Bytes.fromInt(base_time), 0, key, Const.SALT_WIDTH() + m, 
+    System.arraycopy(Bytes.fromInt(base_time), 0, key, schema.salt_width + m, 
         Const.TIMESTAMP_BYTES);
     
     // shortcut for offsets
-    final int pl = Const.SALT_WIDTH() + m + Const.TIMESTAMP_BYTES;
+    final int pl = schema.salt_width + m + Const.TIMESTAMP_BYTES;
     int ctr = 0;
     int offset = 0;
     for (final String tag : tags) {
