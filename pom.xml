@@ -97,6 +97,7 @@
     <module>implementation/server-undertow</module>
     <module>storage/asynchbase</module>
 	<module>storage/yuvi</module>
+    <module>storage/googlepubsub</module>
     <module>implementation/kafka-writer</module>
     <module>distribution</module>
   </modules>
