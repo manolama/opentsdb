@@ -497,7 +497,7 @@ public class DefaultRegistry implements Registry {
     final TimeSeriesDataStoreFactory factory = 
         plugins.getDefaultPlugin(TimeSeriesDataStoreFactory.class);
     if (factory != null) {
-      final TimeSeriesDataStore store = factory.newInstance(tsdb, null);
+      final ReadableTimeSeriesDataStore store = factory.newInstance(tsdb, null);
       System.out.println("SETTING DEFAULT STORE: " + store);
       this.data_stores.put(null, store);
     } else {
@@ -507,11 +507,11 @@ public class DefaultRegistry implements Registry {
     if (true) {
       return Deferred.fromResult(null);
     }
-    final DataShardMerger shards_merger = new DataShardMerger();
-    shards_merger.registerStrategy(new NumericMergeLargest());
-    data_mergers.put(null, shards_merger);
-    data_mergers.put("default", shards_merger);
-    data_mergers.put("largest", shards_merger);
+//    final DataShardMerger shards_merger = new DataShardMerger();
+//    shards_merger.registerStrategy(new NumericMergeLargest());
+//    data_mergers.put(null, shards_merger);
+//    data_mergers.put("default", shards_merger);
+//    data_mergers.put("largest", shards_merger);
     
     List<Deferred<Object>> deferreds = Lists.newArrayList();
     

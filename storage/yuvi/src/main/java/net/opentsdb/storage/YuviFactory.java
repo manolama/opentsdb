@@ -59,7 +59,8 @@ public class YuviFactory implements TimeSeriesDataStoreFactory {
   @Override
   public Deferred<Object> initialize(final TSDB tsdb) {
     this.tsdb = tsdb;
-    manager = new ChunkManager("OpenTSDB", 10485760);
+    //manager = new ChunkManager("OpenTSDB", 10485760);
+    manager = new ChunkManager("OpenTSDB", 1024);
     if (!tsdb.getConfig().hasProperty("yuvi.datafile")) {
       tsdb.getConfig().register("yuvi.datafile", null, false, "The path to a YUVI data file to bootstrap with.");
     }
@@ -105,7 +106,7 @@ public class YuviFactory implements TimeSeriesDataStoreFactory {
   }
 
   @Override
-  public TimeSeriesDataStore newInstance(TSDB tsdb, String id) {
+  public ReadableTimeSeriesDataStore newInstance(TSDB tsdb, String id) {
     if (Strings.isNullOrEmpty(id)) {
       if (default_client == null) {      
         synchronized (this) {

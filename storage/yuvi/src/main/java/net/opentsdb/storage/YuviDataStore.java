@@ -67,7 +67,7 @@ import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
 
-public class YuviDataStore implements TimeSeriesDataStore/*, QueryNodeFactory*/ {
+public class YuviDataStore implements ReadableTimeSeriesDataStore/*, QueryNodeFactory*/ {
   private static final Logger LOG = LoggerFactory.getLogger(YuviDataStore.class);
   
   private final String id;
@@ -98,48 +98,48 @@ public class YuviDataStore implements TimeSeriesDataStore/*, QueryNodeFactory*/ 
     return id;
   }
   
-  @Override
-  public Deferred<Object> write(TimeSeriesStringId id, 
-                                TimeSeriesValue<?> value,
-      net.opentsdb.stats.Span span) {
-    
-    Chunk chunk = factory.manager().getChunk(value.timestamp().epoch());
-    //System.out.println("GOT CHUNK: " + chunk);
-    
-    final List<String> tags = Lists.newArrayListWithCapacity(id.tags().size());
-    for (final Entry<String, String> entry : id.tags().entrySet()) {
-      tags.add(entry.getKey() + "=" + entry.getValue());
-    }
-    final Metric metric = new Metric(id.metric(), tags);
-    chunk.addPoint(metric, value.timestamp().epoch(), 
-        ((NumericType) value.value()).toDouble());
-//    final StringBuilder buf = new StringBuilder()
-//        .append("put ")
-//        .append(id.metric())
-//        .append(" ")
-//        .append(value.timestamp().epoch())
-//        .append(" ");
-//    if (((NumericType) value.value()).isInteger()) {
-//      buf.append(((NumericType) value.value()).longValue());
-//    } else {
-//      buf.append(((NumericType) value.value()).doubleValue());
+//  @Override
+//  public Deferred<Object> write(TimeSeriesStringId id, 
+//                                TimeSeriesValue<?> value,
+//      net.opentsdb.stats.Span span) {
+//    
+//    Chunk chunk = factory.manager().getChunk(value.timestamp().epoch());
+//    //System.out.println("GOT CHUNK: " + chunk);
+//    
+//    final List<String> tags = Lists.newArrayListWithCapacity(id.tags().size());
+//    for (final Entry<String, String> entry : id.tags().entrySet()) {
+//      tags.add(entry.getKey() + "=" + entry.getValue());
 //    }
-//    if (id.tags() != null) {
-//      buf.append(" ");
-//      int i = 0;
-//      for (final Entry<String, String> entry : id.tags().entrySet()) {
-//        if (i++ > 0) {
-//          buf.append(" ");
-//        }
-//        buf.append(entry.getKey())
-//           .append("=")
-//           .append(entry.getValue());
-//      }
-//    }
-//    factory.manager().addMetric(buf.toString());
-//    System.out.println("WROTE: " + buf.toString());
-    return Deferred.fromResult(null);
-  }
+//    final Metric metric = new Metric(id.metric(), tags);
+//    chunk.addPoint(metric, value.timestamp().epoch(), 
+//        ((NumericType) value.value()).toDouble());
+////    final StringBuilder buf = new StringBuilder()
+////        .append("put ")
+////        .append(id.metric())
+////        .append(" ")
+////        .append(value.timestamp().epoch())
+////        .append(" ");
+////    if (((NumericType) value.value()).isInteger()) {
+////      buf.append(((NumericType) value.value()).longValue());
+////    } else {
+////      buf.append(((NumericType) value.value()).doubleValue());
+////    }
+////    if (id.tags() != null) {
+////      buf.append(" ");
+////      int i = 0;
+////      for (final Entry<String, String> entry : id.tags().entrySet()) {
+////        if (i++ > 0) {
+////          buf.append(" ");
+////        }
+////        buf.append(entry.getKey())
+////           .append("=")
+////           .append(entry.getValue());
+////      }
+////    }
+////    factory.manager().addMetric(buf.toString());
+////    System.out.println("WROTE: " + buf.toString());
+//    return Deferred.fromResult(null);
+//  }
 
   @Override
   public Deferred<TimeSeriesStringId> resolveByteId(TimeSeriesByteId id,
@@ -425,6 +425,13 @@ public class YuviDataStore implements TimeSeriesDataStore/*, QueryNodeFactory*/ 
       }
       
     }
+  }
+
+  @Override
+  public Deferred<List<byte[]>> encodeJoinMetrics(List<String> join_metrics,
+      Span span) {
+    // TODO Auto-generated method stub
+    return null;
   }
   
 }

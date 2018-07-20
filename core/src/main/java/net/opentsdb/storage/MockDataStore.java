@@ -770,5 +770,14 @@ public class MockDataStore implements ReadableTimeSeriesDataStore, WritableTimeS
     return null;
   }
 
+  @Override
+  public Deferred<Object> initialize(TSDB tsdb) {
+    return Deferred.fromResult(null);
+  }
+
+  @Override
+  public String version() {
+    return "3.0.0";
+  }
   
 }

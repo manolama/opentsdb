@@ -23,6 +23,9 @@ import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.Tags;
 import net.opentsdb.data.MillisecondTimeStamp;
+import net.opentsdb.data.TimeSeriesDatum;
+import net.opentsdb.data.TimeSeriesDatumId;
+import net.opentsdb.data.TimeSeriesDatumStringId;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
@@ -31,7 +34,7 @@ import net.opentsdb.data.types.numeric.IncomingDataPoint;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.servlet.applications.OpenTSDBApplication;
-import net.opentsdb.storage.TimeSeriesDataStore;
+import net.opentsdb.storage.WritableTimeSeriesDataStore;
 import net.opentsdb.utils.JSON;
 
 @Path("api/put")
@@ -60,33 +63,15 @@ public class PutRpc {
     
     List<IncomingDataPoint> dps = JSON.parseToObject(request.getInputStream(), TR_INCOMING);
     
-    class IDWrapper implements TimeSeriesStringId {
+    class IDWrapper implements TimeSeriesDatumStringId {
       final IncomingDataPoint dp;
       IDWrapper(final IncomingDataPoint dp) {
         this.dp = dp;
       }
       
       @Override
-      public boolean encoded() {
-        // TODO Auto-generated method stub
-        return false;
-      }
-
-      @Override
       public TypeToken<? extends TimeSeriesId> type() {
         return Const.TS_STRING_ID;
-      }
-
-      @Override
-      public int compareTo(TimeSeriesStringId o) {
-        // TODO Auto-generated method stub
-        return 0;
-      }
-
-      @Override
-      public String alias() {
-        // TODO Auto-generated method stub
-        return null;
       }
 
       @Override
@@ -106,23 +91,17 @@ public class PutRpc {
       }
 
       @Override
-      public List<String> aggregatedTags() {
+      public long buildHashCode() {
         // TODO Auto-generated method stub
-        return null;
+        return 0;
       }
 
       @Override
-      public List<String> disjointTags() {
+      public int compareTo(TimeSeriesDatumId o) {
         // TODO Auto-generated method stub
-        return null;
+        return 0;
       }
 
-      @Override
-      public Set<String> uniqueIds() {
-        // TODO Auto-generated method stub
-        return null;
-      }
-      
     }
 
     class ValueWrapper implements TimeSeriesValue<NumericType>, NumericType {
@@ -183,10 +162,11 @@ public class PutRpc {
       
     }
     
-    TimeSeriesDataStore store = tsdb.getRegistry().getDefaultStore();
+    WritableTimeSeriesDataStore store = tsdb.getRegistry()
+        .getDefaultPlugin(WritableTimeSeriesDataStore.class);
     
     for (final IncomingDataPoint dp : dps) {
-      store.write(new IDWrapper(dp), new ValueWrapper(dp), null);
+      store.write(null, TimeSeriesDatum.wrap(new IDWrapper(dp), new ValueWrapper(dp)), null);
     }
     return Response.status(204).build();
   }

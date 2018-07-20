@@ -19,6 +19,7 @@ import java.util.List;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.auth.AuthState;
+import net.opentsdb.core.TSDBPlugin;
 import net.opentsdb.data.TimeSeriesSharedTagsAndTimeData;
 import net.opentsdb.data.TimeSeriesDatum;
 import net.opentsdb.stats.Span;
@@ -29,7 +30,7 @@ import net.opentsdb.stats.Span;
  * 
  * @since 3.0
  */
-public interface WritableTimeSeriesDataStore {
+public interface WritableTimeSeriesDataStore extends TSDBPlugin {
   
   /**
    * Writes the given value to the data store.
