@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017  The OpenTSDB Authors.
+// Copyright (C) 2018  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,26 +12,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package net.opentsdb.data.types.annotation;
+syntax = "proto3";
 
-import com.google.common.reflect.TypeToken;
+option java_package = "net.opentsdb.data.pbuf";
+option java_outer_classname = "NumericDatumPB";
 
-import net.opentsdb.data.TimeSeriesDataType;
-
-/**
- * Base type for Annotations.
- * TODO - implement
- * 
- * @since 3.0
+/*
+ * A single value of the net.opentsdb.data.types.NumericType variety.
  */
-public class AnnotationType implements TimeSeriesDataType {
+message NumericDatum {
   
-  /** The data type reference to pass around. */
-  public static final TypeToken<AnnotationType> TYPE = 
-      TypeToken.of(AnnotationType.class);
-
-  @Override
-  public TypeToken<? extends TimeSeriesDataType> type() {
-    return TYPE;
-  }
+  /* The raw data encoded for floats or left as is for longs. */
+  int64 value = 1;
+  
+  /* Whether or not the value is an integer. */
+  bool is_integer = 2;
+  
 }

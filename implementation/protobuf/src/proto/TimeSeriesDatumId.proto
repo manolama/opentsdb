@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017  The OpenTSDB Authors.
+// Copyright (C) 2018  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,26 +12,22 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package net.opentsdb.data.types.annotation;
+syntax = "proto3";
 
-import com.google.common.reflect.TypeToken;
+option java_package = "net.opentsdb.data.pbuf";
+option java_outer_classname = "TimeSeriesDatumIdPB";
 
-import net.opentsdb.data.TimeSeriesDataType;
-
-/**
- * Base type for Annotations.
- * TODO - implement
- * 
- * @since 3.0
+/*
+ * An implementation of the net.opentsdb.data.TimeSeriesStringId class.
  */
-public class AnnotationType implements TimeSeriesDataType {
+message TimeSeriesDatumId {
+  /* An optional namespace. */
+  string namespace = 2;
   
-  /** The data type reference to pass around. */
-  public static final TypeToken<AnnotationType> TYPE = 
-      TypeToken.of(AnnotationType.class);
-
-  @Override
-  public TypeToken<? extends TimeSeriesDataType> type() {
-    return TYPE;
-  }
+  /* A metric name. */
+  string metric = 3;
+  
+  /* A map of tag keys to values. */
+  map<string, string> tags = 4;
+  
 }
