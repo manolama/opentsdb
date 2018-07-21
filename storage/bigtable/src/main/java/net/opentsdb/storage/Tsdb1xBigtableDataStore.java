@@ -16,6 +16,7 @@ package net.opentsdb.storage;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.List;
 
 import com.google.cloud.bigtable.config.BigtableOptions;
 import com.google.cloud.bigtable.config.CredentialOptions;
@@ -26,9 +27,12 @@ import com.google.cloud.bigtable.grpc.async.AsyncExecutor;
 import com.google.common.base.Strings;
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.auth.AuthState;
 import net.opentsdb.common.Const;
 import net.opentsdb.configuration.Configuration;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.TimeSeriesDatum;
+import net.opentsdb.data.TimeSeriesSharedTagsAndTimeData;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.query.QueryNode;
@@ -210,14 +214,6 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
   }
 
   @Override
-  public Deferred<Object> write(final TimeSeriesStringId id, 
-                                final TimeSeriesValue<?> value,
-                                final Span span) {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  @Override
   public String id() {
     return "Bigtable";
   }
@@ -289,6 +285,20 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
   
   boolean dynamicBoolean(final String key) {
     return tsdb.getConfig().getBoolean(key);
+  }
+
+  @Override
+  public Deferred<WriteStatus> write(AuthState state, TimeSeriesDatum datum,
+      Span span) {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public Deferred<List<WriteStatus>> write(AuthState state,
+      TimeSeriesSharedTagsAndTimeData data, Span span) {
+    // TODO Auto-generated method stub
+    return null;
   }
 
 }

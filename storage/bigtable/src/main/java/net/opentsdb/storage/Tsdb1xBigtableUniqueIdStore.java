@@ -35,9 +35,12 @@ import com.stumbleupon.async.Deferred;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.opentsdb.auth.AuthState;
 import net.opentsdb.core.Const;
+import net.opentsdb.data.TimeSeriesDatumId;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.stats.Span;
+import net.opentsdb.uid.IdOrError;
 import net.opentsdb.uid.UniqueIdStore;
 import net.opentsdb.uid.UniqueIdType;
 import net.opentsdb.utils.Bytes;
@@ -532,113 +535,25 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     return deferred;
   }
   
+
   @Override
-  public Deferred<byte[]> getOrCreateId(final UniqueIdType type, 
-                                        final String name,
-                                        final TimeSeriesId id,
-                                        final Span span) {
-    // TODO - implement
+  public Deferred<IdOrError> getOrCreateId(AuthState auth, UniqueIdType type,
+      String name, TimeSeriesDatumId id, Span span) {
+    // TODO Auto-generated method stub
     return null;
-//    if (type == null) {
-//      throw new IllegalArgumentException("Type cannot be null.");
-//    }
-//    if (Strings.isNullOrEmpty(name)) {
-//      throw new IllegalArgumentException("Name cannot be null or empty.");
-//    }
-//    if (id == null) {
-//      throw new IllegalArgumentException("The ID cannot be null.");
-//    }
-//    
-//    final Span child;
-//    if (span != null && span.isDebug()) {
-//      child = span.newChild("Tsdb1x_getIds")
-//          .withTag("dataStore", data_store.id())
-//          .withTag("type", type.toString())
-//          .withTag("name", name)
-//          .withTag("id", id.toString())
-//          .start();
-//    } else {
-//      child = null;
-//    }
-//    
-//    /** Triggers the assignment if allowed through the filter */
-//    class AssignmentAllowedCB implements  Callback<Deferred<byte[]>, Boolean> {
-//      @Override
-//      public Deferred<byte[]> call(final Boolean allowed) throws Exception {
-//        if (!allowed) {
-//          rejected_assignments.get(type).increment();
-//          return Deferred.fromError(new FailedToAssignUniqueIdException(
-//              type, name, 0, "Blocked by UID filter."));
-//        }
-//        
-//        Deferred<byte[]> assignment = null;
-//        synchronized (pending_assignments) {
-//          assignment = pending_assignments.get(name);
-//          if (assignment == null) {
-//            // to prevent UID leaks that can be caused when multiple time
-//            // series for the same metric or tags arrive, we need to write a 
-//            // deferred to the pending map as quickly as possible. Then we can 
-//            // start the assignment process after we've stashed the deferred 
-//            // and released the lock
-//            assignment = new Deferred<byte[]>();
-//            pending_assignments.put(name, assignment);
-//          } else {
-//            LOG.info("Already waiting for UID assignment: " + name);
-//            return assignment;
-//          }
-//        }
-//        
-//        // start the assignment dance after stashing the deferred
-//        if (metric != null && LOG.isDebugEnabled()) {
-//          LOG.debug("Assigning UID for '" + name + "' of type '" + type + 
-//              "' for series '" + metric + ", " + tags + "'");
-//        }
-//        
-//        // start the assignment dance after stashing the deferred
-//        return new UniqueIdAllocator(name, assignment).tryAllocate();
-//      }
-//      @Override
-//      public String toString() {
-//        return "AssignmentAllowedCB";
-//      }
-//    }
-//    
-//    /** Triggers an assignment (possibly through the filter) if the exception 
-//     * returned was a NoSuchUniqueName. */
-//    class HandleNoSuchUniqueNameCB implements Callback<Object, Exception> {
-//      public Object call(final Exception e) {
-//        if (e instanceof NoSuchUniqueName) {
-//          if (tsdb != null && tsdb.getUidFilter() != null && 
-//              tsdb.getUidFilter().fillterUIDAssignments()) {
-//            return tsdb.getUidFilter()
-//                .allowUIDAssignment(type, name, metric, tags)
-//                .addCallbackDeferring(new AssignmentAllowedCB());
-//          } else {
-//            return Deferred.fromResult(true)
-//                .addCallbackDeferring(new AssignmentAllowedCB());
-//          }
-//        }
-//        return e;  // Other unexpected exception, let it bubble up.
-//      }
-//    }
-//
-//    // Kick off the HBase lookup, and if we don't find it there either, start
-//    // the process to allocate a UID.
-//    return getId(name).addErrback(new HandleNoSuchUniqueNameCB());
   }
 
   @Override
-  public Deferred<List<byte[]>> getOrCreateIds(final UniqueIdType type, 
-                                               final List<String> names,
-                                               final TimeSeriesId id,
-                                               final Span span) {
-    // TODO - implement
+  public Deferred<List<IdOrError>> getOrCreateIds(AuthState auth,
+      UniqueIdType type, List<String> names, TimeSeriesDatumId id, Span span) {
+    // TODO Auto-generated method stub
     return null;
   }
-  
+
   @Override
-  public Charset characterSet() {
-    return character_set;
+  public Charset characterSet(UniqueIdType type) {
+    // TODO Auto-generated method stub
+    return null;
   }
   
 }

@@ -671,164 +671,164 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
           fuzzy_mask = null;
         }
         
-        regex = QueryUtil.getRowKeyUIDRegex(
-            node.schema(), 
-            group_bys, 
-            row_key_literals, 
-            explicit_tags, 
-            fuzzy_key, 
-            fuzzy_mask);
-        if (Strings.isNullOrEmpty(regex)) {
-          throw new RuntimeException("WTF????");
-        }
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Scanner regular expression: " + 
-              QueryUtil.byteRegexToString(node.schema(), regex));
-        }
+//        regex = QueryUtil.getRowKeyUIDRegex(
+//            node.schema(), 
+//            group_bys, 
+//            row_key_literals, 
+//            explicit_tags, 
+//            fuzzy_key, 
+//            fuzzy_mask);
+//        if (Strings.isNullOrEmpty(regex)) {
+//          throw new RuntimeException("WTF????");
+//        }
+//        if (LOG.isDebugEnabled()) {
+//          LOG.debug("Scanner regular expression: " + 
+//              QueryUtil.byteRegexToString(node.schema(), regex));
+//        }
       } else {
         fuzzy_key = null;
         fuzzy_mask = null;
         regex = null;
       }
       
-      final ScanFilter rollup_filter;
-      if (node.rollupIntervals() != null && 
-          !node.rollupIntervals().isEmpty() && 
-          node.rollupUsage() != RollupUsage.ROLLUP_RAW) {
-        
-        // set qualifier filters
-        if (node.rollupAggregation() != null && 
-            node.rollupAggregation().equals("avg")) {
-         
-          // old and new schemas with literal agg names or prefixes.
-          final List<ScanFilter> filters = Lists.newArrayListWithCapacity(4);
-          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
-              new BinaryPrefixComparator("sum".getBytes(Const.ASCII_CHARSET))));
-          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
-              new BinaryPrefixComparator("count".getBytes(Const.ASCII_CHARSET))));
-          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
-              new BinaryPrefixComparator(new byte[] { 
-                  (byte) node.schema().rollupConfig().getIdForAggregator("sum")
-              })));
-          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
-              new BinaryPrefixComparator(new byte[] { 
-                  (byte) node.schema().rollupConfig().getIdForAggregator("count")
-              })));
-          
-          rollup_filter = new FilterList(filters, Operator.MUST_PASS_ONE);
-        } else {
-          // it's another aggregation
-          final List<ScanFilter> filters = Lists.newArrayListWithCapacity(2);
-          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
-              new BinaryPrefixComparator(node.rollupAggregation()
-                  .getBytes(Const.ASCII_CHARSET))));
-          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
-              new BinaryPrefixComparator(new byte[] { 
-                  (byte) node.schema().rollupConfig()
-                    .getIdForAggregator(node.rollupAggregation())
-              })));
-          
-          rollup_filter = new FilterList(filters, Operator.MUST_PASS_ONE);
-        }
-      } else {
-        rollup_filter = null;
-      }
-      
-      int idx = 0;
-      if (node.rollupIntervals() != null && 
-          !node.rollupIntervals().isEmpty() && 
-          node.rollupUsage() != RollupUsage.ROLLUP_RAW) {
-        
-        for (int i = 0; i < node.rollupIntervals().size(); i++) {
-          final RollupInterval interval = node.rollupIntervals().get(idx);
-          final Tsdb1xBigtableScanner[] array = new Tsdb1xBigtableScanner[node.schema().saltWidth() > 0 ? 
-              node.schema().saltBuckets() : 1];
-          scanners.add(array);
-          final byte[] start_key = setStartKey(metric, interval, fuzzy_key);
-          final byte[] stop_key = setStopKey(metric, interval);
-          
-          for (int x = 0; x < array.length; x++) {
-            final Scanner scanner = node.parent()
-                .client().newScanner(pre_aggregate ? 
-                    interval.getGroupbyTable() : interval.getTemporalTable());
-            
-            scanner.setFamily(Tsdb1xBigtableDataStore.DATA_FAMILY);
-            scanner.setMaxNumRows(rows_per_scan);
-            scanner.setReversed(reverse_scan);
-            
-            if (node.schema().saltWidth() > 0) {
-              final byte[] start_clone = Arrays.copyOf(start_key, start_key.length);
-              final byte[] stop_clone = Arrays.copyOf(stop_key, stop_key.length);
-              node.schema().prefixKeyWithSalt(start_clone, x);
-              node.schema().prefixKeyWithSalt(stop_clone, x);
-              scanner.setStartKey(start_clone);
-              scanner.setStopKey(stop_clone);
-            } else {
-              // no copying needed, just dump em in
-              scanner.setStartKey(start_key);
-              scanner.setStopKey(stop_key);
-            }
-            
-            setScannerFilter(scanner, x, regex, fuzzy_key, fuzzy_mask, rollup_filter);
-            
-            if (LOG.isDebugEnabled()) {
-              LOG.debug("Instantiating rollup: " + scanner);
-            }
-            
-            array[x] = new Tsdb1xBigtableScanner(this, scanner, x, interval);
-          }
-          idx++;
-          
-          // bail out
-          if (node.rollupUsage() == RollupUsage.ROLLUP_NOFALLBACK && idx > 0) {
-            break;
-          }
-        }
-      }
-  
-      // raw scanner here if applicable
-      if (node.rollupIntervals() == null || 
-          node.rollupIntervals().isEmpty() || 
-          node.rollupUsage() != RollupUsage.ROLLUP_NOFALLBACK) {
-        
-        final Tsdb1xBigtableScanner[] array = new Tsdb1xBigtableScanner[node.schema().saltWidth() > 0 ? 
-            node.schema().saltBuckets() : 1];
-        scanners.add(array);
-        
-        final byte[] start_key = setStartKey(metric, null, fuzzy_key);
-        final byte[] stop_key = setStopKey(metric, null);
-        
-        for (int i = 0; i < array.length; i++) {
-          final Scanner scanner = node.parent()
-              .client().newScanner(node.parent().dataTable());
-          
-          scanner.setFamily(Tsdb1xBigtableDataStore.DATA_FAMILY);
-          scanner.setMaxNumRows(rows_per_scan);
-          scanner.setReversed(reverse_scan);
-          
-          if (node.schema().saltWidth() > 0) {
-            final byte[] start_clone = Arrays.copyOf(start_key, start_key.length);
-            final byte[] stop_clone = Arrays.copyOf(stop_key, stop_key.length);
-            node.schema().prefixKeyWithSalt(start_clone, i);
-            node.schema().prefixKeyWithSalt(stop_clone, i);
-            scanner.setStartKey(start_clone);
-            scanner.setStopKey(stop_clone);
-          } else {
-            // no copying needed, just dump em in
-            scanner.setStartKey(start_key);
-            scanner.setStopKey(stop_key);
-          }
-          
-          setScannerFilter(scanner, i, regex, fuzzy_key, fuzzy_mask, null);
-          
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Instantiating raw table scanner: " + scanner);
-          }
-          
-          array[i] = new Tsdb1xBigtableScanner(this, scanner, i, null);
-        }
-      }
-      initialized = true;
+//      final ScanFilter rollup_filter;
+//      if (node.rollupIntervals() != null && 
+//          !node.rollupIntervals().isEmpty() && 
+//          node.rollupUsage() != RollupUsage.ROLLUP_RAW) {
+//        
+//        // set qualifier filters
+//        if (node.rollupAggregation() != null && 
+//            node.rollupAggregation().equals("avg")) {
+//         
+//          // old and new schemas with literal agg names or prefixes.
+//          final List<ScanFilter> filters = Lists.newArrayListWithCapacity(4);
+//          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
+//              new BinaryPrefixComparator("sum".getBytes(Const.ASCII_CHARSET))));
+//          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
+//              new BinaryPrefixComparator("count".getBytes(Const.ASCII_CHARSET))));
+//          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
+//              new BinaryPrefixComparator(new byte[] { 
+//                  (byte) node.schema().rollupConfig().getIdForAggregator("sum")
+//              })));
+//          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
+//              new BinaryPrefixComparator(new byte[] { 
+//                  (byte) node.schema().rollupConfig().getIdForAggregator("count")
+//              })));
+//          
+//          rollup_filter = new FilterList(filters, Operator.MUST_PASS_ONE);
+//        } else {
+//          // it's another aggregation
+//          final List<ScanFilter> filters = Lists.newArrayListWithCapacity(2);
+//          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
+//              new BinaryPrefixComparator(node.rollupAggregation()
+//                  .getBytes(Const.ASCII_CHARSET))));
+//          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
+//              new BinaryPrefixComparator(new byte[] { 
+//                  (byte) node.schema().rollupConfig()
+//                    .getIdForAggregator(node.rollupAggregation())
+//              })));
+//          
+//          rollup_filter = new FilterList(filters, Operator.MUST_PASS_ONE);
+//        }
+//      } else {
+//        rollup_filter = null;
+//      }
+//      
+//      int idx = 0;
+//      if (node.rollupIntervals() != null && 
+//          !node.rollupIntervals().isEmpty() && 
+//          node.rollupUsage() != RollupUsage.ROLLUP_RAW) {
+//        
+//        for (int i = 0; i < node.rollupIntervals().size(); i++) {
+//          final RollupInterval interval = node.rollupIntervals().get(idx);
+//          final Tsdb1xBigtableScanner[] array = new Tsdb1xBigtableScanner[node.schema().saltWidth() > 0 ? 
+//              node.schema().saltBuckets() : 1];
+//          scanners.add(array);
+//          final byte[] start_key = setStartKey(metric, interval, fuzzy_key);
+//          final byte[] stop_key = setStopKey(metric, interval);
+//          
+//          for (int x = 0; x < array.length; x++) {
+//            final Scanner scanner = node.parent()
+//                .client().newScanner(pre_aggregate ? 
+//                    interval.getGroupbyTable() : interval.getTemporalTable());
+//            
+//            scanner.setFamily(Tsdb1xBigtableDataStore.DATA_FAMILY);
+//            scanner.setMaxNumRows(rows_per_scan);
+//            scanner.setReversed(reverse_scan);
+//            
+//            if (node.schema().saltWidth() > 0) {
+//              final byte[] start_clone = Arrays.copyOf(start_key, start_key.length);
+//              final byte[] stop_clone = Arrays.copyOf(stop_key, stop_key.length);
+//              node.schema().prefixKeyWithSalt(start_clone, x);
+//              node.schema().prefixKeyWithSalt(stop_clone, x);
+//              scanner.setStartKey(start_clone);
+//              scanner.setStopKey(stop_clone);
+//            } else {
+//              // no copying needed, just dump em in
+//              scanner.setStartKey(start_key);
+//              scanner.setStopKey(stop_key);
+//            }
+//            
+//            setScannerFilter(scanner, x, regex, fuzzy_key, fuzzy_mask, rollup_filter);
+//            
+//            if (LOG.isDebugEnabled()) {
+//              LOG.debug("Instantiating rollup: " + scanner);
+//            }
+//            
+//            array[x] = new Tsdb1xBigtableScanner(this, scanner, x, interval);
+//          }
+//          idx++;
+//          
+//          // bail out
+//          if (node.rollupUsage() == RollupUsage.ROLLUP_NOFALLBACK && idx > 0) {
+//            break;
+//          }
+//        }
+//      }
+//  
+//      // raw scanner here if applicable
+//      if (node.rollupIntervals() == null || 
+//          node.rollupIntervals().isEmpty() || 
+//          node.rollupUsage() != RollupUsage.ROLLUP_NOFALLBACK) {
+//        
+//        final Tsdb1xBigtableScanner[] array = new Tsdb1xBigtableScanner[node.schema().saltWidth() > 0 ? 
+//            node.schema().saltBuckets() : 1];
+//        scanners.add(array);
+//        
+//        final byte[] start_key = setStartKey(metric, null, fuzzy_key);
+//        final byte[] stop_key = setStopKey(metric, null);
+//        
+//        for (int i = 0; i < array.length; i++) {
+//          final Scanner scanner = node.parent()
+//              .client().newScanner(node.parent().dataTable());
+//          
+//          scanner.setFamily(Tsdb1xBigtableDataStore.DATA_FAMILY);
+//          scanner.setMaxNumRows(rows_per_scan);
+//          scanner.setReversed(reverse_scan);
+//          
+//          if (node.schema().saltWidth() > 0) {
+//            final byte[] start_clone = Arrays.copyOf(start_key, start_key.length);
+//            final byte[] stop_clone = Arrays.copyOf(stop_key, stop_key.length);
+//            node.schema().prefixKeyWithSalt(start_clone, i);
+//            node.schema().prefixKeyWithSalt(stop_clone, i);
+//            scanner.setStartKey(start_clone);
+//            scanner.setStopKey(stop_clone);
+//          } else {
+//            // no copying needed, just dump em in
+//            scanner.setStartKey(start_key);
+//            scanner.setStopKey(stop_key);
+//          }
+//          
+//          setScannerFilter(scanner, i, regex, fuzzy_key, fuzzy_mask, null);
+//          
+//          if (LOG.isDebugEnabled()) {
+//            LOG.debug("Instantiating raw table scanner: " + scanner);
+//          }
+//          
+//          array[i] = new Tsdb1xBigtableScanner(this, scanner, i, null);
+//        }
+//      }
+//      initialized = true;
     } catch (Exception e) {
       if (child != null) {
         child.setErrorTags(e)
@@ -846,7 +846,7 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
       LOG.debug("Configured " + scanners.size() + " scanner sets with " 
           + scanners.get(0).length + " scanners per set.");
     }
-    scanNext(span);
+    //scanNext(span);
   }
   
   /**
@@ -859,41 +859,41 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
    * if the fuzzy_key was set.
    * @param rollup_filter An optional rollup filter.
    */
-  void setScannerFilter(final Scanner scanner, 
-                        final int salt_bucket, 
-                        final String regex, 
-                        final byte[] fuzzy_key, 
-                        final byte[] fuzzy_mask, 
-                        final ScanFilter rollup_filter) {
-    if (regex == null && fuzzy_key == null && rollup_filter == null) {
-      return;
-    }
-    
-    List<ScanFilter> filters = Lists.newArrayListWithCapacity(3);
-    if (fuzzy_key != null) {
-      final byte[] key = node.schema().saltWidth() < 1 ? 
-          fuzzy_key : Arrays.copyOf(fuzzy_key, fuzzy_key.length);
-      if (node.schema().saltWidth() > 0) {
-        node.schema().prefixKeyWithSalt(key, salt_bucket);
-      }
-      filters.add(new FuzzyRowFilter(
-              new FuzzyRowFilter.FuzzyFilterPair(key, fuzzy_mask)));
-    }
-    
-    if (regex != null) {
-      filters.add(new KeyRegexpFilter(regex, Const.ASCII_CHARSET));
-    }
-    
-    if (rollup_filter != null) {
-      filters.add(rollup_filter);
-    }
-    
-    if (filters.size() == 1) {
-      scanner.setFilter(filters.get(0));
-    } else {
-      scanner.setFilter(new FilterList(filters, Operator.MUST_PASS_ALL));
-    }
-  }
+//  void setScannerFilter(final Scanner scanner, 
+//                        final int salt_bucket, 
+//                        final String regex, 
+//                        final byte[] fuzzy_key, 
+//                        final byte[] fuzzy_mask, 
+//                        final ScanFilter rollup_filter) {
+//    if (regex == null && fuzzy_key == null && rollup_filter == null) {
+//      return;
+//    }
+//    
+//    List<ScanFilter> filters = Lists.newArrayListWithCapacity(3);
+//    if (fuzzy_key != null) {
+//      final byte[] key = node.schema().saltWidth() < 1 ? 
+//          fuzzy_key : Arrays.copyOf(fuzzy_key, fuzzy_key.length);
+//      if (node.schema().saltWidth() > 0) {
+//        node.schema().prefixKeyWithSalt(key, salt_bucket);
+//      }
+//      filters.add(new FuzzyRowFilter(
+//              new FuzzyRowFilter.FuzzyFilterPair(key, fuzzy_mask)));
+//    }
+//    
+//    if (regex != null) {
+//      filters.add(new KeyRegexpFilter(regex, Const.ASCII_CHARSET));
+//    }
+//    
+//    if (rollup_filter != null) {
+//      filters.add(rollup_filter);
+//    }
+//    
+//    if (filters.size() == 1) {
+//      scanner.setFilter(filters.get(0));
+//    } else {
+//      scanner.setFilter(new FilterList(filters, Operator.MUST_PASS_ALL));
+//    }
+//  }
   
   /**
    * Called from {@link #fetchNext(Tsdb1xQueryResult, Span)} to iterate
@@ -1140,7 +1140,7 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
   }
   
   /** @return The parent node. */
-  Tsdb1xQueryNode node() {
+  Tsdb1xBigtableQueryNode node() {
     return node;
   }
 }
