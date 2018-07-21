@@ -149,20 +149,6 @@
                             <exclude>javax*:*</exclude>
                         </excludes>  
                     </artifactSet> 
-                    <relocations>
-                  <relocation>
-                     <pattern>com.google.protobuf</pattern>
-                     <shadedPattern>net.opentsdb.com.google.protobuf</shadedPattern>
-                  </relocation>
-<!--                  <relocation>
-                     <pattern>com.google.api</pattern>
-                     <shadedPattern>net.opentsdb.com.google.api</shadedPattern>
-                  </relocation>
-                  <relocation>
-                     <pattern>com.google.cloud</pattern>
-                     <shadedPattern>net.opentsdb.com.google.cloud</shadedPattern>
-                  </relocation>-->
-               </relocations>
                     <filters>  
                       <filter> 
                         <artifact>*:*</artifact> 

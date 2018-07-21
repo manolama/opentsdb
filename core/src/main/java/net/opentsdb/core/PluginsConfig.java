@@ -109,8 +109,8 @@ public class PluginsConfig extends Validatable {
     DEFAULT_TYPES.add("net.opentsdb.uid.UniqueIdFactory");
     DEFAULT_TYPES.add("net.opentsdb.query.serdes.SerdesFactory");
     DEFAULT_TYPES.add("net.opentsdb.query.execution.QueryExecutorFactory");
-    DEFAULT_TYPES.add("net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStoreFactory");
-    DEFAULT_TYPES.add("net.opentsdb.storage.TimeSeriesDataStoreFactory");
+    //DEFAULT_TYPES.add("net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStoreFactory");
+    //DEFAULT_TYPES.add("net.opentsdb.storage.TimeSeriesDataStoreFactory");
   }
   
   public static final Map<String, String> DEFAULT_IMPLEMENTATIONS = 

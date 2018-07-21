@@ -85,6 +85,13 @@ public class CachingQueryExecutor implements QuerySourceFactory {
   /** A key generator used for reading and writing the cache data. */
   private final TimeSeriesCacheKeyGenerator key_generator;
   
+  public CachingQueryExecutor() {
+    tsdb = null;
+    plugin = null;
+    serdes = null;
+    key_generator = null;
+  }
+  
   /**
    * <b>TEMPORARY</b> Ctor till we get the execution graph code merged
    * with the pipeline.
