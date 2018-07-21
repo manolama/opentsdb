@@ -97,6 +97,7 @@
     <module>implementation/server-undertow</module>
     <module>storage/asynchbase</module>
     <module>storage/googlepubsub</module>
+    <module>storage/bigtable</module>
     <module>distribution</module>
   </modules>
 
