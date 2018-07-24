@@ -18,6 +18,8 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.List;
 
+import com.google.bigtable.v2.CheckAndMutateRowRequest;
+import com.google.bigtable.v2.CheckAndMutateRowResponse;
 import com.google.cloud.bigtable.config.BigtableOptions;
 import com.google.cloud.bigtable.config.CredentialOptions;
 import com.google.cloud.bigtable.grpc.BigtableDataClient;
@@ -260,6 +262,10 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
     return uid_table;
   }
   
+  BigtableSession session() {
+    return session;
+  }
+  
   /** @return The Bigtable executor. */
   AsyncExecutor executor() {
     return executor;
@@ -301,4 +307,22 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
     return null;
   }
 
+  /**
+   * <p>wasMutationApplied.</p>
+   *<b>NOTE</b> Cribbed from Bigtable client.
+   * @param request a {@link com.google.bigtable.v2.CheckAndMutateRowRequest} object.
+   * @param response a {@link com.google.bigtable.v2.CheckAndMutateRowResponse} object.
+   * @return a boolean.
+   */
+  public static boolean wasMutationApplied(
+      CheckAndMutateRowRequest request,
+      CheckAndMutateRowResponse response) {
+
+    // If we have true mods, we want the predicate to have matched.
+    // If we have false mods, we did not want the predicate to have matched.
+    return (request.getTrueMutationsCount() > 0
+        && response.getPredicateMatched())
+        || (request.getFalseMutationsCount() > 0
+        && !response.getPredicateMatched());
+  }
 }
