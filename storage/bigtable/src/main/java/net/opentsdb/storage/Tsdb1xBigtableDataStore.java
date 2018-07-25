@@ -233,7 +233,7 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
           .build());
       
       final BigtableTableName data_table_name = new BigtableTableName(
-          config.getString(getConfigKey(DATA_TABLE_KEY)));
+          table_namer.toTableNameStr(config.getString(getConfigKey(DATA_TABLE_KEY))));
       mutation_buffer = session.createBulkMutation(data_table_name);
     } catch (IOException e) {
       throw new StorageException("WTF?", e);
