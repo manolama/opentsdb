@@ -17,16 +17,32 @@ package net.opentsdb.storage;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import com.google.bigtable.v2.CheckAndMutateRowRequest;
 import com.google.bigtable.v2.CheckAndMutateRowResponse;
+import com.google.bigtable.v2.MutateRowRequest;
+import com.google.bigtable.v2.MutateRowResponse;
+import com.google.bigtable.v2.Mutation;
+import com.google.bigtable.v2.ReadModifyWriteRowRequest;
+import com.google.bigtable.v2.ReadModifyWriteRowResponse;
+import com.google.bigtable.v2.ReadModifyWriteRule;
+import com.google.bigtable.v2.Mutation.SetCell;
 import com.google.cloud.bigtable.config.BigtableOptions;
+import com.google.cloud.bigtable.config.CallOptionsConfig;
 import com.google.cloud.bigtable.config.CredentialOptions;
 import com.google.cloud.bigtable.grpc.BigtableDataClient;
 import com.google.cloud.bigtable.grpc.BigtableInstanceName;
 import com.google.cloud.bigtable.grpc.BigtableSession;
+import com.google.cloud.bigtable.grpc.BigtableTableName;
 import com.google.cloud.bigtable.grpc.async.AsyncExecutor;
+import com.google.cloud.bigtable.grpc.async.BulkMutation;
+import com.google.cloud.bigtable.util.ByteStringer;
 import com.google.common.base.Strings;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.auth.AuthState;
@@ -37,6 +53,7 @@ import net.opentsdb.data.TimeSeriesDatum;
 import net.opentsdb.data.TimeSeriesSharedTagsAndTimeData;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
+import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
@@ -44,7 +61,9 @@ import net.opentsdb.query.QuerySourceConfig;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
 import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStore;
+import net.opentsdb.uid.IdOrError;
 import net.opentsdb.uid.UniqueIdStore;
+import net.opentsdb.utils.Pair;
 
 public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
   
@@ -80,14 +99,23 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
   public static final String FUZZY_FILTER_KEY = "tsd.query.enable_fuzzy_filter";
   public static final String ROWS_PER_SCAN_KEY = "tsd.query.rows_per_scan";
   public static final String MAX_MG_CARDINALITY_KEY = "tsd.query.multiget.max_cardinality";
+  public static final String ENABLE_APPENDS_KEY = "tsd.storage.enable_appends";
+
+  public static final byte[] DATA_FAMILY = 
+      "t".getBytes(Const.ISO_8859_CHARSET);
   
   protected final TSDB tsdb;
   protected final String id;
   
   protected BigtableSession session;
   protected AsyncExecutor executor;
+  protected ExecutorService pool;
   
   protected Schema schema;
+  
+  private final boolean enable_appends;
+  
+  private final BulkMutation mutation_buffer;
   
   protected final Tsdb1xBigtableUniqueIdStore uid_store;
   
@@ -109,6 +137,7 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
     this.tsdb = factory.tsdb();
     this.id = id;
     this.schema = schema;
+    pool = Executors.newCachedThreadPool();
     
     // We'll sync on the config object to avoid race conditions if 
     // multiple instances of this client are being loaded.
@@ -133,6 +162,10 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
       if (!config.hasProperty(getConfigKey(META_TABLE_KEY))) {
         config.register(getConfigKey(META_TABLE_KEY), "tsdb-meta", false, 
             "The name of the Meta data table for OpenTSDB.");
+      }
+      if (!config.hasProperty(ENABLE_APPENDS_KEY)) {
+        config.register(ENABLE_APPENDS_KEY, false, false,
+            "TODO");
       }
       
       // bigtable configs
@@ -182,6 +215,7 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
     meta_table = (table_namer.toTableNameStr(
         config.getString(getConfigKey(META_TABLE_KEY))))
           .getBytes(Const.ISO_8859_CHARSET);
+    enable_appends = config.getBoolean(ENABLE_APPENDS_KEY);
     
     try {
       final CredentialOptions creds = CredentialOptions.jsonCredentials(
@@ -197,6 +231,10 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
           .setPort(BigtableOptions.BIGTABLE_PORT_DEFAULT)
           .setDataHost(BigtableOptions.BIGTABLE_DATA_HOST_DEFAULT)
           .build());
+      
+      final BigtableTableName data_table_name = new BigtableTableName(
+          config.getString(getConfigKey(DATA_TABLE_KEY)));
+      mutation_buffer = session.createBulkMutation(data_table_name);
     } catch (IOException e) {
       throw new StorageException("WTF?", e);
     }
@@ -245,8 +283,7 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
       return CONFIG_PREFIX + id + "." + suffix;
     }
   }
-
-
+  
   /** @return The schema assigned to this store. */
   Schema schema() {
     return schema;
@@ -262,8 +299,8 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
     return uid_table;
   }
   
-  BigtableSession session() {
-    return session;
+  ExecutorService pool() {
+    return pool;
   }
   
   /** @return The Bigtable executor. */
@@ -296,8 +333,207 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
   @Override
   public Deferred<WriteStatus> write(AuthState state, TimeSeriesDatum datum,
       Span span) {
-    // TODO Auto-generated method stub
-    return null;
+ // TODO - other types
+    if (datum.value().type() != NumericType.TYPE) {
+      return Deferred.fromResult(WriteStatus.rejected(
+          "Not handling this type yet: " + datum.value().type()));
+    }
+    
+    final Span child;
+    if (span != null && span.isDebug()) {
+      child = span.newChild(getClass().getName() + ".write")
+          .start();
+    } else {
+      child = null;
+    }
+    // no need to validate here, schema does it.
+    
+//    class SuccessCB implements Callback<WriteStatus, Object> {
+//      @Override
+//      public WriteStatus call(final Object ignored) throws Exception {
+//        if (child != null) {
+//          child.setSuccessTags().finish();
+//        }
+//        return WriteStatus.OK;
+//      }
+//    }
+//    
+//    class WriteErrorCB implements Callback<WriteStatus, Exception> {
+//      @Override
+//      public WriteStatus call(final Exception ex) throws Exception {
+//        // TODO log?
+//        // TODO - how do we retry?
+////        if (ex instanceof PleaseThrottleException ||
+////            ex instanceof RecoverableException) {
+////          if (child != null) {
+////            child.setErrorTags(ex)
+////                 .finish();
+////          }
+////          return WriteStatus.retry("Please retry at a later time.");
+////        }
+//        if (child != null) {
+//          child.setErrorTags(ex)
+//               .finish();
+//        }
+//        return WriteStatus.error(ex.getMessage(), ex);
+//      }
+//    }
+    
+    class RowKeyCB implements Callback<Deferred<WriteStatus>, IdOrError> {
+
+      @Override
+      public Deferred<WriteStatus> call(final IdOrError ioe) throws Exception {
+        if (ioe.id() == null) {
+          if (child != null) {
+            child.setErrorTags(ioe.exception())
+                 .setTag("state", ioe.state().toString())
+                 .setTag("message", ioe.error())
+                 .finish();
+          }
+          switch (ioe.state()) {
+          case RETRY:
+            return Deferred.fromResult(WriteStatus.retry(ioe.error()));
+          case REJECTED:
+            return Deferred.fromResult(WriteStatus.rejected(ioe.error()));
+          case ERROR:
+            return Deferred.fromResult(WriteStatus.error(ioe.error(), ioe.exception()));
+          default:
+            throw new StorageException("Unexpected resolution state: " 
+                + ioe.state());
+          }
+        }
+        // TODO - handle different types
+        long base_time = datum.value().timestamp().epoch();
+        base_time = base_time - (base_time % Schema.MAX_RAW_TIMESPAN);
+        Pair<byte[], byte[]> pair = schema.encode(datum.value(), 
+            enable_appends, (int) base_time, null);
+        
+        if (enable_appends) {
+          final ReadModifyWriteRowRequest append_request = 
+              ReadModifyWriteRowRequest.newBuilder()
+              .setTableNameBytes(ByteStringer.wrap(data_table))
+              .setRowKey(ByteStringer.wrap(ioe.id()))
+              .addRules(ReadModifyWriteRule.newBuilder()
+                  .setFamilyNameBytes(ByteStringer.wrap(DATA_FAMILY))
+                  .setColumnQualifier(ByteStringer.wrap(pair.getKey()))
+                  .setAppendValue(ByteStringer.wrap(pair.getValue())))
+              .build();
+          
+          final Deferred<WriteStatus> deferred = new Deferred<WriteStatus>();
+          class AppendCB implements FutureCallback<ReadModifyWriteRowResponse> {
+
+            @Override
+            public void onSuccess(
+                final ReadModifyWriteRowResponse result) {
+              if (child != null) {
+                child.setSuccessTags().finish();
+              }
+              
+              deferred.callback(WriteStatus.OK);
+            }
+
+            @Override
+            public void onFailure(final Throwable t) {
+              // TODO log?
+              // TODO - how do we retry?
+//              if (ex instanceof PleaseThrottleException ||
+//                  ex instanceof RecoverableException) {
+//                if (child != null) {
+//                  child.setErrorTags(ex)
+//                       .finish();
+//                }
+//                return WriteStatus.retry("Please retry at a later time.");
+//              }
+              if (child != null) {
+                child.setErrorTags(t)
+                     .finish();
+              }
+              deferred.callback(WriteStatus.error(t.getMessage(), t));
+            }
+            
+          }
+          
+          Futures.addCallback(
+              executor.readModifyWriteRowAsync(append_request), 
+              new AppendCB(), 
+              pool);
+          return deferred;
+//          return client.append(new AppendRequest(data_table,ioe.id(), 
+//              DATA_FAMILY, pair.getKey(), pair.getValue()))
+//              .addCallbacks(new SuccessCB(), new WriteErrorCB());
+        } else {
+          final MutateRowRequest mutate_row_request = 
+              MutateRowRequest.newBuilder()
+              .setTableNameBytes(ByteStringer.wrap(data_table))
+              .setRowKey(ByteStringer.wrap(ioe.id()))
+              .addMutations(Mutation.newBuilder()
+                  .setSetCell(SetCell.newBuilder()
+                      .setFamilyNameBytes(ByteStringer.wrap(DATA_FAMILY))
+                      .setColumnQualifier(ByteStringer.wrap(pair.getKey()))
+                      .setValue(ByteStringer.wrap(pair.getValue()))))
+              .build();
+          
+          final Deferred<WriteStatus> deferred = new Deferred<WriteStatus>();
+          class PutCB implements FutureCallback<MutateRowResponse> {
+
+            @Override
+            public void onSuccess(final MutateRowResponse result) {
+              if (child != null) {
+                child.setSuccessTags().finish();
+              }
+              
+              deferred.callback(WriteStatus.OK);
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+           // TODO log?
+              // TODO - how do we retry?
+//              if (ex instanceof PleaseThrottleException ||
+//                  ex instanceof RecoverableException) {
+//                if (child != null) {
+//                  child.setErrorTags(ex)
+//                       .finish();
+//                }
+//                return WriteStatus.retry("Please retry at a later time.");
+//              }
+              if (child != null) {
+                child.setErrorTags(t)
+                     .finish();
+              }
+              deferred.callback(WriteStatus.error(t.getMessage(), t));
+            }
+            
+          }
+          
+          Futures.addCallback(
+              mutation_buffer.add(mutate_row_request),
+              new PutCB(), 
+              pool);
+          return deferred;
+//          return client.put(new PutRequest(data_table, ioe.id(), 
+//              DATA_FAMILY, pair.getKey(), pair.getValue()))
+//              .addCallbacks(new SuccessCB(), new WriteErrorCB());
+        }
+      }
+      
+    }
+    
+    class ErrorCB implements Callback<WriteStatus, Exception> {
+      @Override
+      public WriteStatus call(final Exception ex) throws Exception {
+        return WriteStatus.error(ex.getMessage(), ex);
+      }
+    }
+    
+    try {
+      return schema.createRowKey(state, datum, null, child)
+          .addCallbackDeferring(new RowKeyCB())
+          .addErrback(new ErrorCB());
+    } catch (Exception e) {
+      // TODO - log
+      return Deferred.fromResult(WriteStatus.error(e.getMessage(), e));
+    }
   }
 
   @Override

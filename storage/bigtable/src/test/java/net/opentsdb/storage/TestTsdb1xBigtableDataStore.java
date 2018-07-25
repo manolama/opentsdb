@@ -460,7 +460,7 @@ System.out.println("GET: " + store.session.createAsyncExecutor().readRowsAsync(r
     
     System.out.println(
         Arrays.toString(store.uidStore().getOrCreateId(null, 
-            UniqueIdType.METRIC, "cl.test3", mock(TimeSeriesDatumId.class), 
+            UniqueIdType.METRIC, "cl.test5", mock(TimeSeriesDatumId.class), 
             null).join().id()));
   }
 

@@ -277,7 +277,7 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     
     try {
       Futures.addCallback(data_store.executor().readRowsAsync(request), 
-          new ResultCB(), MoreExecutors.directExecutor());
+          new ResultCB(), data_store.pool());
     } catch (Exception e) {
       if (child != null) {
         child.setErrorTags()
@@ -392,7 +392,7 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     
     try {
       Futures.addCallback(data_store.executor().readRowsAsync(request), 
-          new ResultCB(), MoreExecutors.directExecutor());
+          new ResultCB(), data_store.pool());
     } catch (Exception e) {
       if (child != null) {
         child.setErrorTags()
@@ -485,7 +485,7 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     
     try {
       Futures.addCallback(data_store.executor().readRowsAsync(request), 
-          new ResultCB(), MoreExecutors.directExecutor());
+          new ResultCB(), data_store.pool());
     } catch (Exception e) {
       if (child != null) {
         child.setErrorTags()
@@ -600,7 +600,7 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     
     try {
       Futures.addCallback(data_store.executor().readRowsAsync(request), 
-          new ResultCB(), MoreExecutors.directExecutor());
+          new ResultCB(), data_store.pool());
     } catch (Exception e) {
       if (child != null) {
         child.setErrorTags()
@@ -826,7 +826,7 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
           
           Futures.addCallback(
               data_store.executor().readModifyWriteRowAsync(request),
-              new IncrementCB(), MoreExecutors.directExecutor());
+              new IncrementCB(), data_store.pool());
           return deferred;
         } catch (ArrayIndexOutOfBoundsException e) {
           purgeWaiting();
@@ -934,7 +934,7 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
       try {
         Futures.addCallback(
             data_store.executor().checkAndMutateRowAsync(request),
-            new CasCB(), MoreExecutors.directExecutor());
+            new CasCB(), data_store.pool());
       } catch (InterruptedException e) {
         // TODO Auto-generated catch block
         e.printStackTrace();
@@ -1009,7 +1009,7 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
       try {
         Futures.addCallback(
             data_store.executor().checkAndMutateRowAsync(request),
-            new CasCB(), MoreExecutors.directExecutor());
+            new CasCB(), data_store.pool());
       } catch (InterruptedException e) {
         // TODO Auto-generated catch block
         e.printStackTrace();
