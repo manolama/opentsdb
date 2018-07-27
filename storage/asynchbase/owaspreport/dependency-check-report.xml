@@ -1,0 +1,1093 @@
+<?xml version="1.0"?>
+<analysis xmlns="https://jeremylong.github.io/DependencyCheck/dependency-check.1.6.xsd">
+    <scanInfo>
+        <engineVersion>3.0.2</engineVersion>
+        <dataSource>
+            <name>NVD CVE 2002</name>
+            <timestamp>28/03/2018 01:29:13</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2003</name>
+            <timestamp>28/03/2018 01:25:06</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2004</name>
+            <timestamp>28/03/2018 01:23:58</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2005</name>
+            <timestamp>28/03/2018 01:21:54</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2006</name>
+            <timestamp>28/03/2018 01:18:17</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2007</name>
+            <timestamp>30/03/2018 00:49:16</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2008</name>
+            <timestamp>28/03/2018 01:07:26</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2009</name>
+            <timestamp>28/03/2018 01:01:46</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2010</name>
+            <timestamp>28/03/2018 00:57:17</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2011</name>
+            <timestamp>30/03/2018 00:43:52</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2012</name>
+            <timestamp>28/03/2018 00:44:45</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2013</name>
+            <timestamp>30/03/2018 00:37:04</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2014</name>
+            <timestamp>30/03/2018 00:31:58</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2015</name>
+            <timestamp>04/04/2018 00:25:05</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2016</name>
+            <timestamp>04/04/2018 00:19:01</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2017</name>
+            <timestamp>04/04/2018 00:12:15</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE 2018</name>
+            <timestamp>04/04/2018 00:01:30</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE Checked</name>
+            <timestamp>04/04/2018 16:29:54</timestamp>
+        </dataSource>
+        <dataSource>
+            <name>NVD CVE Modified</name>
+            <timestamp>04/04/2018 15:01:21</timestamp>
+        </dataSource>
+    </scanInfo>
+    <projectInfo>
+        <name>opentsdb-asynchbase</name>
+        <groupID>net.opentsdb</groupID>
+        <artifactID>opentsdb-asynchbase</artifactID>
+        <version>3.0.2</version>
+        <reportDate>2018-04-04T16:51:26.630-0700</reportDate>
+        <credits>This report contains data retrieved from the National Vulnerability Database: https://nvd.nist.gov and from the Node Security Platform: https://nodesecurity.io</credits>
+    </projectInfo>
+    <dependencies>
+        <dependency isVirtual="false">
+            <fileName>slf4j-api-1.7.7.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/org/slf4j/slf4j-api/1.7.7/slf4j-api-1.7.7.jar</filePath>
+            <md5>ca4280bf93d64367723ae5c8d42dd0b9</md5>
+            <sha1>2b8019b6249bb05d81d3a3094e468753e2b21311</sha1>
+            <description>The slf4j API</description>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(org.slf4j:slf4j-api:1.7.7)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%222b8019b6249bb05d81d3a3094e468753e2b21311%22</url>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>guava-19.0.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/com/google/guava/guava/19.0/guava-19.0.jar</filePath>
+            <md5>43bfc49bdc7324f6daaa60c1ee9f3972</md5>
+            <sha1>6ce200f6b23222af3d8abb6b6459e6c44f4bb0e9</sha1>
+            <description>
+    Guava is a suite of core and expanded libraries that include
+    utility classes, google&apos;s collections, io classes, and much
+    much more.
+
+    Guava has only one code dependency - javax.annotation,
+    per the JSR-305 spec.
+  </description>
+            <license>http://www.apache.org/licenses/LICENSE-2.0.txt</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(com.google.guava:guava:19.0)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%226ce200f6b23222af3d8abb6b6459e6c44f4bb0e9%22</url>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>netty-common-4.1.9.Final.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/io/netty/netty-common/4.1.9.Final/netty-common-4.1.9.Final.jar</filePath>
+            <md5>67e675b3d24a3f15a4cb737af5736d60</md5>
+            <sha1>7c6ba17f3b9e08fbbfc000fa3ce46208446a0019</sha1>
+            <description>Netty is an asynchronous event-driven network application framework for    rapid development of maintainable high performance protocol servers and    clients.</description>
+            <license>http://www.apache.org/licenses/LICENSE-2.0</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(io.netty:netty-common:4.1.9.Final)</name>
+                    <url>http://search.maven.org/remotecontent?filepath=io/netty/netty-common/4.1.9.Final/netty-common-4.1.9.Final.jar</url>
+                </identifier>
+                <identifier type="cpe" confidence="LOW">
+                    <name>(cpe:/a:netty_project:netty:4.1.9)</name>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>async-1.4.1.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/com/stumbleupon/async/1.4.1/async-1.4.1.jar</filePath>
+            <md5>dd937b989f6d84dacc20cad00305cee3</md5>
+            <sha1>25b9507a58570c349d32a80e395bc29da091059c</sha1>
+            <description>
+    Building blocks for high-performance multi-threaded asynchronous
+    applications. Inspired by Twisted&apos;s async library (twisted.internet.defer).
+  </description>
+            <license>BSD: http://www.opensource.org/licenses/BSD-3-Clause</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(com.stumbleupon:async:1.4.1)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%2225b9507a58570c349d32a80e395bc29da091059c%22</url>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>jackson-databind-2.9.5.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.9.5/jackson-databind-2.9.5.jar</filePath>
+            <md5>34b37affbf74f5d199be10622ddc83cd</md5>
+            <sha1>3490508379d065fe3fcb80042b62f630f7588606</sha1>
+            <description>General data-binding functionality for Jackson: works on core streaming API</description>
+            <license>http://www.apache.org/licenses/LICENSE-2.0.txt</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(com.fasterxml.jackson.core:jackson-databind:2.9.5)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%223490508379d065fe3fcb80042b62f630f7588606%22</url>
+                </identifier>
+                <identifier type="cpe" confidence="LOW">
+                    <name>(cpe:/a:fasterxml:jackson:2.9.5)</name>
+                </identifier>
+                <identifier type="cpe" confidence="LOW">
+                    <name>(cpe:/a:fasterxml:jackson-databind:2.9.5)</name>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>opentsdb-common-3.0.84-SNAPSHOT.jar</fileName>
+            <filePath>/Users/clarsen/Documents/opentsdb/opentsdbv3/common/target/opentsdb-common-3.0.84-SNAPSHOT.jar</filePath>
+            <md5>810d17ff942622372a7795d7a38ad160</md5>
+            <sha1>eb06cf16c425a07d140562f32c6a297ed7b8c9b6</sha1>
+            <description>OpenTSDB&apos;s common module holding classes and functions usable
+    across multiple modules and external projects.</description>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGH">
+                    <name>(net.opentsdb:opentsdb-common:3.0.84-SNAPSHOT)</name>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>jackson-core-2.9.5.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.9.5/jackson-core-2.9.5.jar</filePath>
+            <md5>ec59f24f7f8d9acf53301c562722adf2</md5>
+            <sha1>a22ac51016944b06fd9ffbc9541c6e7ce5eea117</sha1>
+            <description>Core Jackson processing abstractions (aka Streaming API), implementation for JSON</description>
+            <license>http://www.apache.org/licenses/LICENSE-2.0.txt</license>
+            <relatedDependencies>
+                <relatedDependency isVirtual="false">
+                    <filePath>/Users/clarsen/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.9.5/jackson-annotations-2.9.5.jar</filePath>
+                    <sha1>9056ec9db21c57d43219a84bb18c129ae51c6a5d</sha1>
+                    <md5>93ff99082f89beba3dd7b594a478df10</md5>
+                    <identifier type="maven">
+                        <name>com.fasterxml.jackson.core:jackson-annotations:2.9.5</name>
+                        <url>http://search.maven.org/#search|ga|1|1%3A%229056ec9db21c57d43219a84bb18c129ae51c6a5d%22</url>
+                    </identifier>
+                </relatedDependency>
+            </relatedDependencies>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="cpe" confidence="LOW">
+                    <name>(cpe:/a:fasterxml:jackson:2.9.5)</name>
+                </identifier>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(com.fasterxml.jackson.core:jackson-core:2.9.5)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%22a22ac51016944b06fd9ffbc9541c6e7ce5eea117%22</url>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>commons-logging-1.1.1.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/commons-logging/commons-logging/1.1.1/commons-logging-1.1.1.jar</filePath>
+            <md5>ed448347fc0104034aa14c8189bf37de</md5>
+            <sha1>5043bfebc3db072ed80fbd362e7caf00e885d8ae</sha1>
+            <description>Commons Logging is a thin adapter allowing configurable bridging to other,
+    well known logging systems.</description>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(commons-logging:commons-logging:1.1.1)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%225043bfebc3db072ed80fbd362e7caf00e885d8ae%22</url>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>commons-jexl-2.1.1.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/org/apache/commons/commons-jexl/2.1.1/commons-jexl-2.1.1.jar</filePath>
+            <md5>4ad8f5c161dd3a50e190334555675db9</md5>
+            <sha1>6ecc181debade00230aa1e17666c4ea0371beaaa</sha1>
+            <description>The Commons Jexl library is an implementation of the JSTL Expression Language with extensions.</description>
+            <license>http://www.apache.org/licenses/LICENSE-2.0.txt</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(org.apache.commons:commons-jexl:2.1.1)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%226ecc181debade00230aa1e17666c4ea0371beaaa%22</url>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>commons-math3-3.4.1.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/org/apache/commons/commons-math3/3.4.1/commons-math3-3.4.1.jar</filePath>
+            <md5>14a218d0ee57907dd2c7ef944b6c0afd</md5>
+            <sha1>3ac44a8664228384bc68437264cf7c4cf112f579</sha1>
+            <description>The Apache Commons Math project is a library of lightweight, self-contained mathematics and statistics components addressing the most common practical problems not immediately available in the Java programming language or commons-lang.</description>
+            <license>http://www.apache.org/licenses/LICENSE-2.0.txt</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(org.apache.commons:commons-math3:3.4.1)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%223ac44a8664228384bc68437264cf7c4cf112f579%22</url>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>jgrapht-core-0.9.2.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/org/jgrapht/jgrapht-core/0.9.2/jgrapht-core-0.9.2.jar</filePath>
+            <md5>ae515025fda476afb55d1edebc6c166f</md5>
+            <sha1>2597c1f9aa80fcfdd1f2e8ad0f0655bd768d95ca</sha1>
+            <description>A Java class library for graph-theory data structures and algorithms.</description>
+            <license>GNU Lesser General Public License Version 2.1, February 1999: http://jgrapht.sourceforge.net/LGPL.html
+Eclipse Public License (EPL) 1.0: http://www.eclipse.org/legal/epl-v10.html</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(org.jgrapht:jgrapht-core:0.9.2)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%222597c1f9aa80fcfdd1f2e8ad0f0655bd768d95ca%22</url>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>opentracing-api-0.20.10.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/io/opentracing/opentracing-api/0.20.10/opentracing-api-0.20.10.jar</filePath>
+            <md5>c1eccb1a1c453508f102b1d14f8db81e</md5>
+            <sha1>dcf34ad85d6571980fc265152966aefa0694c6d1</sha1>
+            <description>OpenTracing Java API</description>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(io.opentracing:opentracing-api:0.20.10)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%22dcf34ad85d6571980fc265152966aefa0694c6d1%22</url>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>zero-allocation-hashing-0.6.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/net/openhft/zero-allocation-hashing/0.6/zero-allocation-hashing-0.6.jar</filePath>
+            <md5>5a8fc33bc3993ee150a668974c651764</md5>
+            <sha1>38042e3eb12f714dc704e90a8329d7af87d77421</sha1>
+            <description>Zero-allocation, pretty fast implementations
+        of non-cryptographic hash functions for byte sequences or blocks of memory</description>
+            <license>http://www.apache.org/licenses/LICENSE-2.0.txt</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(net.openhft:zero-allocation-hashing:0.6)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%2238042e3eb12f714dc704e90a8329d7af87d77421%22</url>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>opentsdb-core-3.0.84-SNAPSHOT.jar</fileName>
+            <filePath>/Users/clarsen/Documents/opentsdb/opentsdbv3/core/target/opentsdb-core-3.0.84-SNAPSHOT.jar</filePath>
+            <md5>fbac92e1483f0c5e44d770ae92e63867</md5>
+            <sha1>044547553d81d6c0e3fd7dbc7a6c75f9f204eacd</sha1>
+            <description>OpenTSDB&apos;s core interfaces, abstracts and base classes for
+    use with concrete implementations.</description>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGH">
+                    <name>(net.opentsdb:opentsdb-core:3.0.84-SNAPSHOT)</name>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>protobuf-java-2.5.0.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar</filePath>
+            <md5>a44473b98947e2a54c54e0db1387d137</md5>
+            <sha1>a10732c76bfacdbd633a7eb0f7968b1059a65dfa</sha1>
+            <description>
+    Protocol Buffers are a way of encoding structured data in an efficient yet
+    extensible format.
+  </description>
+            <license>New BSD license: http://www.opensource.org/licenses/bsd-license.php</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="cpe" confidence="HIGHEST">
+                    <name>(cpe:/a:google:protobuf:2.5.0)</name>
+                    <url>https://web.nvd.nist.gov/view/vuln/search-results?adv_search=true&amp;cves=on&amp;cpe_version=cpe%3A%2Fa%3Agoogle%3Aprotobuf%3A2.5.0</url>
+                </identifier>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(com.google.protobuf:protobuf-java:2.5.0)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%22a10732c76bfacdbd633a7eb0f7968b1059a65dfa%22</url>
+                </identifier>
+            </identifiers>
+            <vulnerabilities>
+                <vulnerability source="NVD">
+                    <name>CVE-2015-5237</name>
+                    <cvssScore>6.5</cvssScore>
+                    <cvssAccessVector>NETWORK</cvssAccessVector>
+                    <cvssAccessComplexity>LOW</cvssAccessComplexity>
+                    <cvssAuthenticationr>SINGLE_INSTANCE</cvssAuthenticationr>
+                    <cvssConfidentialImpact>PARTIAL</cvssConfidentialImpact>
+                    <cvssIntegrityImpact>PARTIAL</cvssIntegrityImpact>
+                    <cvssAvailabilityImpact>PARTIAL</cvssAvailabilityImpact>
+                    <severity>Medium</severity>
+                    <cwe>CWE-119 Improper Restriction of Operations within the Bounds of a Memory Buffer</cwe>
+                    <description>protobuf allows remote authenticated attackers to cause a heap-based buffer overflow.</description>
+                    <references>
+                        <reference>
+                            <source>MLIST</source>
+                            <url>http://www.openwall.com/lists/oss-security/2015/08/27/2</url>
+                            <name>[oss-security] 20150827 CVE-2015-5237: Integer overflow in protobuf serialization (currently minor)</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://github.com/google/protobuf/issues/760</url>
+                            <name>https://github.com/google/protobuf/issues/760</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://bugzilla.redhat.com/show_bug.cgi?id=1256426</url>
+                            <name>https://bugzilla.redhat.com/show_bug.cgi?id=1256426</name>
+                        </reference>
+                    </references>
+                    <vulnerableSoftware>
+                        <software>cpe:/a:google:protobuf:3.0.0</software>
+                        <software>cpe:/a:google:protobuf:3.1.0</software>
+                        <software>cpe:/a:google:protobuf:3.0.2</software>
+                        <software>cpe:/a:google:protobuf:3.2.0</software>
+                        <software>cpe:/a:google:protobuf:3.2.1</software>
+                        <software>cpe:/a:google:protobuf:3.3.0</software>
+                        <software>cpe:/a:google:protobuf:2.6.1</software>
+                        <software>cpe:/a:google:protobuf:3.3.1</software>
+                        <software>cpe:/a:google:protobuf:3.3.2</software>
+                        <software>cpe:/a:google:protobuf:2.4.1</software>
+                        <software>cpe:/a:google:protobuf:2.5.0</software>
+                        <software>cpe:/a:google:protobuf:2.6.0</software>
+                    </vulnerableSoftware>
+                </vulnerability>
+            </vulnerabilities>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>netty-3.9.4.Final.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/io/netty/netty/3.9.4.Final/netty-3.9.4.Final.jar</filePath>
+            <md5>b3701ef46c7518d0d63705e2f092dbe5</md5>
+            <sha1>678200bda583ff36d796455c2bdcdd434897115b</sha1>
+            <description>
+    The Netty project is an effort to provide an asynchronous event-driven
+    network application framework and tools for rapid development of
+    maintainable high performance and high scalability protocol servers and
+    clients.  In other words, Netty is a NIO client server framework which
+    enables quick and easy development of network applications such as protocol
+    servers and clients. It greatly simplifies and streamlines network
+    programming such as TCP and UDP socket server.
+  </description>
+            <license>Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(io.netty:netty:3.9.4.Final)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%22678200bda583ff36d796455c2bdcdd434897115b%22</url>
+                </identifier>
+                <identifier type="cpe" confidence="LOW">
+                    <name>(cpe:/a:netty_project:netty:3.9.4)</name>
+                </identifier>
+            </identifiers>
+            <vulnerabilities>
+                <vulnerability source="NVD">
+                    <name>CVE-2015-2156</name>
+                    <cvssScore>4.3</cvssScore>
+                    <cvssAccessVector>NETWORK</cvssAccessVector>
+                    <cvssAccessComplexity>MEDIUM</cvssAccessComplexity>
+                    <cvssAuthenticationr>NONE</cvssAuthenticationr>
+                    <cvssConfidentialImpact>PARTIAL</cvssConfidentialImpact>
+                    <cvssIntegrityImpact>NONE</cvssIntegrityImpact>
+                    <cvssAvailabilityImpact>NONE</cvssAvailabilityImpact>
+                    <severity>Medium</severity>
+                    <cwe>CWE-20 Improper Input Validation</cwe>
+                    <description>Netty before 3.9.8.Final, 3.10.x before 3.10.3.Final, 4.0.x before 4.0.28.Final, and 4.1.x before 4.1.0.Beta5 and Play Framework 2.x before 2.3.9 might allow remote attackers to bypass the httpOnly flag on cookies and obtain sensitive information by leveraging improper validation of cookie name and value characters.</description>
+                    <references>
+                        <reference>
+                            <source>BID</source>
+                            <url>http://www.securityfocus.com/bid/74704</url>
+                            <name>74704</name>
+                        </reference>
+                        <reference>
+                            <source>FEDORA</source>
+                            <url>http://lists.fedoraproject.org/pipermail/package-announce/2015-May/159166.html</url>
+                            <name>FEDORA-2015-8684</name>
+                        </reference>
+                        <reference>
+                            <source>MISC</source>
+                            <url>https://www.playframework.com/security/vulnerability/CVE-2015-2156-HttpOnlyBypass</url>
+                            <name>https://www.playframework.com/security/vulnerability/CVE-2015-2156-HttpOnlyBypass</name>
+                        </reference>
+                        <reference>
+                            <source>FEDORA</source>
+                            <url>http://lists.fedoraproject.org/pipermail/package-announce/2015-June/159379.html</url>
+                            <name>FEDORA-2015-8713</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://bugzilla.redhat.com/show_bug.cgi?id=1222923</url>
+                            <name>https://bugzilla.redhat.com/show_bug.cgi?id=1222923</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://github.com/netty/netty/pull/3754</url>
+                            <name>https://github.com/netty/netty/pull/3754</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>http://netty.io/news/2015/05/08/3-9-8-Final-and-3.html</url>
+                            <name>http://netty.io/news/2015/05/08/3-9-8-Final-and-3.html</name>
+                        </reference>
+                        <reference>
+                            <source>MLIST</source>
+                            <url>http://www.openwall.com/lists/oss-security/2015/05/17/1</url>
+                            <name>[oss-security] 20150516 Netty/Play&apos;s Security Updates (CVE-2015-2156)</name>
+                        </reference>
+                    </references>
+                    <vulnerableSoftware>
+                        <software>cpe:/a:netty_project:netty:4.0.1</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.5:rc1</software>
+                        <software>cpe:/a:netty_project:netty:4.0.2</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.2:rc1</software>
+                        <software>cpe:/a:netty_project:netty:4.0.0</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.5:rc2</software>
+                        <software>cpe:/a:netty_project:netty:4.0.5</software>
+                        <software>cpe:/a:netty_project:netty:4.0.6</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.2:rc2</software>
+                        <software>cpe:/a:netty_project:netty:4.0.3</software>
+                        <software>cpe:/a:netty_project:netty:4.0.4</software>
+                        <software>cpe:/a:netty_project:netty:4.0.9</software>
+                        <software>cpe:/a:netty_project:netty:4.0.17</software>
+                        <software>cpe:/a:netty_project:netty:4.0.16</software>
+                        <software>cpe:/a:netty_project:netty:4.0.7</software>
+                        <software>cpe:/a:netty_project:netty:4.0.15</software>
+                        <software>cpe:/a:netty_project:netty:4.0.8</software>
+                        <software>cpe:/a:netty_project:netty:4.0.14</software>
+                        <software>cpe:/a:netty_project:netty:4.0.13</software>
+                        <software>cpe:/a:netty_project:netty:4.0.12</software>
+                        <software>cpe:/a:netty_project:netty:4.0.11</software>
+                        <software>cpe:/a:netty_project:netty:4.0.10</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.1</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.2</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.3</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.4</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.5</software>
+                        <software>cpe:/a:playframework:play_framework:2.0:rc5</software>
+                        <software>cpe:/a:playframework:play_framework:2.0:rc3</software>
+                        <software>cpe:/a:playframework:play_framework:2.0:rc4</software>
+                        <software>cpe:/a:playframework:play_framework:2.0:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.0:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.6</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.4:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.7</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.1:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.8</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.4:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.2:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.2:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.0:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.0:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.6:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.0</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.1</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.2</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.3:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.3:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.3</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.4</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.5</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.6</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.7</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.8</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.1:rc1-2.9.x-backport</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.0:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.0:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.1:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.1:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.4:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.4:rc1</software>
+                        <software>cpe:/a:netty_project:netty:3.10.2</software>
+                        <software>cpe:/a:netty_project:netty:3.10.1</software>
+                        <software>cpe:/a:netty_project:netty:3.10.0</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.0</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.1</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.2</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.3</software>
+                        <software>cpe:/a:playframework:play_framework:2.0:beta</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.2:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.2:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.2:rc3</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.2:rc4</software>
+                        <software>cpe:/a:playframework:play_framework:2.0</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.3:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.3:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.4</software>
+                        <software>cpe:/a:playframework:play_framework:2.3:m1</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.5</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.6</software>
+                        <software>cpe:/a:netty_project:netty:4.1.0:beta2</software>
+                        <software>cpe:/a:netty_project:netty:4.1.0:beta3</software>
+                        <software>cpe:/a:netty_project:netty:4.1.0:beta1</software>
+                        <software>cpe:/a:netty_project:netty:4.1.0:beta4</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.1:2.9.x-backport</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.3:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.3:rc1</software>
+                        <software>cpe:/a:netty_project:netty:4.0.20</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.0</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.1</software>
+                        <software allPreviousVersion="true">cpe:/a:netty_project:netty:3.9.7</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.2</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.3</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.4</software>
+                        <software>cpe:/a:netty_project:netty:4.0.27</software>
+                        <software>cpe:/a:netty_project:netty:4.0.26</software>
+                        <software>cpe:/a:netty_project:netty:4.0.25</software>
+                        <software>cpe:/a:netty_project:netty:4.0.24</software>
+                        <software>cpe:/a:netty_project:netty:4.0.23</software>
+                        <software>cpe:/a:netty_project:netty:4.0.22</software>
+                        <software>cpe:/a:netty_project:netty:4.0.21</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.0:m3</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.0:m1</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.0:m2</software>
+                        <software>cpe:/a:netty_project:netty:4.0.19</software>
+                        <software>cpe:/a:netty_project:netty:4.0.18</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.2:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.5</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.2:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.6</software>
+                    </vulnerableSoftware>
+                </vulnerability>
+            </vulnerabilities>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>netty-3.2.2.Final.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/org/jboss/netty/netty/3.2.2.Final/netty-3.2.2.Final.jar</filePath>
+            <md5>bff0be9a499f7c328d3c40acb8b00034</md5>
+            <sha1>d4afed2b2038db3f5298da54314575ef194f8bd0</sha1>
+            <description>
+    The Netty project is an effort to provide an asynchronous event-driven
+    network application framework and tools for rapid development of
+    maintainable high performance and high scalability protocol servers and
+    clients.  In other words, Netty is a NIO client server framework which
+    enables quick and easy development of network applications such as protocol
+    servers and clients. It greatly simplifies and streamlines network
+    programming such as TCP and UDP socket server.
+  </description>
+            <license>Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="cpe" confidence="LOW">
+                    <name>(cpe:/a:netty_project:netty:3.2.2)</name>
+                </identifier>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(org.jboss.netty:netty:3.2.2.Final)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%22d4afed2b2038db3f5298da54314575ef194f8bd0%22</url>
+                </identifier>
+            </identifiers>
+            <vulnerabilities>
+                <vulnerability source="NVD">
+                    <name>CVE-2014-3488</name>
+                    <cvssScore>5.0</cvssScore>
+                    <cvssAccessVector>NETWORK</cvssAccessVector>
+                    <cvssAccessComplexity>LOW</cvssAccessComplexity>
+                    <cvssAuthenticationr>NONE</cvssAuthenticationr>
+                    <cvssConfidentialImpact>NONE</cvssConfidentialImpact>
+                    <cvssIntegrityImpact>NONE</cvssIntegrityImpact>
+                    <cvssAvailabilityImpact>PARTIAL</cvssAvailabilityImpact>
+                    <severity>Medium</severity>
+                    <cwe>CWE-119 Improper Restriction of Operations within the Bounds of a Memory Buffer</cwe>
+                    <description>The SslHandler in Netty before 3.9.2 allows remote attackers to cause a denial of service (infinite loop and CPU consumption) via a crafted SSLv2Hello message.</description>
+                    <references>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://github.com/netty/netty/issues/2562</url>
+                            <name>https://github.com/netty/netty/issues/2562</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>http://netty.io/news/2014/06/11/3-9-2-Final.html</url>
+                            <name>http://netty.io/news/2014/06/11/3-9-2-Final.html</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://github.com/netty/netty/commit/2fa9400a59d0563a66908aba55c41e7285a04994</url>
+                            <name>https://github.com/netty/netty/commit/2fa9400a59d0563a66908aba55c41e7285a04994</name>
+                        </reference>
+                    </references>
+                    <vulnerableSoftware>
+                        <software>cpe:/a:netty_project:netty:3.6.0</software>
+                        <software>cpe:/a:netty_project:netty:3.6.1</software>
+                        <software>cpe:/a:netty_project:netty:3.7.0</software>
+                        <software allPreviousVersion="true">cpe:/a:netty_project:netty:3.9.1.1</software>
+                        <software>cpe:/a:netty_project:netty:3.6.6</software>
+                        <software>cpe:/a:netty_project:netty:3.6.7</software>
+                        <software>cpe:/a:netty_project:netty:3.6.8</software>
+                        <software>cpe:/a:netty_project:netty:3.6.2</software>
+                        <software>cpe:/a:netty_project:netty:3.8.0</software>
+                        <software>cpe:/a:netty_project:netty:3.6.3</software>
+                        <software>cpe:/a:netty_project:netty:3.8.1</software>
+                        <software>cpe:/a:netty_project:netty:3.9.0</software>
+                        <software>cpe:/a:netty_project:netty:3.6.4</software>
+                        <software>cpe:/a:netty_project:netty:3.9.1</software>
+                        <software>cpe:/a:netty_project:netty:3.6.5</software>
+                    </vulnerableSoftware>
+                </vulnerability>
+                <vulnerability source="NVD">
+                    <name>CVE-2015-2156</name>
+                    <cvssScore>4.3</cvssScore>
+                    <cvssAccessVector>NETWORK</cvssAccessVector>
+                    <cvssAccessComplexity>MEDIUM</cvssAccessComplexity>
+                    <cvssAuthenticationr>NONE</cvssAuthenticationr>
+                    <cvssConfidentialImpact>PARTIAL</cvssConfidentialImpact>
+                    <cvssIntegrityImpact>NONE</cvssIntegrityImpact>
+                    <cvssAvailabilityImpact>NONE</cvssAvailabilityImpact>
+                    <severity>Medium</severity>
+                    <cwe>CWE-20 Improper Input Validation</cwe>
+                    <description>Netty before 3.9.8.Final, 3.10.x before 3.10.3.Final, 4.0.x before 4.0.28.Final, and 4.1.x before 4.1.0.Beta5 and Play Framework 2.x before 2.3.9 might allow remote attackers to bypass the httpOnly flag on cookies and obtain sensitive information by leveraging improper validation of cookie name and value characters.</description>
+                    <references>
+                        <reference>
+                            <source>BID</source>
+                            <url>http://www.securityfocus.com/bid/74704</url>
+                            <name>74704</name>
+                        </reference>
+                        <reference>
+                            <source>FEDORA</source>
+                            <url>http://lists.fedoraproject.org/pipermail/package-announce/2015-May/159166.html</url>
+                            <name>FEDORA-2015-8684</name>
+                        </reference>
+                        <reference>
+                            <source>MISC</source>
+                            <url>https://www.playframework.com/security/vulnerability/CVE-2015-2156-HttpOnlyBypass</url>
+                            <name>https://www.playframework.com/security/vulnerability/CVE-2015-2156-HttpOnlyBypass</name>
+                        </reference>
+                        <reference>
+                            <source>FEDORA</source>
+                            <url>http://lists.fedoraproject.org/pipermail/package-announce/2015-June/159379.html</url>
+                            <name>FEDORA-2015-8713</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://bugzilla.redhat.com/show_bug.cgi?id=1222923</url>
+                            <name>https://bugzilla.redhat.com/show_bug.cgi?id=1222923</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://github.com/netty/netty/pull/3754</url>
+                            <name>https://github.com/netty/netty/pull/3754</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>http://netty.io/news/2015/05/08/3-9-8-Final-and-3.html</url>
+                            <name>http://netty.io/news/2015/05/08/3-9-8-Final-and-3.html</name>
+                        </reference>
+                        <reference>
+                            <source>MLIST</source>
+                            <url>http://www.openwall.com/lists/oss-security/2015/05/17/1</url>
+                            <name>[oss-security] 20150516 Netty/Play&apos;s Security Updates (CVE-2015-2156)</name>
+                        </reference>
+                    </references>
+                    <vulnerableSoftware>
+                        <software>cpe:/a:netty_project:netty:4.0.1</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.5:rc1</software>
+                        <software>cpe:/a:netty_project:netty:4.0.2</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.2:rc1</software>
+                        <software>cpe:/a:netty_project:netty:4.0.0</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.5:rc2</software>
+                        <software>cpe:/a:netty_project:netty:4.0.5</software>
+                        <software>cpe:/a:netty_project:netty:4.0.6</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.2:rc2</software>
+                        <software>cpe:/a:netty_project:netty:4.0.3</software>
+                        <software>cpe:/a:netty_project:netty:4.0.4</software>
+                        <software>cpe:/a:netty_project:netty:4.0.9</software>
+                        <software>cpe:/a:netty_project:netty:4.0.17</software>
+                        <software>cpe:/a:netty_project:netty:4.0.16</software>
+                        <software>cpe:/a:netty_project:netty:4.0.7</software>
+                        <software>cpe:/a:netty_project:netty:4.0.15</software>
+                        <software>cpe:/a:netty_project:netty:4.0.8</software>
+                        <software>cpe:/a:netty_project:netty:4.0.14</software>
+                        <software>cpe:/a:netty_project:netty:4.0.13</software>
+                        <software>cpe:/a:netty_project:netty:4.0.12</software>
+                        <software>cpe:/a:netty_project:netty:4.0.11</software>
+                        <software>cpe:/a:netty_project:netty:4.0.10</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.1</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.2</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.3</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.4</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.5</software>
+                        <software>cpe:/a:playframework:play_framework:2.0:rc5</software>
+                        <software>cpe:/a:playframework:play_framework:2.0:rc3</software>
+                        <software>cpe:/a:playframework:play_framework:2.0:rc4</software>
+                        <software>cpe:/a:playframework:play_framework:2.0:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.0:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.6</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.4:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.7</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.1:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.8</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.4:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.2:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.2:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.0:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.0:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.6:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.0</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.1</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.2</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.3:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.3:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.3</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.4</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.5</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.6</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.7</software>
+                        <software>cpe:/a:playframework:play_framework:2.3.8</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.1:rc1-2.9.x-backport</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.0:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.0:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.1:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.1:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.4:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.4:rc1</software>
+                        <software>cpe:/a:netty_project:netty:3.10.2</software>
+                        <software>cpe:/a:netty_project:netty:3.10.1</software>
+                        <software>cpe:/a:netty_project:netty:3.10.0</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.0</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.1</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.2</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.3</software>
+                        <software>cpe:/a:playframework:play_framework:2.0:beta</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.2:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.2:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.2:rc3</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.2:rc4</software>
+                        <software>cpe:/a:playframework:play_framework:2.0</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.3:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.3:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.4</software>
+                        <software>cpe:/a:playframework:play_framework:2.3:m1</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.5</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.6</software>
+                        <software>cpe:/a:netty_project:netty:4.1.0:beta2</software>
+                        <software>cpe:/a:netty_project:netty:4.1.0:beta3</software>
+                        <software>cpe:/a:netty_project:netty:4.1.0:beta1</software>
+                        <software>cpe:/a:netty_project:netty:4.1.0:beta4</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.1:2.9.x-backport</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.3:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.3:rc1</software>
+                        <software>cpe:/a:netty_project:netty:4.0.20</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.0</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.1</software>
+                        <software allPreviousVersion="true">cpe:/a:netty_project:netty:3.9.7</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.2</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.3</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.4</software>
+                        <software>cpe:/a:netty_project:netty:4.0.27</software>
+                        <software>cpe:/a:netty_project:netty:4.0.26</software>
+                        <software>cpe:/a:netty_project:netty:4.0.25</software>
+                        <software>cpe:/a:netty_project:netty:4.0.24</software>
+                        <software>cpe:/a:netty_project:netty:4.0.23</software>
+                        <software>cpe:/a:netty_project:netty:4.0.22</software>
+                        <software>cpe:/a:netty_project:netty:4.0.21</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.0:m3</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.0:m1</software>
+                        <software>cpe:/a:playframework:play_framework:2.2.0:m2</software>
+                        <software>cpe:/a:netty_project:netty:4.0.19</software>
+                        <software>cpe:/a:netty_project:netty:4.0.18</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.2:rc2</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.5</software>
+                        <software>cpe:/a:playframework:play_framework:2.0.2:rc1</software>
+                        <software>cpe:/a:playframework:play_framework:2.1.6</software>
+                    </vulnerableSoftware>
+                </vulnerability>
+            </vulnerabilities>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>zookeeper-3.4.5.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/org/apache/zookeeper/zookeeper/3.4.5/zookeeper-3.4.5.jar</filePath>
+            <md5>00b9db19ad7f18681761edc6db524ceb</md5>
+            <sha1>c0f69fb36526552a8f0bc548a6c33c49cf08e562</sha1>
+            <license>http://www.apache.org/licenses/LICENSE-2.0.txt</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="cpe" confidence="HIGHEST">
+                    <name>(cpe:/a:apache:zookeeper:3.4.5)</name>
+                    <url>https://web.nvd.nist.gov/view/vuln/search-results?adv_search=true&amp;cves=on&amp;cpe_version=cpe%3A%2Fa%3Aapache%3Azookeeper%3A3.4.5</url>
+                </identifier>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(org.apache.zookeeper:zookeeper:3.4.5)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%22c0f69fb36526552a8f0bc548a6c33c49cf08e562%22</url>
+                </identifier>
+            </identifiers>
+            <vulnerabilities>
+                <vulnerability source="NVD">
+                    <name>CVE-2014-0085</name>
+                    <cvssScore>2.1</cvssScore>
+                    <cvssAccessVector>LOCAL</cvssAccessVector>
+                    <cvssAccessComplexity>LOW</cvssAccessComplexity>
+                    <cvssAuthenticationr>NONE</cvssAuthenticationr>
+                    <cvssConfidentialImpact>PARTIAL</cvssConfidentialImpact>
+                    <cvssIntegrityImpact>NONE</cvssIntegrityImpact>
+                    <cvssAvailabilityImpact>NONE</cvssAvailabilityImpact>
+                    <severity>Low</severity>
+                    <cwe>CWE-255 Credentials Management</cwe>
+                    <description>Apache Zookeeper logs cleartext admin passwords, which allows local users to obtain sensitive information by reading the log.</description>
+                    <references>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://bugzilla.redhat.com/show_bug.cgi?id=1067265</url>
+                            <name>https://bugzilla.redhat.com/show_bug.cgi?id=1067265</name>
+                        </reference>
+                        <reference>
+                            <source>REDHAT</source>
+                            <url>http://rhn.redhat.com/errata/RHSA-2014-0400.html</url>
+                            <name>RHSA-2014:0400</name>
+                        </reference>
+                    </references>
+                    <vulnerableSoftware>
+                        <software>cpe:/a:redhat:jboss_fuse:6.0.0</software>
+                        <software>cpe:/a:apache:zookeeper:-</software>
+                    </vulnerableSoftware>
+                </vulnerability>
+                <vulnerability source="NVD">
+                    <name>CVE-2016-5017</name>
+                    <cvssScore>6.8</cvssScore>
+                    <cvssAccessVector>NETWORK</cvssAccessVector>
+                    <cvssAccessComplexity>MEDIUM</cvssAccessComplexity>
+                    <cvssAuthenticationr>NONE</cvssAuthenticationr>
+                    <cvssConfidentialImpact>PARTIAL</cvssConfidentialImpact>
+                    <cvssIntegrityImpact>PARTIAL</cvssIntegrityImpact>
+                    <cvssAvailabilityImpact>PARTIAL</cvssAvailabilityImpact>
+                    <severity>Medium</severity>
+                    <cwe>CWE-119 Improper Restriction of Operations within the Bounds of a Memory Buffer</cwe>
+                    <description>Buffer overflow in the C cli shell in Apache Zookeeper before 3.4.9 and 3.5.x before 3.5.3, when using the &quot;cmd:&quot; batch mode syntax, allows attackers to have unspecified impact via a long command string.</description>
+                    <references>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://git-wip-us.apache.org/repos/asf?p=zookeeper.git;a=commitdiff;h=27ecf981a15554dc8e64a28630af7a5c9e2bdf4f</url>
+                            <name>https://git-wip-us.apache.org/repos/asf?p=zookeeper.git;a=commitdiff;h=27ecf981a15554dc8e64a28630af7a5c9e2bdf4f</name>
+                        </reference>
+                        <reference>
+                            <source>MISC</source>
+                            <url>http://packetstormsecurity.com/files/138755/ZooKeeper-3.4.8-3.5.2-Buffer-Overflow.html</url>
+                            <name>http://packetstormsecurity.com/files/138755/ZooKeeper-3.4.8-3.5.2-Buffer-Overflow.html</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://www.cloudera.com/documentation/other/security-bulletins/topics/csb_topic_1.html</url>
+                            <name>https://www.cloudera.com/documentation/other/security-bulletins/topics/csb_topic_1.html</name>
+                        </reference>
+                        <reference>
+                            <source>MLIST</source>
+                            <url>http://www.openwall.com/lists/oss-security/2016/09/17/3</url>
+                            <name>[oss-security] 20160916 [SECURITY] CVE-2016-5017: Buffer overflow vulnerability in ZooKeeper C cli shell</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://git-wip-us.apache.org/repos/asf?p=zookeeper.git;a=commitdiff;h=f09154d6648eeb4ec5e1ac8a2bacbd2f8c87c14a</url>
+                            <name>https://git-wip-us.apache.org/repos/asf?p=zookeeper.git;a=commitdiff;h=f09154d6648eeb4ec5e1ac8a2bacbd2f8c87c14a</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://zookeeper.apache.org/security.html#CVE-2016-5017</url>
+                            <name>https://zookeeper.apache.org/security.html#CVE-2016-5017</name>
+                        </reference>
+                        <reference>
+                            <source>BID</source>
+                            <url>http://www.securityfocus.com/bid/93044</url>
+                            <name>93044</name>
+                        </reference>
+                    </references>
+                    <vulnerableSoftware>
+                        <software>cpe:/a:apache:zookeeper:3.5.2</software>
+                        <software>cpe:/a:apache:zookeeper:3.5.1</software>
+                        <software>cpe:/a:apache:zookeeper:3.5.0</software>
+                        <software allPreviousVersion="true">cpe:/a:apache:zookeeper:3.4.8</software>
+                    </vulnerableSoftware>
+                </vulnerability>
+                <vulnerability source="NVD">
+                    <name>CVE-2017-5637</name>
+                    <cvssScore>5.0</cvssScore>
+                    <cvssAccessVector>NETWORK</cvssAccessVector>
+                    <cvssAccessComplexity>LOW</cvssAccessComplexity>
+                    <cvssAuthenticationr>NONE</cvssAuthenticationr>
+                    <cvssConfidentialImpact>NONE</cvssConfidentialImpact>
+                    <cvssIntegrityImpact>NONE</cvssIntegrityImpact>
+                    <cvssAvailabilityImpact>PARTIAL</cvssAvailabilityImpact>
+                    <severity>Medium</severity>
+                    <cwe>CWE-399 Resource Management Errors</cwe>
+                    <description>Two four letter word commands &quot;wchp/wchc&quot; are CPU intensive and could cause spike of CPU utilization on Apache ZooKeeper server if abused, which leads to the server unable to serve legitimate client requests. Apache ZooKeeper thru version 3.4.9 and 3.5.2 suffer from this issue, fixed in 3.4.10, 3.5.3, and later.</description>
+                    <references>
+                        <reference>
+                            <source>BID</source>
+                            <url>http://www.securityfocus.com/bid/98814</url>
+                            <name>98814</name>
+                        </reference>
+                        <reference>
+                            <source>REDHAT</source>
+                            <url>https://access.redhat.com/errata/RHSA-2017:3354</url>
+                            <name>RHSA-2017:3354</name>
+                        </reference>
+                        <reference>
+                            <source>MLIST</source>
+                            <url>https://lists.apache.org/thread.html/58170aeb7a681d462b7fa31cae81110cbb749d2dc83c5736a0bb8370@%3Cdev.zookeeper.apache.org%3E</url>
+                            <name>[dev] 20171009 [SECURITY] CVE-2017-5637: DOS attack on wchp/wchc four letter words (4lw)</name>
+                        </reference>
+                        <reference>
+                            <source>REDHAT</source>
+                            <url>https://access.redhat.com/errata/RHSA-2017:3355</url>
+                            <name>RHSA-2017:3355</name>
+                        </reference>
+                        <reference>
+                            <source>DEBIAN</source>
+                            <url>http://www.debian.org/security/2017/dsa-3871</url>
+                            <name>DSA-3871</name>
+                        </reference>
+                        <reference>
+                            <source>REDHAT</source>
+                            <url>https://access.redhat.com/errata/RHSA-2017:2477</url>
+                            <name>RHSA-2017:2477</name>
+                        </reference>
+                        <reference>
+                            <source>CONFIRM</source>
+                            <url>https://issues.apache.org/jira/browse/ZOOKEEPER-2693</url>
+                            <name>https://issues.apache.org/jira/browse/ZOOKEEPER-2693</name>
+                        </reference>
+                    </references>
+                    <vulnerableSoftware>
+                        <software>cpe:/a:apache:zookeeper:3.4.3</software>
+                        <software>cpe:/a:apache:zookeeper:3.5.2</software>
+                        <software>cpe:/a:apache:zookeeper:3.4.2</software>
+                        <software>cpe:/a:apache:zookeeper:3.5.1</software>
+                        <software>cpe:/a:apache:zookeeper:3.4.1</software>
+                        <software>cpe:/a:apache:zookeeper:3.5.0</software>
+                        <software>cpe:/a:apache:zookeeper:3.4.0</software>
+                        <software>cpe:/a:apache:zookeeper:3.4.9</software>
+                        <software>cpe:/a:apache:zookeeper:3.4.8</software>
+                        <software>cpe:/a:apache:zookeeper:3.4.7</software>
+                        <software>cpe:/a:apache:zookeeper:3.4.6</software>
+                        <software>cpe:/a:apache:zookeeper:3.4.5</software>
+                        <software>cpe:/a:apache:zookeeper:3.4.4</software>
+                    </vulnerableSoftware>
+                </vulnerability>
+            </vulnerabilities>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>log4j-over-slf4j-1.7.7.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/org/slf4j/log4j-over-slf4j/1.7.7/log4j-over-slf4j-1.7.7.jar</filePath>
+            <md5>93ab42a5216afd683c35988c6b6fc3d8</md5>
+            <sha1>d521cb26a9c4407caafcec302e7804b048b07cea</sha1>
+            <description>Log4j implemented over SLF4J</description>
+            <license>Apache Software Licenses: http://www.apache.org/licenses/LICENSE-2.0.txt</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(org.slf4j:log4j-over-slf4j:1.7.7)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%22d521cb26a9c4407caafcec302e7804b048b07cea%22</url>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>asynchbase-1.8.2-SNAPSHOT.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/org/hbase/asynchbase/1.8.2-SNAPSHOT/asynchbase-1.8.2-SNAPSHOT.jar</filePath>
+            <md5>03e27531f57fa410653299fbbc241df2</md5>
+            <sha1>209b84ec22ccbda982984b3de6c8e3a7c8cb65e9</sha1>
+            <description>
+    An alternative HBase client library for applications requiring fully
+    asynchronous, non-blocking and thread-safe HBase connectivity.
+  </description>
+            <license>BSD: http://www.opensource.org/licenses/BSD-3-Clause</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGH">
+                    <name>(org.hbase:asynchbase:1.8.2-SNAPSHOT)</name>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>trove4j-3.0.3.jar</fileName>
+            <filePath>/Users/clarsen/.m2/repository/net/sf/trove4j/trove4j/3.0.3/trove4j-3.0.3.jar</filePath>
+            <md5>8fc4d4e0129244f9fd39650c5f30feb2</md5>
+            <sha1>42ccaf4761f0dfdfa805c9e340d99a755907e2dd</sha1>
+            <description>The Trove library provides high speed regular and primitive
+        collections for Java.
+    </description>
+            <license>GNU Lesser General Public License 2.1: http://www.gnu.org/licenses/lgpl-2.1.txt</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGHEST">
+                    <name>(net.sf.trove4j:trove4j:3.0.3)</name>
+                    <url>http://search.maven.org/#search|ga|1|1%3A%2242ccaf4761f0dfdfa805c9e340d99a755907e2dd%22</url>
+                </identifier>
+            </identifiers>
+        </dependency>
+        <dependency isVirtual="false">
+            <fileName>netty-common-4.1.9.Final.jar/META-INF/maven/org.jctools/jctools-core/pom.xml</fileName>
+            <filePath>/Users/clarsen/.m2/repository/io/netty/netty-common/4.1.9.Final/netty-common-4.1.9.Final.jar/META-INF/maven/org.jctools/jctools-core/pom.xml</filePath>
+            <md5>ff7b0b544295fb15c18c258e9fd33f37</md5>
+            <sha1>93cf6661c66216bbcf63dffe85c510c81481c3e5</sha1>
+            <description>Java Concurrency Tools Core Library</description>
+            <license>Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0.txt</license>
+            <evidenceCollected>
+            </evidenceCollected>
+            <identifiers>
+                <identifier type="maven" confidence="HIGH">
+                    <name>(org.jctools:jctools-core:2.0.1)</name>
+                </identifier>
+            </identifiers>
+        </dependency>
+    </dependencies>
+</analysis>
