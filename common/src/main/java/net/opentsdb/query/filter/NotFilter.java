@@ -19,7 +19,7 @@ package net.opentsdb.query.filter;
  * 
  * @since 3.0
  */
-public class NotFilter implements QueryFilter {
+public class NotFilter implements NestedQueryFilter {
 
   /** The filter to invert. */
   private final QueryFilter filter;
@@ -35,7 +35,7 @@ public class NotFilter implements QueryFilter {
     filter = builder.filter;
   }
   
-  /** @return The filter. */
+  @Override
   public QueryFilter getFilter() {
     return filter;
   }

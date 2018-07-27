@@ -83,6 +83,19 @@ public class TagValueLiteralOrFilter extends BaseTagValueFilter
     return literals;
   }
   
+  @Override
+  public String toString() {
+    return new StringBuilder()
+        .append("{type=")
+        .append(getClass().getSimpleName())
+        .append(", tagKey=")
+        .append(tag_key)
+        .append(", filter=")
+        .append(filter)
+        .append("}")
+        .toString();
+  }
+  
   public static Builder newBuilder() {
     return new Builder();
   }

@@ -66,6 +66,19 @@ public class ChainFilter implements QueryFilter {
     return filters;
   }
   
+  @Override
+  public String toString() {
+    return new StringBuilder()
+        .append("{type=")
+        .append(getClass().getSimpleName())
+        .append(", operator=")
+        .append(op)
+        .append(", filters=")
+        .append(filters)
+        .append("}")
+        .toString();
+  }
+  
   public static Builder newBuilder() {
     return new Builder();
   }
@@ -90,6 +103,14 @@ public class ChainFilter implements QueryFilter {
     public Builder setOp(final FilterOp op) {
       this.op = op;
       return this;
+    }
+    
+    public int filtersCount() {
+      return filters == null ? 0 : filters.size();
+    }
+    
+    public List<QueryFilter> filters() {
+      return filters;
     }
     
     public ChainFilter build() {

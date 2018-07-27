@@ -12,23 +12,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package net.opentsdb.storage.schemas.tsdb1x;
+package net.opentsdb.query.filter;
 
-import java.util.List;
+public interface NestedQueryFilter extends QueryFilter {
 
-/**
- * A container returned at UID resolution type when converting from a
- * query filter to UIDs for building a storage query or comparing keys.
- * 
- * @since 3.0
- */
-public interface ResolvedFilter {
-
-  /** @return A non-null tag key UID. */
-  public byte[] getTagKey();
-  
-  /** @return A possible list of tag values if the filter contained
-   * literals. Returns null if the filter did not have literals. */
-  public List<byte[]> getTagValues();
+  /** @return The nested filter. */
+  public QueryFilter getFilter();
   
 }
