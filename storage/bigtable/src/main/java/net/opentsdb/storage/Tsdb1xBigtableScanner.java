@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.storage;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -108,6 +109,8 @@ public class Tsdb1xBigtableScanner {
   /** A singleton base timestamp for this scanner. */
   protected TimeStamp base_ts;
   
+  protected int rows_scanned = 0;
+  
   /**
    * Default ctor.
    * @param owner A non-null owner with configuration and reporting.
@@ -117,9 +120,9 @@ public class Tsdb1xBigtableScanner {
    * @throws IllegalArgumentException if the owner or scanner was null.
    */
   public Tsdb1xBigtableScanner(final Tsdb1xBigtableScanners owner, 
-                       final ResultScanner<FlatRow> scanner, 
-                       final int idx,
-                       final RollupInterval rollup_interval) {
+                               final ResultScanner<FlatRow> scanner, 
+                               final int idx,
+                               final RollupInterval rollup_interval) {
     if (owner == null) {
       throw new IllegalArgumentException("Owner cannot be null.");
     }
@@ -148,51 +151,57 @@ public class Tsdb1xBigtableScanner {
    * @param span An optional tracing span.
    */
   public void fetchNext(final Tsdb1xBigtableQueryResult result, final Span span) {
-//    if (owner.hasException()) {
-//      scanner.close();
-//      if (LOG.isDebugEnabled()) {
-//        LOG.debug("Closing scanner due to upstream result exception.");
-//      }
-//      state = State.COMPLETE;
-//      owner.scannerDone();
-//      return;
-//    }
+    if (owner.hasException()) {
+      try {
+        scanner.close();
+      } catch (IOException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Closing scanner due to upstream result exception.");
+      }
+      state = State.COMPLETE;
+      owner.scannerDone();
+      return;
+    }
     
-//    if (result.isFull()) {
-//      if (owner.node().pipelineContext().queryContext().mode() == 
-//          QueryMode.SINGLE) {
-//        state = State.EXCEPTION;
-//        owner.exception(new QueryExecutionException(
-//            result.resultIsFullErrorMessage(),
-//            HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.code()));
-//        return;
-//      }
-//      if (LOG.isDebugEnabled()) {
-//        LOG.debug("Pausing scanner as upstream is full.");
-//      }
-//      owner.scannerDone();
-//      return;
-//    }
-//    
-//    if (row_buffer != null) {
-//      if (owner.scannerFilter() != null) {
-//        processBufferWithFilter(result, span);
-//      } else {
-//        processBuffer(result, span);
-//      }
-//    } else {
-//      // try for some data from HBase
-//      final Span child;
-//      if (span != null && span.isDebug()) {
-//        child = span.newChild(getClass().getName() + ".fetchNext_" + idx)
-//            .start();
-//      } else {
-//        child = span;
-//      }
-//      
+    if (result.isFull()) {
+      if (owner.node().pipelineContext().queryContext().mode() == 
+          QueryMode.SINGLE) {
+        state = State.EXCEPTION;
+        owner.exception(new QueryExecutionException(
+            result.resultIsFullErrorMessage(),
+            HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.code()));
+        return;
+      }
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Pausing scanner as upstream is full.");
+      }
+      owner.scannerDone();
+      return;
+    }
+    
+    if (row_buffer != null) {
+      if (owner.scannerFilter() != null) {
+        processBufferWithFilter(result, span);
+      } else {
+        processBuffer(result, span);
+      }
+    } else {
+      // try for some data from HBase
+      final Span child;
+      if (span != null && span.isDebug()) {
+        child = span.newChild(getClass().getName() + ".fetchNext_" + idx)
+            .start();
+      } else {
+        child = span;
+      }
+      
+      scan(result, child);
 //      scanner.nextRows()
 //        .addCallbacks(new ScannerCB(result, child), new ErrorCB(child));
-//    }
+    }
   }
   
   /**
@@ -403,230 +412,237 @@ public class Tsdb1xBigtableScanner {
 //      }
 //    }
 //
-//    @Override
-//    public Object call(final ArrayList<ArrayList<KeyValue>> rows) throws Exception {
-//      if (rows == null) {
-//        complete(null, 0);
-//        return null;
-//      }
-//      
-//      if (owner.hasException()) {
-//        // bail out!
-//        complete(null, rows.size());
-//        return null;
-//      }
-//      
-//      final Span child;
-//      if (span != null) {
-//        child = span.newChild(getClass().getName() + "call_" + idx)
-//            .start();
-//      } else {
-//        child = null;
-//      }
-//      
-//      try {
-//        rows_scanned += rows.size();
-//        if (owner.scannerFilter() != null) {
-//          final List<Deferred<Object>> deferreds = 
-//              Lists.newArrayListWithCapacity(rows.size());
-//          boolean keep_going = true;
-//          for (int i = 0; i < rows.size(); i++) {
-//            final ArrayList<KeyValue> row = rows.get(i);
-//            if (row.isEmpty()) {
-//              // should never happen
-//              if (LOG.isDebugEnabled()) {
-//                LOG.debug("Received an empty row from result set: " + rows);
-//              }
-//              continue;
-//            }
-//            
-//            owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
-//            if (owner.node().sequenceEnd() != null && 
-//                base_ts.compare(
-//                    (scanner.isReversed() ? Op.LT : Op.GT), 
-//                        owner.node().sequenceEnd())) {
-//              // end of sequence encountered in the buffer. Push on up
-//              if (LOG.isDebugEnabled()) {
-//                LOG.debug("Hit next sequence end in the scanner. "
-//                    + "Buffering results and returning.");
-//              }
-//              buffer(i, rows, false);
-//              keep_going = false;
-//              break;
-//            } else if (result.isFull()) {
-//              if (owner.node().pipelineContext().queryContext().mode() == 
-//                  QueryMode.SINGLE) {
-//                throw new QueryExecutionException(
-//                    result.resultIsFullErrorMessage(),
-//                    HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
-//              }
-//              if (LOG.isDebugEnabled()) {
-//                LOG.debug("Owner is full while in the scanner cache.");
-//              }
-//              buffer(i, rows, false);
-//              keep_going = false;
-//              break;
-//            }
-//            
-//            final byte[] tsuid = owner.node().schema().getTSUID(row.get(0).key());
-//            deferreds.add(resolveAndFilter(tsuid, row, result, child));
-//          }
-//          
-//          return Deferred.group(deferreds)
-//              .addCallbacks(new GroupResolutionCB(keep_going, child), new ErrorCB(child));
-//        } else {
-//          // load all
-//          for (int i = 0; i < rows.size(); i++) {
-//            final ArrayList<KeyValue> row = rows.get(i);
-//            if (row.isEmpty()) {
-//              // should never happen
-//              if (LOG.isDebugEnabled()) {
-//                LOG.debug("Received an empty row from result set: " + rows);
-//              }
-//              continue;
-//            }
-//            
-//            owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
-//            if ((owner.node().sequenceEnd() != null && 
-//                base_ts.compare(
-//                    (scanner.isReversed() ? Op.LT : Op.GT), 
-//                        owner.node().sequenceEnd()))) {
-//              
-//              // end of sequence encountered in the buffer. Push on up
-//              if (LOG.isDebugEnabled()) {
-//                LOG.debug("Hit next sequence end in the scanner. "
-//                    + "Buffering results and returning.");
-//              }
-//              buffer(i, rows, true);
-//              return null;
-//            } else if (result.isFull()) {
-//              if (owner.node().pipelineContext().queryContext().mode() == 
-//                  QueryMode.SINGLE) {
-//                throw new QueryExecutionException(
-//                    result.resultIsFullErrorMessage(),
-//                    HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
-//              }
-//              if (LOG.isDebugEnabled()) {
-//                LOG.debug("Owner is full. Buffering results and returning.");
-//              }
-//              buffer(i, rows, true);
-//              return null;
-//            }
-//            
-//            result.decode(row, rollup_interval);
-//          }
-//        }
-//        
-//        if (!result.isFull()) {
-//          // keep going!
-//          if (child != null) {
-//            child.setSuccessTags()
-//                 .setTag("rows", rows.size())
-//                 .setTag("buffered", row_buffer == null ? 0 : row_buffer.size())
-//                 .finish();
-//          }
-//          return scanner.nextRows().addCallbacks(this, new ErrorCB(span));
-//        } else if (owner.node().pipelineContext().queryContext().mode() == 
-//              QueryMode.SINGLE) {
-//          throw new QueryExecutionException(
-//              result.resultIsFullErrorMessage(),
-//              HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
-//        }
-//        
-//        if (owner.hasException()) {
-//          complete(child, rows.size());
-//        } else {
-//          // is full
-//          owner.scannerDone();
-//        }
-//      } catch (Exception e) {
-//        LOG.error("Unexpected exception", e);
-//        complete(e, child, rows.size());
-//      }
-//      
-//      return null;
+    
+  protected void scan(final Tsdb1xBigtableQueryResult result, final Span span) {
+    final Span child;
+    if (span != null) {
+      child = span.newChild(getClass().getName() + ".scan")
+                  .start();
+    } else {
+      child = null;
+    }
+    
+    while (true) {
+      try {
+        final FlatRow[] rows = scanner.next(owner.rows_per_scan);
+        rows_scanned += rows.length;
+          if (owner.scannerFilter() != null) {
+            final List<Deferred<Object>> deferreds = 
+                Lists.newArrayListWithCapacity(rows.length);
+            boolean keep_going = true;
+            for (int i = 0; i < rows.length; i++) {
+              final FlatRow row = rows[i];
+              if (row.getCells().isEmpty()) {
+                // should never happen
+                if (LOG.isDebugEnabled()) {
+                  LOG.debug("Received an empty row from result set: " + rows);
+                }
+                continue;
+              }
+              
+              owner.node().schema().baseTimestamp(row.getRowKey().toByteArray(), base_ts);
+              if (owner.node().sequenceEnd() != null && 
+                  base_ts.compare(
+                      /*(scanner.isReversed() ? Op.LT : */Op.GT/*)*/, 
+                          owner.node().sequenceEnd())) {
+                // end of sequence encountered in the buffer. Push on up
+                if (LOG.isDebugEnabled()) {
+                  LOG.debug("Hit next sequence end in the scanner. "
+                      + "Buffering results and returning.");
+                }
+                buffer(i, rows, false);
+                keep_going = false;
+                break;
+              } else if (result.isFull()) {
+                if (owner.node().pipelineContext().queryContext().mode() == 
+                    QueryMode.SINGLE) {
+                  throw new QueryExecutionException(
+                      result.resultIsFullErrorMessage(), 413);
+                }
+                if (LOG.isDebugEnabled()) {
+                  LOG.debug("Owner is full while in the scanner cache.");
+                }
+                buffer(i, rows, false);
+                keep_going = false;
+                break;
+              }
+              
+              final byte[] tsuid = owner.node().schema().getTSUID(rows[i].getRowKey().toByteArray());
+              deferreds.add(resolveAndFilter(tsuid, row, result, child));
+            }
+            
+            Deferred.group(deferreds)
+                .addCallbacks(new GroupResolutionCB(result, keep_going, child), 
+                    new ErrorCB(child));
+            return;
+          } else {
+            // load all
+            for (int i = 0; i < rows.length; i++) {
+              final FlatRow row = rows[i];
+              if (row.getCells().isEmpty()) {
+                // should never happen
+                if (LOG.isDebugEnabled()) {
+                  LOG.debug("Received an empty row from result set: " + rows);
+                }
+                continue;
+              }
+              
+              owner.node().schema().baseTimestamp(rows[0].getRowKey().toByteArray(), base_ts);
+              if ((owner.node().sequenceEnd() != null && 
+                  base_ts.compare(
+                      /*(scanner.isReversed() ? Op.LT : */Op.GT/*)*/, 
+                          owner.node().sequenceEnd()))) {
+                
+                // end of sequence encountered in the buffer. Push on up
+                if (LOG.isDebugEnabled()) {
+                  LOG.debug("Hit next sequence end in the scanner. "
+                      + "Buffering results and returning.");
+                }
+                buffer(i, rows, true);
+                return;
+              } else if (result.isFull()) {
+                if (owner.node().pipelineContext().queryContext().mode() == 
+                    QueryMode.SINGLE) {
+                  throw new QueryExecutionException(
+                      result.resultIsFullErrorMessage(), 413);
+                }
+                if (LOG.isDebugEnabled()) {
+                  LOG.debug("Owner is full. Buffering results and returning.");
+                }
+                buffer(i, rows, true);
+                return;
+              }
+              
+              result.decode(row, rollup_interval);
+            }
+          }
+          
+          if (!result.isFull()) {
+            // keep going!
+            if (child != null) {
+              child.setSuccessTags()
+                   .setTag("rows", rows.length)
+                   .setTag("buffered", row_buffer == null ? 0 : row_buffer.size())
+                   .finish();
+            }
+            // next set
+            continue;
+          } else if (owner.node().pipelineContext().queryContext().mode() == 
+                QueryMode.SINGLE) {
+            throw new QueryExecutionException(
+                result.resultIsFullErrorMessage(),413);
+          }
+          
+          if (owner.hasException()) {
+            complete(child, rows.length);
+          } else {
+            // is full
+            owner.scannerDone();
+          }
+        } catch (Exception e) {
+          LOG.error("Unexpected exception", e);
+          complete(e, child, 0);
+        }
+      }
+    
+    
+//    final Span child;
+//    if (span != null) {
+//      child = span.newChild(getClass().getName() + "call_" + idx)
+//          .start();
+//    } else {
+//      child = null;
 //    }
-//    
-//    /**
-//     * Marks the scanner as complete, closing it and reporting to the owner
-//     * @param child An optional tracing span.
-//     * @param rows The number of rows found in this result set.
-//     */
-//    void complete(final Span child, final int rows) {
-//      complete(null, child, rows);
-//    }
-//    
-//    /**
-//     * Marks the scanner as complete, closing it and reporting to the owner
-//     * @param e An exception, may be null. If not null, calls 
-//     * {@link Tsdb1xScanners#exception(Throwable)}
-//     * @param child An optional tracing span.
-//     * @param rows The number of rows found in this result set.
-//     */
-//    void complete(final Exception e, final Span child, final int rows) {
-//      if (e != null) {
-//        if (child != null) {
-//          child.setErrorTags(e)
-//               .finish();
-//        }
+
+  }
+    
+    /**
+     * Marks the scanner as complete, closing it and reporting to the owner
+     * @param child An optional tracing span.
+     * @param rows The number of rows found in this result set.
+     */
+    void complete(final Span child, final int rows) {
+      complete(null, child, rows);
+    }
+    
+    /**
+     * Marks the scanner as complete, closing it and reporting to the owner
+     * @param e An exception, may be null. If not null, calls 
+     * {@link Tsdb1xScanners#exception(Throwable)}
+     * @param child An optional tracing span.
+     * @param rows The number of rows found in this result set.
+     */
+    void complete(final Exception e, final Span child, final int rows) {
+      if (e != null) {
+        if (child != null) {
+          child.setErrorTags(e)
+               .finish();
+        }
 //        if (span != null) {
 //          span.setErrorTags(e)
 //              .finish();
 //        }
-//        state = State.EXCEPTION;
-//        owner.exception(e);
-//      } else {
-//        if (child != null) {
-//          child.setSuccessTags()
-//               .setTag("rows", rows)
-//               .setTag("buffered", row_buffer == null ? 0 : row_buffer.size())
-//               .finish();
-//        }
+        state = State.EXCEPTION;
+        owner.exception(e);
+      } else {
+        if (child != null) {
+          child.setSuccessTags()
+               .setTag("rows", rows)
+               .setTag("buffered", row_buffer == null ? 0 : row_buffer.size())
+               .finish();
+        }
 //        if (span != null) {
 //          span.setSuccessTags()
 //              .setTag("totalRows", rows_scanned)
 //              .setTag("buffered", row_buffer == null ? 0 : row_buffer.size())
 //              .finish();
 //        }
-//        state = State.COMPLETE;
-//        owner.scannerDone();
-//      }
-//      scanner.close(); // TODO - attach a callback for logging in case
-//      // something goes pear shaped.
-//      clear();
-//    }
-//    
-//    /** Called when the filter resolution is complete. */
-//    class GroupResolutionCB implements Callback<Object, ArrayList<Object>> {
-//      final boolean keep_going;
-//      final Span child;
-//      
-//      GroupResolutionCB(final boolean keep_going, final Span span) {
-//        this.keep_going = keep_going;
-//        this.child = span;
-//      }
-//      
-//      @Override
-//      public Object call(final ArrayList<Object> ignored) throws Exception {
-//        keys_to_ids.clear();
-//        if (owner.hasException()) {
-//          complete(child, 0);
-//        } else if (!result.isFull() && keep_going) {
-//          return scanner.nextRows().addCallbacks(ScannerCB.this, new ErrorCB(span));
-//        } else if (result.isFull() && 
-//            owner.node().pipelineContext().queryContext().mode() == 
-//              QueryMode.SINGLE) {
-//          complete(new QueryExecutionException(
-//              result.resultIsFullErrorMessage(),
-//              HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode()), child, 0);
-//        } else {
-//          // told not to keep going.
-//          owner.scannerDone();
-//        }
-//        return null;
-//      }
-//    }
-//  }
+        state = State.COMPLETE;
+        owner.scannerDone();
+      }
+      try {
+        scanner.close();
+      } catch (IOException e1) {
+        // TODO Auto-generated catch block
+        e1.printStackTrace();
+      } // TODO - attach a callback for logging in case
+      // something goes pear shaped.
+      clear();
+    }
+    
+    /** Called when the filter resolution is complete. */
+    class GroupResolutionCB implements Callback<Object, ArrayList<Object>> {
+      final Tsdb1xBigtableQueryResult result;
+      final boolean keep_going;
+      final Span child;
+      
+      GroupResolutionCB(final Tsdb1xBigtableQueryResult result, 
+                        final boolean keep_going, 
+                        final Span span) {
+        this.result = result;
+        this.keep_going = keep_going;
+        this.child = span;
+      }
+      
+      @Override
+      public Object call(final ArrayList<Object> ignored) throws Exception {
+        keys_to_ids.clear();
+        if (owner.hasException()) {
+          complete(child, 0);
+        } else if (!result.isFull() && keep_going) {
+          return null;//scanner.nextRows().addCallbacks(ScannerCB.this, new ErrorCB(span));
+        } else if (result.isFull() && 
+            owner.node().pipelineContext().queryContext().mode() == 
+              QueryMode.SINGLE) {
+          complete(new QueryExecutionException(
+              result.resultIsFullErrorMessage(), 413), child, 0);
+        } else {
+          // told not to keep going.
+          owner.scannerDone();
+        }
+        return null;
+      }
+    }
   
   /**
    * Writes the remaining rows to the buffer.
@@ -634,21 +650,21 @@ public class Tsdb1xBigtableScanner {
    * @param rows The non-null rows list.
    * @param mark_scanner_done Whether or not to call {@link Tsdb1xScanners#scannerDone()}.
    */
-//  private void buffer(int i, 
-//                      final ArrayList<ArrayList<KeyValue>> rows, 
-//                      final boolean mark_scanner_done) {
-//    if (row_buffer == null) {
-//      row_buffer = Lists.newArrayListWithCapacity(rows.size() - i);
-//    }
-//    for (; i < rows.size(); i++) {
-//      row_buffer.add(rows.get(i));
-//      TimeStamp t = new MillisecondTimeStamp(0);
-//      owner.node().schema().baseTimestamp(rows.get(i).get(0).key(), t);
-//    }
-//    if (mark_scanner_done) {
-//      owner.scannerDone();
-//    }
-//  }
+  private void buffer(int i, 
+                      final FlatRow[] rows, 
+                      final boolean mark_scanner_done) {
+    if (row_buffer == null) {
+      row_buffer = Lists.newArrayListWithCapacity(rows.length - i);
+    }
+    for (; i < rows.length; i++) {
+      row_buffer.add(rows[i]);
+      TimeStamp t = new MillisecondTimeStamp(0);
+      owner.node().schema().baseTimestamp(rows[i].getRowKey().toByteArray(), t);
+    }
+    if (mark_scanner_done) {
+      owner.scannerDone();
+    }
+  }
   
   /** @return The state of this scanner. */
   State state() {

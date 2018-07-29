@@ -1103,7 +1103,6 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     }
   }
   
-
   @Override
   public Deferred<IdOrError> getOrCreateId(AuthState auth, UniqueIdType type,
       String name, TimeSeriesDatumId id, Span span) {
@@ -1262,7 +1261,6 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     return Deferred.groupInOrder(deferreds).addCallback(new GroupCB());
   
   }
-
 
   @Override
   public Charset characterSet(final UniqueIdType type) {

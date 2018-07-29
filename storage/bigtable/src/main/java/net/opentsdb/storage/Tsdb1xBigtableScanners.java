@@ -22,13 +22,21 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.bigtable.v2.ReadRowsRequest;
 import com.google.bigtable.v2.RowFilter;
+import com.google.bigtable.v2.RowFilter.Chain;
+import com.google.bigtable.v2.RowFilter.Interleave;
+import com.google.bigtable.v2.RowRange;
+import com.google.bigtable.v2.RowSet;
+import com.google.cloud.bigtable.grpc.scanner.FlatRow;
+import com.google.cloud.bigtable.grpc.scanner.ResultScanner;
+import com.google.cloud.bigtable.util.ByteStringer;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.stumbleupon.async.Callback;
 
+import net.opentsdb.common.Const;
 import net.opentsdb.configuration.Configuration;
-import net.opentsdb.core.Const;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QuerySourceConfig;
 import net.opentsdb.query.SemanticQuery;
@@ -583,7 +591,8 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
                 + source_config.getQuery().getClass() + " yet");
           }
           if (filter == null) {
-            throw new IllegalStateException("No filter was found for: " + source_config.getFilterId());
+            throw new IllegalStateException("No filter was found for: " 
+                + source_config.getFilterId());
           }
           
           node.schema().resolveUids(filter, child)
@@ -671,36 +680,49 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
           fuzzy_mask = null;
         }
         
-//        regex = QueryUtil.getRowKeyUIDRegex(
-//            node.schema(), 
-//            group_bys, 
-//            row_key_literals, 
-//            explicit_tags, 
-//            fuzzy_key, 
-//            fuzzy_mask);
-//        if (Strings.isNullOrEmpty(regex)) {
-//          throw new RuntimeException("WTF????");
-//        }
-//        if (LOG.isDebugEnabled()) {
-//          LOG.debug("Scanner regular expression: " + 
-//              QueryUtil.byteRegexToString(node.schema(), regex));
-//        }
+        regex = QueryUtil.getRowKeyUIDRegex(
+            node.schema(), 
+            group_bys, 
+            row_key_literals, 
+            explicit_tags, 
+            fuzzy_key, 
+            fuzzy_mask);
+        if (Strings.isNullOrEmpty(regex)) {
+          throw new RuntimeException("WTF????");
+        }
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Scanner regular expression: " + 
+              QueryUtil.byteRegexToString(node.schema(), regex));
+        }
       } else {
         fuzzy_key = null;
         fuzzy_mask = null;
         regex = null;
       }
       
-//      final ScanFilter rollup_filter;
-//      if (node.rollupIntervals() != null && 
-//          !node.rollupIntervals().isEmpty() && 
-//          node.rollupUsage() != RollupUsage.ROLLUP_RAW) {
-//        
-//        // set qualifier filters
-//        if (node.rollupAggregation() != null && 
-//            node.rollupAggregation().equals("avg")) {
-//         
-//          // old and new schemas with literal agg names or prefixes.
+      final Interleave.Builder rollup_filter;
+      if (node.rollupIntervals() != null && 
+          !node.rollupIntervals().isEmpty() && 
+          node.rollupUsage() != RollupUsage.ROLLUP_RAW) {
+        
+        // set qualifier filters
+        if (node.rollupAggregation() != null && 
+            node.rollupAggregation().equals("avg")) {
+         
+          rollup_filter = RowFilter.Interleave.newBuilder()
+          .addFilters(RowFilter.newBuilder()
+              .setColumnQualifierRegexFilter(ByteStringer.wrap("sum".getBytes(Const.ASCII_US_CHARSET))))
+          .addFilters(RowFilter.newBuilder()
+              .setColumnQualifierRegexFilter(ByteStringer.wrap("count".getBytes(Const.ASCII_US_CHARSET))))
+          .addFilters(RowFilter.newBuilder()
+              .setColumnQualifierRegexFilter(ByteStringer.wrap(new byte[] { 
+                  (byte) node.schema().rollupConfig().getIdForAggregator("sum")
+              })))
+          .addFilters(RowFilter.newBuilder()
+              .setColumnQualifierRegexFilter(ByteStringer.wrap(new byte[] { 
+                  (byte) node.schema().rollupConfig().getIdForAggregator("count")
+              })));
+          // old and new schemas with literal agg names or prefixes.
 //          final List<ScanFilter> filters = Lists.newArrayListWithCapacity(4);
 //          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
 //              new BinaryPrefixComparator("sum".getBytes(Const.ASCII_CHARSET))));
@@ -716,8 +738,17 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
 //              })));
 //          
 //          rollup_filter = new FilterList(filters, Operator.MUST_PASS_ONE);
-//        } else {
-//          // it's another aggregation
+        } else {
+          // it's another aggregation
+          rollup_filter = RowFilter.Interleave.newBuilder()
+              .addFilters(RowFilter.newBuilder()
+                  .setColumnQualifierRegexFilter(ByteStringer.wrap(
+                      node.rollupAggregation().getBytes(Const.ASCII_US_CHARSET))))
+              .addFilters(RowFilter.newBuilder()
+                  .setColumnQualifierRegexFilter(ByteStringer.wrap(new byte[] { 
+                      (byte) node.schema().rollupConfig()
+                        .getIdForAggregator(node.rollupAggregation())
+                  })));
 //          final List<ScanFilter> filters = Lists.newArrayListWithCapacity(2);
 //          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
 //              new BinaryPrefixComparator(node.rollupAggregation()
@@ -729,106 +760,149 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
 //              })));
 //          
 //          rollup_filter = new FilterList(filters, Operator.MUST_PASS_ONE);
-//        }
-//      } else {
-//        rollup_filter = null;
-//      }
-//      
-//      int idx = 0;
-//      if (node.rollupIntervals() != null && 
-//          !node.rollupIntervals().isEmpty() && 
-//          node.rollupUsage() != RollupUsage.ROLLUP_RAW) {
-//        
-//        for (int i = 0; i < node.rollupIntervals().size(); i++) {
-//          final RollupInterval interval = node.rollupIntervals().get(idx);
-//          final Tsdb1xBigtableScanner[] array = new Tsdb1xBigtableScanner[node.schema().saltWidth() > 0 ? 
-//              node.schema().saltBuckets() : 1];
-//          scanners.add(array);
-//          final byte[] start_key = setStartKey(metric, interval, fuzzy_key);
-//          final byte[] stop_key = setStopKey(metric, interval);
-//          
-//          for (int x = 0; x < array.length; x++) {
+        }
+      } else {
+        rollup_filter = null;
+      }
+      
+      int idx = 0;
+      if (node.rollupIntervals() != null && 
+          !node.rollupIntervals().isEmpty() && 
+          node.rollupUsage() != RollupUsage.ROLLUP_RAW) {
+        
+        for (int i = 0; i < node.rollupIntervals().size(); i++) {
+          final RollupInterval interval = node.rollupIntervals().get(idx);
+          final Tsdb1xBigtableScanner[] array = new Tsdb1xBigtableScanner[node.schema().saltWidth() > 0 ? 
+              node.schema().saltBuckets() : 1];
+          scanners.add(array);
+          final byte[] start_key = setStartKey(metric, interval, fuzzy_key);
+          final byte[] stop_key = setStopKey(metric, interval);
+          
+          for (int x = 0; x < array.length; x++) {
+            ReadRowsRequest.Builder read_builder = ReadRowsRequest.newBuilder()
+                .setTableNameBytes(pre_aggregate ? 
+                    // TODO = need to bigtabelize the names.
+                    ByteStringer.wrap(node.parent.table_namer.toTableName(
+                        new String(interval.getGroupbyTable()))
+                          .getTableId().getBytes(Const.ASCII_US_CHARSET))
+                    : ByteStringer.wrap(node.parent.table_namer.toTableName(
+                        new String(interval.getTemporalTable()))
+                        .getTableId().getBytes(Const.ASCII_US_CHARSET)));
+            
+            Chain.Builder bldr = RowFilter.Chain.newBuilder();
+            
 //            final Scanner scanner = node.parent()
 //                .client().newScanner(pre_aggregate ? 
 //                    interval.getGroupbyTable() : interval.getTemporalTable());
-//            
+            
 //            scanner.setFamily(Tsdb1xBigtableDataStore.DATA_FAMILY);
 //            scanner.setMaxNumRows(rows_per_scan);
 //            scanner.setReversed(reverse_scan);
-//            
-//            if (node.schema().saltWidth() > 0) {
-//              final byte[] start_clone = Arrays.copyOf(start_key, start_key.length);
-//              final byte[] stop_clone = Arrays.copyOf(stop_key, stop_key.length);
-//              node.schema().prefixKeyWithSalt(start_clone, x);
-//              node.schema().prefixKeyWithSalt(stop_clone, x);
-//              scanner.setStartKey(start_clone);
-//              scanner.setStopKey(stop_clone);
-//            } else {
-//              // no copying needed, just dump em in
-//              scanner.setStartKey(start_key);
-//              scanner.setStopKey(stop_key);
-//            }
-//            
-//            setScannerFilter(scanner, x, regex, fuzzy_key, fuzzy_mask, rollup_filter);
-//            
-//            if (LOG.isDebugEnabled()) {
-//              LOG.debug("Instantiating rollup: " + scanner);
-//            }
-//            
-//            array[x] = new Tsdb1xBigtableScanner(this, scanner, x, interval);
-//          }
-//          idx++;
-//          
-//          // bail out
-//          if (node.rollupUsage() == RollupUsage.ROLLUP_NOFALLBACK && idx > 0) {
-//            break;
-//          }
-//        }
-//      }
-//  
-//      // raw scanner here if applicable
-//      if (node.rollupIntervals() == null || 
-//          node.rollupIntervals().isEmpty() || 
-//          node.rollupUsage() != RollupUsage.ROLLUP_NOFALLBACK) {
-//        
-//        final Tsdb1xBigtableScanner[] array = new Tsdb1xBigtableScanner[node.schema().saltWidth() > 0 ? 
-//            node.schema().saltBuckets() : 1];
-//        scanners.add(array);
-//        
-//        final byte[] start_key = setStartKey(metric, null, fuzzy_key);
-//        final byte[] stop_key = setStopKey(metric, null);
-//        
-//        for (int i = 0; i < array.length; i++) {
-//          final Scanner scanner = node.parent()
-//              .client().newScanner(node.parent().dataTable());
-//          
+            
+            if (node.schema().saltWidth() > 0) {
+              final byte[] start_clone = Arrays.copyOf(start_key, start_key.length);
+              final byte[] stop_clone = Arrays.copyOf(stop_key, stop_key.length);
+              node.schema().prefixKeyWithSalt(start_clone, x);
+              node.schema().prefixKeyWithSalt(stop_clone, x);
+              
+              read_builder.setRows(RowSet.newBuilder()
+                  .addRowRanges(RowRange.newBuilder()
+                      .setStartKeyClosed(ByteStringer.wrap(start_clone))
+                      .setEndKeyOpen(ByteStringer.wrap(stop_clone))));
+            } else {
+              // no copying needed, just dump em in
+              read_builder.setRows(RowSet.newBuilder()
+                  .addRowRanges(RowRange.newBuilder()
+                      .setStartKeyClosed(ByteStringer.wrap(start_key))
+                      .setEndKeyOpen(ByteStringer.wrap(stop_key))));
+            }
+            
+            if (!Strings.isNullOrEmpty(regex)) {
+              bldr.addFilters(RowFilter.newBuilder()
+                  .setRowKeyRegexFilter(ByteStringer.wrap(regex.getBytes(Const.ISO_8859_CHARSET))));
+            }
+            if (rollup_filter != null) {
+              bldr.addFilters(
+                  RowFilter.newBuilder().setInterleave(rollup_filter.build()));
+            }
+            
+            // Fuzzies are converted  into regex filters, so we could add if we want
+            // otherwise just leave for now.
+            //setScannerFilter(scanner, x, regex, fuzzy_key, fuzzy_mask, rollup_filter);
+            
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("Instantiating rollup: " + read_builder);
+            }
+            
+            if (bldr != null) {
+              // TODO - set the darn filter.
+              //read_builder.setFilter(RowFilter.ch);
+            }
+            ResultScanner<FlatRow> scnr = node.parent.session.getDataClient().readFlatRows(read_builder.build());
+            
+            array[x] = new Tsdb1xBigtableScanner(this, scnr, x, interval);
+          }
+          idx++;
+          
+          // bail out
+          if (node.rollupUsage() == RollupUsage.ROLLUP_NOFALLBACK && idx > 0) {
+            break;
+          }
+        }
+      }
+  
+      // raw scanner here if applicable
+      if (node.rollupIntervals() == null || 
+          node.rollupIntervals().isEmpty() || 
+          node.rollupUsage() != RollupUsage.ROLLUP_NOFALLBACK) {
+        
+        final Tsdb1xBigtableScanner[] array = new Tsdb1xBigtableScanner[node.schema().saltWidth() > 0 ? 
+            node.schema().saltBuckets() : 1];
+        scanners.add(array);
+        
+        final byte[] start_key = setStartKey(metric, null, fuzzy_key);
+        final byte[] stop_key = setStopKey(metric, null);
+        
+        for (int i = 0; i < array.length; i++) {
+          ReadRowsRequest.Builder read_builder = ReadRowsRequest.newBuilder()
+              .setTableNameBytes(ByteStringer.wrap(node.parent().dataTable()));
+              
+          
 //          scanner.setFamily(Tsdb1xBigtableDataStore.DATA_FAMILY);
 //          scanner.setMaxNumRows(rows_per_scan);
 //          scanner.setReversed(reverse_scan);
-//          
-//          if (node.schema().saltWidth() > 0) {
-//            final byte[] start_clone = Arrays.copyOf(start_key, start_key.length);
-//            final byte[] stop_clone = Arrays.copyOf(stop_key, stop_key.length);
-//            node.schema().prefixKeyWithSalt(start_clone, i);
-//            node.schema().prefixKeyWithSalt(stop_clone, i);
-//            scanner.setStartKey(start_clone);
-//            scanner.setStopKey(stop_clone);
-//          } else {
-//            // no copying needed, just dump em in
-//            scanner.setStartKey(start_key);
-//            scanner.setStopKey(stop_key);
-//          }
-//          
-//          setScannerFilter(scanner, i, regex, fuzzy_key, fuzzy_mask, null);
-//          
-//          if (LOG.isDebugEnabled()) {
-//            LOG.debug("Instantiating raw table scanner: " + scanner);
-//          }
-//          
-//          array[i] = new Tsdb1xBigtableScanner(this, scanner, i, null);
-//        }
-//      }
-//      initialized = true;
+          
+          if (node.schema().saltWidth() > 0) {
+            final byte[] start_clone = Arrays.copyOf(start_key, start_key.length);
+            final byte[] stop_clone = Arrays.copyOf(stop_key, stop_key.length);
+            node.schema().prefixKeyWithSalt(start_clone, i);
+            node.schema().prefixKeyWithSalt(stop_clone, i);
+            read_builder.setRows(RowSet.newBuilder()
+                .addRowRanges(RowRange.newBuilder()
+                    .setStartKeyClosed(ByteStringer.wrap(start_clone))
+                    .setEndKeyOpen(ByteStringer.wrap(stop_clone))));
+          } else {
+            // no copying needed, just dump em in
+            read_builder.setRows(RowSet.newBuilder()
+                .addRowRanges(RowRange.newBuilder()
+                    .setStartKeyClosed(ByteStringer.wrap(start_key))
+                    .setEndKeyOpen(ByteStringer.wrap(stop_key))));
+          }
+          
+          //setScannerFilter(scanner, i, regex, fuzzy_key, fuzzy_mask, null);
+          if (!Strings.isNullOrEmpty(regex)) {
+            read_builder.setFilter(RowFilter.newBuilder()
+                .setRowKeyRegexFilter(ByteStringer.wrap(regex.getBytes(Const.ISO_8859_CHARSET))));
+          }
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Instantiating raw table scanner: " + read_builder);
+          }
+          ResultScanner<FlatRow> scnr = node.parent.session.getDataClient().readFlatRows(read_builder.build());
+          
+          array[i] = new Tsdb1xBigtableScanner(this, scnr, i, null);
+        }
+      }
+      initialized = true;
     } catch (Exception e) {
       if (child != null) {
         child.setErrorTags(e)

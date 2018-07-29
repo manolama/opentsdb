@@ -107,7 +107,8 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
   protected final TSDB tsdb;
   protected final String id;
   
-  protected BigtableSession session;
+  protected final BigtableInstanceName table_namer;
+  protected final BigtableSession session;
   protected AsyncExecutor executor;
   protected ExecutorService pool;
   
@@ -168,6 +169,71 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
             "TODO");
       }
       
+
+      // more bits
+      if (!config.hasProperty(EXPANSION_LIMIT_KEY)) {
+        config.register(EXPANSION_LIMIT_KEY, 4096, true,
+            "The maximum number of UIDs to expand in a literal filter "
+            + "for HBase scanners.");
+      }
+      if (!config.hasProperty(ROLLUP_USAGE_KEY)) {
+        config.register(ROLLUP_USAGE_KEY, "rollup_fallback", true,
+            "The default fallback operation for queries involving rollup tables.");
+      }
+      if (!config.hasProperty(SKIP_NSUN_TAGK_KEY)) {
+        config.register(SKIP_NSUN_TAGK_KEY, "false", true,
+            "Whether or not to simply drop tag keys (names) from query filters "
+            + "that have not been assigned UIDs and try to fetch data anyway.");
+      }
+      if (!config.hasProperty(SKIP_NSUN_TAGV_KEY)) {
+        config.register(SKIP_NSUN_TAGV_KEY, "false", true,
+            "Whether or not to simply drop tag values from query filters "
+            + "that have not been assigned UIDs and try to fetch data anyway.");
+      }
+      if (!config.hasProperty(SKIP_NSUI_KEY)) {
+        config.register(SKIP_NSUI_KEY, "false", true,
+            "Whether or not to ignore data from storage that did not "
+            + "resolve from a UID to a string. If not ignored, "
+            + "exceptions are thrown when the data is read.");
+      }
+      if (!config.hasProperty(ALLOW_DELETE_KEY)) {
+        config.register(ALLOW_DELETE_KEY, "false", true,
+            "TODO");
+      }
+      if (!config.hasProperty(DELETE_KEY)) {
+        config.register(DELETE_KEY, "false", true,
+            "TODO");
+      }
+      if (!config.hasProperty(PRE_AGG_KEY)) {
+        config.register(PRE_AGG_KEY, "false", true,
+            "TODO");
+      }
+      if (!config.hasProperty(FUZZY_FILTER_KEY)) {
+        config.register(FUZZY_FILTER_KEY, "true", true,
+            "TODO");
+      }
+      if (!config.hasProperty(ROWS_PER_SCAN_KEY)) {
+        config.register(ROWS_PER_SCAN_KEY, "128", true,
+            "TODO");
+      }
+      
+      if (!config.hasProperty(MULTI_GET_CONCURRENT_KEY)) {
+        config.register(MULTI_GET_CONCURRENT_KEY, "20", true,
+            "TODO");
+      }
+      if (!config.hasProperty(MULTI_GET_BATCH_KEY)) {
+        config.register(MULTI_GET_BATCH_KEY, "1024", true,
+            "TODO");
+      }
+      if (!config.hasProperty(MAX_MG_CARDINALITY_KEY)) {
+        config.register(MAX_MG_CARDINALITY_KEY, "128", true,
+            "TODO");
+      }
+      if (!config.hasProperty(ENABLE_APPENDS_KEY)) {
+        config.register(ENABLE_APPENDS_KEY, false, false,
+            "TODO");
+      }
+      
       // bigtable configs
       if (!config.hasProperty(PROJECT_ID_KEY)) {
         config.register(PROJECT_ID_KEY, null, false, 
@@ -200,7 +266,7 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
       }
     }
     
-    final BigtableInstanceName table_namer = new BigtableInstanceName(
+    table_namer = new BigtableInstanceName(
         config.getString(PROJECT_ID_KEY), config.getString(INSTANCE_ID_KEY));
     
     data_table = (table_namer.toTableNameStr(
