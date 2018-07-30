@@ -877,12 +877,16 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
             final byte[] stop_clone = Arrays.copyOf(stop_key, stop_key.length);
             node.schema().prefixKeyWithSalt(start_clone, i);
             node.schema().prefixKeyWithSalt(stop_clone, i);
+            
+            System.out.println("SALT: " + Arrays.toString(start_clone) + "  " + Arrays.toString(stop_clone));
             read_builder.setRows(RowSet.newBuilder()
                 .addRowRanges(RowRange.newBuilder()
                     .setStartKeyClosed(ByteStringer.wrap(start_clone))
                     .setEndKeyOpen(ByteStringer.wrap(stop_clone))));
           } else {
             // no copying needed, just dump em in
+            System.out.println("nosalt: " + Arrays.toString(start_key) + "  " + Arrays.toString(stop_key));
+            
             read_builder.setRows(RowSet.newBuilder()
                 .addRowRanges(RowRange.newBuilder()
                     .setStartKeyClosed(ByteStringer.wrap(start_key))
@@ -920,7 +924,7 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
       LOG.debug("Configured " + scanners.size() + " scanner sets with " 
           + scanners.get(0).length + " scanners per set.");
     }
-    //scanNext(span);
+    scanNext(span);
   }
   
   /**

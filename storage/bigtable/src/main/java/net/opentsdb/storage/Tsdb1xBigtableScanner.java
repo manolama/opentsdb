@@ -151,6 +151,7 @@ public class Tsdb1xBigtableScanner {
    * @param span An optional tracing span.
    */
   public void fetchNext(final Tsdb1xBigtableQueryResult result, final Span span) {
+    System.out.println("FETCHING NEXT");
     if (owner.hasException()) {
       try {
         scanner.close();
@@ -198,6 +199,7 @@ public class Tsdb1xBigtableScanner {
         child = span;
       }
       
+      System.out.println("SCANNING NEXT");
       scan(result, child);
 //      scanner.nextRows()
 //        .addCallbacks(new ScannerCB(result, child), new ErrorCB(child));
@@ -424,7 +426,13 @@ public class Tsdb1xBigtableScanner {
     
     while (true) {
       try {
+        System.out.println("CALLING SCANNER NEXT.... with: " + scanner);
         final FlatRow[] rows = scanner.next(owner.rows_per_scan);
+        if (rows == null || rows.length < 1) {
+          System.out.println("No data from scan.");
+          break;
+        }
+        System.out.println("SCANNED: " + rows.length);
         rows_scanned += rows.length;
           if (owner.scannerFilter() != null) {
             final List<Deferred<Object>> deferreds = 
@@ -544,7 +552,8 @@ public class Tsdb1xBigtableScanner {
           complete(e, child, 0);
         }
       }
-    
+    System.out.println("TATTINGG AS DONE.");
+    complete(child, 0);
     
 //    final Span child;
 //    if (span != null) {

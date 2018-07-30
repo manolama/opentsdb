@@ -30,6 +30,7 @@ import com.google.bigtable.v2.ReadModifyWriteRowResponse;
 import com.google.bigtable.v2.ReadModifyWriteRule;
 import com.google.bigtable.v2.Mutation.SetCell;
 import com.google.cloud.bigtable.config.BigtableOptions;
+import com.google.cloud.bigtable.config.BulkOptions;
 import com.google.cloud.bigtable.config.CallOptionsConfig;
 import com.google.cloud.bigtable.config.CredentialOptions;
 import com.google.cloud.bigtable.grpc.BigtableDataClient;
@@ -296,16 +297,24 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
           .setAppProfileId(BigtableOptions.BIGTABLE_APP_PROFILE_DEFAULT)
           .setPort(BigtableOptions.BIGTABLE_PORT_DEFAULT)
           .setDataHost(BigtableOptions.BIGTABLE_DATA_HOST_DEFAULT)
+          .setBulkOptions(new BulkOptions.Builder()
+              .setBulkMutationRpcTargetMs(1000)
+              .setBulkMaxRequestSize(1024)
+              .setAutoflushMs(1000)
+              .build())
           .build());
+      
+
+      executor = session.createAsyncExecutor();
       
       final BigtableTableName data_table_name = new BigtableTableName(
           table_namer.toTableNameStr(config.getString(getConfigKey(DATA_TABLE_KEY))));
       mutation_buffer = session.createBulkMutation(data_table_name);
+      
     } catch (IOException e) {
       throw new StorageException("WTF?", e);
     }
     
-    executor = session.createAsyncExecutor();
     
     uid_store = new Tsdb1xBigtableUniqueIdStore(this);
     tsdb.getRegistry().registerSharedObject(Strings.isNullOrEmpty(id) ? 
@@ -399,6 +408,7 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
   @Override
   public Deferred<WriteStatus> write(AuthState state, TimeSeriesDatum datum,
       Span span) {
+    System.out.println("HERHERHERHE");
  // TODO - other types
     if (datum.value().type() != NumericType.TYPE) {
       return Deferred.fromResult(WriteStatus.rejected(
@@ -456,6 +466,7 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
                  .setTag("message", ioe.error())
                  .finish();
           }
+          System.out.println("IOE WRITE STATE: " + ioe.state());
           switch (ioe.state()) {
           case RETRY:
             return Deferred.fromResult(WriteStatus.retry(ioe.error()));
@@ -471,6 +482,7 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
         // TODO - handle different types
         long base_time = datum.value().timestamp().epoch();
         base_time = base_time - (base_time % Schema.MAX_RAW_TIMESPAN);
+        System.out.println("TIMESTAMP : "+ base_time);
         Pair<byte[], byte[]> pair = schema.encode(datum.value(), 
             enable_appends, (int) base_time, null);
         
@@ -495,11 +507,13 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
                 child.setSuccessTags().finish();
               }
               
+              System.out.println("ON SUCCESS for write.");
               deferred.callback(WriteStatus.OK);
             }
 
             @Override
             public void onFailure(final Throwable t) {
+              System.out.println("ON ERROR: " + t.getMessage());
               // TODO log?
               // TODO - how do we retry?
 //              if (ex instanceof PleaseThrottleException ||
@@ -530,14 +544,14 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
         } else {
           final MutateRowRequest mutate_row_request = 
               MutateRowRequest.newBuilder()
-              .setTableNameBytes(ByteStringer.wrap(data_table))
-              .setRowKey(ByteStringer.wrap(ioe.id()))
-              .addMutations(Mutation.newBuilder()
-                  .setSetCell(SetCell.newBuilder()
-                      .setFamilyNameBytes(ByteStringer.wrap(DATA_FAMILY))
-                      .setColumnQualifier(ByteStringer.wrap(pair.getKey()))
-                      .setValue(ByteStringer.wrap(pair.getValue()))))
-              .build();
+                .setTableNameBytes(ByteStringer.wrap(data_table))
+                .setRowKey(ByteStringer.wrap(ioe.id()))
+                .addMutations(Mutation.newBuilder()
+                    .setSetCell(SetCell.newBuilder()
+                        .setFamilyNameBytes(ByteStringer.wrap(DATA_FAMILY))
+                        .setColumnQualifier(ByteStringer.wrap(pair.getKey()))
+                        .setValue(ByteStringer.wrap(pair.getValue()))))
+                .build();
           
           final Deferred<WriteStatus> deferred = new Deferred<WriteStatus>();
           class PutCB implements FutureCallback<MutateRowResponse> {
@@ -547,7 +561,7 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
               if (child != null) {
                 child.setSuccessTags().finish();
               }
-              
+              System.out.println("ON SUCCESS!!!!!");
               deferred.callback(WriteStatus.OK);
             }
 
@@ -563,6 +577,7 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
 //                }
 //                return WriteStatus.retry("Please retry at a later time.");
 //              }
+              System.out.println("ON ERRRROR!!!!! " + t.getMessage());
               if (child != null) {
                 child.setErrorTags(t)
                      .finish();
@@ -572,6 +587,8 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
             
           }
           
+          System.out.println("WRITING TO BIGTABLE MUTATION BUFFER...");
+          try {
           Futures.addCallback(
               mutation_buffer.add(mutate_row_request),
               new PutCB(), 
@@ -580,6 +597,10 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
 //          return client.put(new PutRequest(data_table, ioe.id(), 
 //              DATA_FAMILY, pair.getKey(), pair.getValue()))
 //              .addCallbacks(new SuccessCB(), new WriteErrorCB());
+          } catch (Throwable t) {
+            t.printStackTrace();
+            throw t;
+          }
         }
       }
       

@@ -435,6 +435,54 @@ public final class Bytes {
     return buf.toString();
   }
 
+  public static String pretty(final byte[] array, final boolean force_hex) {
+    if (array == null) {
+      return "null";
+    }
+    final StringBuilder buf = new StringBuilder(1 + array.length + 1);
+    pretty(buf, array, force_hex);
+    return buf.toString();
+  }
+  
+  public static void pretty(final StringBuilder outbuf, final byte[] array, 
+      final boolean force_hex) {
+    if (array == null) {
+      outbuf.append("null");
+      return;
+    }
+    int ascii = 0;
+    final int start_length = outbuf.length();
+    final int n = array.length;
+    outbuf.ensureCapacity(start_length + 1 + n + 1);
+    outbuf.append('"');
+    for (int i = 0; i < n; i++) {
+      final byte b = array[i];
+      if (force_hex) {
+        outbuf.append("\\x")
+              .append((char) HEX[(b >>> 4) & 0x0F])
+              .append((char) HEX[b & 0x0F]);
+      } else {
+        if (' ' <= b && b <= '~') {
+          ascii++;
+          outbuf.append((char) b);
+        } else if (b == '\n') {
+          outbuf.append('\\').append('n');
+        } else if (b == '\t') {
+          outbuf.append('\\').append('t');
+        } else {
+          outbuf.append("\\x")
+            .append((char) HEX[(b >>> 4) & 0x0F])
+            .append((char) HEX[b & 0x0F]);
+        }
+      }
+    }
+    if (!force_hex && ascii < n / 2) {
+      outbuf.setLength(start_length);
+      outbuf.append(Arrays.toString(array));
+    } else {
+      outbuf.append('"');
+    }
+  }
   // This doesn't really belong here but it doesn't belong anywhere else
   // either, so let's put it close to the other pretty-printing functions.
   /**

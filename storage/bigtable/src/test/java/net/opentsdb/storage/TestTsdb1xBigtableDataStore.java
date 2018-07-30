@@ -21,6 +21,7 @@ import com.google.bigtable.v2.ReadModifyWriteRule;
 import com.google.bigtable.v2.ReadRowsRequest;
 import com.google.bigtable.v2.Row;
 import com.google.bigtable.v2.RowFilter;
+import com.google.bigtable.v2.RowRange;
 import com.google.bigtable.v2.RowSet;
 import com.google.bigtable.v2.ValueRange;
 import com.google.bigtable.v2.Mutation.SetCell;
@@ -464,5 +465,121 @@ System.out.println("GET: " + store.session.createAsyncExecutor().readRowsAsync(r
             null).join().id()));
   }
 
+  @Test
+  public void readUID() throws Exception {
+    Tsdb1xBigtableFactory factory = mock(Tsdb1xBigtableFactory.class);
+    MockTSDB tsdb = new MockTSDB();
+    
+    tsdb.config.register(Tsdb1xBigtableDataStore.PROJECT_ID_KEY, 
+        "calcium-post-108621", false, "UT");
+    tsdb.config.register(Tsdb1xBigtableDataStore.INSTANCE_ID_KEY, 
+        "opentsdb", false, "UT");
+    tsdb.config.register(Tsdb1xBigtableDataStore.ZONE_ID_KEY, 
+        "us-central1-c", false, "UT");
+    tsdb.config.register(Tsdb1xBigtableDataStore.JSON_KEYFILE_KEY, 
+        "/Users/clarsen/Documents/opentsdb/bigtable/quickstart/key.json", false, "UT");
+    when(factory.tsdb()).thenReturn(tsdb);
+    
+    Tsdb1xBigtableDataStore store = new Tsdb1xBigtableDataStore(factory, null, 
+        mock(Schema.class));
+    
+    
+    ReadRowsRequest rrr = ReadRowsRequest.newBuilder()
+        .setTableNameBytes(ByteString.copyFrom("projects/calcium-post-108621/instances/opentsdb/tables/tsdb-uid".getBytes()))
+        .setRows(RowSet.newBuilder()
+            .addRowRanges(RowRange.newBuilder()
+            .setStartKeyClosed(ByteStringer.wrap("my.metric".getBytes()))
+            .setEndKeyOpen(ByteStringer.wrap("my.metrics".getBytes()))))
+        .setFilter(RowFilter.newBuilder()
+            .setFamilyNameRegexFilterBytes(ByteStringer.wrap("id".getBytes()))
+            )
+        .buildPartial();
+    
+//    System.out.println("GET: " + store.session.createAsyncExecutor().readRowsAsync(rrr).get());
+    
+//  ReadRowsRequest rrr = ReadRowsRequest.newBuilder()
+//  .setTableNameBytes(ByteString.copyFrom("projects/calcium-post-108621/instances/opentsdb/tables/tsdb-uid".getBytes()))
+//  .setRows(RowSet.newBuilder()
+//      .addRowRanges(RowRange.newBuilder()
+//      .setStartKeyClosed(ByteStringer.wrap(new byte[] { 0, 0, 1 }))
+//      .setEndKeyOpen(ByteStringer.wrap(new byte[] { 1, 0, 0 }))))
+//  .setFilter(RowFilter.newBuilder()
+//      .setFamilyNameRegexFilterBytes(ByteStringer.wrap("id".getBytes()))
+//      )
+//  .buildPartial();
+
+  
+  ResultScanner<FlatRow> scnr = store.session.getDataClient().readFlatRows(rrr);
+  
+  while (true) {
+    FlatRow[] rows = scnr.next(25);
+    if (rows == null || rows.length < 1) {
+      System.out.println("ALL DONE");
+      break;
+    }
+    for (final FlatRow row : rows) {
+      System.out.println("  Row: " + Arrays.toString(row.getCells().get(0).getValue().toByteArray()) 
+        + "  " + Bytes.pretty(row.getCells().get(0).getValue().toByteArray(), true)
+        + "  " + new String(row.getRowKey().toByteArray()));
+    }
+  }
+  store.shutdown().join();
+//    System.out.println("GET: " + store.session.createAsyncExecutor().readRowsAsync(rrr).get());
+  
+  }
+  
+  @Test
+  public void readTSDB() throws Exception {
+    Tsdb1xBigtableFactory factory = mock(Tsdb1xBigtableFactory.class);
+    MockTSDB tsdb = new MockTSDB();
+    
+    tsdb.config.register(Tsdb1xBigtableDataStore.PROJECT_ID_KEY, 
+        "calcium-post-108621", false, "UT");
+    tsdb.config.register(Tsdb1xBigtableDataStore.INSTANCE_ID_KEY, 
+        "opentsdb", false, "UT");
+    tsdb.config.register(Tsdb1xBigtableDataStore.ZONE_ID_KEY, 
+        "us-central1-c", false, "UT");
+    tsdb.config.register(Tsdb1xBigtableDataStore.JSON_KEYFILE_KEY, 
+        "/Users/clarsen/Documents/opentsdb/bigtable/quickstart/key.json", false, "UT");
+    when(factory.tsdb()).thenReturn(tsdb);
+    
+    Tsdb1xBigtableDataStore store = new Tsdb1xBigtableDataStore(factory, null, 
+        mock(Schema.class));
+    
+    
+    ReadRowsRequest rrr = ReadRowsRequest.newBuilder()
+        .setTableNameBytes(ByteString.copyFrom("projects/calcium-post-108621/instances/opentsdb/tables/tsdb".getBytes()))
+        .setRows(RowSet.newBuilder()
+            .addRowRanges(RowRange.newBuilder()
+            .setStartKeyClosed(ByteStringer.wrap(new byte[] { 0, 7, -44 }))
+            .setEndKeyOpen(ByteStringer.wrap((new byte[] { 0, 7, -43 })))))
+        .setFilter(RowFilter.newBuilder()
+            .setFamilyNameRegexFilterBytes(ByteStringer.wrap("t".getBytes()))
+            )
+        .buildPartial();
+
+  ResultScanner<FlatRow> scnr = store.session.getDataClient().readFlatRows(rrr);
+  
+  while (true) {
+    FlatRow[] rows = scnr.next(25);
+    if (rows == null || rows.length < 1) {
+      System.out.println("ALL DONE");
+      break;
+    }
+    for (final FlatRow row : rows) {
+      for (int i = 0; i < row.getCells().size(); i++) {
+        System.out.println("  Row: " + Arrays.toString(row.getRowKey().toByteArray()) 
+          + "  " + Bytes.pretty(row.getRowKey().toByteArray(), true)
+          + "  " + Arrays.toString(row.getCells().get(i).getValue().toByteArray()));
+        }
+    }
+  }
+  
+  System.out.println("TIME: " + Bytes.getInt(new byte[] { 0, 23, 88, -112 }));
+  
+  store.shutdown().join();
+//    System.out.println("GET: " + store.session.createAsyncExecutor().readRowsAsync(rrr).get());
+  
+  }
 }
 
