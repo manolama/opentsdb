@@ -33,9 +33,13 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.powermock.api.mockito.PowerMockito;
 
+import com.google.bigtable.v2.ReadRowsRequest;
 import com.google.cloud.bigtable.config.CredentialOptions;
+import com.google.cloud.bigtable.grpc.BigtableDataClient;
+import com.google.cloud.bigtable.grpc.BigtableInstanceName;
 import com.google.cloud.bigtable.grpc.BigtableSession;
 import com.google.cloud.bigtable.grpc.scanner.FlatRow;
+import com.google.cloud.bigtable.grpc.scanner.ResultScanner;
 import com.google.cloud.bigtable.util.ByteStringer;
 
 import net.opentsdb.common.Const;
@@ -129,6 +133,8 @@ public class UTBase {
   protected static MockTSDB tsdb;
   protected static Tsdb1xDataStoreFactory store_factory;
   protected static BigtableSession session;
+  protected static BigtableDataClient client;
+  protected static BigtableInstanceName table_namer;
   //protected static MockBase storage;
   protected static Tsdb1xBigtableDataStore data_store;
   protected static UniqueIdFactory uid_factory;
@@ -143,6 +149,7 @@ public class UTBase {
     tsdb = new MockTSDB();
     store_factory = mock(Tsdb1xDataStoreFactory.class);
     session = mock(BigtableSession.class);
+    client = mock(BigtableDataClient.class);
     uid_factory = mock(UniqueIdFactory.class);
     data_store = mock(Tsdb1xBigtableDataStore.class);
     
@@ -154,6 +161,19 @@ public class UTBase {
     PowerMockito.mockStatic(Executors.class);
     when(Executors.newCachedThreadPool())
       .thenReturn(mock(ExecutorService.class));
+    when(session.getDataClient()).thenReturn(client);
+    
+    table_namer = new BigtableInstanceName("UT", "UT");
+    when(data_store.tableNamer()).thenReturn(table_namer);
+    
+    when(client.readFlatRows(any(ReadRowsRequest.class)))
+      .thenAnswer(new Answer<ResultScanner>() {
+      @Override
+      public ResultScanner answer(InvocationOnMock invocation)
+          throws Throwable {
+        return mock(ResultScanner.class);
+      }
+    });
     
     when(tsdb.registry.getDefaultPlugin(Tsdb1xDataStoreFactory.class))
       .thenReturn(store_factory);
@@ -169,7 +189,7 @@ public class UTBase {
     });
     when(data_store.dataTable()).thenReturn("tsdb".getBytes(Const.ISO_8859_CHARSET));
     when(data_store.uidTable()).thenReturn(UID_TABLE);
-    //when(data_store.client()).thenReturn(client);
+    when(data_store.session()).thenReturn(session);
     when(tsdb.registry.getSharedObject(any())).thenReturn(data_store);
    
     when(tsdb.registry.getPlugin(UniqueIdFactory.class, "LRU"))

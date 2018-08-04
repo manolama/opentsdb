@@ -267,7 +267,8 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
     }
     
     table_namer = new BigtableInstanceName(
-        config.getString(PROJECT_ID_KEY), config.getString(INSTANCE_ID_KEY));
+        config.getString(PROJECT_ID_KEY), 
+        config.getString(INSTANCE_ID_KEY));
     
     data_table = (table_namer.toTableNameStr(
         config.getString(getConfigKey(DATA_TABLE_KEY))))
@@ -379,6 +380,15 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
     return executor;
   }
 
+  /** @return The session. */
+  BigtableSession session() {
+    return session;
+  }
+  
+  BigtableInstanceName tableNamer() {
+    return table_namer;
+  }
+  
   /** @return The TSDB reference. */
   TSDB tsdb() {
     return tsdb;

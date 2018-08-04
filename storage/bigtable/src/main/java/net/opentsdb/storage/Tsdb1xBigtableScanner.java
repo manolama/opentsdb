@@ -150,7 +150,6 @@ public class Tsdb1xBigtableScanner {
    * @param span An optional tracing span.
    */
   public void fetchNext(final Tsdb1xBigtableQueryResult result, final Span span) {
-    System.out.println("FETCHING NEXT");
     if (owner.hasException()) {
       try {
         scanner.close();
