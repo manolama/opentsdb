@@ -16,7 +16,6 @@ package net.opentsdb.storage;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -24,7 +23,6 @@ import org.slf4j.LoggerFactory;
 
 import com.google.cloud.bigtable.grpc.scanner.FlatRow;
 import com.google.cloud.bigtable.grpc.scanner.ResultScanner;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
@@ -42,7 +40,8 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.exceptions.QueryExecutionException;
 import net.opentsdb.query.QueryMode;
-import net.opentsdb.query.filter.TagVFilter;
+import net.opentsdb.query.QuerySourceConfig;
+import net.opentsdb.query.filter.FilterUtils;
 import net.opentsdb.rollup.RollupInterval;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.BigtableExecutor.State;
@@ -865,14 +864,42 @@ public class Tsdb1xBigtableScanner {
       } else {
         grand_child = child;
       }
-      final List<Deferred<Boolean>> deferreds = 
-          Lists.newArrayListWithCapacity(owner.scannerFilter().getTags().size());
-      for (final TagVFilter filter : owner.scannerFilter().getTags()) {
-        deferreds.add(filter.match(id.tags()));
+      if (FilterUtils.matchesTags(
+          ((QuerySourceConfig) owner.node().config()).getFilter(), id.tags())) {
+        synchronized (keepers) {
+          keepers.add(hash);
+        }
+        if (grand_child != null) {
+          grand_child.setSuccessTags()
+                     .setTag("resolved", "true")
+                     .setTag("matched", "true")
+                     .finish();
+        }
+        if (child != null) {
+          child.setSuccessTags()
+               .setTag("resolved", "true")
+               .setTag("matched", "true")
+               .finish();
+        }
+        deferred.callback(true);
+      } else {
+        synchronized (skips) {
+          skips.add(hash);
+        }
+        if (grand_child != null) {
+          grand_child.setSuccessTags()
+                     .setTag("resolved", "true")
+                     .setTag("matched", "false")
+                     .finish();
+        }
+        if (child != null) {
+          child.setSuccessTags()
+               .setTag("resolved", "true")
+               .setTag("matched", "false")
+               .finish();
+        }
+        deferred.callback(false);
       }
-      Deferred.group(deferreds)
-        .addCallback(new FinalCB(grand_child))
-        .addErrback(new ErrorCB(grand_child));
       return null;
     }
     
