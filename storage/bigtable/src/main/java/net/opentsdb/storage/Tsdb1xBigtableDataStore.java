@@ -170,7 +170,6 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
             "TODO");
       }
       
-
       // more bits
       if (!config.hasProperty(EXPANSION_LIMIT_KEY)) {
         config.register(EXPANSION_LIMIT_KEY, 4096, true,
@@ -304,17 +303,14 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
               .build())
           .build());
       
-
       executor = session.createAsyncExecutor();
       
       final BigtableTableName data_table_name = new BigtableTableName(
           table_namer.toTableNameStr(config.getString(getConfigKey(DATA_TABLE_KEY))));
       mutation_buffer = session.createBulkMutation(data_table_name);
-      
     } catch (IOException e) {
       throw new StorageException("WTF?", e);
     }
-    
     
     uid_store = new Tsdb1xBigtableUniqueIdStore(this);
     tsdb.getRegistry().registerSharedObject(Strings.isNullOrEmpty(id) ? 

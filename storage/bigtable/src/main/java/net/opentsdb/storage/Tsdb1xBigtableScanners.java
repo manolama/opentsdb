@@ -160,13 +160,6 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
   /** Whether or not the scanner can switch to multi-gets. 
    * TODO - implement */
   protected boolean could_multi_get;
-
-  /**
-   * Tags by which we must group the results.
-   * Each element is a tag ID.
-   * Invariant: an element cannot be both in this array and in {@code tags}.
-   */
-  protected List<byte[]> group_bys; 
   
   /** Tag key and values to use in the row key filter, all pre-sorted */
   protected ByteMap<List<byte[]>> row_key_literals;
@@ -669,8 +662,7 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
         }
         
         regex = QueryUtil.getRowKeyUIDRegex(
-            node.schema(), 
-            group_bys, 
+            node.schema(),
             row_key_literals, 
             filter_cb != null ? filter_cb.explicit_tags : false, 
             fuzzy_key, 
