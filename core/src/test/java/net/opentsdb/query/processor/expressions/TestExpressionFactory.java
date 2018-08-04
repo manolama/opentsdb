@@ -35,6 +35,7 @@ import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QuerySourceConfig;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
+import net.opentsdb.query.filter.MetricLiteralFilter;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.joins.JoinConfig;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
@@ -98,16 +99,18 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("a")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.a")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.a")
+                .build())
             .build())
         .build());
     nodes.add(ExecutionGraphNode.newBuilder()
         .setType("DataSource")
         .setId("b")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.b")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.b")
+                .build())
             .build())
         .build());
     
@@ -181,8 +184,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("a")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.a")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.a")
+                .build())
             .build())
         .build());
     nodes.add(ExecutionGraphNode.newBuilder()
@@ -190,8 +194,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("b")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.b")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.b")
+                .build())
             .build())
         .build());
     nodes.add(ExecutionGraphNode.newBuilder()
@@ -199,8 +204,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("c")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.c")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.c")
+                .build())
             .build())
         .build());
     
@@ -263,8 +269,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("a")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.a")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.a")
+                .build())
             .build())
         .build());
     
@@ -272,8 +279,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("b")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.b")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.b")
+                .build())
             .build())
         .build());
     
@@ -321,8 +329,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("a")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.a")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.a")
+                .build())
             .build())
         .build());
     
@@ -330,8 +339,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("b")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.b")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.b")
+                .build())
             .build())
         .build());
     
@@ -390,8 +400,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("a")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.a")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.a")
+                .build())
             .build())
         .build());
     
@@ -399,8 +410,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("b")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.b")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.b")
+                .build())
             .build())
         .build());
     
@@ -460,8 +472,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("a")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.a")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.a")
+                .build())
             .build())
         .build());
     
@@ -469,8 +482,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("b")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.b")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.b")
+                .build())
             .build())
         .build());
     
@@ -478,8 +492,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("c")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.c")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.c")
+                .build())
             .build())
         .build());
     
@@ -560,8 +575,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("a")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.a")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.a")
+                .build())
             .build())
         .build());
     
@@ -569,8 +585,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("b")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.b")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.b")
+                .build())
             .build())
         .build());
     
@@ -578,8 +595,9 @@ public class TestExpressionFactory {
         .setType("DataSource")
         .setId("c")
         .setConfig(QuerySourceConfig.newBuilder()
-            .setStart("1h-ago")
-            .setMetric("metric.c")
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("metric.c")
+                .build())
             .build())
         .build());
     

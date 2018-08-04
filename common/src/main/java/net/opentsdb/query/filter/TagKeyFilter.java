@@ -12,23 +12,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package net.opentsdb.storage.schemas.tsdb1x;
+package net.opentsdb.query.filter;
 
-import java.util.List;
+import java.util.Map;
 
 /**
- * A container returned at UID resolution type when converting from a
- * query filter to UIDs for building a storage query or comparing keys.
+ * An interface to evaluate tag keys.
  * 
  * @since 3.0
  */
-public interface ResolvedFilter {
+public interface TagKeyFilter extends QueryFilter {
 
-  /** @return A non-null tag key UID. */
-  public byte[] getTagKey();
+  /** @return The non-null and non-empty filter string. */
+  public String filter();
   
-  /** @return A possible list of tag values if the filter contained
-   * literals. Returns null if the filter did not have literals. */
-  public List<byte[]> getTagValues();
+  /**
+   * Whether or not the filter is satisfied with the tag keys.
+   * @param tags A non-null (but possibly empty) map of tags.
+   * @return True if satisfied, false if not.
+   */
+  public boolean matches(final Map<String, String> tags);
   
 }

@@ -26,6 +26,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
@@ -124,10 +126,10 @@ public class CachingQueryExecutor implements QuerySourceFactory {
     throw new UnsupportedOperationException("Not implemented yet");
   }
   
-  @Override
-  public Class<? extends QueryNodeConfig> nodeConfigClass() {
-    return Config.class;
-  }
+//  @Override
+//  public Class<? extends QueryNodeConfig> nodeConfigClass() {
+//    return Config.class;
+//  }
   
   @Override
   public TimeSeriesDataSource newNode(final QueryPipelineContext context,
@@ -166,9 +168,8 @@ public class CachingQueryExecutor implements QuerySourceFactory {
       super(CachingQueryExecutor.this, context, id);
       complete = new AtomicBoolean();
 
-      key = key_generator.generate(
-          (net.opentsdb.query.pojo.TimeSeriesQuery) context.query(), 
-          ((Config) config).use_timestamps);
+      key = null; /*key_generator.generate(context.query(), 
+          ((Config) config).use_timestamps);*/
       this.config = (Config) config;
 //      final QueryExecutorConfig override = 
 //          context.getConfigOverride(node.getExecutorId());
@@ -219,11 +220,11 @@ public class CachingQueryExecutor implements QuerySourceFactory {
         try {
           tsdb.getStatsCollector().incrementCounter("query.cache.executor.miss",
               "node", "CachingQueryExecutor");
-          final net.opentsdb.query.pojo.TimeSeriesQuery query = 
-              (net.opentsdb.query.pojo.TimeSeriesQuery) context.query();
+//          final net.opentsdb.query.pojo.TimeSeriesQuery query = 
+//              (net.opentsdb.query.pojo.TimeSeriesQuery) context.query();
           
-          final long expiration = key_generator.expiration(query, 
-              config.getExpiration());
+          final long expiration = 0;/*key_generator.expiration(query, 
+              config.getExpiration());*/
           if (LOG.isDebugEnabled()) {
             LOG.debug("Calculated cache expiration: " + expiration);
           }
@@ -257,12 +258,12 @@ public class CachingQueryExecutor implements QuerySourceFactory {
             }
             
             // TODO - normalize times.
-            final SerdesOptions options = BaseSerdesOptions.newBuilder()
-                .setStart(query.getTime().startTime())
-                .setEnd(query.getTime().endTime())
-                .build();
-            serdes.serialize(context.queryContext(), options, baos, next, child)
-              .addCallbacks(new SerdesCB(), new ErrorCB());
+//            final SerdesOptions options = BaseSerdesOptions.newBuilder()
+//                .setStart(query.getTime().startTime())
+//                .setEnd(query.getTime().endTime())
+//                .build();
+//            serdes.serialize(context.queryContext(), options, baos, next, child)
+//              .addCallbacks(new SerdesCB(), new ErrorCB());
           }
         } catch (Exception e) {
           LOG.error("Failed to process results for cache", e);
@@ -432,16 +433,16 @@ public class CachingQueryExecutor implements QuerySourceFactory {
             }
             
             // TODO - normalize times.
-            final net.opentsdb.query.pojo.TimeSeriesQuery query = 
-                (net.opentsdb.query.pojo.TimeSeriesQuery) context.query();
-            final SerdesOptions options = BaseSerdesOptions.newBuilder()
-                .setStart(query.getTime().startTime())
-                .setEnd(query.getTime().endTime())
-                .build();
-            serdes.deserialize(options, 
-                new ByteArrayInputStream(cache_data), 
-                LocalExecution.this,
-                child);
+//            final net.opentsdb.query.pojo.TimeSeriesQuery query = 
+//                (net.opentsdb.query.pojo.TimeSeriesQuery) context.query();
+//            final SerdesOptions options = BaseSerdesOptions.newBuilder()
+//                .setStart(query.getTime().startTime())
+//                .setEnd(query.getTime().endTime())
+//                .build();
+//            serdes.deserialize(options, 
+//                new ByteArrayInputStream(cache_data), 
+//                LocalExecution.this,
+//                child);
           }
           return null;
         }
@@ -781,6 +782,13 @@ public class CachingQueryExecutor implements QuerySourceFactory {
   @VisibleForTesting
   TimeSeriesCacheKeyGenerator keyGenerator() {
     return key_generator;
+  }
+
+  @Override
+  public QueryNodeConfig parseConfig(ObjectMapper mapper, TSDB tsdb,
+      JsonNode node) {
+    // TODO Auto-generated method stub
+    return null;
   }
 
   

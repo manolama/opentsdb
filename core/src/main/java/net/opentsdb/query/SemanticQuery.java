@@ -17,16 +17,23 @@ import java.util.Map;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.hash.HashCode;
 
 import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.MillisecondTimeStamp;
+import net.opentsdb.data.TimeStamp;
 import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
-import net.opentsdb.query.pojo.Filter;
+import net.opentsdb.query.filter.DefaultNamedFilter;
+import net.opentsdb.query.filter.NamedFilter;
+import net.opentsdb.query.filter.QueryFilter;
+import net.opentsdb.query.filter.QueryFilterFactory;
 import net.opentsdb.query.serdes.SerdesOptions;
+import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.JSON;
 
 /**
@@ -38,7 +45,17 @@ import net.opentsdb.utils.JSON;
  * @since 3.0
  */
 public class SemanticQuery implements TimeSeriesQuery {
-
+  /** User given start date/time, could be relative or absolute */
+  private final String start;
+  private final TimeStamp start_ts;
+  
+  /** User given end date/time, could be relative, absolute or empty */
+  private final String end;
+  private final TimeStamp end_ts;
+  
+  /** User's timezone used for converting absolute human readable dates */
+  private final String time_zone;
+  
   /** The non-null and non-empty execution graph to build the query from. */
   private ExecutionGraph execution_graph;
   
@@ -49,7 +66,7 @@ public class SemanticQuery implements TimeSeriesQuery {
   private List<QuerySink> sinks;
   
   /** An optional map of filter IDs to the filters. */
-  private Map<String, Filter> filters;
+  private Map<String, NamedFilter> filters;
   
   /** The execution mode of the query. */
   private QueryMode mode;
@@ -58,13 +75,33 @@ public class SemanticQuery implements TimeSeriesQuery {
   private List<SerdesOptions> serdes_options;
   
   SemanticQuery(final Builder builder) {
+    if (Strings.isNullOrEmpty(builder.start)) {
+      throw new IllegalArgumentException("Start time is required.");
+    }
+    start = builder.start;
+    start_ts = new MillisecondTimeStamp(
+        DateTime.parseDateTimeString(start, builder.time_zone));
+    if (Strings.isNullOrEmpty(builder.end)) {
+      end = null;
+      end_ts = new MillisecondTimeStamp(DateTime.currentTimeMillis());
+    } else {
+      end = builder.end;
+      end_ts = new MillisecondTimeStamp(
+          DateTime.parseDateTimeString(end, builder.time_zone));
+    }
+    time_zone = builder.time_zone;
+    
+    // TODO need checks here
+    if (builder.mode == null) {
+      throw new IllegalArgumentException("Mode cannot be null.");
+    }
     execution_graph = builder.execution_graph;
     sink_configs = builder.sink_configs;
     sinks = builder.sinks;
     if (builder.filters != null) {
       filters = Maps.newHashMap();
-      for (final Filter filter : builder.filters) {
-        filters.put(filter.getId(), filter);
+      for (final NamedFilter filter : builder.filters) {
+        filters.put(filter.id(), filter);
       }
     } else {
       filters = null;
@@ -88,6 +125,21 @@ public class SemanticQuery implements TimeSeriesQuery {
       }
     }
   }
+
+  /** @return user given start date/time, could be relative or absolute */
+  public String getStart() {
+    return start;
+  }
+
+  /** @return user given end date/time, could be relative, absolute or empty */
+  public String getEnd() {
+    return end;
+  }
+
+  /** @return user's timezone used for converting absolute human readable dates */
+  public String getTimezone() {
+    return time_zone;
+  }
   
   public ExecutionGraph getExecutionGraph() {
     return execution_graph;
@@ -101,7 +153,7 @@ public class SemanticQuery implements TimeSeriesQuery {
     return sinks;
   }
   
-  public List<Filter> getFilters() {
+  public List<NamedFilter> getFilters() {
     return Lists.newArrayList(filters.values());
   }
   
@@ -113,8 +165,20 @@ public class SemanticQuery implements TimeSeriesQuery {
     return serdes_options;
   }
   
-  public Filter getFilter(final String filter_id) {
-    return filters == null ? null : filters.get(filter_id);
+  public QueryFilter getFilter(final String filter_id) {
+    return filters == null ? null : filters.get(filter_id).filter();
+  }
+  
+  /** @return Returns the parsed start time. 
+   * @see DateTime#parseDateTimeString(String, String) */
+  public TimeStamp startTime() {
+    return start_ts;
+  }
+  
+  /** @return Returns the parsed end time. 
+   * @see DateTime#parseDateTimeString(String, String) */
+  public TimeStamp endTime() {
+    return end_ts;
   }
   
   @Override
@@ -137,12 +201,30 @@ public class SemanticQuery implements TimeSeriesQuery {
   }
   
   public static class Builder {
+    private String start;
+    private String end;
+    private String time_zone;
     private ExecutionGraph execution_graph;
     private List<QuerySinkConfig> sink_configs;
     private List<QuerySink> sinks;
-    private List<Filter> filters;
+    private List<NamedFilter> filters;
     private QueryMode mode;
     private List<SerdesOptions> serdes_options;
+    
+    public Builder setStart(final String start) {
+      this.start = start;
+      return this;
+    }
+    
+    public Builder setEnd(final String end) {
+      this.end = end;
+      return this;
+    }
+    
+    public Builder setTimeZone(final String time_zone) {
+      this.time_zone = time_zone;
+      return this;
+    }
     
     public Builder setExecutionGraph(final ExecutionGraph execution_graph) {
       this.execution_graph = execution_graph;
@@ -175,12 +257,12 @@ public class SemanticQuery implements TimeSeriesQuery {
       return this;
     }
     
-    public Builder setFilters(final List<Filter> filters) {
+    public Builder setFilters(final List<NamedFilter> filters) {
       this.filters = filters;
       return this;
     }
     
-    public Builder addFilter(final Filter filter) {
+    public Builder addFilter(final NamedFilter filter) {
       if (filters == null) {
         filters = Lists.newArrayList();
       }
@@ -215,15 +297,55 @@ public class SemanticQuery implements TimeSeriesQuery {
     }
     builder.setExecutionGraph(ExecutionGraph.parse(
         JSON.getMapper(), tsdb, node).build());
+    node = root.get("start");
+    builder.setStart(node.asText());
+    
+    node = root.get("end");
+    if (node != null) {
+      builder.setEnd(node.asText());
+    }
+    
+    node = root.get("timezone");
+    if (node != null) {
+      builder.setTimeZone(node.asText());
+    }
     
     node = root.get("filters");
     if (node != null) {
       for (final JsonNode filter : node) {
-        try {
-          builder.addFilter(JSON.getMapper().treeToValue(filter, Filter.class));
-        } catch (JsonProcessingException e) {
-          throw new IllegalStateException("Failed to parse query", e);
+        final JsonNode id_node = filter.get("id");
+        if (id_node == null) {
+          throw new IllegalArgumentException("Filter node was missing the ID.");
         }
+        final String id = id_node.asText();
+        if (Strings.isNullOrEmpty(id)) {
+          throw new IllegalArgumentException("Filter ID cannot be null or empty.");
+        }
+        
+        final JsonNode child = filter.get("filter");
+        if (child == null) {
+          throw new IllegalArgumentException("Filter child cannot be null or empty.");
+        }
+        final JsonNode type_node = child.get("type");
+        if (type_node == null) {
+          throw new IllegalArgumentException("Filter must include a type.");
+        }
+        final String type = type_node.asText();
+        if (Strings.isNullOrEmpty(type)) {
+          throw new IllegalArgumentException("Filter type cannot be null "
+              + "or empty.");
+        }
+        final QueryFilterFactory factory = tsdb.getRegistry()
+            .getPlugin(QueryFilterFactory.class, type);
+        if (factory == null) {
+          throw new IllegalArgumentException("No filter factory found "
+              + "for type: " + type);
+        }
+        
+        builder.addFilter(DefaultNamedFilter.newBuilder()
+            .setId(id)
+            .setFilter(factory.parse(tsdb, JSON.getMapper(), child))
+            .build());
       }
     }
     

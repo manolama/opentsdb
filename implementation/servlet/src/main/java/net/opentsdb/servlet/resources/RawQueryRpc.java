@@ -46,6 +46,7 @@ import net.opentsdb.query.SemanticQueryContext;
 import net.opentsdb.query.TSQuery;
 import net.opentsdb.query.execution.serdes.JsonV2QuerySerdes;
 import net.opentsdb.query.execution.serdes.JsonV2QuerySerdesOptions;
+import net.opentsdb.query.execution.serdes.JsonV3QuerySerdes;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
 import net.opentsdb.query.serdes.SerdesFactory;
 import net.opentsdb.query.serdes.SerdesOptions;
@@ -315,8 +316,8 @@ public class RawQueryRpc {
 //        .setShowQuery(ts_query.getShowQuery())
 //        .setShowStats(ts_query.getShowStats())
 //        .setShowSummary(ts_query.getShowSummary())
-        .setStart(source_config.startTime())
-        .setEnd(source_config.endTime())
+        .setStart(query.startTime())
+        .setEnd(query.endTime())
         .setId("serdes")
         .build();
     
@@ -332,7 +333,7 @@ public class RawQueryRpc {
 //              .start();
 //        }
 
-        final JsonV2QuerySerdes serdes = new JsonV2QuerySerdes();
+        final JsonV3QuerySerdes serdes = new JsonV3QuerySerdes();
         try {
           // TODO - ug ug ugggg!!!
           serdes.serialize(context, options, output, result, serdes_span).join();

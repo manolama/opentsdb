@@ -59,6 +59,7 @@ import com.google.common.primitives.Bytes;
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QuerySourceConfig;
@@ -66,6 +67,7 @@ import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
 import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
+import net.opentsdb.query.filter.MetricLiteralFilter;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.pojo.FillPolicy;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
@@ -120,6 +122,9 @@ public class TestTsdb1xMultiGet extends UTBase {
       });
     
     query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
+        .setStart(Integer.toString(START_TS))
+        .setEnd(Integer.toString(END_TS))
         .setExecutionGraph(ExecutionGraph.newBuilder()
             .setId("graph")
             .addNode(ExecutionGraphNode.newBuilder()
@@ -129,9 +134,9 @@ public class TestTsdb1xMultiGet extends UTBase {
     
     source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
         .setQuery(query)
-        .setMetric(METRIC_STRING)
-        .setStart(Integer.toString(START_TS))
-        .setEnd(Integer.toString(END_TS))
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric(METRIC_STRING)
+            .build())
         .setId("m1")
         .build();
     
@@ -206,11 +211,21 @@ public class TestTsdb1xMultiGet extends UTBase {
   
   @Test
   public void ctorQueryOverrides() throws Exception {
-    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
-        .setQuery(query)
-        .setMetric(METRIC_STRING)
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
         .setStart(Integer.toString(START_TS))
         .setEnd(Integer.toString(END_TS))
+        .setExecutionGraph(ExecutionGraph.newBuilder()
+            .setId("graph")
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("datasource"))
+            .build())
+        .build();
+    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
+        .setQuery(query)
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric(METRIC_STRING)
+            .build())
         .addOverride(Tsdb1xHBaseDataStore.PRE_AGG_KEY, "true")
         .addOverride(Tsdb1xHBaseDataStore.MULTI_GET_CONCURRENT_KEY, "8")
         .addOverride(Tsdb1xHBaseDataStore.MULTI_GET_BATCH_KEY, "16")
@@ -289,11 +304,21 @@ public class TestTsdb1xMultiGet extends UTBase {
     assertArrayEquals(new byte[] { 2 }, ((BinaryPrefixComparator) ((QualifierFilter) filter.filters().get(3)).comparator()).value());
     
     // pre-agg
-    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
-        .setQuery(query)
-        .setMetric(METRIC_STRING)
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
         .setStart(Integer.toString(START_TS))
         .setEnd(Integer.toString(END_TS))
+        .setExecutionGraph(ExecutionGraph.newBuilder()
+            .setId("graph")
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("datasource"))
+            .build())
+        .build();
+    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
+        .setQuery(query)
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric(METRIC_STRING)
+            .build())
         .addOverride(Tsdb1xHBaseDataStore.PRE_AGG_KEY, "true")
         .setId("m1")
         .build();
@@ -331,11 +356,21 @@ public class TestTsdb1xMultiGet extends UTBase {
             .build())
         .build());
     when(node.rollupAggregation()).thenReturn("sum");
-    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
-        .setQuery(query)
-        .setMetric(METRIC_STRING)
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
         .setStart(Integer.toString(START_TS))
         .setEnd(Integer.toString(END_TS))
+        .setExecutionGraph(ExecutionGraph.newBuilder()
+            .setId("graph")
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("datasource"))
+            .build())
+        .build();
+    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
+        .setQuery(query)
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric(METRIC_STRING)
+            .build())
         .setId("m1")
         .build();
     
@@ -380,11 +415,22 @@ public class TestTsdb1xMultiGet extends UTBase {
 
   @Test
   public void ctoreTimestamps() throws Exception {
-    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
-        .setQuery(query)
-        .setMetric(METRIC_STRING)
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
         .setStart(Integer.toString(END_TS))
         .setEnd(Integer.toString(END_TS + 3600))
+        .setExecutionGraph(ExecutionGraph.newBuilder()
+            .setId("graph")
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("datasource"))
+            .build())
+        .build();
+    
+    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
+        .setQuery(query)
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric(METRIC_STRING)
+            .build())
         .setId("m1")
         .build();
     
@@ -651,11 +697,21 @@ public class TestTsdb1xMultiGet extends UTBase {
   
   @Test
   public void incrementTimeStampReversed() throws Exception {
-    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
-        .setQuery(query)
-        .setMetric(METRIC_STRING)
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
         .setStart(Integer.toString(START_TS))
         .setEnd(Integer.toString(END_TS))
+        .setExecutionGraph(ExecutionGraph.newBuilder()
+            .setId("graph")
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("datasource"))
+            .build())
+        .build();
+    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
+        .setQuery(query)
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric(METRIC_STRING)
+            .build())
         .addOverride(Schema.QUERY_REVERSE_KEY, "true")
         .setId("m1")
         .build();
@@ -1188,12 +1244,22 @@ public class TestTsdb1xMultiGet extends UTBase {
   @Test
   public void fetchNextRealTraced() throws Exception {
     trace = new MockTrace(true);
-    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
-        .setQuery(query)
-        .setMetric(METRIC_STRING)
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
         .setStart(Integer.toString(TS_SINGLE_SERIES))
         .setEnd(Integer.toString(TS_SINGLE_SERIES + 
             (TS_SINGLE_SERIES_COUNT * TS_SINGLE_SERIES_INTERVAL)))
+        .setExecutionGraph(ExecutionGraph.newBuilder()
+            .setId("graph")
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("datasource"))
+            .build())
+        .build();
+    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
+        .setQuery(query)
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric(METRIC_STRING)
+            .build())
         .addOverride(Schema.QUERY_REVERSE_KEY, "true")
         .setId("m1")
         .build();
@@ -1215,12 +1281,22 @@ public class TestTsdb1xMultiGet extends UTBase {
   @Test
   public void fetchNextRealException() throws Exception {
     trace = new MockTrace(true);
-    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
-        .setQuery(query)
-        .setMetric(METRIC_STRING)
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
         .setStart(Integer.toString(TS_MULTI_SERIES_EX))
         .setEnd(Integer.toString(TS_MULTI_SERIES_EX + 
             (TS_MULTI_SERIES_EX_COUNT * TS_MULTI_SERIES_INTERVAL)))
+        .setExecutionGraph(ExecutionGraph.newBuilder()
+            .setId("graph")
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("datasource"))
+            .build())
+        .build();
+    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
+        .setQuery(query)
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric(METRIC_STRING)
+            .build())
         .setId("m1")
         .build();
     
@@ -1271,11 +1347,21 @@ public class TestTsdb1xMultiGet extends UTBase {
         .build());
     when(node.rollupAggregation()).thenReturn("avg");
     
-    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
-        .setQuery(query)
-        .setMetric(METRIC_STRING)
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
         .setStart(Integer.toString(START_TS))
         .setEnd(Integer.toString(END_TS))
+        .setExecutionGraph(ExecutionGraph.newBuilder()
+            .setId("graph")
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("datasource"))
+            .build())
+        .build();
+    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
+        .setQuery(query)
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric(METRIC_STRING)
+            .build())
         .addOverride(Schema.QUERY_REVERSE_KEY, reversed ? "true" : "false")
         .setId("m1")
         .build();

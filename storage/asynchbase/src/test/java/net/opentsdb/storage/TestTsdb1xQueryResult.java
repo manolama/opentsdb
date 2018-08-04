@@ -43,11 +43,13 @@ import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QuerySourceConfig;
 import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
+import net.opentsdb.query.filter.MetricLiteralFilter;
 import net.opentsdb.rollup.DefaultRollupConfig;
 import net.opentsdb.rollup.RollupInterval;
 import net.opentsdb.rollup.RollupUtils;
@@ -76,6 +78,9 @@ public class TestTsdb1xQueryResult extends UTBase {
     schema = spy(new Schema(tsdb, null));
 
     query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
+        .setStart(Integer.toString(START_TS))
+        .setEnd(Integer.toString(END_TS))
         .setExecutionGraph(ExecutionGraph.newBuilder()
             .setId("graph")
             .addNode(ExecutionGraphNode.newBuilder()
@@ -85,9 +90,9 @@ public class TestTsdb1xQueryResult extends UTBase {
     
     source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
         .setQuery(query)
-        .setMetric(METRIC_STRING)
-        .setStart(Integer.toString(START_TS))
-        .setEnd(Integer.toString(END_TS))
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric(METRIC_STRING)
+            .build())
         .setId("m1")
         .build();
     final QueryPipelineContext context = mock(QueryPipelineContext.class);

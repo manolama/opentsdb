@@ -67,8 +67,10 @@ import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.QuerySourceConfig;
 import net.opentsdb.query.SemanticQuery;
-import net.opentsdb.query.filter.TagVFilter;
+import net.opentsdb.query.filter.FilterUtils;
+import net.opentsdb.query.filter.QueryFilter;
 import net.opentsdb.query.pojo.Filter;
+import net.opentsdb.query.pojo.TagVFilter;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
 import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.stats.Span;
@@ -456,6 +458,7 @@ public class MockDataStore implements ReadableTimeSeriesDataStore, WritableTimeS
   
   class LocalResult implements QueryResult, Runnable {
     final QuerySourceConfig config;
+    final SemanticQuery query;
     final QueryPipelineContext context;
     final LocalNode pipeline;
     final long sequence_id;
@@ -481,6 +484,8 @@ public class MockDataStore implements ReadableTimeSeriesDataStore, WritableTimeS
       } else {
         this.trace_span = null;
       }
+      query = (SemanticQuery) context.query();
+      System.out.println("ISETUP result from mock");
     }
     
     @Override
@@ -517,57 +522,39 @@ public class MockDataStore implements ReadableTimeSeriesDataStore, WritableTimeS
         }
         
         long start_ts = context.queryContext().mode() == QueryMode.SINGLE ? 
-            config.startTime().msEpoch() : 
-              config.endTime().msEpoch() - ((sequence_id + 1) * ROW_WIDTH);
+            query.startTime().msEpoch() : 
+              query.endTime().msEpoch() - ((sequence_id + 1) * ROW_WIDTH);
         long end_ts = context.queryContext().mode() == QueryMode.SINGLE ? 
-            config.endTime().msEpoch() : 
-              config.endTime().msEpoch() - (sequence_id * ROW_WIDTH);
-  
+            query.endTime().msEpoch() : 
+              query.endTime().msEpoch() - (sequence_id * ROW_WIDTH);
+  System.out.println("START: " + start_ts + " END: " + end_ts);
         if (LOG.isDebugEnabled()) {
           LOG.debug("Running the filter: " + config);
         }
         
-        final Filter filter;
+        final QueryFilter filter;
         if (!Strings.isNullOrEmpty(config.getFilterId())) {
           if (config.getQuery() instanceof SemanticQuery) {
             filter = ((SemanticQuery) config.getQuery())
-                .getFilter(config.getFilterId());
-          } else if (config.getQuery() instanceof TimeSeriesQuery) {
-            filter = ((TimeSeriesQuery) config.getQuery())
                 .getFilter(config.getFilterId());
           } else {
             throw new UnsupportedOperationException("We don't support " 
                 + config.getQuery().getClass() + " yet");
           }
+        } else if (config.getFilter() != null) {
+          filter = config.getFilter();
         } else {
           filter = null;
         }
         
         for (final Entry<TimeSeriesDatumStringId, MockSpan> entry : database.entrySet()) {
-          if (!config.getMetric().equals(entry.getKey().metric())) {
+          // TODO - handle filter types
+          if (!config.getMetric().matches(entry.getKey().metric())) {
             continue;
           }
           
           if (filter != null) {
-            boolean matched = true;
-            for (final TagVFilter tf : filter.getTags()) {
-              String tagv = entry.getKey().tags().get(tf.getTagk());
-              if (tagv == null) {
-                matched = false;
-                break;
-              }
-              
-              try {
-                if (!tf.match(ImmutableMap.of(tf.getTagk(), tagv)).join()) {
-                  matched = false;
-                  break;
-                }
-              } catch (Exception e) {
-                throw new RuntimeException("WTF?", e);
-              }
-            }
-            
-            if (!matched) {
+            if (!FilterUtils.matchesTags(filter, entry.getKey().tags())) {
               continue;
             }
           }
@@ -701,10 +688,10 @@ public class MockDataStore implements ReadableTimeSeriesDataStore, WritableTimeS
 
     boolean hasNext(final long seqid) {
       long end_ts = context.queryContext().mode() == QueryMode.SINGLE ? 
-          config.endTime().msEpoch() : 
-            config.endTime().msEpoch() - (seqid * ROW_WIDTH);
+          query.endTime().msEpoch() : 
+            query.endTime().msEpoch() - (seqid * ROW_WIDTH);
       
-      if (end_ts <= config.startTime().msEpoch()) {
+      if (end_ts <= query.startTime().msEpoch()) {
         return false;
       }
       return true;

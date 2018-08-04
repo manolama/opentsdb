@@ -5,7 +5,7 @@
     <parent>
       <groupId>net.opentsdb</groupId>
       <artifactId>opentsdb</artifactId>
-      <version>3.0.85-SNAPSHOT</version>
+      <version>3.0.86-SNAPSHOT</version>
       <relativePath>../../pom.xml</relativePath>
     </parent>
     
@@ -149,6 +149,20 @@
                             <exclude>javax*:*</exclude>
                         </excludes>  
                     </artifactSet> 
+                    <relocations>
+                  <relocation>
+                     <pattern>com.google.protobuf</pattern>
+                     <shadedPattern>net.opentsdb.com.google.protobuf</shadedPattern>
+                  </relocation>
+<!--                  <relocation>
+                     <pattern>com.google.api</pattern>
+                     <shadedPattern>net.opentsdb.com.google.api</shadedPattern>
+                  </relocation>
+                  <relocation>
+                     <pattern>com.google.cloud</pattern>
+                     <shadedPattern>net.opentsdb.com.google.cloud</shadedPattern>
+                  </relocation>-->
+               </relocations>
                     <filters>  
                       <filter> 
                         <artifact>*:*</artifact> 

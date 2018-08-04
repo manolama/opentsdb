@@ -18,6 +18,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.google.common.base.Strings;
 import com.google.common.collect.ComparisonChain;
@@ -27,8 +29,11 @@ import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
 
 import net.opentsdb.core.Const;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.TimeStamp;
+import net.opentsdb.query.filter.MetricFilter;
+import net.opentsdb.query.filter.QueryFilter;
 import net.opentsdb.utils.DateTime;
 
 /**
@@ -44,25 +49,19 @@ public class QuerySourceConfig extends BaseQueryNodeConfig {
   /** The original and complete time series query. */
   private TimeSeriesQuery query;
   
-  /** The starting timestamp of the query. */
-  private final String start;
-  private final TimeStamp start_ts;
-  
-  /** The end timestamp of the query. If null or empt, assume "now". */
-  private final String end;
-  private final TimeStamp end_ts;
-  
-  /** User's timezone used for converting absolute human readable dates */
-  private String timezone;
+  // TODO - time offsets for period over period
   
   /** A list of data types to fetch. If empty, fetch all. */
   private final List<String> types;
   
-  /** A non-null and non-empty metric to fetch. */
-  private final String metric;
+  /** A non-null metric filter used to determine the metric(s) to fetch. */
+  private final MetricFilter metric;
   
   /** An optional filter ID found in the query. */
   private final String filter_id;
+  
+  /** An optional filter. If filter_id is set, this is ignored. */
+  private final QueryFilter filter;
   
   /**
    * Private ctor for the builder.
@@ -70,28 +69,14 @@ public class QuerySourceConfig extends BaseQueryNodeConfig {
    */
   protected QuerySourceConfig(final Builder builder) {
     super(builder);
-    if (Strings.isNullOrEmpty(builder.start)) {
-      throw new IllegalArgumentException("Start time cannot be null "
-          + "or empty.");
-    }
-    if (Strings.isNullOrEmpty(builder.metric)) {
-      throw new IllegalArgumentException("Metric cannot be null or empty.");
+    if (builder.metric == null) {
+      throw new IllegalArgumentException("Metric filter cannot be null.");
     }
     query = builder.query;
-    start = builder.start;
-    end = builder.end;
-    timezone = builder.timezone;
     types = builder.types;
     metric = builder.metric;
     filter_id = builder.filterId;
-    start_ts = new MillisecondTimeStamp(
-        DateTime.parseDateTimeString(start, timezone));
-    if (Strings.isNullOrEmpty(end)) {
-      end_ts = new MillisecondTimeStamp(DateTime.currentTimeMillis());
-    } else {
-      end_ts = new MillisecondTimeStamp(
-          DateTime.parseDateTimeString(end, timezone));
-    }
+    filter = builder.filter;
   }
   
   /** @return The non-null query object. */
@@ -104,47 +89,30 @@ public class QuerySourceConfig extends BaseQueryNodeConfig {
     this.query = query;
   }
   
-  /** @return user given start date/time, could be relative or absolute */
-  public String getStart() {
-    return start;
-  }
-
-  /** @return user given end date/time, could be relative, absolute or empty */
-  public String getEnd() {
-    return end;
-  }
-
-  /** @return user's timezone used for converting absolute human readable dates */
-  public String getTimezone() {
-    return timezone;
-  }
-  
-  /** @return Returns the parsed start time. 
-   * @see DateTime#parseDateTimeString(String, String) */
-  public TimeStamp startTime() {
-    return start_ts;
-  }
-  
-  /** @return Returns the parsed end time. 
-   * @see DateTime#parseDateTimeString(String, String) */
-  public TimeStamp endTime() {
-    return end_ts;
-  }
-  
   /** @return A list of data types to filter on. If null or empty, fetch
    * all. */
   public List<String> getTypes() {
     return types;
   }
   
-  /** @return The non-null and non-empty metric to fetch. */
-  public String getMetric() {
+  /** @return The non-null metric filter. */
+  public MetricFilter getMetric() {
     return metric;
   }
   
   /** @return An optional filter ID to fetch. */
   public String getFilterId() {
     return filter_id;
+  }
+  
+  /** @return The optional filter. If {@link #getFilterId()} is not null or
+   * empty, this will always return null. */
+  public QueryFilter getFilter() {
+    if (Strings.isNullOrEmpty(filter_id)) {
+      return filter;
+    }
+    // TODO - no no no!!!
+    return ((SemanticQuery) query).getFilter(filter_id);
   }
   
   @Override
@@ -190,17 +158,13 @@ public class QuerySourceConfig extends BaseQueryNodeConfig {
     @JsonProperty
     private TimeSeriesQuery query;
     @JsonProperty
-    private String start;
-    @JsonProperty
-    private String end;
-    @JsonProperty
-    private String timezone;
-    @JsonProperty
     private List<String> types;
     @JsonProperty
-    private String metric;
+    private MetricFilter metric;
     @JsonProperty
     private String filterId;
+    @JsonProperty
+    private QueryFilter filter;
     
     /** 
      * @param query The non-null query to execute.
@@ -208,21 +172,6 @@ public class QuerySourceConfig extends BaseQueryNodeConfig {
      */
     public Builder setQuery(final TimeSeriesQuery query) {
       this.query = query;
-      return this;
-    }
-    
-    public Builder setStart(final String start) {
-      this.start = start;
-      return this;
-    }
-    
-    public Builder setEnd(final String end) {
-      this.end = end;
-      return this;
-    }
-    
-    public Builder setTimezone(final String timezone) {
-      this.timezone = timezone;
       return this;
     }
     
@@ -239,13 +188,18 @@ public class QuerySourceConfig extends BaseQueryNodeConfig {
       return this;
     }
     
-    public Builder setMetric(final String metric) {
+    public Builder setMetric(final MetricFilter metric) {
       this.metric = metric;
       return this;
     }
     
     public Builder setFilterId(final String filter_id) {
       this.filterId = filter_id;
+      return this;
+    }
+    
+    public Builder setQueryFilter(final QueryFilter filter) {
+      this.filter = filter;
       return this;
     }
     

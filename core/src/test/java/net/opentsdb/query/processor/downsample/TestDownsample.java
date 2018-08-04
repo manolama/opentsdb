@@ -34,17 +34,17 @@ import org.junit.Test;
 import com.google.common.collect.Lists;
 
 import net.opentsdb.data.MillisecondTimeStamp;
-import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
-import net.opentsdb.query.QuerySourceConfig;
-import net.opentsdb.query.TimeSeriesQuery;
+import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
+import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericSummaryInterpolatorConfig;
 import net.opentsdb.query.pojo.FillPolicy;
@@ -56,29 +56,23 @@ public class TestDownsample {
   private QueryNodeFactory factory;
   private DownsampleConfig config;
   private QueryNode upstream;
-  private TimeSeriesDataSource downstream;
-  private QuerySourceConfig source_config;
+  private SemanticQuery query;
   
   @Before
   public void before() throws Exception {
     context = mock(QueryPipelineContext.class);
     factory = new DownsampleFactory();
     upstream = mock(QueryNode.class);
-    downstream = mock(TimeSeriesDataSource.class);
     when(context.upstream(any(QueryNode.class)))
       .thenReturn(Lists.newArrayList(upstream));
-    when(context.downstreamSources(any(QueryNode.class)))
-      .thenReturn(Lists.newArrayList(downstream));
     
-    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
         .setStart("1970/01/01-00:00:01")
         .setEnd("1970/01/01-00:01:00")
-        .setMetric("sys.cpu.user")
-        .setQuery(mock(TimeSeriesQuery.class))
-        .setId("m1")
+        .setExecutionGraph(mock(ExecutionGraph.class))
         .build();
-    when(downstream.config()).thenReturn(source_config);
-    
+    when(context.query()).thenReturn(query);
     NumericInterpolatorConfig numeric_config = 
           (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
       .setFillPolicy(FillPolicy.NOT_A_NUMBER)
@@ -178,14 +172,13 @@ public class TestDownsample {
     DownsampleResult dr = ds.new DownsampleResult(result);
     assertEquals(ChronoUnit.SECONDS, dr.resolution());
     
-    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
         .setStart("1970/01/01-00:00:01")
         .setEnd("1970/01/01-12:00:00")
-        .setMetric("sys.cpu.user")
-        .setQuery(mock(TimeSeriesQuery.class))
-        .setId("m1")
+        .setExecutionGraph(mock(ExecutionGraph.class))
         .build();
-    when(downstream.config()).thenReturn(source_config);
+    when(context.query()).thenReturn(query);
     
     NumericInterpolatorConfig numeric_config = 
           (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
@@ -205,6 +198,9 @@ public class TestDownsample {
     ds.initialize(null);
     dr = ds.new DownsampleResult(result);
     assertEquals(ChronoUnit.SECONDS, dr.resolution());
+    assertEquals(3600, dr.start().epoch());
+    assertEquals(43200, dr.end().epoch());
+    assertEquals(ChronoUnit.HOURS, dr.units());
     
     config = (DownsampleConfig) DownsampleConfig.newBuilder()
         .setAggregator("sum")
@@ -217,6 +213,9 @@ public class TestDownsample {
     ds.initialize(null);
     dr = ds.new DownsampleResult(result);
     assertEquals(ChronoUnit.MILLIS, dr.resolution());
+    assertEquals(1, dr.start().epoch());
+    assertEquals(43200, dr.end().epoch());
+    assertEquals(ChronoUnit.MILLIS, dr.units());
     
     config = (DownsampleConfig) DownsampleConfig.newBuilder()
         .setAggregator("sum")
@@ -229,6 +228,9 @@ public class TestDownsample {
     ds.initialize(null);
     dr = ds.new DownsampleResult(result);
     assertEquals(ChronoUnit.NANOS, dr.resolution());
+    assertEquals(1, dr.start().epoch());
+    assertEquals(43200, dr.end().epoch());
+    assertEquals(ChronoUnit.MICROS, dr.units());
     
     config = (DownsampleConfig) DownsampleConfig.newBuilder()
         .setAggregator("sum")
@@ -241,6 +243,9 @@ public class TestDownsample {
     ds.initialize(null);
     dr = ds.new DownsampleResult(result);
     assertEquals(ChronoUnit.NANOS, dr.resolution());
+    assertEquals(1, dr.start().epoch());
+    assertEquals(43200, dr.end().epoch());
+    assertEquals(ChronoUnit.NANOS, dr.units());
   }
   
   @Test

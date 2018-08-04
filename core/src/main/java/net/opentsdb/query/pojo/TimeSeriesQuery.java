@@ -42,7 +42,15 @@ import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
 import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
-import net.opentsdb.query.filter.TagVFilter;
+import net.opentsdb.query.filter.ChainFilter;
+import net.opentsdb.query.filter.DefaultNamedFilter;
+import net.opentsdb.query.filter.ExplicitTagsFilter;
+import net.opentsdb.query.filter.MetricLiteralFilter;
+import net.opentsdb.query.filter.NamedFilter;
+import net.opentsdb.query.filter.QueryFilter;
+import net.opentsdb.query.filter.TagValueLiteralOrFilter;
+import net.opentsdb.query.filter.TagValueRegexFilter;
+import net.opentsdb.query.filter.TagValueWildcardFilter;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.joins.JoinConfig;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
@@ -65,8 +73,8 @@ import java.util.Set;
 @JsonInclude(Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonDeserialize(builder = TimeSeriesQuery.Builder.class)
-public class TimeSeriesQuery extends Validatable implements Comparable<net.opentsdb.query.TimeSeriesQuery>, 
-    net.opentsdb.query.TimeSeriesQuery {
+public class TimeSeriesQuery extends Validatable 
+    implements Comparable<TimeSeriesQuery>{
   /** An optional name for the query */
   private String name;
   
@@ -439,7 +447,7 @@ public class TimeSeriesQuery extends Validatable implements Comparable<net.opent
   }
   
   @Override
-  public int compareTo(final net.opentsdb.query.TimeSeriesQuery o) {
+  public int compareTo(final TimeSeriesQuery o) {
     if (!(o instanceof TimeSeriesQuery)) {
       return -1;
     }
@@ -586,10 +594,58 @@ public class TimeSeriesQuery extends Validatable implements Comparable<net.opent
     validate();
     
     final SemanticQuery.Builder builder = SemanticQuery.newBuilder()
+        .setStart(time.getStart())
+        .setEnd(time.getEnd())
+        .setTimeZone(time.getTimezone())
         .setMode(QueryMode.SINGLE);
     
     if (filters != null) {
-      builder.setFilters(filters);
+      final List<NamedFilter> named_filter = 
+          Lists.newArrayListWithExpectedSize(filters.size());
+      for (final Filter filter : filters) {
+        final ChainFilter.Builder chain_builder = ChainFilter.newBuilder();
+        for (final TagVFilter tag_filter : filter.getTags()) {
+          if (tag_filter instanceof TagVLiteralOrFilter) {
+            chain_builder.addFilter(TagValueLiteralOrFilter.newBuilder()
+                .setTagKey(tag_filter.getTagk())
+                .setFilter(tag_filter.getFilter())
+                .build());
+          } else if (tag_filter instanceof TagVWildcardFilter) {
+            chain_builder.addFilter(TagValueWildcardFilter.newBuilder()
+                .setTagKey(tag_filter.getTagk())
+                .setFilter(tag_filter.getFilter())
+                .build());
+          } else if (tag_filter instanceof TagVRegexFilter) {
+            chain_builder.addFilter(TagValueRegexFilter.newBuilder()
+                .setTagKey(tag_filter.getTagk())
+                .setFilter(tag_filter.getFilter())
+                .build());
+          }
+          // TODO - case insensitive
+        }
+        
+        QueryFilter almost_final;
+        if (chain_builder.filtersCount() == 1) {
+          almost_final = chain_builder.filters().get(0);
+        } else {
+          almost_final = chain_builder.build();
+        }
+        
+        if (filter.getExplicitTags()) {
+          named_filter.add(DefaultNamedFilter.newBuilder()
+              .setId(filter.getId())
+              .setFilter(ExplicitTagsFilter.newBuilder()
+                  .setFilter(almost_final)
+                  .build())
+              .build());
+        } else {
+          named_filter.add(DefaultNamedFilter.newBuilder()
+              .setId(filter.getId())
+              .setFilter(almost_final)
+              .build());
+        }
+      }
+      builder.setFilters(named_filter);
     }
     
     Map<String, String> id_to_node_roots = Maps.newHashMap();
@@ -600,9 +656,9 @@ public class TimeSeriesQuery extends Validatable implements Comparable<net.opent
           .setId(metric.getId())
           .setType("DataSource")
           .setConfig(QuerySourceConfig.newBuilder()
-              .setStart(time.getStart())
-              .setEnd(time.getEnd())
-              .setMetric(metric.getMetric())
+              .setMetric(MetricLiteralFilter.newBuilder()
+                  .setMetric(metric.getMetric())
+                  .build())
               .setFilterId(metric.getFilter())
               .build())
           .build();
@@ -682,6 +738,7 @@ public class TimeSeriesQuery extends Validatable implements Comparable<net.opent
     }
     
     builder.setExecutionGraph(ExecutionGraph.newBuilder()
+        .setId("TsdbQuery")
         .setNodes(nodes)
         .setId(name)
         .build());
@@ -705,7 +762,7 @@ public class TimeSeriesQuery extends Validatable implements Comparable<net.opent
     DownsampleConfig.Builder ds = (DownsampleConfig.Builder) DownsampleConfig.newBuilder()
         .setAggregator(downsampler.getAggregator())
         .setInterval(downsampler.getInterval())
-        .setFill(downsampler.getFillPolicy() != null ? true : false)
+        .setFill(policy != null && policy != FillPolicy.NONE)
         .setId("downsample_" + metric.getId())
         .addInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
                   .setFillPolicy(policy)

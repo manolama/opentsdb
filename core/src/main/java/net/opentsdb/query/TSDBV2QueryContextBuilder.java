@@ -27,13 +27,14 @@ import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
 import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
-import net.opentsdb.query.filter.TagVFilter;
+import net.opentsdb.query.filter.MetricLiteralFilter;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.pojo.Downsampler;
 import net.opentsdb.query.pojo.FillPolicy;
 import net.opentsdb.query.pojo.Filter;
 import net.opentsdb.query.pojo.Metric;
 import net.opentsdb.query.pojo.RateOptions;
+import net.opentsdb.query.pojo.TagVFilter;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
 import net.opentsdb.query.processor.groupby.GroupByConfig;
 import net.opentsdb.stats.QueryStats;
@@ -162,7 +163,8 @@ public class TSDBV2QueryContextBuilder implements QueryContextBuilder {
             .asChildOf(stats.querySpan())
             .start();
       }
-      context = new LocalPipeline(tsdb, query, this, buildGraph(), sinks);
+      context = new LocalPipeline(tsdb, query, this, 
+          ((SemanticQuery) query).getExecutionGraph(), sinks);
       context.initialize(local_span);
     }
     
@@ -200,165 +202,6 @@ public class TSDBV2QueryContextBuilder implements QueryContextBuilder {
       return query;
     }
 
-    ExecutionGraph buildGraph() {
-      final net.opentsdb.query.pojo.TimeSeriesQuery q = 
-          (net.opentsdb.query.pojo.TimeSeriesQuery) query;
-      List<ExecutionGraphNode> nodes = Lists.newArrayList();
-      
-      for (final Metric metric : q.getMetrics()) {
-        final net.opentsdb.query.pojo.TimeSeriesQuery.Builder sub_query = 
-            net.opentsdb.query.pojo.TimeSeriesQuery.newBuilder()
-            .setTime(q.getTime())
-            .addMetric(metric);
-        if (!Strings.isNullOrEmpty(metric.getFilter())) {
-          sub_query.addFilter(q.getFilter(metric.getFilter()));
-        }
-        
-        final String interpolator;
-        String agg = !Strings.isNullOrEmpty(metric.getAggregator()) ?
-            metric.getAggregator().toLowerCase() : 
-              q.getTime().getAggregator().toLowerCase();
-        if (agg.contains("zimsum") || 
-            agg.contains("mimmax") ||
-            agg.contains("mimmin")) {
-          interpolator = null;
-        } else {
-          interpolator = "LERP";
-        }
-        
-        String previous_node = metric.getId();
-        final QuerySourceConfig config = 
-            (QuerySourceConfig) QuerySourceConfig.newBuilder()
-            .setQuery(sub_query.build())
-            .setStart(q.getTime().getStart())
-            .setEnd(q.getTime().getEnd())
-            .setTimezone(q.getTime().getTimezone())
-            .setFilterId(metric.getFilter())
-            .setMetric(metric.getMetric())
-            .setId(metric.getId())
-            // TODO types
-            .build();
-        
-        nodes.add(ExecutionGraphNode.newBuilder()
-            .setId(metric.getId())
-            .setType("DataSource")
-            .setConfig(config)
-            .build());
-        
-        final Downsampler downsampler = metric.getDownsampler() != null ? 
-            metric.getDownsampler() : q.getTime().getDownsampler();
-         // downsample
-        if (downsampler != null) {
-          FillPolicy policy = downsampler.getFillPolicy().getPolicy();
-          DownsampleConfig.Builder ds = (DownsampleConfig.Builder) DownsampleConfig.newBuilder()
-              .setAggregator(downsampler.getAggregator())
-              .setInterval(downsampler.getInterval())
-              .setFill(downsampler.getFillPolicy() != null ? true : false)
-              .setId("downsample_" + metric.getId())
-              .addInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-                        .setFillPolicy(policy)
-                        .setRealFillPolicy(FillWithRealPolicy.NONE)
-                        .setId(interpolator)
-                        .setType(NumericType.TYPE.toString())
-                        .build());
-          if (!Strings.isNullOrEmpty(downsampler.getTimezone())) {
-            ds.setTimeZone(downsampler.getTimezone());
-          }
-          
-          nodes.add(ExecutionGraphNode.newBuilder()
-              .setId("downsample_" + metric.getId())
-              .setType("Downsample")
-              .addSource(previous_node)
-              .setConfig(ds.build())
-              .build());
-          previous_node = "downsample_" + metric.getId();
-        }
-        
-        // Rate!
-        if (metric.isRate()) {
-          nodes.add(ExecutionGraphNode.newBuilder()
-            .setId("rate_" + metric.getId())
-            .setType("Rate")
-            .addSource(previous_node)
-            .setConfig(RateOptions.newBuilder(metric.getRateOptions())
-              .setId("rate_" + metric.getId())
-              .build())
-            .build());
-          previous_node = "rate_" + metric.getId();
-        }
-        
-        // Group by!
-        final Filter filter = Strings.isNullOrEmpty(metric.getFilter()) ? null 
-            : q.getFilter(metric.getFilter());
-        if (filter != null) {
-          GroupByConfig.Builder gb_config = null;
-          final Set<String> join_keys = Sets.newHashSet();
-          for (TagVFilter v : filter.getTags()) {
-            if (v.isGroupBy()) {
-              if (gb_config == null) {
-                FillPolicy policy = downsampler == null ? 
-                    FillPolicy.NONE : downsampler.getFillPolicy().getPolicy();
-                gb_config = (GroupByConfig.Builder) GroupByConfig.newBuilder()
-                    .addInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-                        .setFillPolicy(policy)
-                        .setRealFillPolicy(FillWithRealPolicy.NONE)
-                        .setId(interpolator)
-                        .setType(NumericType.TYPE.toString())
-                        .build())
-                    .setId("groupBy_" + metric.getId());
-              }
-              join_keys.add(v.getTagk());
-            }
-          }
-
-          if (gb_config != null) {
-            gb_config.setTagKeys(join_keys);
-            gb_config.setAggregator( 
-                !Strings.isNullOrEmpty(metric.getAggregator()) ?
-                metric.getAggregator() : q.getTime().getAggregator());
-            nodes.add(ExecutionGraphNode.newBuilder()
-                .setId("groupBy_" + metric.getId())
-                .setType("GroupBy")
-                .addSource(previous_node)
-                .setConfig(gb_config.build())
-                .build());
-            previous_node = "groupBy_" + metric.getId();
-          }
-        } else if (!agg.toLowerCase().equals("none")) {
-          // we agg all 
-          FillPolicy policy = downsampler == null ? 
-              FillPolicy.NONE : downsampler.getFillPolicy().getPolicy();
-          GroupByConfig.Builder gb_config = (GroupByConfig.Builder) GroupByConfig.newBuilder()
-              .setGroupAll(true)
-              .addInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
-                  .setFillPolicy(policy)
-                  .setRealFillPolicy(FillWithRealPolicy.NONE)
-                  .setId(interpolator)
-                  .setType(NumericType.TYPE.toString())
-                  .build())
-              .setId("groupBy_" + metric.getId());
-              
-          gb_config.setAggregator(
-              !Strings.isNullOrEmpty(metric.getAggregator()) ?
-              metric.getAggregator() : q.getTime().getAggregator());
-          
-          nodes.add(ExecutionGraphNode.newBuilder()
-              .setId("groupBy_" + metric.getId())
-              .setType("GroupBy")
-              .addSource(previous_node)
-              .setConfig(gb_config.build())
-              .build());
-          previous_node = "groupBy_" + metric.getId();
-        }
-      }
-      
-      final ExecutionGraph graph = ExecutionGraph.newBuilder()
-          .setId("TsdbV2Query")
-          .setNodes(nodes)
-          .build();
-      
-      return graph;
-    }
   }
   
   class LocalPipeline extends AbstractQueryPipelineContext {
