@@ -348,7 +348,7 @@ public class Tsdb1xUniqueIdStore implements UniqueIdStore {
               + ids.size() + ". Should never happen!");
         }
         
-        final List<String> names = Lists.newArrayListWithCapacity(results.size());
+        final List<String> names = Lists.newArrayListWithCapacity(ids.size());
         for (int i = 0; i < results.size(); i++) {
           if (results.get(i).getException() != null) {
             if (child != null) {

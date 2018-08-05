@@ -714,22 +714,6 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
               .setColumnQualifierRegexFilter(ByteStringer.wrap(new byte[] { 
                   (byte) node.schema().rollupConfig().getIdForAggregator("count")
               })));
-          // old and new schemas with literal agg names or prefixes.
-//          final List<ScanFilter> filters = Lists.newArrayListWithCapacity(4);
-//          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
-//              new BinaryPrefixComparator("sum".getBytes(Const.ASCII_CHARSET))));
-//          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
-//              new BinaryPrefixComparator("count".getBytes(Const.ASCII_CHARSET))));
-//          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
-//              new BinaryPrefixComparator(new byte[] { 
-//                  (byte) node.schema().rollupConfig().getIdForAggregator("sum")
-//              })));
-//          filters.add(new QualifierFilter(CompareFilter.CompareOp.EQUAL,
-//              new BinaryPrefixComparator(new byte[] { 
-//                  (byte) node.schema().rollupConfig().getIdForAggregator("count")
-//              })));
-//          
-//          rollup_filter = new FilterList(filters, Operator.MUST_PASS_ONE);
         } else {
           // it's another aggregation
           rollup_filter = RowFilter.Interleave.newBuilder()

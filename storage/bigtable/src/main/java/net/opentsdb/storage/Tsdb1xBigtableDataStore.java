@@ -430,37 +430,6 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
     }
     // no need to validate here, schema does it.
     
-//    class SuccessCB implements Callback<WriteStatus, Object> {
-//      @Override
-//      public WriteStatus call(final Object ignored) throws Exception {
-//        if (child != null) {
-//          child.setSuccessTags().finish();
-//        }
-//        return WriteStatus.OK;
-//      }
-//    }
-//    
-//    class WriteErrorCB implements Callback<WriteStatus, Exception> {
-//      @Override
-//      public WriteStatus call(final Exception ex) throws Exception {
-//        // TODO log?
-//        // TODO - how do we retry?
-////        if (ex instanceof PleaseThrottleException ||
-////            ex instanceof RecoverableException) {
-////          if (child != null) {
-////            child.setErrorTags(ex)
-////                 .finish();
-////          }
-////          return WriteStatus.retry("Please retry at a later time.");
-////        }
-//        if (child != null) {
-//          child.setErrorTags(ex)
-//               .finish();
-//        }
-//        return WriteStatus.error(ex.getMessage(), ex);
-//      }
-//    }
-    
     class RowKeyCB implements Callback<Deferred<WriteStatus>, IdOrError> {
 
       @Override
@@ -495,13 +464,13 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
         if (enable_appends) {
           final ReadModifyWriteRowRequest append_request = 
               ReadModifyWriteRowRequest.newBuilder()
-              .setTableNameBytes(ByteStringer.wrap(data_table))
-              .setRowKey(ByteStringer.wrap(ioe.id()))
-              .addRules(ReadModifyWriteRule.newBuilder()
-                  .setFamilyNameBytes(ByteStringer.wrap(DATA_FAMILY))
-                  .setColumnQualifier(ByteStringer.wrap(pair.getKey()))
-                  .setAppendValue(ByteStringer.wrap(pair.getValue())))
-              .build();
+                .setTableNameBytes(ByteStringer.wrap(data_table))
+                .setRowKey(ByteStringer.wrap(ioe.id()))
+                .addRules(ReadModifyWriteRule.newBuilder()
+                    .setFamilyNameBytes(ByteStringer.wrap(DATA_FAMILY))
+                    .setColumnQualifier(ByteStringer.wrap(pair.getKey()))
+                    .setAppendValue(ByteStringer.wrap(pair.getValue())))
+                .build();
           
           final Deferred<WriteStatus> deferred = new Deferred<WriteStatus>();
           class AppendCB implements FutureCallback<ReadModifyWriteRowResponse> {
@@ -544,9 +513,6 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
               new AppendCB(), 
               pool);
           return deferred;
-//          return client.append(new AppendRequest(data_table,ioe.id(), 
-//              DATA_FAMILY, pair.getKey(), pair.getValue()))
-//              .addCallbacks(new SuccessCB(), new WriteErrorCB());
         } else {
           final MutateRowRequest mutate_row_request = 
               MutateRowRequest.newBuilder()
@@ -556,7 +522,8 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
                     .setSetCell(SetCell.newBuilder()
                         .setFamilyNameBytes(ByteStringer.wrap(DATA_FAMILY))
                         .setColumnQualifier(ByteStringer.wrap(pair.getKey()))
-                        .setValue(ByteStringer.wrap(pair.getValue()))))
+                        .setValue(ByteStringer.wrap(pair.getValue()))
+                        .setTimestampMicros(-1)))
                 .build();
           
           final Deferred<WriteStatus> deferred = new Deferred<WriteStatus>();
@@ -600,9 +567,6 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
               new PutCB(), 
               pool);
           return deferred;
-//          return client.put(new PutRequest(data_table, ioe.id(), 
-//              DATA_FAMILY, pair.getKey(), pair.getValue()))
-//              .addCallbacks(new SuccessCB(), new WriteErrorCB());
           } catch (Throwable t) {
             t.printStackTrace();
             throw t;

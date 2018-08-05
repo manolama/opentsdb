@@ -144,7 +144,7 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
   protected final boolean randomize_tagk_ids;
   protected final boolean randomize_tagv_ids;
   
-  private final Map<UniqueIdType, Map<String, Deferred<IdOrError>>> pending_assignments;
+  final Map<UniqueIdType, Map<String, Deferred<IdOrError>>> pending_assignments;
 
   public Tsdb1xBigtableUniqueIdStore(final Tsdb1xBigtableDataStore data_store) {
     if (data_store == null) {
@@ -233,13 +233,15 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     
     final Deferred<String> deferred = new Deferred<String>();
     ReadRowsRequest request = ReadRowsRequest.newBuilder()
-        .setTableNameBytes(ByteStringer.wrap(data_store.uid_table))
+        .setTableNameBytes(ByteStringer.wrap(data_store.uidTable()))
         .setRows(RowSet.newBuilder()
             .addRowKeys(ByteStringer.wrap(id)))
         .setFilter(RowFilter.newBuilder()
-            .setFamilyNameRegexFilterBytes(ByteStringer.wrap(NAME_FAMILY))
-            .setColumnQualifierRegexFilter(ByteStringer.wrap(qualifier))
-            )
+            .setChain(RowFilter.Chain.newBuilder()
+                .addFilters(RowFilter.newBuilder()
+                    .setFamilyNameRegexFilterBytes(ByteStringer.wrap(NAME_FAMILY)))
+                .addFilters(RowFilter.newBuilder()
+                    .setColumnQualifierRegexFilter(ByteStringer.wrap(qualifier)))))
         .build();
     
     class ResultCB implements FutureCallback<List<Row>> {
@@ -335,12 +337,14 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     
     final Deferred<List<String>> deferred = new Deferred<List<String>>();
     ReadRowsRequest request = ReadRowsRequest.newBuilder()
-        .setTableNameBytes(ByteStringer.wrap(data_store.uid_table))
+        .setTableNameBytes(ByteStringer.wrap(data_store.uidTable()))
         .setRows(rows.build())
         .setFilter(RowFilter.newBuilder()
-            .setFamilyNameRegexFilterBytes(ByteStringer.wrap(NAME_FAMILY))
-            .setColumnQualifierRegexFilter(ByteStringer.wrap(qualifier))
-            )
+            .setChain(RowFilter.Chain.newBuilder()
+                .addFilters(RowFilter.newBuilder()
+                    .setFamilyNameRegexFilterBytes(ByteStringer.wrap(NAME_FAMILY)))
+                .addFilters(RowFilter.newBuilder()
+                    .setColumnQualifierRegexFilter(ByteStringer.wrap(qualifier)))))
         .build();
     
     class ResultCB implements FutureCallback<List<Row>> {
@@ -351,20 +355,30 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
           throw new StorageException("Result list returned was null");
         }
         
-        final List<String> names = Lists.newArrayListWithCapacity(results.size());
+        final List<String> names = Lists.newArrayListWithCapacity(ids.size());
+        // TODO - can we assume that the order of values returned is
+        // the same as those requested?
         int id_idx = 0;
         for (int i = 0; i < results.size(); i++) {
           if (results.get(i).getFamiliesCount() < 1 ||
               results.get(i).getFamilies(0).getColumnsCount() < 1) {
-            continue;
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("Empty row from result at index " + i);
+            }
+            names.add(null);
           } else {
-            while (Bytes.memcmp(results.get(i).getKey().toByteArray(), ids.get(id_idx++)) != 0) {
+            while (Bytes.memcmp(results.get(i).getKey().toByteArray(), 
+                ids.get(id_idx++)) != 0) {
               names.add(null);
             }
             names.add(new String(results.get(i).getFamilies(0).getColumns(0)
                 .getCells(0).getValue().toByteArray(), 
                 characterSet(type)));
           }
+        }
+        // fill trailing empties.
+        for (int i = names.size(); i < ids.size(); i++) {
+          names.add(null);
         }
         
         if (child != null) {
@@ -441,13 +455,15 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     
     final Deferred<byte[]> deferred = new Deferred<byte[]>();
     ReadRowsRequest request = ReadRowsRequest.newBuilder()
-        .setTableNameBytes(ByteStringer.wrap(data_store.uid_table))
+        .setTableNameBytes(ByteStringer.wrap(data_store.uidTable()))
         .setRows(RowSet.newBuilder()
             .addRowKeys(ByteStringer.wrap(name.getBytes(characterSet(type)))))
         .setFilter(RowFilter.newBuilder()
-            .setFamilyNameRegexFilterBytes(ByteStringer.wrap(ID_FAMILY))
-            .setColumnQualifierRegexFilter(ByteStringer.wrap(qualifier))
-            )
+            .setChain(RowFilter.Chain.newBuilder()
+                .addFilters(RowFilter.newBuilder()
+                    .setFamilyNameRegexFilterBytes(ByteStringer.wrap(ID_FAMILY)))
+                .addFilters(RowFilter.newBuilder()
+                    .setColumnQualifierRegexFilter(ByteStringer.wrap(qualifier)))))
         .build();
     
    class ResultCB implements FutureCallback<List<Row>> {
@@ -543,12 +559,14 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     
     final Deferred<List<byte[]>> deferred = new Deferred<List<byte[]>>();
     ReadRowsRequest request = ReadRowsRequest.newBuilder()
-        .setTableNameBytes(ByteStringer.wrap(data_store.uid_table))
+        .setTableNameBytes(ByteStringer.wrap(data_store.uidTable()))
         .setRows(rows.build())
         .setFilter(RowFilter.newBuilder()
-            .setFamilyNameRegexFilterBytes(ByteStringer.wrap(NAME_FAMILY))
-            .setColumnQualifierRegexFilter(ByteStringer.wrap(qualifier))
-            )
+            .setChain(RowFilter.Chain.newBuilder()
+                .addFilters(RowFilter.newBuilder()
+                    .setFamilyNameRegexFilterBytes(ByteStringer.wrap(ID_FAMILY)))
+                .addFilters(RowFilter.newBuilder()
+                    .setColumnQualifierRegexFilter(ByteStringer.wrap(qualifier)))))
         .build();
     
     class ResultCB implements FutureCallback<List<Row>> {
@@ -574,12 +592,15 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
                 .getCells(0).getValue().toByteArray());
           }
         }
+        for (int i = ids.size(); i < names.size(); i++) {
+          ids.add(null);
+        }
         
         if (child != null) {
           child.setSuccessTags()
             .finish();
         }
-        deferred.callback(names);
+        deferred.callback(ids);
       }
 
       @Override
@@ -814,8 +835,7 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
 
             @Override
             public void onFailure(final Throwable t) {
-              deferred.callback(new StorageException("Failed to "
-                  + "increment UID assignment column.", t));
+              deferred.callback(t);
             }
             
           }
@@ -917,13 +937,13 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
 
         @Override
         public void onSuccess(final CheckAndMutateRowResponse result) {
-          deferred.callback(Tsdb1xBigtableDataStore.wasMutationApplied(request, result));
+          deferred.callback(Tsdb1xBigtableDataStore
+              .wasMutationApplied(request, result));
         }
 
         @Override
-        public void onFailure(Throwable t) {
-          deferred.callback(new StorageException("Failed to "
-              + "compare and set UID reverse mapping.", t));
+        public void onFailure(final Throwable t) {
+          deferred.callback(t);
         }
         
       }
@@ -932,8 +952,7 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
             data_store.executor().checkAndMutateRowAsync(request),
             new CasCB(), data_store.pool());
       } catch (InterruptedException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
+        return Deferred.fromError(e);
       }
       return deferred;
     }
