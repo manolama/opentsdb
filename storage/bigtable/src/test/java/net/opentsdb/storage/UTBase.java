@@ -38,6 +38,8 @@ import com.google.cloud.bigtable.config.CredentialOptions;
 import com.google.cloud.bigtable.grpc.BigtableDataClient;
 import com.google.cloud.bigtable.grpc.BigtableInstanceName;
 import com.google.cloud.bigtable.grpc.BigtableSession;
+import com.google.cloud.bigtable.grpc.async.AsyncExecutor;
+import com.google.cloud.bigtable.grpc.async.BulkMutation;
 import com.google.cloud.bigtable.grpc.scanner.FlatRow;
 import com.google.cloud.bigtable.grpc.scanner.ResultScanner;
 import com.google.cloud.bigtable.util.ByteStringer;
@@ -134,8 +136,10 @@ public class UTBase {
   protected static Tsdb1xDataStoreFactory store_factory;
   protected static BigtableSession session;
   protected static BigtableDataClient client;
+  protected static AsyncExecutor executor;
+  protected static BulkMutation bulk_mutator;
   protected static BigtableInstanceName table_namer;
-  //protected static MockBase storage;
+  protected static MockBigtable storage;
   protected static Tsdb1xBigtableDataStore data_store;
   protected static UniqueIdFactory uid_factory;
   protected static UniqueIdStore uid_store;
@@ -150,6 +154,8 @@ public class UTBase {
     store_factory = mock(Tsdb1xDataStoreFactory.class);
     session = mock(BigtableSession.class);
     client = mock(BigtableDataClient.class);
+    executor = mock(AsyncExecutor.class);
+    bulk_mutator = mock(BulkMutation.class);
     uid_factory = mock(UniqueIdFactory.class);
     data_store = mock(Tsdb1xBigtableDataStore.class);
     
@@ -190,6 +196,7 @@ public class UTBase {
     when(data_store.dataTable()).thenReturn("tsdb".getBytes(Const.ISO_8859_CHARSET));
     when(data_store.uidTable()).thenReturn(UID_TABLE);
     when(data_store.session()).thenReturn(session);
+    when(data_store.executor()).thenReturn(executor);
     when(tsdb.registry.getSharedObject(any())).thenReturn(data_store);
    
     when(tsdb.registry.getPlugin(UniqueIdFactory.class, "LRU"))
@@ -210,76 +217,76 @@ public class UTBase {
     schema = spy(new Schema(tsdb, null));
     when(data_store.schema()).thenReturn(schema);
     
-//    storage = new MockBase(client, true, true, true, true);
-//    loadUIDTable();
-//    loadRawData();
+    storage = new MockBigtable(session, executor, client, bulk_mutator);
+    loadUIDTable();
+    //loadRawData();
   }
   
-//  /**
-//   * Populates the UID table with the mappings and some exceptions.
-//   */
-//  public static void loadUIDTable() {
-//    bothUIDs(UniqueIdType.METRIC, METRIC_STRING, METRIC_BYTES);
-//    bothUIDs(UniqueIdType.METRIC, METRIC_B_STRING, METRIC_B_BYTES);
-//    storage.throwException(METRIC_STRING_EX.getBytes(Const.ISO_8859_CHARSET), 
-//        new UnitTestException(), true);
-//    storage.throwException(METRIC_BYTES_EX, new UnitTestException(), true);
-//    
-//    bothUIDs(UniqueIdType.TAGK, TAGK_STRING, TAGK_BYTES);
-//    bothUIDs(UniqueIdType.TAGK, TAGK_B_STRING, TAGK_B_BYTES);
-//    storage.throwException(TAGK_STRING_EX.getBytes(Const.ISO_8859_CHARSET), 
-//        new UnitTestException(), true);
-//    storage.throwException(TAGK_BYTES_EX, new UnitTestException(), true);
-//    
-//    bothUIDs(UniqueIdType.TAGV, TAGV_STRING, TAGV_BYTES);
-//    bothUIDs(UniqueIdType.TAGV, TAGV_B_STRING, TAGV_B_BYTES);
-//    storage.throwException(TAGV_STRING_EX.getBytes(Const.ISO_8859_CHARSET), 
-//        new UnitTestException(), true);
-//    storage.throwException(TAGV_BYTES_EX, new UnitTestException(), true);
-//    
-//    for (final Map.Entry<String, byte[]> uid : SchemaBase.UIDS.entrySet()) {
-//      bothUIDs(UniqueIdType.METRIC, uid.getKey(), uid.getValue());
-//      bothUIDs(UniqueIdType.TAGK, uid.getKey(), uid.getValue());
-//      bothUIDs(UniqueIdType.TAGV, uid.getKey(), uid.getValue());
-//    }
-//  }
-//  
-//  /**
-//   * Mocks out both UIDs, writing them to storage.
-//   * @param type The type.
-//   * @param name The name.
-//   * @param inal The id.
-//   */
-//  static void bothUIDs(final UniqueIdType type, 
-//                       final String name, 
-//                       final byte[] id) {
-//    byte[] qualifier = null;
-//    switch (type) {
-//    case METRIC:
-//      qualifier = Tsdb1xUniqueIdStore.METRICS_QUAL;
-//      break;
-//    case TAGK:
-//      qualifier = Tsdb1xUniqueIdStore.TAG_NAME_QUAL;
-//      break;
-//    case TAGV:
-//      qualifier = Tsdb1xUniqueIdStore.TAG_VALUE_QUAL;
-//      break;
-//    default:
-//      throw new IllegalArgumentException("Hmm, " + type 
-//          + " isn't supported here.");
-//    }
-//    storage.addColumn(UID_TABLE, 
-//        name.getBytes(Const.ISO_8859_CHARSET), 
-//        Tsdb1xUniqueIdStore.ID_FAMILY,
-//        qualifier, 
-//        id);
-//    storage.addColumn(UID_TABLE, 
-//        id, 
-//        Tsdb1xUniqueIdStore.NAME_FAMILY,
-//        qualifier, 
-//        name.getBytes(Const.ISO_8859_CHARSET));
-//  }
-//  
+  /**
+   * Populates the UID table with the mappings and some exceptions.
+   */
+  public static void loadUIDTable() {
+    bothUIDs(UniqueIdType.METRIC, METRIC_STRING, METRIC_BYTES);
+    bothUIDs(UniqueIdType.METRIC, METRIC_B_STRING, METRIC_B_BYTES);
+    storage.throwException(METRIC_STRING_EX.getBytes(Const.ISO_8859_CHARSET), 
+        new UnitTestException(), true);
+    storage.throwException(METRIC_BYTES_EX, new UnitTestException(), true);
+    
+    bothUIDs(UniqueIdType.TAGK, TAGK_STRING, TAGK_BYTES);
+    bothUIDs(UniqueIdType.TAGK, TAGK_B_STRING, TAGK_B_BYTES);
+    storage.throwException(TAGK_STRING_EX.getBytes(Const.ISO_8859_CHARSET), 
+        new UnitTestException(), true);
+    storage.throwException(TAGK_BYTES_EX, new UnitTestException(), true);
+    
+    bothUIDs(UniqueIdType.TAGV, TAGV_STRING, TAGV_BYTES);
+    bothUIDs(UniqueIdType.TAGV, TAGV_B_STRING, TAGV_B_BYTES);
+    storage.throwException(TAGV_STRING_EX.getBytes(Const.ISO_8859_CHARSET), 
+        new UnitTestException(), true);
+    storage.throwException(TAGV_BYTES_EX, new UnitTestException(), true);
+    
+    for (final Map.Entry<String, byte[]> uid : SchemaBase.UIDS.entrySet()) {
+      bothUIDs(UniqueIdType.METRIC, uid.getKey(), uid.getValue());
+      bothUIDs(UniqueIdType.TAGK, uid.getKey(), uid.getValue());
+      bothUIDs(UniqueIdType.TAGV, uid.getKey(), uid.getValue());
+    }
+  }
+  
+  /**
+   * Mocks out both UIDs, writing them to storage.
+   * @param type The type.
+   * @param name The name.
+   * @param inal The id.
+   */
+  static void bothUIDs(final UniqueIdType type, 
+                       final String name, 
+                       final byte[] id) {
+    byte[] qualifier = null;
+    switch (type) {
+    case METRIC:
+      qualifier = Tsdb1xBigtableUniqueIdStore.METRICS_QUAL;
+      break;
+    case TAGK:
+      qualifier = Tsdb1xBigtableUniqueIdStore.TAG_NAME_QUAL;
+      break;
+    case TAGV:
+      qualifier = Tsdb1xBigtableUniqueIdStore.TAG_VALUE_QUAL;
+      break;
+    default:
+      throw new IllegalArgumentException("Hmm, " + type 
+          + " isn't supported here.");
+    }
+    storage.addColumn(UID_TABLE, 
+        name.getBytes(Const.ISO_8859_CHARSET), 
+        Tsdb1xBigtableUniqueIdStore.ID_FAMILY,
+        qualifier, 
+        id);
+    storage.addColumn(UID_TABLE, 
+        id, 
+        Tsdb1xBigtableUniqueIdStore.NAME_FAMILY,
+        qualifier, 
+        name.getBytes(Const.ISO_8859_CHARSET));
+  }
+  
   /**
    * Utility to generate a row key for scanners or storage.
    * @param metric A non-null metric UID.
