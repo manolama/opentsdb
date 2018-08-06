@@ -23,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -41,11 +42,11 @@ import com.google.cloud.bigtable.config.CredentialOptions;
 import com.google.cloud.bigtable.grpc.BigtableDataClient;
 import com.google.cloud.bigtable.grpc.BigtableInstanceName;
 import com.google.cloud.bigtable.grpc.BigtableSession;
+import com.google.cloud.bigtable.grpc.BigtableTableName;
 import com.google.cloud.bigtable.grpc.async.AsyncExecutor;
 import com.google.cloud.bigtable.grpc.async.BulkMutation;
 import com.google.cloud.bigtable.grpc.scanner.FlatRow;
 import com.google.cloud.bigtable.grpc.scanner.ResultScanner;
-import com.google.cloud.bigtable.grpc.scanner.FlatRow.Cell;
 import com.google.cloud.bigtable.util.ByteStringer;
 
 import net.opentsdb.common.Const;
@@ -112,9 +113,6 @@ public class UTBase {
   public static final int TS_NSUI_SERIES_COUNT = 16;
   public static final int TS_NSUI_SERIES_INTERVAL = 3600;
   
-  public static final byte[] DATA_TABLE = "tsdb".getBytes(Const.ISO_8859_CHARSET);
-  public static final byte[] UID_TABLE = "tsdb-uid".getBytes(Const.ISO_8859_CHARSET);
-  
   // GMT: Monday, January 1, 2018 12:15:00 AM
   public static final int START_TS = 1514765700;
   
@@ -172,6 +170,18 @@ public class UTBase {
     when(Executors.newCachedThreadPool())
       .thenReturn(mock(ExecutorService.class));
     when(session.getDataClient()).thenReturn(client);
+    PowerMockito.whenNew(FileInputStream.class).withAnyArguments()
+      .thenAnswer(new Answer<FileInputStream>() {
+        @Override
+        public FileInputStream answer(InvocationOnMock invocation)
+            throws Throwable {
+          return mock(FileInputStream.class);
+        }
+      });
+    
+    when(session.createBulkMutation(any(BigtableTableName.class)))
+      .thenReturn(bulk_mutator);
+    when(session.createAsyncExecutor()).thenReturn(executor);
     
     table_namer = new BigtableInstanceName("UT", "UT");
     when(data_store.tableNamer()).thenReturn(table_namer);
@@ -190,15 +200,8 @@ public class UTBase {
     when(store_factory.newInstance(any(TSDB.class), any(), any(Schema.class)))
       .thenReturn(data_store);
     when(data_store.tsdb()).thenReturn(tsdb);
-    when(data_store.getConfigKey(anyString()))
-      .thenAnswer(new Answer<String>() {
-      @Override
-      public String answer(InvocationOnMock invocation) throws Throwable {
-        return "tsd.mock." + (String) invocation.getArguments()[0];
-      }
-    });
-    when(data_store.dataTable()).thenReturn("tsdb".getBytes(Const.ISO_8859_CHARSET));
-    when(data_store.uidTable()).thenReturn(UID_TABLE);
+    when(data_store.dataTable()).thenReturn(MockBigtable.DATA_TABLE);
+    when(data_store.uidTable()).thenReturn(MockBigtable.UID_TABLE);
     when(data_store.session()).thenReturn(session);
     when(data_store.executor()).thenReturn(executor);
     when(tsdb.registry.getSharedObject(any())).thenReturn(data_store);
@@ -279,12 +282,12 @@ public class UTBase {
       throw new IllegalArgumentException("Hmm, " + type 
           + " isn't supported here.");
     }
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         name.getBytes(Const.ISO_8859_CHARSET), 
         Tsdb1xBigtableUniqueIdStore.ID_FAMILY,
         qualifier, 
         id);
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         id, 
         Tsdb1xBigtableUniqueIdStore.NAME_FAMILY,
         qualifier, 
@@ -324,9 +327,8 @@ public class UTBase {
    * @throws Exception
    */
   public static void loadRawData() throws Exception {
-    final byte[] table = "tsdb".getBytes(Const.ISO_8859_CHARSET);
     for (int i = 0; i < TS_SINGLE_SERIES_COUNT; i++) {
-      storage.addColumn(table, makeRowKey(
+      storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
           METRIC_BYTES, 
           TS_SINGLE_SERIES + (i * TS_SINGLE_SERIES_INTERVAL), 
           TAGK_BYTES,
@@ -335,7 +337,7 @@ public class UTBase {
         new byte[2], 
         new byte[] { 1 });
       
-      storage.addColumn(table, makeRowKey(
+      storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
           METRIC_B_BYTES, 
           TS_SINGLE_SERIES + (i * TS_SINGLE_SERIES_INTERVAL), 
           TAGK_BYTES,
@@ -346,7 +348,7 @@ public class UTBase {
     }
     
     for (int i = 0; i < TS_DOUBLE_SERIES_COUNT; i++) {
-      storage.addColumn(table, makeRowKey(
+      storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
           METRIC_BYTES, 
           TS_DOUBLE_SERIES + (i * TS_DOUBLE_SERIES_INTERVAL), 
           TAGK_BYTES,
@@ -355,7 +357,7 @@ public class UTBase {
         new byte[2], 
         new byte[] { 1 });
       
-      storage.addColumn(table, makeRowKey(
+      storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
           METRIC_BYTES, 
           TS_DOUBLE_SERIES + (i * TS_DOUBLE_SERIES_INTERVAL), 
           TAGK_BYTES,
@@ -364,7 +366,7 @@ public class UTBase {
         new byte[2], 
         new byte[] { 1 });
       
-      storage.addColumn(table, makeRowKey(
+      storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
           METRIC_B_BYTES, 
           TS_DOUBLE_SERIES + (i * TS_DOUBLE_SERIES_INTERVAL), 
           TAGK_BYTES,
@@ -373,7 +375,7 @@ public class UTBase {
         new byte[2], 
         new byte[] { 1 });
       
-      storage.addColumn(table, makeRowKey(
+      storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
           METRIC_B_BYTES, 
           TS_DOUBLE_SERIES + (i * TS_DOUBLE_SERIES_INTERVAL), 
           TAGK_BYTES,
@@ -384,7 +386,7 @@ public class UTBase {
     }
     
     for (int i = 0; i < TS_MULTI_SERIES_EX_COUNT; i++) {
-      storage.addColumn(table, makeRowKey(
+      storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
           METRIC_BYTES, 
           TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
           TAGK_BYTES,
@@ -393,7 +395,7 @@ public class UTBase {
         new byte[2], 
         new byte[] { 1 });
       
-      storage.addColumn(table, makeRowKey(
+      storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
           METRIC_BYTES, 
           TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
           TAGK_BYTES,
@@ -402,7 +404,7 @@ public class UTBase {
         new byte[2], 
         new byte[] { 1 });
       
-      storage.addColumn(table, makeRowKey(
+      storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
           METRIC_B_BYTES, 
           TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
           TAGK_BYTES,
@@ -411,7 +413,7 @@ public class UTBase {
         new byte[2], 
         new byte[] { 1 });
       
-      storage.addColumn(table, makeRowKey(
+      storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
           METRIC_B_BYTES, 
           TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
           TAGK_BYTES,
@@ -438,7 +440,7 @@ public class UTBase {
     }
     
     for (int i = 0; i < TS_NSUI_SERIES_COUNT; i++) {
-      storage.addColumn(table, makeRowKey(
+      storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
           METRIC_BYTES, 
           TS_NSUI_SERIES + (i * TS_NSUI_SERIES_INTERVAL), 
           TAGK_BYTES,
@@ -449,7 +451,7 @@ public class UTBase {
       
       // offset a bit
       if (i > 0) {
-        storage.addColumn(table, makeRowKey(
+        storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
             METRIC_BYTES, 
             TS_NSUI_SERIES + (i * TS_NSUI_SERIES_INTERVAL), 
             TAGK_BYTES,
@@ -459,7 +461,7 @@ public class UTBase {
           new byte[] { 1 });
       }
       
-      storage.addColumn(table, makeRowKey(
+      storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
           METRIC_B_BYTES, 
           TS_NSUI_SERIES + (i * TS_NSUI_SERIES_INTERVAL), 
           TAGK_BYTES,
@@ -469,7 +471,7 @@ public class UTBase {
         new byte[] { 1 });
       
       if (i > 0) {
-        storage.addColumn(table, makeRowKey(
+        storage.addColumn(MockBigtable.DATA_TABLE, makeRowKey(
             METRIC_B_BYTES, 
             TS_NSUI_SERIES + (i * TS_NSUI_SERIES_INTERVAL), 
             TAGK_BYTES,

@@ -156,31 +156,31 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
         .getDefaultPlugin(UniqueIdAssignmentAuthorizer.class);
     
     metric_character_set = Charset.forName(data_store.tsdb().getConfig()
-        .getString(data_store.getConfigKey(
+        .getString(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
             CONFIG_PREFIX.get(UniqueIdType.METRIC) + CHARACTER_SET_KEY)));
     tagk_character_set = Charset.forName(data_store.tsdb().getConfig()
-        .getString(data_store.getConfigKey(
+        .getString(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
             CONFIG_PREFIX.get(UniqueIdType.TAGK) + CHARACTER_SET_KEY)));
     tagv_character_set = Charset.forName(data_store.tsdb().getConfig()
-        .getString(data_store.getConfigKey(
+        .getString(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
             CONFIG_PREFIX.get(UniqueIdType.TAGV) + CHARACTER_SET_KEY)));
     
     randomize_metric_ids = data_store.tsdb().getConfig()
-        .getBoolean(data_store.getConfigKey(
+        .getBoolean(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
             CONFIG_PREFIX.get(UniqueIdType.METRIC) + RANDOM_ASSIGNMENT_KEY));
     randomize_tagk_ids = data_store.tsdb().getConfig()
-        .getBoolean(data_store.getConfigKey(
+        .getBoolean(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
             CONFIG_PREFIX.get(UniqueIdType.TAGK) + RANDOM_ASSIGNMENT_KEY));
     randomize_tagv_ids = data_store.tsdb().getConfig()
-        .getBoolean(data_store.getConfigKey(
+        .getBoolean(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
             CONFIG_PREFIX.get(UniqueIdType.TAGV) + RANDOM_ASSIGNMENT_KEY));
     
     assign_and_retry = data_store.tsdb().getConfig()
-        .getBoolean(data_store.getConfigKey(ASSIGN_AND_RETRY_KEY));
+        .getBoolean(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), ASSIGN_AND_RETRY_KEY));
     max_attempts_assign = (short) data_store.tsdb().getConfig()
-        .getInt(data_store.getConfigKey(ATTEMPTS_KEY));
+        .getInt(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), ATTEMPTS_KEY));
     max_attempts_assign_random = (short) data_store.tsdb().getConfig()
-        .getInt(data_store.getConfigKey(RANDOM_ATTEMPTS_KEY));
+        .getInt(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), RANDOM_ATTEMPTS_KEY));
     
     // It's important to create maps here.
     pending_assignments = Maps.newHashMapWithExpectedSize(
@@ -1294,9 +1294,9 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
   void registerConfigs(final TSDB tsdb) {
     for (final Entry<UniqueIdType, String> entry : CONFIG_PREFIX.entrySet()) {
       if (!data_store.tsdb().getConfig().hasProperty(
-          data_store.getConfigKey(entry.getValue() + CHARACTER_SET_KEY))) {
+          Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), entry.getValue() + CHARACTER_SET_KEY))) {
         data_store.tsdb().getConfig().register(
-            data_store.getConfigKey(entry.getValue() + CHARACTER_SET_KEY), 
+            Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), entry.getValue() + CHARACTER_SET_KEY), 
             CHARACTER_SET_DEFAULT, 
             false, 
             "The character set used for encoding/decoding UID "
@@ -1305,9 +1305,9 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
       }
       
       if (!data_store.tsdb().getConfig().hasProperty(
-          data_store.getConfigKey(entry.getValue() + RANDOM_ASSIGNMENT_KEY))) {
+          Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), entry.getValue() + RANDOM_ASSIGNMENT_KEY))) {
         data_store.tsdb().getConfig().register(
-            data_store.getConfigKey(entry.getValue() + RANDOM_ASSIGNMENT_KEY), 
+            Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), entry.getValue() + RANDOM_ASSIGNMENT_KEY), 
             false, 
             false, 
             "Whether or not to randomly assign UIDs for " 
@@ -1317,9 +1317,9 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     }
     
     if (!data_store.tsdb().getConfig().hasProperty(
-        data_store.getConfigKey(ASSIGN_AND_RETRY_KEY))) {
+        Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), ASSIGN_AND_RETRY_KEY))) {
       data_store.tsdb().getConfig().register(
-          data_store.getConfigKey(ASSIGN_AND_RETRY_KEY), 
+          Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), ASSIGN_AND_RETRY_KEY), 
           false, 
           false, 
           "Whether or not to return with a RETRY write state immediately "
@@ -1329,9 +1329,9 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     }
     
     if (!data_store.tsdb().getConfig().hasProperty(
-        data_store.getConfigKey(RANDOM_ATTEMPTS_KEY))) {
+        Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), RANDOM_ATTEMPTS_KEY))) {
       data_store.tsdb().getConfig().register(
-          data_store.getConfigKey(RANDOM_ATTEMPTS_KEY), 
+          Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), RANDOM_ATTEMPTS_KEY), 
           DEFAULT_ATTEMPTS_ASSIGN_RANDOM_ID, 
           false, 
           "The maximum number of attempts to make before giving up on "
@@ -1341,9 +1341,9 @@ public class Tsdb1xBigtableUniqueIdStore implements UniqueIdStore {
     }
     
     if (!data_store.tsdb().getConfig().hasProperty(
-        data_store.getConfigKey(ATTEMPTS_KEY))) {
+        Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), ATTEMPTS_KEY))) {
       data_store.tsdb().getConfig().register(
-          data_store.getConfigKey(ATTEMPTS_KEY), 
+          Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), ATTEMPTS_KEY), 
           DEFAULT_ATTEMPTS_ASSIGN_ID, 
           false, 
           "The maximum number of attempts to make before giving up on "

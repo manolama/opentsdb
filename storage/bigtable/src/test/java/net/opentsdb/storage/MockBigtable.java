@@ -112,6 +112,13 @@ import com.google.protobuf.ByteString;
  */
 @Ignore
 public final class MockBigtable {
+  public static final byte[] DATA_TABLE = 
+      "projects/MyProject/instances/MyInstance/tables/tsdb"
+        .getBytes(Const.ISO_8859_CHARSET);
+  public static final byte[] UID_TABLE = 
+      "projects/MyProject/instances/MyInstance/tables/tsdb-uid"
+        .getBytes(Const.ISO_8859_CHARSET);
+  
   
   /** The TSD mock */
   private TSDB tsdb;
@@ -147,7 +154,7 @@ public final class MockBigtable {
                       final BulkMutation bulk_mutator) {
 
     default_family = "t".getBytes(Const.ASCII_US_CHARSET);
-    default_table = "tsdb".getBytes(Const.ASCII_US_CHARSET);
+    default_table = DATA_TABLE;
     setupDefaultTables();
 
     try {
@@ -568,7 +575,7 @@ public final class MockBigtable {
       return null;
     }
     final TreeMap<Long, byte[]> column = row.get(qualifier);
-    if (column == null) {
+    if (column == null || column.isEmpty()) {
       return null;
     }
     return column.firstEntry().getValue();
@@ -969,7 +976,7 @@ public final class MockBigtable {
         new ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>>();
     tsdb.put("t".getBytes(Const.ASCII_US_CHARSET), 
         new ByteMap<ByteMap<TreeMap<Long, byte[]>>>());
-    storage.put("tsdb".getBytes(Const.ASCII_US_CHARSET), tsdb);
+    storage.put(DATA_TABLE, tsdb);
 
     final ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>> tsdb_uid =
         new ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>>();
@@ -977,7 +984,7 @@ public final class MockBigtable {
         new ByteMap<ByteMap<TreeMap<Long, byte[]>>>());
     tsdb_uid.put("id".getBytes(Const.ASCII_US_CHARSET),
         new ByteMap<ByteMap<TreeMap<Long, byte[]>>>());
-    storage.put("tsdb-uid".getBytes(Const.ASCII_US_CHARSET), tsdb_uid);
+    storage.put(UID_TABLE, tsdb_uid);
   }
 
   /**
@@ -986,13 +993,11 @@ public final class MockBigtable {
    * NOTE: all timestamp, value pairs are returned.
    */
   private class MockGet implements ListenableFuture<List<Row>> {
-    final ReadRowsRequest request;
     Exception exception;
     List<Row> response;
     
     MockGet(final ReadRowsRequest request) {
       multi_gets.add(request);
-      this.request = request;
       response = Lists.newArrayList();
       
       // TODO - for now we're just comparing literal bytes since TSD isn't
@@ -1212,14 +1217,14 @@ public final class MockBigtable {
     		  } else {
     		    continue;
     		  }
-
-          column.put(mutation.getSetCell().getTimestampMicros() / 1000 
-              != Long.MAX_VALUE ? mutation.getSetCell().getTimestampMicros() / 1000 :
-            current_timestamp++, mutation.getSetCell().getValue().toByteArray());
-          assert column.size() == 1 : "Since max versions allowed is 1, there can "
-              + "never be two entries at similar timestamp. To resolve change the "
-              + "code to only keep the entry with higher timestamp";
         }
+        
+        column.put(mutation.getSetCell().getTimestampMicros() / 1000 
+            != Long.MAX_VALUE ? mutation.getSetCell().getTimestampMicros() / 1000 :
+          current_timestamp++, mutation.getSetCell().getValue().toByteArray());
+        assert column.size() == 1 : "Since max versions allowed is 1, there can "
+            + "never be two entries at similar timestamp. To resolve change the "
+            + "code to only keep the entry with higher timestamp";
       }
       
       response = MutateRowResponse.newBuilder().build();

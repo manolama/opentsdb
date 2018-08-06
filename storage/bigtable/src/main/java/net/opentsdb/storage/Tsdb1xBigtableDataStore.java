@@ -16,6 +16,7 @@ package net.opentsdb.storage;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -41,6 +42,7 @@ import com.google.cloud.bigtable.grpc.async.AsyncExecutor;
 import com.google.cloud.bigtable.grpc.async.BulkMutation;
 import com.google.cloud.bigtable.util.ByteStringer;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.stumbleupon.async.Callback;
@@ -69,7 +71,7 @@ import net.opentsdb.utils.Pair;
 public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
   
   /** Config keys */
-  public static final String CONFIG_PREFIX = "tsd.storage.";
+  public static final String CONFIG_PREFIX = "google.bigtable.";
   public static final String DATA_TABLE_KEY = "data_table";
   public static final String UID_TABLE_KEY = "uid_table";
   public static final String TREE_TABLE_KEY = "tree_table";
@@ -140,29 +142,392 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
     this.id = id;
     this.schema = schema;
     pool = Executors.newCachedThreadPool();
+    registerConfigs(id, tsdb);
     
+    final Configuration config = tsdb.getConfig();
+    table_namer = new BigtableInstanceName(
+        config.getString(getConfigKey(id, PROJECT_ID_KEY)), 
+        config.getString(getConfigKey(id, INSTANCE_ID_KEY)));
+    
+    data_table = (table_namer.toTableNameStr(
+        config.getString(getConfigKey(id, DATA_TABLE_KEY))))
+          .getBytes(Const.ISO_8859_CHARSET);
+    uid_table = (table_namer.toTableNameStr(
+        config.getString(getConfigKey(id, UID_TABLE_KEY))))
+          .getBytes(Const.ISO_8859_CHARSET);
+    tree_table = (table_namer.toTableNameStr(
+        config.getString(getConfigKey(id, TREE_TABLE_KEY))))
+          .getBytes(Const.ISO_8859_CHARSET);
+    meta_table = (table_namer.toTableNameStr(
+        config.getString(getConfigKey(id, META_TABLE_KEY))))
+          .getBytes(Const.ISO_8859_CHARSET);
+    enable_appends = config.getBoolean(ENABLE_APPENDS_KEY);
+    
+    try {
+      final CredentialOptions creds = CredentialOptions.jsonCredentials(
+          new FileInputStream(
+              config.getString(getConfigKey(id, JSON_KEYFILE_KEY))));
+      
+      session = new BigtableSession(new BigtableOptions.Builder()
+          .setProjectId(config.getString(getConfigKey(id, PROJECT_ID_KEY)))
+          .setInstanceId(config.getString(getConfigKey(id, INSTANCE_ID_KEY)))
+          .setCredentialOptions(creds)
+          .setUserAgent("OpenTSDB_3x")
+          .setAdminHost(BigtableOptions.BIGTABLE_ADMIN_HOST_DEFAULT)
+          .setAppProfileId(BigtableOptions.BIGTABLE_APP_PROFILE_DEFAULT)
+          .setPort(BigtableOptions.BIGTABLE_PORT_DEFAULT)
+          .setDataHost(BigtableOptions.BIGTABLE_DATA_HOST_DEFAULT)
+          .setBulkOptions(new BulkOptions.Builder()
+              .setBulkMutationRpcTargetMs(1000)
+              .setBulkMaxRequestSize(1024)
+              .setAutoflushMs(1000)
+              .build())
+          .build());
+      
+      executor = session.createAsyncExecutor();
+      
+      final BigtableTableName data_table_name = new BigtableTableName(
+          table_namer.toTableNameStr(
+              config.getString(getConfigKey(id, DATA_TABLE_KEY))));
+      mutation_buffer = session.createBulkMutation(data_table_name);
+    } catch (IOException e) {
+      throw new StorageException("WTF?", e);
+    }
+    
+    uid_store = new Tsdb1xBigtableUniqueIdStore(this);
+    tsdb.getRegistry().registerSharedObject(Strings.isNullOrEmpty(id) ? 
+        "default_uidstore" : id + "_uidstore", uid_store);
+  }
+  
+  @Override
+  public QueryNode newNode(final QueryPipelineContext context, 
+                           final String id,
+                           final QueryNodeConfig config) {
+    return new Tsdb1xBigtableQueryNode(this, context, id, (QuerySourceConfig) config);
+  }
+
+  @Override
+  public String id() {
+    return "Bigtable";
+  }
+
+  public Deferred<Object> shutdown() {
+    try {
+      session.close();
+    } catch (IOException e) {
+      Deferred.fromError(e);
+    }
+    return Deferred.fromResult(null);
+  }
+
+  /** @return The schema assigned to this store. */
+  Schema schema() {
+    return schema;
+  }
+  
+  /** @return The data table. */
+  byte[] dataTable() {
+    return data_table;
+  }
+  
+  /** @return The UID table. */
+  byte[] uidTable() {
+    return uid_table;
+  }
+  
+  ExecutorService pool() {
+    return pool;
+  }
+  
+  /** @return The Bigtable executor. */
+  AsyncExecutor executor() {
+    return executor;
+  }
+
+  /** @return The session. */
+  BigtableSession session() {
+    return session;
+  }
+  
+  BigtableInstanceName tableNamer() {
+    return table_namer;
+  }
+  
+  /** @return The TSDB reference. */
+  TSDB tsdb() {
+    return tsdb;
+  }
+  
+  /** @return The UID store. */
+  UniqueIdStore uidStore() {
+    return uid_store;
+  }
+
+  String dynamicString(final String key) {
+    return tsdb.getConfig().getString(key);
+  }
+  
+  int dynamicInt(final String key) {
+    return tsdb.getConfig().getInt(key);
+  }
+  
+  boolean dynamicBoolean(final String key) {
+    return tsdb.getConfig().getBoolean(key);
+  }
+
+  @Override
+  public Deferred<WriteStatus> write(final AuthState state, 
+                                     final TimeSeriesDatum datum,
+                                     final Span span) {
+    // TODO - other types
+    if (datum.value().type() != NumericType.TYPE) {
+      return Deferred.fromResult(WriteStatus.rejected(
+          "Not handling this type yet: " + datum.value().type()));
+    }
+    
+    final Span child;
+    if (span != null && span.isDebug()) {
+      child = span.newChild(getClass().getName() + ".write")
+          .start();
+    } else {
+      child = null;
+    }
+    // no need to validate here, schema does it.
+    
+    class RowKeyCB implements Callback<Deferred<WriteStatus>, IdOrError> {
+
+      @Override
+      public Deferred<WriteStatus> call(final IdOrError ioe) throws Exception {
+        if (ioe.id() == null) {
+          if (child != null) {
+            child.setErrorTags(ioe.exception())
+                 .setTag("state", ioe.state().toString())
+                 .setTag("message", ioe.error())
+                 .finish();
+          }
+          System.out.println("IOE WRITE STATE: " + ioe.state());
+          switch (ioe.state()) {
+          case RETRY:
+            return Deferred.fromResult(WriteStatus.retry(ioe.error()));
+          case REJECTED:
+            return Deferred.fromResult(WriteStatus.rejected(ioe.error()));
+          case ERROR:
+            return Deferred.fromResult(WriteStatus.error(ioe.error(), ioe.exception()));
+          default:
+            throw new StorageException("Unexpected resolution state: " 
+                + ioe.state());
+          }
+        }
+        // TODO - handle different types
+        long base_time = datum.value().timestamp().epoch();
+        base_time = base_time - (base_time % Schema.MAX_RAW_TIMESPAN);
+        System.out.println("TIMESTAMP : "+ base_time);
+        Pair<byte[], byte[]> pair = schema.encode(datum.value(), 
+            enable_appends, (int) base_time, null);
+        
+        if (enable_appends) {
+          System.out.println("   APPENDING");
+          final ReadModifyWriteRowRequest append_request = 
+              ReadModifyWriteRowRequest.newBuilder()
+                .setTableNameBytes(ByteStringer.wrap(data_table))
+                .setRowKey(ByteStringer.wrap(ioe.id()))
+                .addRules(ReadModifyWriteRule.newBuilder()
+                    .setFamilyNameBytes(ByteStringer.wrap(DATA_FAMILY))
+                    .setColumnQualifier(ByteStringer.wrap(pair.getKey()))
+                    .setAppendValue(ByteStringer.wrap(pair.getValue())))
+                .build();
+          
+          final Deferred<WriteStatus> deferred = new Deferred<WriteStatus>();
+          class AppendCB implements FutureCallback<ReadModifyWriteRowResponse> {
+
+            @Override
+            public void onSuccess(
+                final ReadModifyWriteRowResponse result) {
+              if (child != null) {
+                child.setSuccessTags().finish();
+              }
+              
+              System.out.println("ON SUCCESS for write.");
+              deferred.callback(WriteStatus.OK);
+            }
+
+            @Override
+            public void onFailure(final Throwable t) {
+              System.out.println("ON ERROR: " + t.getMessage());
+              // TODO log?
+              // TODO - how do we retry?
+//              if (ex instanceof PleaseThrottleException ||
+//                  ex instanceof RecoverableException) {
+//                if (child != null) {
+//                  child.setErrorTags(ex)
+//                       .finish();
+//                }
+//                return WriteStatus.retry("Please retry at a later time.");
+//              }
+              if (child != null) {
+                child.setErrorTags(t)
+                     .finish();
+              }
+              deferred.callback(WriteStatus.error(t.getMessage(), t));
+            }
+            
+          }
+          
+          Futures.addCallback(
+              executor.readModifyWriteRowAsync(append_request), 
+              new AppendCB(), 
+              pool);
+          System.out.println("SENT APPEND....");
+          return deferred;
+        } else {
+          final MutateRowRequest mutate_row_request = 
+              MutateRowRequest.newBuilder()
+                .setTableNameBytes(ByteStringer.wrap(data_table))
+                .setRowKey(ByteStringer.wrap(ioe.id()))
+                .addMutations(Mutation.newBuilder()
+                    .setSetCell(SetCell.newBuilder()
+                        .setFamilyNameBytes(ByteStringer.wrap(DATA_FAMILY))
+                        .setColumnQualifier(ByteStringer.wrap(pair.getKey()))
+                        .setValue(ByteStringer.wrap(pair.getValue()))
+                        .setTimestampMicros(-1)))
+                .build();
+          
+          final Deferred<WriteStatus> deferred = new Deferred<WriteStatus>();
+          class PutCB implements FutureCallback<MutateRowResponse> {
+
+            @Override
+            public void onSuccess(final MutateRowResponse result) {
+              if (child != null) {
+                child.setSuccessTags().finish();
+              }
+              System.out.println("ON SUCCESS!!!!!");
+              deferred.callback(WriteStatus.OK);
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+           // TODO log?
+              // TODO - how do we retry?
+//              if (ex instanceof PleaseThrottleException ||
+//                  ex instanceof RecoverableException) {
+//                if (child != null) {
+//                  child.setErrorTags(ex)
+//                       .finish();
+//                }
+//                return WriteStatus.retry("Please retry at a later time.");
+//              }
+              System.out.println("ON ERRRROR!!!!! " + t.getMessage());
+              if (child != null) {
+                child.setErrorTags(t)
+                     .finish();
+              }
+              deferred.callback(WriteStatus.error(t.getMessage(), t));
+            }
+            
+          }
+          
+          System.out.println("WRITING TO BIGTABLE MUTATION BUFFER...");
+          try {
+            Futures.addCallback(
+                mutation_buffer.add(mutate_row_request),
+                new PutCB(), 
+                pool);
+          return deferred;
+          } catch (Throwable t) {
+            t.printStackTrace();
+            throw t;
+          }
+        }
+      }
+      
+    }
+    
+    class ErrorCB implements Callback<WriteStatus, Exception> {
+      @Override
+      public WriteStatus call(final Exception ex) throws Exception {
+        return WriteStatus.error(ex.getMessage(), ex);
+      }
+    }
+    
+    try {
+      return schema.createRowKey(state, datum, null, child)
+          .addCallbackDeferring(new RowKeyCB())
+          .addErrback(new ErrorCB());
+    } catch (Exception e) {
+      // TODO - log
+      return Deferred.fromResult(WriteStatus.error(e.getMessage(), e));
+    }
+  }
+
+  @Override
+  public Deferred<List<WriteStatus>> write(final AuthState state,
+                                           final TimeSeriesSharedTagsAndTimeData data, 
+                                           final Span span) {
+    final Span child;
+    if (span != null && span.isDebug()) {
+      child = span.newChild(getClass().getName() + ".write")
+          .start();
+    } else {
+      child = null;
+    }
+    
+    final List<Deferred<WriteStatus>> deferreds = 
+        Lists.newArrayListWithExpectedSize(data.size());
+    for (final TimeSeriesDatum datum : data) {
+      deferreds.add(write(state, datum, child));
+    }
+    
+    class GroupCB implements Callback<List<WriteStatus>, ArrayList<WriteStatus>> {
+      @Override
+      public List<WriteStatus> call(final ArrayList<WriteStatus> results)
+          throws Exception {
+        return results;
+      }
+    }
+    return Deferred.groupInOrder(deferreds).addCallback(new GroupCB());
+  }
+
+  /**
+   * Prepends the {@link #CONFIG_PREFIX} and the current data store ID to
+   * the given suffix.
+   * @param id The optional ID. May be null or empty.
+   * @param suffix A non-null and non-empty suffix.
+   * @return A non-null and non-empty config string.
+   */
+  public static String getConfigKey(final String id, final String suffix) {
+    if (Strings.isNullOrEmpty(suffix)) {
+      throw new IllegalArgumentException("Suffix cannot be null.");
+    }
+    if (Strings.isNullOrEmpty(id)) {
+      return CONFIG_PREFIX + suffix;
+    } else {
+      return CONFIG_PREFIX + id + "." + suffix;
+    }
+  }
+  
+  static void registerConfigs(final String id, final TSDB tsdb) {
     // We'll sync on the config object to avoid race conditions if 
     // multiple instances of this client are being loaded.
     final Configuration config = tsdb.getConfig();
     synchronized(config) {
-      if (!config.hasProperty(getConfigKey(DATA_TABLE_KEY))) {
-        System.out.println("REGISTERED: " + getConfigKey(DATA_TABLE_KEY));
-        config.register(getConfigKey(DATA_TABLE_KEY), "tsdb", false, 
+      if (!config.hasProperty(getConfigKey(id, DATA_TABLE_KEY))) {
+        System.out.println("REGISTERED: " + getConfigKey(id, DATA_TABLE_KEY));
+        config.register(getConfigKey(id, DATA_TABLE_KEY), "tsdb", false, 
             "The name of the raw data table for OpenTSDB.");
       }
       
-      if (!config.hasProperty(getConfigKey(UID_TABLE_KEY))) {
-        config.register(getConfigKey(UID_TABLE_KEY), "tsdb-uid", false, 
+      if (!config.hasProperty(getConfigKey(id, UID_TABLE_KEY))) {
+        config.register(getConfigKey(id, UID_TABLE_KEY), "tsdb-uid", false, 
             "The name of the UID mapping table for OpenTSDB.");
       }
       
-      if (!config.hasProperty(getConfigKey(TREE_TABLE_KEY))) {
-        config.register(getConfigKey(TREE_TABLE_KEY), "tsdb-tree", false, 
+      if (!config.hasProperty(getConfigKey(id, TREE_TABLE_KEY))) {
+        config.register(getConfigKey(id, TREE_TABLE_KEY), "tsdb-tree", false, 
             "The name of the Tree table for OpenTSDB.");
       }
       
-      if (!config.hasProperty(getConfigKey(META_TABLE_KEY))) {
-        config.register(getConfigKey(META_TABLE_KEY), "tsdb-meta", false, 
+      if (!config.hasProperty(getConfigKey(id, META_TABLE_KEY))) {
+        config.register(getConfigKey(id, META_TABLE_KEY), "tsdb-meta", false, 
             "The name of the Meta data table for OpenTSDB.");
       }
       if (!config.hasProperty(ENABLE_APPENDS_KEY)) {
@@ -235,371 +600,38 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
       }
       
       // bigtable configs
-      if (!config.hasProperty(PROJECT_ID_KEY)) {
-        config.register(PROJECT_ID_KEY, null, false, 
+      if (!config.hasProperty(getConfigKey(id, PROJECT_ID_KEY))) {
+        config.register(getConfigKey(id, PROJECT_ID_KEY), null, false, 
             "The project ID hosting the Bigtable cluster");
       }
-      if (!config.hasProperty(INSTANCE_ID_KEY)) {
-        config.register(INSTANCE_ID_KEY, null, false, 
+      if (!config.hasProperty(getConfigKey(id, INSTANCE_ID_KEY))) {
+        config.register(getConfigKey(id, INSTANCE_ID_KEY), null, false, 
             "The cluster ID assigned to the Bigtable cluster at creation.");
       }
-      if (!config.hasProperty(ZONE_ID_KEY)) {
-        config.register(ZONE_ID_KEY, null, false, 
+      if (!config.hasProperty(getConfigKey(id, ZONE_ID_KEY))) {
+        config.register(getConfigKey(id, ZONE_ID_KEY), null, false, 
             "The name of the zone where the Bigtable cluster is operating.");
       }
-      if (!config.hasProperty(SERVICE_ACCOUNT_ENABLE_KEY)) {
-        config.register(SERVICE_ACCOUNT_ENABLE_KEY, true, false, 
+      if (!config.hasProperty(getConfigKey(id, SERVICE_ACCOUNT_ENABLE_KEY))) {
+        config.register(getConfigKey(id, SERVICE_ACCOUNT_ENABLE_KEY), true, false, 
             "Whether or not to use a Google cloud service account to connect.");
       }
-      if (!config.hasProperty(JSON_KEYFILE_KEY)) {
-        config.register(JSON_KEYFILE_KEY, null, false, 
+      if (!config.hasProperty(getConfigKey(id, JSON_KEYFILE_KEY))) {
+        config.register(getConfigKey(id, JSON_KEYFILE_KEY), null, false, 
             "The full path to the JSON formatted key file associated with "
             + "the service account you want to use for Bigtable access. "
             + "Download this from your cloud console.");
       }
-      if (!config.hasProperty(CHANNEL_COUNT_KEY)) {
-        config.register(CHANNEL_COUNT_KEY, 
+      if (!config.hasProperty(getConfigKey(id, CHANNEL_COUNT_KEY))) {
+        config.register(getConfigKey(id, CHANNEL_COUNT_KEY), 
             Runtime.getRuntime().availableProcessors(), false, 
             "The number of sockets opened to the Bigtable API for handling "
             + "RPCs. For higher throughput consider increasing the "
             + "channel count.");
       }
     }
-    
-    table_namer = new BigtableInstanceName(
-        config.getString(PROJECT_ID_KEY), 
-        config.getString(INSTANCE_ID_KEY));
-    
-    data_table = (table_namer.toTableNameStr(
-        config.getString(getConfigKey(DATA_TABLE_KEY))))
-          .getBytes(Const.ISO_8859_CHARSET);
-    uid_table = (table_namer.toTableNameStr(
-        config.getString(getConfigKey(UID_TABLE_KEY))))
-          .getBytes(Const.ISO_8859_CHARSET);
-    tree_table = (table_namer.toTableNameStr(
-        config.getString(getConfigKey(TREE_TABLE_KEY))))
-          .getBytes(Const.ISO_8859_CHARSET);
-    meta_table = (table_namer.toTableNameStr(
-        config.getString(getConfigKey(META_TABLE_KEY))))
-          .getBytes(Const.ISO_8859_CHARSET);
-    enable_appends = config.getBoolean(ENABLE_APPENDS_KEY);
-    
-    try {
-      final CredentialOptions creds = CredentialOptions.jsonCredentials(
-          new FileInputStream(config.getString(JSON_KEYFILE_KEY)));
-      
-      session = new BigtableSession(new BigtableOptions.Builder()
-          .setProjectId(config.getString(PROJECT_ID_KEY))
-          .setInstanceId(config.getString(INSTANCE_ID_KEY))
-          .setCredentialOptions(creds)
-          .setUserAgent("OpenTSDB_3x")
-          .setAdminHost(BigtableOptions.BIGTABLE_ADMIN_HOST_DEFAULT)
-          .setAppProfileId(BigtableOptions.BIGTABLE_APP_PROFILE_DEFAULT)
-          .setPort(BigtableOptions.BIGTABLE_PORT_DEFAULT)
-          .setDataHost(BigtableOptions.BIGTABLE_DATA_HOST_DEFAULT)
-          .setBulkOptions(new BulkOptions.Builder()
-              .setBulkMutationRpcTargetMs(1000)
-              .setBulkMaxRequestSize(1024)
-              .setAutoflushMs(1000)
-              .build())
-          .build());
-      
-      executor = session.createAsyncExecutor();
-      
-      final BigtableTableName data_table_name = new BigtableTableName(
-          table_namer.toTableNameStr(config.getString(getConfigKey(DATA_TABLE_KEY))));
-      mutation_buffer = session.createBulkMutation(data_table_name);
-    } catch (IOException e) {
-      throw new StorageException("WTF?", e);
-    }
-    
-    uid_store = new Tsdb1xBigtableUniqueIdStore(this);
-    tsdb.getRegistry().registerSharedObject(Strings.isNullOrEmpty(id) ? 
-        "default_uidstore" : id + "_uidstore", uid_store);
   }
   
-  @Override
-  public QueryNode newNode(final QueryPipelineContext context, 
-                           final String id,
-                           final QueryNodeConfig config) {
-    return new Tsdb1xBigtableQueryNode(this, context, id, (QuerySourceConfig) config);
-  }
-
-  @Override
-  public String id() {
-    return "Bigtable";
-  }
-
-  public Deferred<Object> shutdown() {
-    try {
-      session.close();
-    } catch (IOException e) {
-      Deferred.fromError(e);
-    }
-    return Deferred.fromResult(null);
-  }
-
-  /**
-   * Prepends the {@link #CONFIG_PREFIX} and the current data store ID to
-   * the given suffix.
-   * @param suffix A non-null and non-empty suffix.
-   * @return A non-null and non-empty config string.
-   */
-  public String getConfigKey(final String suffix) {
-    if (Strings.isNullOrEmpty(suffix)) {
-      throw new IllegalArgumentException("Suffix cannot be null.");
-    }
-    if (Strings.isNullOrEmpty(id)) {
-      return CONFIG_PREFIX + suffix;
-    } else {
-      return CONFIG_PREFIX + id + "." + suffix;
-    }
-  }
-  
-  /** @return The schema assigned to this store. */
-  Schema schema() {
-    return schema;
-  }
-  
-  /** @return The data table. */
-  byte[] dataTable() {
-    return data_table;
-  }
-  
-  /** @return The UID table. */
-  byte[] uidTable() {
-    return uid_table;
-  }
-  
-  ExecutorService pool() {
-    return pool;
-  }
-  
-  /** @return The Bigtable executor. */
-  AsyncExecutor executor() {
-    return executor;
-  }
-
-  /** @return The session. */
-  BigtableSession session() {
-    return session;
-  }
-  
-  BigtableInstanceName tableNamer() {
-    return table_namer;
-  }
-  
-  /** @return The TSDB reference. */
-  TSDB tsdb() {
-    return tsdb;
-  }
-  
-  /** @return The UID store. */
-  UniqueIdStore uidStore() {
-    return uid_store;
-  }
-
-  String dynamicString(final String key) {
-    return tsdb.getConfig().getString(key);
-  }
-  
-  int dynamicInt(final String key) {
-    return tsdb.getConfig().getInt(key);
-  }
-  
-  boolean dynamicBoolean(final String key) {
-    return tsdb.getConfig().getBoolean(key);
-  }
-
-  @Override
-  public Deferred<WriteStatus> write(AuthState state, TimeSeriesDatum datum,
-      Span span) {
-    System.out.println("HERHERHERHE");
- // TODO - other types
-    if (datum.value().type() != NumericType.TYPE) {
-      return Deferred.fromResult(WriteStatus.rejected(
-          "Not handling this type yet: " + datum.value().type()));
-    }
-    
-    final Span child;
-    if (span != null && span.isDebug()) {
-      child = span.newChild(getClass().getName() + ".write")
-          .start();
-    } else {
-      child = null;
-    }
-    // no need to validate here, schema does it.
-    
-    class RowKeyCB implements Callback<Deferred<WriteStatus>, IdOrError> {
-
-      @Override
-      public Deferred<WriteStatus> call(final IdOrError ioe) throws Exception {
-        if (ioe.id() == null) {
-          if (child != null) {
-            child.setErrorTags(ioe.exception())
-                 .setTag("state", ioe.state().toString())
-                 .setTag("message", ioe.error())
-                 .finish();
-          }
-          System.out.println("IOE WRITE STATE: " + ioe.state());
-          switch (ioe.state()) {
-          case RETRY:
-            return Deferred.fromResult(WriteStatus.retry(ioe.error()));
-          case REJECTED:
-            return Deferred.fromResult(WriteStatus.rejected(ioe.error()));
-          case ERROR:
-            return Deferred.fromResult(WriteStatus.error(ioe.error(), ioe.exception()));
-          default:
-            throw new StorageException("Unexpected resolution state: " 
-                + ioe.state());
-          }
-        }
-        // TODO - handle different types
-        long base_time = datum.value().timestamp().epoch();
-        base_time = base_time - (base_time % Schema.MAX_RAW_TIMESPAN);
-        System.out.println("TIMESTAMP : "+ base_time);
-        Pair<byte[], byte[]> pair = schema.encode(datum.value(), 
-            enable_appends, (int) base_time, null);
-        
-        if (enable_appends) {
-          final ReadModifyWriteRowRequest append_request = 
-              ReadModifyWriteRowRequest.newBuilder()
-                .setTableNameBytes(ByteStringer.wrap(data_table))
-                .setRowKey(ByteStringer.wrap(ioe.id()))
-                .addRules(ReadModifyWriteRule.newBuilder()
-                    .setFamilyNameBytes(ByteStringer.wrap(DATA_FAMILY))
-                    .setColumnQualifier(ByteStringer.wrap(pair.getKey()))
-                    .setAppendValue(ByteStringer.wrap(pair.getValue())))
-                .build();
-          
-          final Deferred<WriteStatus> deferred = new Deferred<WriteStatus>();
-          class AppendCB implements FutureCallback<ReadModifyWriteRowResponse> {
-
-            @Override
-            public void onSuccess(
-                final ReadModifyWriteRowResponse result) {
-              if (child != null) {
-                child.setSuccessTags().finish();
-              }
-              
-              System.out.println("ON SUCCESS for write.");
-              deferred.callback(WriteStatus.OK);
-            }
-
-            @Override
-            public void onFailure(final Throwable t) {
-              System.out.println("ON ERROR: " + t.getMessage());
-              // TODO log?
-              // TODO - how do we retry?
-//              if (ex instanceof PleaseThrottleException ||
-//                  ex instanceof RecoverableException) {
-//                if (child != null) {
-//                  child.setErrorTags(ex)
-//                       .finish();
-//                }
-//                return WriteStatus.retry("Please retry at a later time.");
-//              }
-              if (child != null) {
-                child.setErrorTags(t)
-                     .finish();
-              }
-              deferred.callback(WriteStatus.error(t.getMessage(), t));
-            }
-            
-          }
-          
-          Futures.addCallback(
-              executor.readModifyWriteRowAsync(append_request), 
-              new AppendCB(), 
-              pool);
-          return deferred;
-        } else {
-          final MutateRowRequest mutate_row_request = 
-              MutateRowRequest.newBuilder()
-                .setTableNameBytes(ByteStringer.wrap(data_table))
-                .setRowKey(ByteStringer.wrap(ioe.id()))
-                .addMutations(Mutation.newBuilder()
-                    .setSetCell(SetCell.newBuilder()
-                        .setFamilyNameBytes(ByteStringer.wrap(DATA_FAMILY))
-                        .setColumnQualifier(ByteStringer.wrap(pair.getKey()))
-                        .setValue(ByteStringer.wrap(pair.getValue()))
-                        .setTimestampMicros(-1)))
-                .build();
-          
-          final Deferred<WriteStatus> deferred = new Deferred<WriteStatus>();
-          class PutCB implements FutureCallback<MutateRowResponse> {
-
-            @Override
-            public void onSuccess(final MutateRowResponse result) {
-              if (child != null) {
-                child.setSuccessTags().finish();
-              }
-              System.out.println("ON SUCCESS!!!!!");
-              deferred.callback(WriteStatus.OK);
-            }
-
-            @Override
-            public void onFailure(Throwable t) {
-           // TODO log?
-              // TODO - how do we retry?
-//              if (ex instanceof PleaseThrottleException ||
-//                  ex instanceof RecoverableException) {
-//                if (child != null) {
-//                  child.setErrorTags(ex)
-//                       .finish();
-//                }
-//                return WriteStatus.retry("Please retry at a later time.");
-//              }
-              System.out.println("ON ERRRROR!!!!! " + t.getMessage());
-              if (child != null) {
-                child.setErrorTags(t)
-                     .finish();
-              }
-              deferred.callback(WriteStatus.error(t.getMessage(), t));
-            }
-            
-          }
-          
-          System.out.println("WRITING TO BIGTABLE MUTATION BUFFER...");
-          try {
-          Futures.addCallback(
-              mutation_buffer.add(mutate_row_request),
-              new PutCB(), 
-              pool);
-          return deferred;
-          } catch (Throwable t) {
-            t.printStackTrace();
-            throw t;
-          }
-        }
-      }
-      
-    }
-    
-    class ErrorCB implements Callback<WriteStatus, Exception> {
-      @Override
-      public WriteStatus call(final Exception ex) throws Exception {
-        return WriteStatus.error(ex.getMessage(), ex);
-      }
-    }
-    
-    try {
-      return schema.createRowKey(state, datum, null, child)
-          .addCallbackDeferring(new RowKeyCB())
-          .addErrback(new ErrorCB());
-    } catch (Exception e) {
-      // TODO - log
-      return Deferred.fromResult(WriteStatus.error(e.getMessage(), e));
-    }
-  }
-
-  @Override
-  public Deferred<List<WriteStatus>> write(AuthState state,
-      TimeSeriesSharedTagsAndTimeData data, Span span) {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
   /**
    * <p>wasMutationApplied.</p>
    *<b>NOTE</b> Cribbed from Bigtable client.

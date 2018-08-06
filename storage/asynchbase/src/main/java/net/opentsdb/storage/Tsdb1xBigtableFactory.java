@@ -35,7 +35,7 @@ import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStoreFactory;
  * 
  * @since 3.0
  */
-public class Tsdb1xHBaseFactory implements Tsdb1xDataStoreFactory {
+public class Tsdb1xBigtableFactory implements Tsdb1xDataStoreFactory {
   
   /** A TSD to pull config data from. */
   private TSDB tsdb;

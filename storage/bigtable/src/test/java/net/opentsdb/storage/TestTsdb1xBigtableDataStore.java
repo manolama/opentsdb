@@ -22,64 +22,91 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import org.hbase.async.HBaseClient;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 import org.powermock.reflect.Whitebox;
 
+import com.google.cloud.bigtable.config.CredentialOptions;
+import com.google.cloud.bigtable.grpc.BigtableSession;
+import com.google.cloud.bigtable.grpc.BigtableTableName;
+
 import net.opentsdb.common.Const;
-import net.opentsdb.configuration.Configuration;
-import net.opentsdb.configuration.UnitTestConfiguration;
-import net.opentsdb.core.DefaultRegistry;
-import net.opentsdb.core.DefaultTSDB;
 import net.opentsdb.data.BaseTimeSeriesDatumStringId;
-import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeriesDatum;
 import net.opentsdb.data.TimeSeriesDatumStringId;
 import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.storage.WriteStatus.WriteState;
 import net.opentsdb.storage.schemas.tsdb1x.NumericCodec;
-import net.opentsdb.storage.schemas.tsdb1x.Schema;
-import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStoreFactory;
 import net.opentsdb.uid.UniqueIdStore;
 
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({ Tsdb1xHBaseDataStore.class, HBaseClient.class })
-public class TestTsdb1xHBaseDataStore extends UTBase {
+@PrepareForTest({ ExecutorService.class, BigtableSession.class, 
+  Tsdb1xBigtableQueryNode.class, CredentialOptions.class,
+  FileInputStream.class, Tsdb1xBigtableDataStore.class })
+public class TestTsdb1xBigtableDataStore extends UTBase {
 
+  private static final String ID = "UT";
+  
   private Tsdb1xBigtableFactory factory;
-//  private DefaultTSDB tsdb;
-//  private Configuration config;
-//  private DefaultRegistry registry;
   
   @Before
   public void before() throws Exception {
     factory = mock(Tsdb1xBigtableFactory.class);
-//    tsdb = mock(DefaultTSDB.class);
-//    config = UnitTestConfiguration.getConfiguration();
-//    registry = mock(DefaultRegistry.class);
-//    when(tsdb.getConfig()).thenReturn(config);
-//    when(tsdb.getRegistry()).thenReturn(registry);
     when(factory.tsdb()).thenReturn(tsdb);
-    PowerMockito.whenNew(HBaseClient.class).withAnyArguments().thenReturn(client);
     storage.flushStorage("tsdb".getBytes(Const.ASCII_US_CHARSET));
+    Tsdb1xBigtableDataStore.registerConfigs(ID, tsdb);
+    
+    tsdb.config.override(Tsdb1xBigtableDataStore.getConfigKey(ID, 
+        Tsdb1xBigtableDataStore.PROJECT_ID_KEY), "MyProject");
+    tsdb.config.override(Tsdb1xBigtableDataStore.getConfigKey(ID, 
+        Tsdb1xBigtableDataStore.INSTANCE_ID_KEY), "MyInstance");
+    
+    PowerMockito.whenNew(BigtableSession.class).withAnyArguments()
+      .thenReturn(session);
+    PowerMockito.mockStatic(CredentialOptions.class);
+    when(CredentialOptions.jsonCredentials(any(InputStream.class)))
+      .thenReturn(mock(CredentialOptions.class));
+    PowerMockito.mockStatic(Executors.class);
+    when(Executors.newCachedThreadPool())
+      .thenReturn(mock(ExecutorService.class));
+    when(session.getDataClient()).thenReturn(client);
+    PowerMockito.whenNew(FileInputStream.class).withAnyArguments()
+      .thenAnswer(new Answer<FileInputStream>() {
+        @Override
+        public FileInputStream answer(InvocationOnMock invocation)
+            throws Throwable {
+          return mock(FileInputStream.class);
+        }
+      });
+    
+    when(session.createBulkMutation(any(BigtableTableName.class)))
+      .thenReturn(bulk_mutator);
+    when(session.createAsyncExecutor()).thenReturn(executor);
   }
   
   @Test
   public void ctorDefault() throws Exception {
-    final Tsdb1xHBaseDataStore store = 
-        new Tsdb1xHBaseDataStore(factory, "UT", schema);
-    assertArrayEquals("tsdb".getBytes(Const.ISO_8859_CHARSET), store.dataTable());
-    assertArrayEquals("tsdb-uid".getBytes(Const.ISO_8859_CHARSET), store.uidTable());
+    final Tsdb1xBigtableDataStore store = 
+        new Tsdb1xBigtableDataStore(factory, ID, schema);
+    assertArrayEquals(store.tableNamer().toTableNameStr("tsdb")
+        .getBytes(Const.ISO_8859_CHARSET), store.dataTable());
+    assertArrayEquals(store.tableNamer().toTableNameStr("tsdb-uid")
+        .getBytes(Const.ISO_8859_CHARSET), store.uidTable());
     assertSame(tsdb, store.tsdb());
     assertNotNull(store.uidStore());
     verify(tsdb.registry, atLeastOnce()).registerSharedObject(eq("UT_uidstore"), 
@@ -88,6 +115,7 @@ public class TestTsdb1xHBaseDataStore extends UTBase {
   
   @Test
   public void write() throws Exception {
+    storage.flushStorage(MockBigtable.DATA_TABLE);
     MutableNumericValue value = 
         new MutableNumericValue(new SecondTimeStamp(1262304000), 42);
     TimeSeriesDatumStringId id = BaseTimeSeriesDatumStringId.newBuilder()
@@ -95,32 +123,22 @@ public class TestTsdb1xHBaseDataStore extends UTBase {
         .addTags(TAGK_STRING, TAGV_STRING)
         .build();
     
-    Tsdb1xHBaseDataStore store = 
-        new Tsdb1xHBaseDataStore(factory, "UT", schema);
+    Tsdb1xBigtableDataStore store = 
+        new Tsdb1xBigtableDataStore(factory, ID, schema);
     WriteStatus state = store.write(null, TimeSeriesDatum.wrap(id, value), null).join();
     assertEquals(WriteState.OK, state.state());
     byte[] row_key = new byte[] { 0, 0, 1, 75, 61, 59, 0, 0, 0, 1, 0, 0, 1 };
     assertArrayEquals(new byte[] { 42 }, storage.getColumn(
-        store.dataTable(), row_key, Tsdb1xHBaseDataStore.DATA_FAMILY, 
+        MockBigtable.DATA_TABLE, row_key, Tsdb1xBigtableDataStore.DATA_FAMILY, 
         new byte[] { 0, 0 }));
-    storage.dumpToSystemOut(store.dataTable(), false);
     
     // appends
     Whitebox.setInternalState(store, "enable_appends", true);
     state = store.write(null, TimeSeriesDatum.wrap(id, value), null).join();
     assertEquals(WriteState.OK, state.state());
+
     assertArrayEquals(new byte[] { 0, 0, 42 }, storage.getColumn(
-        store.dataTable(), row_key, Tsdb1xHBaseDataStore.DATA_FAMILY, 
-        NumericCodec.APPEND_QUALIFIER));
-    
-    Whitebox.setInternalState(store, "enable_appends", false);
-    Whitebox.setInternalState(store, "enable_appends_coproc", true);
-    value.resetValue(1);
-    state = store.write(null, TimeSeriesDatum.wrap(id, value), null).join();
-    assertEquals(WriteState.OK, state.state());
-    // overwrites
-    assertArrayEquals(new byte[] { 0, 0, 1 }, storage.getColumn(
-        store.dataTable(), row_key, Tsdb1xHBaseDataStore.DATA_FAMILY, 
+        store.dataTable(), row_key, Tsdb1xBigtableDataStore.DATA_FAMILY, 
         NumericCodec.APPEND_QUALIFIER));
     
     // bad metric

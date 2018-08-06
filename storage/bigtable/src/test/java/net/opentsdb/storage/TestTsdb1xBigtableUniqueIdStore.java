@@ -151,12 +151,12 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
   @BeforeClass
   public static void beforeClassLocal() throws Exception {
     // UTF-8 Encoding
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         UNI_STRING.getBytes(Const.UTF8_CHARSET), 
         Tsdb1xBigtableUniqueIdStore.ID_FAMILY, 
         Tsdb1xBigtableUniqueIdStore.METRICS_QUAL, 
         UNI_BYTES);
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         UNI_BYTES, 
         Tsdb1xBigtableUniqueIdStore.NAME_FAMILY, 
         Tsdb1xBigtableUniqueIdStore.METRICS_QUAL, 
@@ -213,48 +213,42 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     MockTSDB tsdb = new MockTSDB();
     Tsdb1xBigtableDataStore data_store = mock(Tsdb1xBigtableDataStore.class);
     when(data_store.tsdb()).thenReturn(tsdb);
-    when(data_store.getConfigKey(anyString())).then(new Answer<String>() {
-      @Override
-      public String answer(InvocationOnMock invocation) throws Throwable {
-        return (String) invocation.getArguments()[0];
-      }
-    });
     Tsdb1xBigtableUniqueIdStore uid = new Tsdb1xBigtableUniqueIdStore(data_store);
     
     // now we're assured they're registered, override
-    tsdb.config.override(data_store.getConfigKey(
+    tsdb.config.override(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
         Tsdb1xBigtableUniqueIdStore.CONFIG_PREFIX.get(UniqueIdType.METRIC) + 
         Tsdb1xBigtableUniqueIdStore.CHARACTER_SET_KEY), 
         "UTF8");
-    tsdb.config.override(data_store.getConfigKey(
+    tsdb.config.override(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
         Tsdb1xBigtableUniqueIdStore.CONFIG_PREFIX.get(UniqueIdType.TAGK) + 
         Tsdb1xBigtableUniqueIdStore.CHARACTER_SET_KEY), 
         "UTF8");
-    tsdb.config.override(data_store.getConfigKey(
+    tsdb.config.override(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
         Tsdb1xBigtableUniqueIdStore.CONFIG_PREFIX.get(UniqueIdType.TAGV) + 
         Tsdb1xBigtableUniqueIdStore.CHARACTER_SET_KEY), 
         "UTF8");
     
-    tsdb.config.override(data_store.getConfigKey(
+    tsdb.config.override(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
         Tsdb1xBigtableUniqueIdStore.CONFIG_PREFIX.get(UniqueIdType.METRIC) + 
         Tsdb1xBigtableUniqueIdStore.RANDOM_ASSIGNMENT_KEY), 
         "true");
-    tsdb.config.override(data_store.getConfigKey(
+    tsdb.config.override(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
         Tsdb1xBigtableUniqueIdStore.CONFIG_PREFIX.get(UniqueIdType.TAGK) + 
         Tsdb1xBigtableUniqueIdStore.RANDOM_ASSIGNMENT_KEY), 
         "true");
-    tsdb.config.override(data_store.getConfigKey(
+    tsdb.config.override(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
         Tsdb1xBigtableUniqueIdStore.CONFIG_PREFIX.get(UniqueIdType.TAGV) + 
         Tsdb1xBigtableUniqueIdStore.RANDOM_ASSIGNMENT_KEY), 
         "true");
     
-    tsdb.config.override(data_store.getConfigKey(
+    tsdb.config.override(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
         Tsdb1xBigtableUniqueIdStore.ASSIGN_AND_RETRY_KEY), 
         "true");
-    tsdb.config.override(data_store.getConfigKey(
+    tsdb.config.override(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
         Tsdb1xBigtableUniqueIdStore.ATTEMPTS_KEY), 
         "42");
-    tsdb.config.override(data_store.getConfigKey(
+    tsdb.config.override(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
         Tsdb1xBigtableUniqueIdStore.RANDOM_ATTEMPTS_KEY), 
         "128");
     
@@ -326,7 +320,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     
     // now try it with UTF8
     tsdb.config.override(
-        data_store.getConfigKey(
+        Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
             Tsdb1xBigtableUniqueIdStore.CONFIG_PREFIX.get(UniqueIdType.METRIC) + 
             Tsdb1xBigtableUniqueIdStore.CHARACTER_SET_KEY), "UTF-8");
     uid = new Tsdb1xBigtableUniqueIdStore(data_store);
@@ -461,7 +455,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     
     // UTF8
     tsdb.config.override(
-        data_store.getConfigKey(
+        Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
             Tsdb1xBigtableUniqueIdStore.CONFIG_PREFIX.get(UniqueIdType.METRIC) + 
             Tsdb1xBigtableUniqueIdStore.CHARACTER_SET_KEY), "UTF-8");
     uid = new Tsdb1xBigtableUniqueIdStore(data_store);
@@ -593,7 +587,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     
     // now try it with UTF8
     tsdb.config.override(
-        data_store.getConfigKey(
+        Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
             Tsdb1xBigtableUniqueIdStore.CONFIG_PREFIX.get(UniqueIdType.METRIC) + 
             Tsdb1xBigtableUniqueIdStore.CHARACTER_SET_KEY), "UTF-8");
     uid = new Tsdb1xBigtableUniqueIdStore(data_store);
@@ -727,7 +721,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     
     // UTF8
     tsdb.config.override(
-        data_store.getConfigKey(
+        Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
             Tsdb1xBigtableUniqueIdStore.CONFIG_PREFIX.get(UniqueIdType.METRIC) + 
             Tsdb1xBigtableUniqueIdStore.CHARACTER_SET_KEY), "UTF-8");
     uid = new Tsdb1xBigtableUniqueIdStore(data_store);
@@ -991,7 +985,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
   @Test  // Test the creation of an ID when unable to increment MAXID
   public void getOrCreateIdUnableToIncrementMaxId() throws Exception {
     resetAssignmentState();
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         Tsdb1xBigtableUniqueIdStore.MAXID_ROW,
         Tsdb1xBigtableUniqueIdStore.ID_FAMILY,
         Tsdb1xBigtableUniqueIdStore.METRICS_QUAL, 
@@ -1021,7 +1015,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
   @Test  // Failure due to negative id.
   public void getOrCreateIdUnableToIncrementRolledID() throws Exception {
     resetAssignmentState();
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         Tsdb1xBigtableUniqueIdStore.MAXID_ROW,
         Tsdb1xBigtableUniqueIdStore.ID_FAMILY,
         Tsdb1xBigtableUniqueIdStore.METRICS_QUAL, 
@@ -1051,7 +1045,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
   @Test  // Failure due to negative id.
   public void getOrCreateIdUnableToIncrementCorruptId() throws Exception {
     resetAssignmentState();
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         Tsdb1xBigtableUniqueIdStore.MAXID_ROW,
         Tsdb1xBigtableUniqueIdStore.ID_FAMILY,
         Tsdb1xBigtableUniqueIdStore.METRICS_QUAL, 
@@ -1087,13 +1081,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     when(data_store_a.executor()).thenReturn(executor);
     when(data_store_a.schema()).thenReturn(schema);
     when(data_store_a.tsdb()).thenReturn(tsdb);
-    when(data_store_a.getConfigKey(anyString())).then(new Answer<String>() {
-      @Override
-      public String answer(InvocationOnMock invocation) throws Throwable {
-        return (String) invocation.getArguments()[0];
-      }
-    });
-    when(data_store_a.uidTable()).thenReturn(UID_TABLE);
+    when(data_store_a.uidTable()).thenReturn(MockBigtable.UID_TABLE);
     Tsdb1xBigtableUniqueIdStore uid = new Tsdb1xBigtableUniqueIdStore(data_store_a);
     
     when(executor.readRowsAsync(any(ReadRowsRequest.class)))
@@ -1134,13 +1122,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     when(data_store_a.executor()).thenReturn(executor);
     when(data_store_a.schema()).thenReturn(schema);
     when(data_store_a.tsdb()).thenReturn(tsdb);
-    when(data_store_a.getConfigKey(anyString())).then(new Answer<String>() {
-      @Override
-      public String answer(InvocationOnMock invocation) throws Throwable {
-        return (String) invocation.getArguments()[0];
-      }
-    });
-    when(data_store_a.uidTable()).thenReturn(UID_TABLE);
+    when(data_store_a.uidTable()).thenReturn(MockBigtable.UID_TABLE);
     Tsdb1xBigtableUniqueIdStore uid = new Tsdb1xBigtableUniqueIdStore(data_store_a);
     
     when(executor.readRowsAsync(any(ReadRowsRequest.class)))
@@ -1171,13 +1153,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     when(data_store_a.executor()).thenReturn(executor);
     when(data_store_a.schema()).thenReturn(schema);
     when(data_store_a.tsdb()).thenReturn(tsdb);
-    when(data_store_a.getConfigKey(anyString())).then(new Answer<String>() {
-      @Override
-      public String answer(InvocationOnMock invocation) throws Throwable {
-        return (String) invocation.getArguments()[0];
-      }
-    });
-    when(data_store_a.uidTable()).thenReturn(UID_TABLE);
+    when(data_store_a.uidTable()).thenReturn(MockBigtable.UID_TABLE);
     Tsdb1xBigtableUniqueIdStore uid = new Tsdb1xBigtableUniqueIdStore(data_store_a);
     
     when(executor.readRowsAsync(any(ReadRowsRequest.class)))
@@ -1224,13 +1200,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     when(data_store_a.executor()).thenReturn(executor);
     when(data_store_a.schema()).thenReturn(schema);
     when(data_store_a.tsdb()).thenReturn(tsdb);
-    when(data_store_a.getConfigKey(anyString())).then(new Answer<String>() {
-      @Override
-      public String answer(InvocationOnMock invocation) throws Throwable {
-        return (String) invocation.getArguments()[0];
-      }
-    });
-    when(data_store_a.uidTable()).thenReturn(UID_TABLE);
+    when(data_store_a.uidTable()).thenReturn(MockBigtable.UID_TABLE);
     Tsdb1xBigtableUniqueIdStore uid = new Tsdb1xBigtableUniqueIdStore(data_store_a);
     
     when(executor.readRowsAsync(any(ReadRowsRequest.class)))
@@ -1262,13 +1232,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     when(data_store_a.executor()).thenReturn(executor);
     when(data_store_a.schema()).thenReturn(schema);
     when(data_store_a.tsdb()).thenReturn(tsdb);
-    when(data_store_a.getConfigKey(anyString())).then(new Answer<String>() {
-      @Override
-      public String answer(InvocationOnMock invocation) throws Throwable {
-        return (String) invocation.getArguments()[0];
-      }
-    });
-    when(data_store_a.uidTable()).thenReturn(UID_TABLE);
+    when(data_store_a.uidTable()).thenReturn(MockBigtable.UID_TABLE);
     Tsdb1xBigtableUniqueIdStore uid = new Tsdb1xBigtableUniqueIdStore(data_store_a);
     
     when(executor.readRowsAsync(any(ReadRowsRequest.class)))
@@ -1415,13 +1379,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     when(data_store_a.executor()).thenReturn(executor);
     when(data_store_a.schema()).thenReturn(schema);
     when(data_store_a.tsdb()).thenReturn(tsdb);
-    when(data_store_a.getConfigKey(anyString())).then(new Answer<String>() {
-      @Override
-      public String answer(InvocationOnMock invocation) throws Throwable {
-        return (String) invocation.getArguments()[0];
-      }
-    });
-    when(data_store_a.uidTable()).thenReturn(UID_TABLE);
+    when(data_store_a.uidTable()).thenReturn(MockBigtable.UID_TABLE);
     
     when(executor.readRowsAsync(any(ReadRowsRequest.class)))
       .thenReturn(mockGetResponse(null));
@@ -1469,13 +1427,7 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     when(data_store_a.executor()).thenReturn(executor);
     when(data_store_a.schema()).thenReturn(schema);
     when(data_store_a.tsdb()).thenReturn(tsdb);
-    when(data_store_a.getConfigKey(anyString())).then(new Answer<String>() {
-      @Override
-      public String answer(InvocationOnMock invocation) throws Throwable {
-        return (String) invocation.getArguments()[0];
-      }
-    });
-    when(data_store_a.uidTable()).thenReturn(UID_TABLE);
+    when(data_store_a.uidTable()).thenReturn(MockBigtable.UID_TABLE);
     
     when(executor.readRowsAsync(any(ReadRowsRequest.class)))
       .thenReturn(mockGetResponse(null))
@@ -2806,12 +2758,12 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
 
   private static void resetConfig() {
     final UnitTestConfiguration c = tsdb.config;
-    if (c.hasProperty(data_store.getConfigKey(
+    if (c.hasProperty(Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
         Tsdb1xBigtableUniqueIdStore.CONFIG_PREFIX.get(UniqueIdType.METRIC) + 
         Tsdb1xBigtableUniqueIdStore.CHARACTER_SET_KEY))) {
       // restore
       tsdb.config.override(
-          data_store.getConfigKey(
+          Tsdb1xBigtableDataStore.getConfigKey(data_store.id(), 
               Tsdb1xBigtableUniqueIdStore.CONFIG_PREFIX.get(UniqueIdType.METRIC) + 
               Tsdb1xBigtableUniqueIdStore.CHARACTER_SET_KEY), Tsdb1xBigtableUniqueIdStore.CHARACTER_SET_DEFAULT);
     }
@@ -2832,45 +2784,45 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
         UniqueIdAssignmentAuthorizer.class)).thenReturn(filter);
     
     // clean out the UID table.
-    storage.flushRow(UID_TABLE, ASSIGNED_ID_NAME.getBytes(Const.UTF8_CHARSET));
-    storage.flushRow(UID_TABLE, ASSIGNED_ID);
-    storage.flushRow(UID_TABLE, ASSIGNED_TAGV_NAME.getBytes(Const.UTF8_CHARSET));
-    storage.flushRow(UID_TABLE, ASSIGNED_TAGV);
-    storage.flushRow(UID_TABLE, UNASSIGNED_ID_NAME.getBytes(Const.UTF8_CHARSET));
-    storage.flushRow(UID_TABLE, UNASSIGNED_ID);
-    storage.flushRow(UID_TABLE, UNASSIGNED_TAGV_NAME.getBytes(Const.UTF8_CHARSET));
-    storage.flushRow(UID_TABLE, UNASSIGNED_TAGV);
+    storage.flushRow(MockBigtable.UID_TABLE, ASSIGNED_ID_NAME.getBytes(Const.UTF8_CHARSET));
+    storage.flushRow(MockBigtable.UID_TABLE, ASSIGNED_ID);
+    storage.flushRow(MockBigtable.UID_TABLE, ASSIGNED_TAGV_NAME.getBytes(Const.UTF8_CHARSET));
+    storage.flushRow(MockBigtable.UID_TABLE, ASSIGNED_TAGV);
+    storage.flushRow(MockBigtable.UID_TABLE, UNASSIGNED_ID_NAME.getBytes(Const.UTF8_CHARSET));
+    storage.flushRow(MockBigtable.UID_TABLE, UNASSIGNED_ID);
+    storage.flushRow(MockBigtable.UID_TABLE, UNASSIGNED_TAGV_NAME.getBytes(Const.UTF8_CHARSET));
+    storage.flushRow(MockBigtable.UID_TABLE, UNASSIGNED_TAGV);
     
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         ASSIGNED_ID_NAME.getBytes(Const.UTF8_CHARSET), 
         Tsdb1xBigtableUniqueIdStore.ID_FAMILY, 
         Tsdb1xBigtableUniqueIdStore.METRICS_QUAL, 
         ASSIGNED_ID);
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         ASSIGNED_ID, 
         Tsdb1xBigtableUniqueIdStore.NAME_FAMILY, 
         Tsdb1xBigtableUniqueIdStore.METRICS_QUAL, 
         ASSIGNED_ID_NAME.getBytes(Const.UTF8_CHARSET));
     
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         ASSIGNED_TAGV_NAME.getBytes(Const.UTF8_CHARSET), 
         Tsdb1xBigtableUniqueIdStore.ID_FAMILY, 
         Tsdb1xBigtableUniqueIdStore.TAG_VALUE_QUAL, 
         ASSIGNED_TAGV);
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         ASSIGNED_TAGV, 
         Tsdb1xBigtableUniqueIdStore.NAME_FAMILY, 
         Tsdb1xBigtableUniqueIdStore.TAG_VALUE_QUAL, 
         ASSIGNED_TAGV_NAME.getBytes(Const.UTF8_CHARSET));
     
     // set an atomic long for metrics and tag values
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         Tsdb1xBigtableUniqueIdStore.MAXID_ROW,
         Tsdb1xBigtableUniqueIdStore.ID_FAMILY,
         Tsdb1xBigtableUniqueIdStore.METRICS_QUAL, 
         Bytes.fromLong(42));
     
-    storage.addColumn(UID_TABLE, 
+    storage.addColumn(MockBigtable.UID_TABLE, 
         Tsdb1xBigtableUniqueIdStore.MAXID_ROW,
         Tsdb1xBigtableUniqueIdStore.ID_FAMILY,
         Tsdb1xBigtableUniqueIdStore.TAG_VALUE_QUAL, 
@@ -2903,15 +2855,9 @@ public class TestTsdb1xBigtableUniqueIdStore extends UTBase {
     when(data_store.tableNamer()).thenReturn(table_namer);
     when(session.getDataClient()).thenReturn(client);
     when(data_store.tsdb()).thenReturn(tsdb);
-    when(data_store.uidTable()).thenReturn(UID_TABLE);
+    when(data_store.uidTable()).thenReturn(MockBigtable.UID_TABLE);
     when(data_store.session()).thenReturn(session);
     when(data_store.executor()).thenReturn(executor);
-    when(data_store.getConfigKey(anyString())).then(new Answer<String>() {
-      @Override
-      public String answer(InvocationOnMock invocation) throws Throwable {
-        return (String) invocation.getArguments()[0];
-      }
-    });
     return data_store;
   }
 }

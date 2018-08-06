@@ -1500,7 +1500,7 @@ public class TestTsdb1xBigtableScanner extends UTBase {
   ResultScanner<FlatRow> metricStartStopScanner(final Series series, 
                                                 final byte[] metric) {
     ReadRowsRequest.Builder read_builder = ReadRowsRequest.newBuilder()
-        .setTableNameBytes(ByteStringer.wrap(DATA_TABLE));
+        .setTableNameBytes(ByteStringer.wrap(MockBigtable.DATA_TABLE));
     switch (series) {
     case SINGLE_SERIES:
       read_builder.setRows(RowSet.newBuilder()

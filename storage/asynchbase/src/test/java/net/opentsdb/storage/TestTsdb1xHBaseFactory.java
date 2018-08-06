@@ -39,7 +39,7 @@ import net.opentsdb.storage.schemas.tsdb1x.Schema;
 import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStore;
 
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({ Tsdb1xHBaseFactory.class })
+@PrepareForTest({ Tsdb1xBigtableFactory.class })
 public class TestTsdb1xHBaseFactory {
 
   private TSDB tsdb;
@@ -64,7 +64,7 @@ public class TestTsdb1xHBaseFactory {
   
   @Test
   public void ctor() throws Exception {
-    Tsdb1xHBaseFactory factory = new Tsdb1xHBaseFactory();
+    Tsdb1xBigtableFactory factory = new Tsdb1xBigtableFactory();
     assertNull(factory.tsdb());
     assertNull(factory.default_client);
     assertTrue(factory.clients.isEmpty());
@@ -72,7 +72,7 @@ public class TestTsdb1xHBaseFactory {
   
   @Test
   public void initialize() throws Exception {
-    Tsdb1xHBaseFactory factory = new Tsdb1xHBaseFactory();
+    Tsdb1xBigtableFactory factory = new Tsdb1xBigtableFactory();
     assertNull(factory.tsdb());
     assertNull(factory.default_client);
     assertTrue(factory.clients.isEmpty());
@@ -85,7 +85,7 @@ public class TestTsdb1xHBaseFactory {
   
   @Test
   public void newInstanceDefault() throws Exception {
-    Tsdb1xHBaseFactory factory = new Tsdb1xHBaseFactory();
+    Tsdb1xBigtableFactory factory = new Tsdb1xBigtableFactory();
     assertNull(factory.tsdb());
     assertNull(factory.default_client);
     assertTrue(factory.clients.isEmpty());
@@ -111,7 +111,7 @@ public class TestTsdb1xHBaseFactory {
   
   @Test
   public void newInstanceWithId() throws Exception {
-    Tsdb1xHBaseFactory factory = new Tsdb1xHBaseFactory();
+    Tsdb1xBigtableFactory factory = new Tsdb1xBigtableFactory();
     assertNull(factory.tsdb());
     assertNull(factory.default_client);
     assertTrue(factory.clients.isEmpty());
@@ -145,7 +145,7 @@ public class TestTsdb1xHBaseFactory {
   
   @Test
   public void shutdown() throws Exception {
-    Tsdb1xHBaseFactory factory = new Tsdb1xHBaseFactory();
+    Tsdb1xBigtableFactory factory = new Tsdb1xBigtableFactory();
     
     // empty, no-op
     assertNull(factory.shutdown().join());

@@ -499,7 +499,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
     assertEquals(1, scanners.scanners.get(0).length);
     assertEquals(1, storage.getScanners().size());
     ReadRowsRequest request = storage.getScanners().get(0).request();
-    assertArrayEquals(DATA_TABLE, request.getTableNameBytes().toByteArray());
+    assertArrayEquals(MockBigtable.DATA_TABLE, request.getTableNameBytes().toByteArray());
     assertArrayEquals(Tsdb1xBigtableDataStore.DATA_FAMILY, 
         request.getFilter().getFamilyNameRegexFilterBytes().toByteArray());
     assertArrayEquals(makeRowKey(METRIC_BYTES, START_TS - 900, null),
@@ -529,7 +529,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
     assertEquals(6, storage.getScanners().size());
     for (int i = 0; i < 6; i++) {
       ReadRowsRequest request = storage.getScanners().get(i).request();
-      assertArrayEquals(DATA_TABLE, request.getTableNameBytes().toByteArray());
+      assertArrayEquals(MockBigtable.DATA_TABLE, request.getTableNameBytes().toByteArray());
       assertArrayEquals(Tsdb1xBigtableDataStore.DATA_FAMILY, 
           request.getFilter().getFamilyNameRegexFilterBytes().toByteArray());
       assertArrayEquals(makeRowKey(com.google.common.primitives.Bytes.concat(
@@ -561,7 +561,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
     assertEquals(1, scanners.scanners.get(0).length);
     assertEquals(1, storage.getScanners().size());
     ReadRowsRequest request = storage.getScanners().get(0).request();
-    assertArrayEquals(DATA_TABLE, request.getTableNameBytes().toByteArray());
+    assertArrayEquals(MockBigtable.DATA_TABLE, request.getTableNameBytes().toByteArray());
     assertArrayEquals(makeRowKey(METRIC_BYTES, START_TS - 900, null),
         request.getRows().getRowRanges(0).getStartKeyClosed().toByteArray());
     assertArrayEquals(makeRowKey(METRIC_BYTES, END_TS - 900 + 3600, null),
@@ -592,7 +592,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
     assertEquals(6, storage.getScanners().size());
     for (int i = 0; i < 6; i++) {
       ReadRowsRequest request = storage.getScanners().get(i).request();
-      assertArrayEquals(DATA_TABLE, request.getTableNameBytes().toByteArray());
+      assertArrayEquals(MockBigtable.DATA_TABLE, request.getTableNameBytes().toByteArray());
       assertArrayEquals(makeRowKey(com.google.common.primitives.Bytes.concat(
           new byte[] { (byte) i }, METRIC_BYTES), START_TS - 900, null),
           request.getRows().getRowRanges(0).getStartKeyClosed().toByteArray());
@@ -664,7 +664,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
     assertEquals(1, scanners.scanners.get(0).length);
     assertEquals(1, storage.getScanners().size());
     ReadRowsRequest request = storage.getScanners().get(0).request();
-    assertArrayEquals(DATA_TABLE, request.getTableNameBytes().toByteArray());
+    assertArrayEquals(MockBigtable.DATA_TABLE, request.getTableNameBytes().toByteArray());
     assertArrayEquals(makeRowKey(METRIC_BYTES, START_TS - 900, TAGK_BYTES, new byte[3]),
         request.getRows().getRowRanges(0).getStartKeyClosed().toByteArray());
     assertArrayEquals(makeRowKey(METRIC_BYTES, END_TS - 900 + 3600, null),
@@ -692,7 +692,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
         storage.getScanners().get(0).request().getTableNameBytes().toByteArray());
     assertArrayEquals(table_namer.toTableNameStr("tsdb-30m").getBytes(Const.ASCII_CHARSET), 
         storage.getScanners().get(1).request().getTableNameBytes().toByteArray());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getScanners().get(2).request().getTableNameBytes().toByteArray());
     
     // 1h
@@ -813,7 +813,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
         storage.getScanners().get(0).request().getTableNameBytes().toByteArray());
     assertArrayEquals(table_namer.toTableNameStr("tsdb-agg-30m").getBytes(Const.ASCII_CHARSET), 
         storage.getScanners().get(1).request().getTableNameBytes().toByteArray());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getScanners().get(2).request().getTableNameBytes().toByteArray());
     
     // 1h
@@ -889,7 +889,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
     
     assertArrayEquals(table_namer.toTableNameStr("tsdb-1h").getBytes(Const.ASCII_CHARSET), 
         storage.getScanners().get(0).request().getTableNameBytes().toByteArray());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getScanners().get(1).request().getTableNameBytes().toByteArray());
     
     // 1h
@@ -975,7 +975,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
     // raw
     for (int i = 6; i < 12; i++) {
       ReadRowsRequest request = storage.getScanners().get(i).request();
-      assertArrayEquals(DATA_TABLE, request.getTableNameBytes().toByteArray());
+      assertArrayEquals(MockBigtable.DATA_TABLE, request.getTableNameBytes().toByteArray());
       assertArrayEquals(makeRowKey(com.google.common.primitives.Bytes.concat(
           new byte[] { (byte) (i - 6) }, METRIC_BYTES), START_TS - 900, null),
           request.getRows().getRowRanges(0).getStartKeyClosed().toByteArray());
@@ -1044,7 +1044,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
     // raw
     for (int i = 6; i < 12; i++) {
       ReadRowsRequest request = storage.getScanners().get(i).request();
-      assertArrayEquals(DATA_TABLE, request.getTableNameBytes().toByteArray());
+      assertArrayEquals(MockBigtable.DATA_TABLE, request.getTableNameBytes().toByteArray());
       assertArrayEquals(makeRowKey(com.google.common.primitives.Bytes.concat(
           new byte[] { (byte) (i - 6) }, METRIC_BYTES), START_TS - 900, null),
           request.getRows().getRowRanges(0).getStartKeyClosed().toByteArray());
@@ -1082,7 +1082,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
         storage.getScanners().get(0).request().getTableNameBytes().toByteArray());
     assertArrayEquals(table_namer.toTableNameStr("tsdb-30m").getBytes(Const.ASCII_CHARSET), 
         storage.getScanners().get(1).request().getTableNameBytes().toByteArray());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getScanners().get(2).request().getTableNameBytes().toByteArray());
     
     // 1h
@@ -1165,7 +1165,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
     
     assertArrayEquals(table_namer.toTableNameStr("tsdb-1h").getBytes(Const.ASCII_CHARSET), 
         storage.getScanners().get(0).request().getTableNameBytes().toByteArray());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getScanners().get(1).request().getTableNameBytes().toByteArray());
     
     // 1h
@@ -1267,7 +1267,7 @@ public class TestTsdb1xBigtableScanners extends UTBase {
     
     assertArrayEquals(table_namer.toTableNameStr("tsdb-1h").getBytes(Const.ASCII_CHARSET), 
         storage.getScanners().get(0).request().getTableNameBytes().toByteArray());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getScanners().get(1).request().getTableNameBytes().toByteArray());
     
     // 1h
@@ -2382,8 +2382,8 @@ public class TestTsdb1xBigtableScanners extends UTBase {
     when(tsdb.getConfig()).thenReturn(config);
     when(tsdb.getRegistry()).thenReturn(registry);
     when(data_store.tsdb()).thenReturn(tsdb);
-    when(data_store.dataTable()).thenReturn("tsdb".getBytes(Const.ASCII_CHARSET));
-    when(data_store.uidTable()).thenReturn(UID_TABLE);
+    when(data_store.dataTable()).thenReturn(MockBigtable.DATA_TABLE);
+    when(data_store.uidTable()).thenReturn(MockBigtable.UID_TABLE);
     when(session.getDataClient()).thenReturn(client);
     when(data_store.session()).thenReturn(session);
     when(data_store.tableNamer()).thenReturn(table_namer);

@@ -486,38 +486,38 @@ public class TestTsdb1xBigtableQueryNode extends UTBase {
     verifySpan("UT", UnitTestException.class);
   }
 
-//  @Test
-//  public void metaCBWithData() throws Exception {
-//    List<TimeSeriesId> ids = Lists.newArrayList();
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(TAGK_STRING, TAGV_STRING)
-//        .build());
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(TAGK_STRING, TAGV_B_STRING)
-//        .build());
-//    
-//    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
-//    when(meta_result.timeSeries()).thenReturn(ids);
-//    when(meta_result.result()).thenReturn(MetaResult.DATA);
-//    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
-//        data_store, context, "n1", source_config);
-//    node.initialize(null);
-//    
-//    node.new MetaCB(null).call(meta_result);
-//    
-//    Tsdb1xMultiGet gets = (Tsdb1xMultiGet) node.executor;
-//    assertEquals(2, gets.tsuids.size());
-//    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_BYTES), 
-//        gets.tsuids.get(0));
-//    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_B_BYTES), 
-//        gets.tsuids.get(1));
-//    assertTrue(node.initialized.get());
-//    verify(upstream_a, times(1)).onNext(any(QueryResult.class));
-//    verify(upstream_b, times(1)).onNext(any(QueryResult.class));
-//  }
-//  
+  @Test
+  public void metaCBWithData() throws Exception {
+    List<TimeSeriesId> ids = Lists.newArrayList();
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(TAGK_STRING, TAGV_STRING)
+        .build());
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(TAGK_STRING, TAGV_B_STRING)
+        .build());
+    
+    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
+    when(meta_result.timeSeries()).thenReturn(ids);
+    when(meta_result.result()).thenReturn(MetaResult.DATA);
+    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
+        data_store, context, "n1", source_config);
+    node.initialize(null);
+    
+    node.new MetaCB(null).call(meta_result);
+    
+    Tsdb1xBigtableMultiGet gets = (Tsdb1xBigtableMultiGet) node.executor;
+    assertEquals(2, gets.tsuids.size());
+    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_BYTES), 
+        gets.tsuids.get(0));
+    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_B_BYTES), 
+        gets.tsuids.get(1));
+    assertTrue(node.initialized.get());
+    verify(upstream_a, times(1)).onNext(any(QueryResult.class));
+    verify(upstream_b, times(1)).onNext(any(QueryResult.class));
+  }
+  
   @Test
   public void metaCBNoData() throws Exception {
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
@@ -592,327 +592,327 @@ public class TestTsdb1xBigtableQueryNode extends UTBase {
     verify(upstream_b, never()).onError(any(UnitTestException.class));
   }
   
-//  @Test
-//  public void resolveMetaStringOk() throws Exception {
-//    // Seems the PowerMockito won't mock down to the nested classes
-//    // so this will actually execute the query via multi-get.
-//    List<TimeSeriesId> ids = Lists.newArrayList();
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(TAGK_STRING, TAGV_STRING)
-//        .build());
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(TAGK_STRING, TAGV_B_STRING)
-//        .build());
-//    
-//    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
-//    when(meta_result.timeSeries()).thenReturn(ids);
-//    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
-//        data_store, context, "n1", source_config);
-//    node.initialize(null);
-//    
-//    node.resolveMeta(meta_result, null);
-//    
-//    Tsdb1xMultiGet gets = (Tsdb1xMultiGet) node.executor;
-//    assertEquals(2, gets.tsuids.size());
-//    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_BYTES), 
-//        gets.tsuids.get(0));
-//    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_B_BYTES), 
-//        gets.tsuids.get(1));
-//    assertTrue(node.initialized.get());
-//    verify(upstream_a, times(1)).onNext(any(QueryResult.class));
-//    verify(upstream_b, times(1)).onNext(any(QueryResult.class));
-//  }
-//  
-//  @Test
-//  public void resolveMetaStringMetricNSUN() throws Exception {
-//    // Seems the PowerMockito won't mock down to the nested classes
-//    // so this will actually execute the query via multi-get.
-//    List<TimeSeriesId> ids = Lists.newArrayList();
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(NSUN_METRIC)
-//        .addTags(TAGK_STRING, TAGV_STRING)
-//        .build());
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(NSUN_METRIC)
-//        .addTags(TAGK_STRING, TAGV_B_STRING)
-//        .build());
-//    
-//    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
-//    when(meta_result.timeSeries()).thenReturn(ids);
-//    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
-//        data_store, context, "n1", source_config);
-//    node.initialize(null);
-//    
-//    node.resolveMeta(meta_result, null);
-//    
-//    assertNull(node.executor);
-//    assertFalse(node.initialized.get());
-//    verify(upstream_a, times(1)).onError(any(NoSuchUniqueName.class));
-//    verify(upstream_b, times(1)).onError(any(NoSuchUniqueName.class));
-//  }
-//  
-//  @Test
-//  public void resolveMetaStringTagkNSUN() throws Exception {
-//    // Seems the PowerMockito won't mock down to the nested classes
-//    // so this will actually execute the query via multi-get.
-//    List<TimeSeriesId> ids = Lists.newArrayList();
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(NSUN_TAGK, TAGV_STRING)
-//        .build());
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(TAGK_STRING, TAGV_B_STRING)
-//        .build());
-//    
-//    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
-//    when(meta_result.timeSeries()).thenReturn(ids);
-//    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
-//        data_store, context, "n1", source_config);
-//    node.initialize(null);
-//    
-//    node.resolveMeta(meta_result, null);
-//    
-//    assertNull(node.executor);
-//    assertFalse(node.initialized.get());
-//    verify(upstream_a, times(1)).onError(any(NoSuchUniqueName.class));
-//    verify(upstream_b, times(1)).onError(any(NoSuchUniqueName.class));
-//  }
-//  
-//  @Test
-//  public void resolveMetaStringTagkNSUNAllowed() throws Exception {
-//    // Seems the PowerMockito won't mock down to the nested classes
-//    // so this will actually execute the query via multi-get.
-//    query = SemanticQuery.newBuilder()
-//        .setMode(QueryMode.SINGLE)
-//        .setStart(Integer.toString(START_TS))
-//        .setEnd(Integer.toString(END_TS))
-//        .setExecutionGraph(ExecutionGraph.newBuilder()
-//            .setId("graph")
-//            .addNode(ExecutionGraphNode.newBuilder()
-//                .setId("datasource"))
-//            .build())
-//        .build();
-//    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
-//        .setQuery(query)
-//        .setMetric(MetricLiteralFilter.newBuilder()
-//            .setMetric(METRIC_STRING)
-//            .build())
-//        .addOverride(Tsdb1xBigtableDataStore.SKIP_NSUN_TAGK_KEY, "true")
-//        .setId("m1")
-//        .build();
-//    
-//    List<TimeSeriesId> ids = Lists.newArrayList();
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(NSUN_TAGK, TAGV_STRING)
-//        .build());
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(TAGK_STRING, TAGV_B_STRING)
-//        .build());
-//    
-//    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
-//    when(meta_result.timeSeries()).thenReturn(ids);
-//    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
-//        data_store, context, "n1", source_config);
-//    node.initialize(null);
-//    
-//    node.resolveMeta(meta_result, null);
-//    
-//    Tsdb1xMultiGet gets = (Tsdb1xMultiGet) node.executor;
-//    assertEquals(1, gets.tsuids.size());
-//    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_B_BYTES), 
-//        gets.tsuids.get(0));
-//    assertTrue(node.initialized.get());
-//    verify(upstream_a, times(1)).onNext(any(QueryResult.class));
-//    verify(upstream_b, times(1)).onNext(any(QueryResult.class));
-//  }
-//
-//  @Test
-//  public void resolveMetaStringTagvNSUN() throws Exception {
-//    // Seems the PowerMockito won't mock down to the nested classes
-//    // so this will actually execute the query via multi-get.
-//    List<TimeSeriesId> ids = Lists.newArrayList();
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(TAGK_STRING, TAGV_STRING)
-//        .build());
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(TAGK_STRING, NSUN_TAGV)
-//        .build());
-//    
-//    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
-//    when(meta_result.timeSeries()).thenReturn(ids);
-//    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
-//        data_store, context, "n1", source_config);
-//    node.initialize(null);
-//    
-//    node.resolveMeta(meta_result, null);
-//    
-//    assertNull(node.executor);
-//    assertFalse(node.initialized.get());
-//    verify(upstream_a, times(1)).onError(any(NoSuchUniqueName.class));
-//    verify(upstream_b, times(1)).onError(any(NoSuchUniqueName.class));
-//  }
-//  
-//  @Test
-//  public void resolveMetaStringTagvNSUNAllowed() throws Exception {
-//    // Seems the PowerMockito won't mock down to the nested classes
-//    // so this will actually execute the query via multi-get.
-//    query = SemanticQuery.newBuilder()
-//        .setMode(QueryMode.SINGLE)
-//        .setStart(Integer.toString(START_TS))
-//        .setEnd(Integer.toString(END_TS))
-//        .setExecutionGraph(ExecutionGraph.newBuilder()
-//            .setId("graph")
-//            .addNode(ExecutionGraphNode.newBuilder()
-//                .setId("datasource"))
-//            .build())
-//        .build();
-//    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
-//        .setQuery(query)
-//        .setMetric(MetricLiteralFilter.newBuilder()
-//            .setMetric(METRIC_STRING)
-//            .build())
-//        .addOverride(Tsdb1xBigtableDataStore.SKIP_NSUN_TAGV_KEY, "true")
-//        .setId("m1")
-//        .build();
-//    
-//    List<TimeSeriesId> ids = Lists.newArrayList();
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(TAGK_STRING, TAGV_STRING)
-//        .build());
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(TAGK_STRING, NSUN_TAGV)
-//        .build());
-//    
-//    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
-//    when(meta_result.timeSeries()).thenReturn(ids);
-//    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
-//        data_store, context, "n1", source_config);
-//    node.initialize(null);
-//    
-//    node.resolveMeta(meta_result, null);
-//    
-//    Tsdb1xMultiGet gets = (Tsdb1xMultiGet) node.executor;
-//    assertEquals(1, gets.tsuids.size());
-//    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_BYTES), 
-//        gets.tsuids.get(0));
-//    assertTrue(node.initialized.get());
-//    verify(upstream_a, times(1)).onNext(any(QueryResult.class));
-//    verify(upstream_b, times(1)).onNext(any(QueryResult.class));
-//  }
-//
-//  @Test
-//  public void resolveMetaStringTwoMetrics() throws Exception {
-//    // Seems the PowerMockito won't mock down to the nested classes
-//    // so this will actually execute the query via multi-get.
-//    List<TimeSeriesId> ids = Lists.newArrayList();
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_STRING)
-//        .addTags(TAGK_STRING, TAGV_STRING)
-//        .build());
-//    ids.add(BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_B_STRING)
-//        .addTags(TAGK_STRING, TAGV_B_STRING)
-//        .build());
-//    
-//    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
-//    when(meta_result.timeSeries()).thenReturn(ids);
-//    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
-//        data_store, context, "n1", source_config);
-//    node.initialize(null);
-//    
-//    try {
-//      node.resolveMeta(meta_result, null);
-//      fail("Expected IllegalDataException");
-//    } catch (IllegalDataException e) { }
-//    
-//    assertNull(node.executor);
-//    assertFalse(node.initialized.get());
-//    verify(upstream_a, never()).onError(any());
-//    verify(upstream_b, never()).onError(any());
-//  }
-//
-//  @Test
-//  public void resolveMetaBytesOK() throws Exception {
-//    // Seems the PowerMockito won't mock down to the nested classes
-//    // so this will actually execute the query via multi-get.
-//    List<TimeSeriesId> ids = Lists.newArrayList();
-//    ids.add(BaseTimeSeriesByteId.newBuilder(schema)
-//        .setMetric(METRIC_BYTES)
-//        .addTags(TAGK_BYTES, TAGV_BYTES)
-//        .build());
-//    ids.add(BaseTimeSeriesByteId.newBuilder(schema)
-//        .setMetric(METRIC_BYTES)
-//        .addTags(TAGK_BYTES, TAGV_B_BYTES)
-//        .build());
-//    
-//    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
-//    when(meta_result.timeSeries()).thenReturn(ids);
-//    when(meta_result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
-//      @Override
-//      public TypeToken<?> answer(InvocationOnMock invocation) throws Throwable {
-//        return Const.TS_BYTE_ID;
-//      }
-//    });
-//    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
-//        data_store, context, "n1", source_config);
-//    node.initialize(null);
-//    
-//    node.resolveMeta(meta_result, null);
-//    
-//    Tsdb1xMultiGet gets = (Tsdb1xMultiGet) node.executor;
-//    assertEquals(2, gets.tsuids.size());
-//    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_BYTES), 
-//        gets.tsuids.get(0));
-//    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_B_BYTES), 
-//        gets.tsuids.get(1));
-//    assertTrue(node.initialized.get());
-//    verify(upstream_a, times(1)).onNext(any(QueryResult.class));
-//    verify(upstream_b, times(1)).onNext(any(QueryResult.class));
-//  }
-//  
-//  @Test
-//  public void resolveMetaBytesTwoMetrics() throws Exception {
-//    // Seems the PowerMockito won't mock down to the nested classes
-//    // so this will actually execute the query via multi-get.
-//    List<TimeSeriesId> ids = Lists.newArrayList();
-//    ids.add(BaseTimeSeriesByteId.newBuilder(schema)
-//        .setMetric(METRIC_BYTES)
-//        .addTags(TAGK_BYTES, TAGV_BYTES)
-//        .build());
-//    ids.add(BaseTimeSeriesByteId.newBuilder(schema)
-//        .setMetric(METRIC_B_BYTES)
-//        .addTags(TAGK_BYTES, TAGV_B_BYTES)
-//        .build());
-//    
-//    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
-//    when(meta_result.timeSeries()).thenReturn(ids);
-//    when(meta_result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
-//      @Override
-//      public TypeToken<?> answer(InvocationOnMock invocation) throws Throwable {
-//        return Const.TS_BYTE_ID;
-//      }
-//    });
-//    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
-//        data_store, context, "n1", source_config);
-//    node.initialize(null);
-//    
-//    try {
-//      node.resolveMeta(meta_result, null);
-//      fail("Expected IllegalDataException");
-//    } catch (IllegalDataException e) { }
-//    
-//    assertNull(node.executor);
-//    assertFalse(node.initialized.get());
-//    verify(upstream_a, never()).onError(any());
-//    verify(upstream_b, never()).onError(any());
-//  }
+  @Test
+  public void resolveMetaStringOk() throws Exception {
+    // Seems the PowerMockito won't mock down to the nested classes
+    // so this will actually execute the query via multi-get.
+    List<TimeSeriesId> ids = Lists.newArrayList();
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(TAGK_STRING, TAGV_STRING)
+        .build());
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(TAGK_STRING, TAGV_B_STRING)
+        .build());
+    
+    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
+    when(meta_result.timeSeries()).thenReturn(ids);
+    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
+        data_store, context, "n1", source_config);
+    node.initialize(null);
+    
+    node.resolveMeta(meta_result, null);
+    
+    Tsdb1xBigtableMultiGet gets = (Tsdb1xBigtableMultiGet) node.executor;
+    assertEquals(2, gets.tsuids.size());
+    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_BYTES), 
+        gets.tsuids.get(0));
+    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_B_BYTES), 
+        gets.tsuids.get(1));
+    assertTrue(node.initialized.get());
+    verify(upstream_a, times(1)).onNext(any(QueryResult.class));
+    verify(upstream_b, times(1)).onNext(any(QueryResult.class));
+  }
+  
+  @Test
+  public void resolveMetaStringMetricNSUN() throws Exception {
+    // Seems the PowerMockito won't mock down to the nested classes
+    // so this will actually execute the query via multi-get.
+    List<TimeSeriesId> ids = Lists.newArrayList();
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(NSUN_METRIC)
+        .addTags(TAGK_STRING, TAGV_STRING)
+        .build());
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(NSUN_METRIC)
+        .addTags(TAGK_STRING, TAGV_B_STRING)
+        .build());
+    
+    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
+    when(meta_result.timeSeries()).thenReturn(ids);
+    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
+        data_store, context, "n1", source_config);
+    node.initialize(null);
+    
+    node.resolveMeta(meta_result, null);
+    
+    assertNull(node.executor);
+    assertFalse(node.initialized.get());
+    verify(upstream_a, times(1)).onError(any(NoSuchUniqueName.class));
+    verify(upstream_b, times(1)).onError(any(NoSuchUniqueName.class));
+  }
+  
+  @Test
+  public void resolveMetaStringTagkNSUN() throws Exception {
+    // Seems the PowerMockito won't mock down to the nested classes
+    // so this will actually execute the query via multi-get.
+    List<TimeSeriesId> ids = Lists.newArrayList();
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(NSUN_TAGK, TAGV_STRING)
+        .build());
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(TAGK_STRING, TAGV_B_STRING)
+        .build());
+    
+    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
+    when(meta_result.timeSeries()).thenReturn(ids);
+    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
+        data_store, context, "n1", source_config);
+    node.initialize(null);
+    
+    node.resolveMeta(meta_result, null);
+    
+    assertNull(node.executor);
+    assertFalse(node.initialized.get());
+    verify(upstream_a, times(1)).onError(any(NoSuchUniqueName.class));
+    verify(upstream_b, times(1)).onError(any(NoSuchUniqueName.class));
+  }
+  
+  @Test
+  public void resolveMetaStringTagkNSUNAllowed() throws Exception {
+    // Seems the PowerMockito won't mock down to the nested classes
+    // so this will actually execute the query via multi-get.
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
+        .setStart(Integer.toString(START_TS))
+        .setEnd(Integer.toString(END_TS))
+        .setExecutionGraph(ExecutionGraph.newBuilder()
+            .setId("graph")
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("datasource"))
+            .build())
+        .build();
+    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
+        .setQuery(query)
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric(METRIC_STRING)
+            .build())
+        .addOverride(Tsdb1xBigtableDataStore.SKIP_NSUN_TAGK_KEY, "true")
+        .setId("m1")
+        .build();
+    
+    List<TimeSeriesId> ids = Lists.newArrayList();
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(NSUN_TAGK, TAGV_STRING)
+        .build());
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(TAGK_STRING, TAGV_B_STRING)
+        .build());
+    
+    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
+    when(meta_result.timeSeries()).thenReturn(ids);
+    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
+        data_store, context, "n1", source_config);
+    node.initialize(null);
+    
+    node.resolveMeta(meta_result, null);
+    
+    Tsdb1xBigtableMultiGet gets = (Tsdb1xBigtableMultiGet) node.executor;
+    assertEquals(1, gets.tsuids.size());
+    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_B_BYTES), 
+        gets.tsuids.get(0));
+    assertTrue(node.initialized.get());
+    verify(upstream_a, times(1)).onNext(any(QueryResult.class));
+    verify(upstream_b, times(1)).onNext(any(QueryResult.class));
+  }
+
+  @Test
+  public void resolveMetaStringTagvNSUN() throws Exception {
+    // Seems the PowerMockito won't mock down to the nested classes
+    // so this will actually execute the query via multi-get.
+    List<TimeSeriesId> ids = Lists.newArrayList();
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(TAGK_STRING, TAGV_STRING)
+        .build());
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(TAGK_STRING, NSUN_TAGV)
+        .build());
+    
+    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
+    when(meta_result.timeSeries()).thenReturn(ids);
+    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
+        data_store, context, "n1", source_config);
+    node.initialize(null);
+    
+    node.resolveMeta(meta_result, null);
+    
+    assertNull(node.executor);
+    assertFalse(node.initialized.get());
+    verify(upstream_a, times(1)).onError(any(NoSuchUniqueName.class));
+    verify(upstream_b, times(1)).onError(any(NoSuchUniqueName.class));
+  }
+  
+  @Test
+  public void resolveMetaStringTagvNSUNAllowed() throws Exception {
+    // Seems the PowerMockito won't mock down to the nested classes
+    // so this will actually execute the query via multi-get.
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
+        .setStart(Integer.toString(START_TS))
+        .setEnd(Integer.toString(END_TS))
+        .setExecutionGraph(ExecutionGraph.newBuilder()
+            .setId("graph")
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("datasource"))
+            .build())
+        .build();
+    source_config = (QuerySourceConfig) QuerySourceConfig.newBuilder()
+        .setQuery(query)
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric(METRIC_STRING)
+            .build())
+        .addOverride(Tsdb1xBigtableDataStore.SKIP_NSUN_TAGV_KEY, "true")
+        .setId("m1")
+        .build();
+    
+    List<TimeSeriesId> ids = Lists.newArrayList();
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(TAGK_STRING, TAGV_STRING)
+        .build());
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(TAGK_STRING, NSUN_TAGV)
+        .build());
+    
+    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
+    when(meta_result.timeSeries()).thenReturn(ids);
+    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
+        data_store, context, "n1", source_config);
+    node.initialize(null);
+    
+    node.resolveMeta(meta_result, null);
+    
+    Tsdb1xBigtableMultiGet gets = (Tsdb1xBigtableMultiGet) node.executor;
+    assertEquals(1, gets.tsuids.size());
+    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_BYTES), 
+        gets.tsuids.get(0));
+    assertTrue(node.initialized.get());
+    verify(upstream_a, times(1)).onNext(any(QueryResult.class));
+    verify(upstream_b, times(1)).onNext(any(QueryResult.class));
+  }
+
+  @Test
+  public void resolveMetaStringTwoMetrics() throws Exception {
+    // Seems the PowerMockito won't mock down to the nested classes
+    // so this will actually execute the query via multi-get.
+    List<TimeSeriesId> ids = Lists.newArrayList();
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_STRING)
+        .addTags(TAGK_STRING, TAGV_STRING)
+        .build());
+    ids.add(BaseTimeSeriesStringId.newBuilder()
+        .setMetric(METRIC_B_STRING)
+        .addTags(TAGK_STRING, TAGV_B_STRING)
+        .build());
+    
+    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
+    when(meta_result.timeSeries()).thenReturn(ids);
+    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
+        data_store, context, "n1", source_config);
+    node.initialize(null);
+    
+    try {
+      node.resolveMeta(meta_result, null);
+      fail("Expected IllegalDataException");
+    } catch (IllegalDataException e) { }
+    
+    assertNull(node.executor);
+    assertFalse(node.initialized.get());
+    verify(upstream_a, never()).onError(any());
+    verify(upstream_b, never()).onError(any());
+  }
+
+  @Test
+  public void resolveMetaBytesOK() throws Exception {
+    // Seems the PowerMockito won't mock down to the nested classes
+    // so this will actually execute the query via multi-get.
+    List<TimeSeriesId> ids = Lists.newArrayList();
+    ids.add(BaseTimeSeriesByteId.newBuilder(schema)
+        .setMetric(METRIC_BYTES)
+        .addTags(TAGK_BYTES, TAGV_BYTES)
+        .build());
+    ids.add(BaseTimeSeriesByteId.newBuilder(schema)
+        .setMetric(METRIC_BYTES)
+        .addTags(TAGK_BYTES, TAGV_B_BYTES)
+        .build());
+    
+    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
+    when(meta_result.timeSeries()).thenReturn(ids);
+    when(meta_result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
+      @Override
+      public TypeToken<?> answer(InvocationOnMock invocation) throws Throwable {
+        return Const.TS_BYTE_ID;
+      }
+    });
+    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
+        data_store, context, "n1", source_config);
+    node.initialize(null);
+    
+    node.resolveMeta(meta_result, null);
+    
+    Tsdb1xBigtableMultiGet gets = (Tsdb1xBigtableMultiGet) node.executor;
+    assertEquals(2, gets.tsuids.size());
+    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_BYTES), 
+        gets.tsuids.get(0));
+    assertArrayEquals(Bytes.concat(METRIC_BYTES, TAGK_BYTES, TAGV_B_BYTES), 
+        gets.tsuids.get(1));
+    assertTrue(node.initialized.get());
+    verify(upstream_a, times(1)).onNext(any(QueryResult.class));
+    verify(upstream_b, times(1)).onNext(any(QueryResult.class));
+  }
+  
+  @Test
+  public void resolveMetaBytesTwoMetrics() throws Exception {
+    // Seems the PowerMockito won't mock down to the nested classes
+    // so this will actually execute the query via multi-get.
+    List<TimeSeriesId> ids = Lists.newArrayList();
+    ids.add(BaseTimeSeriesByteId.newBuilder(schema)
+        .setMetric(METRIC_BYTES)
+        .addTags(TAGK_BYTES, TAGV_BYTES)
+        .build());
+    ids.add(BaseTimeSeriesByteId.newBuilder(schema)
+        .setMetric(METRIC_B_BYTES)
+        .addTags(TAGK_BYTES, TAGV_B_BYTES)
+        .build());
+    
+    MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
+    when(meta_result.timeSeries()).thenReturn(ids);
+    when(meta_result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
+      @Override
+      public TypeToken<?> answer(InvocationOnMock invocation) throws Throwable {
+        return Const.TS_BYTE_ID;
+      }
+    });
+    Tsdb1xBigtableQueryNode node = new Tsdb1xBigtableQueryNode(
+        data_store, context, "n1", source_config);
+    node.initialize(null);
+    
+    try {
+      node.resolveMeta(meta_result, null);
+      fail("Expected IllegalDataException");
+    } catch (IllegalDataException e) { }
+    
+    assertNull(node.executor);
+    assertFalse(node.initialized.get());
+    verify(upstream_a, never()).onError(any());
+    verify(upstream_b, never()).onError(any());
+  }
 }

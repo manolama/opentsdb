@@ -199,7 +199,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
     assertNull(mget.fallback_timestamp);
     assertEquals(-1, mget.rollup_index);
     assertEquals(1, mget.tables.size());
-    assertArrayEquals(DATA_TABLE, mget.tables.get(0));
+    assertArrayEquals(MockBigtable.DATA_TABLE, mget.tables.get(0));
     assertEquals(0, mget.outstanding);
     assertFalse(mget.has_failed);
     assertNull(mget.current_result);
@@ -256,7 +256,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
     assertNull(mget.fallback_timestamp);
     assertEquals(-1, mget.rollup_index);
     assertEquals(1, mget.tables.size());
-    assertArrayEquals(DATA_TABLE, mget.tables.get(0));
+    assertArrayEquals(MockBigtable.DATA_TABLE, mget.tables.get(0));
     assertEquals(0, mget.outstanding);
     assertFalse(mget.has_failed);
     assertNull(mget.current_result);
@@ -300,7 +300,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
         mget.tables.get(0));
     assertArrayEquals(table_namer.toTableNameStr("tsdb-30m").getBytes(), 
         mget.tables.get(1));
-    assertArrayEquals(DATA_TABLE, mget.tables.get(2));
+    assertArrayEquals(MockBigtable.DATA_TABLE, mget.tables.get(2));
     assertEquals(0, mget.rollup_index);
     assertEquals(START_TS - 900, mget.timestamp.epoch());
     assertNull(mget.fallback_timestamp);
@@ -348,7 +348,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
         mget.tables.get(0));
     assertArrayEquals(table_namer.toTableNameStr("tsdb-agg-30m").getBytes(), 
         mget.tables.get(1));
-    assertArrayEquals(DATA_TABLE, mget.tables.get(2));
+    assertArrayEquals(MockBigtable.DATA_TABLE, mget.tables.get(2));
     assertEquals(0, mget.rollup_index);
     assertEquals(START_TS - 900, mget.timestamp.epoch());
     assertNull(mget.fallback_timestamp);
@@ -409,7 +409,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
         mget.tables.get(0));
     assertArrayEquals(table_namer.toTableNameStr("tsdb-30m").getBytes(), 
         mget.tables.get(1));
-    assertArrayEquals(DATA_TABLE, mget.tables.get(2));
+    assertArrayEquals(MockBigtable.DATA_TABLE, mget.tables.get(2));
     assertEquals(0, mget.rollup_index);
     assertEquals(START_TS - 900, mget.timestamp.epoch());
     assertNull(mget.fallback_timestamp);
@@ -436,7 +436,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
         mget.tables.get(0));
     assertArrayEquals(table_namer.toTableNameStr("tsdb-30m").getBytes(), 
         mget.tables.get(1));
-    assertArrayEquals(DATA_TABLE, mget.tables.get(2));
+    assertArrayEquals(MockBigtable.DATA_TABLE, mget.tables.get(2));
     assertEquals(0, mget.rollup_index);
     assertEquals(START_TS - 900, mget.timestamp.epoch());
     assertNull(mget.fallback_timestamp);
@@ -831,7 +831,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
         storage.getLastMultiGets().getRows().getRowKeys(2).toByteArray());
     assertArrayEquals(makeRowKey(METRIC_B_BYTES, START_TS, TAGK_BYTES, TAGV_B_BYTES), 
         storage.getLastMultiGets().getRows().getRowKeys(3).toByteArray());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getLastMultiGets().getTableNameBytes().toByteArray());
     assertSame(mget.filter, storage.getLastMultiGets().getFilter());
     
@@ -846,7 +846,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
         storage.getLastMultiGets().getRows().getRowKeys(1).toByteArray());
     assertArrayEquals(makeRowKey(METRIC_B_BYTES, START_TS, TAGK_BYTES, TAGV_BYTES), 
         storage.getLastMultiGets().getRows().getRowKeys(2).toByteArray());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getLastMultiGets().getTableNameBytes().toByteArray());
     assertSame(mget.filter, storage.getLastMultiGets().getFilter());
     
@@ -856,7 +856,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
     assertEquals(1, storage.getLastMultiGets().getRows().getRowKeysCount());
     assertArrayEquals(makeRowKey(METRIC_B_BYTES, START_TS, TAGK_BYTES, TAGV_B_BYTES), 
         storage.getLastMultiGets().getRows().getRowKeys(0).toByteArray());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getLastMultiGets().getTableNameBytes().toByteArray());
     assertSame(mget.filter, storage.getLastMultiGets().getFilter());
     
@@ -888,7 +888,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
     mget.rollup_index = 2;
     mget.nextBatch(0, START_TS, null);
     assertEquals(4, storage.getLastMultiGets().getRows().getRowKeysCount());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getLastMultiGets().getTableNameBytes().toByteArray());
     assertSame(mget.filter, storage.getLastMultiGets().getFilter());
     
@@ -911,7 +911,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
         storage.getLastMultiGets().getRows().getRowKeys(2).toByteArray());
     assertArrayEquals(makeRowKey(Bytes.concat(new byte[1], METRIC_B_BYTES), START_TS, TAGK_BYTES, TAGV_B_BYTES), 
         storage.getLastMultiGets().getRows().getRowKeys(3).toByteArray());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getLastMultiGets().getTableNameBytes().toByteArray());
     assertSame(mget.filter, storage.getLastMultiGets().getFilter());
   }
@@ -937,7 +937,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
         storage.getLastMultiGets().getRows().getRowKeys(2).toByteArray());
     assertArrayEquals(makeRowKey(Bytes.concat(new byte[1], METRIC_B_BYTES), START_TS, TAGK_BYTES, TAGV_B_BYTES), 
         storage.getLastMultiGets().getRows().getRowKeys(3).toByteArray());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getLastMultiGets().getTableNameBytes().toByteArray());
     assertSame(mget.filter, storage.getLastMultiGets().getFilter());
   }
@@ -964,7 +964,7 @@ public class TestTsdb1xBigtableMultiGet extends UTBase {
         storage.getLastMultiGets().getRows().getRowKeys(2).toByteArray());
     assertArrayEquals(makeRowKey(Bytes.concat(new byte[1], METRIC_B_BYTES), 0, TAGK_BYTES, TAGV_B_BYTES), 
         storage.getLastMultiGets().getRows().getRowKeys(3).toByteArray());
-    assertArrayEquals(DATA_TABLE, 
+    assertArrayEquals(MockBigtable.DATA_TABLE, 
         storage.getLastMultiGets().getTableNameBytes().toByteArray());
     assertSame(mget.filter, storage.getLastMultiGets().getFilter());
   }

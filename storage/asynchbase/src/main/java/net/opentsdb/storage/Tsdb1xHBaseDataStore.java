@@ -115,7 +115,7 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
   private final boolean enable_appends;
   private final boolean enable_appends_coproc;
   
-  public Tsdb1xHBaseDataStore(final Tsdb1xHBaseFactory factory,
+  public Tsdb1xHBaseDataStore(final Tsdb1xBigtableFactory factory,
                               final String id,
                               final Schema schema) {
     this.tsdb = factory.tsdb();

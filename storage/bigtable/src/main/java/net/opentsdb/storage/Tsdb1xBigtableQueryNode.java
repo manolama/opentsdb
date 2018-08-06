@@ -621,22 +621,22 @@ public class Tsdb1xBigtableQueryNode implements SourceNode {
         tsuids.add(tsuid);
       }
       
-//      synchronized (this) {
-//        executor = new Tsdb1xMultiGet(Tsdb1xBigtableQueryNode.this, config, tsuids);
-//        if (initialized.compareAndSet(false, true)) {
-//          if (child != null) {
-//            child.setSuccessTags()
-//                 .finish();
-//          }
-//          executor.fetchNext(new Tsdb1xBigtableQueryResult(
-//              sequence_id.incrementAndGet(), 
-//              Tsdb1xBigtableQueryNode.this, 
-//              parent.schema()), 
-//          span);
-//        } else {
-//          LOG.error("WTF? We lost an initialization race??");
-//        }
-//      }
+      synchronized (this) {
+        executor = new Tsdb1xBigtableMultiGet(Tsdb1xBigtableQueryNode.this, config, tsuids);
+        if (initialized.compareAndSet(false, true)) {
+          if (child != null) {
+            child.setSuccessTags()
+                 .finish();
+          }
+          executor.fetchNext(new Tsdb1xBigtableQueryResult(
+              sequence_id.incrementAndGet(), 
+              Tsdb1xBigtableQueryNode.this, 
+              parent.schema()), 
+          span);
+        } else {
+          LOG.error("WTF? We lost an initialization race??");
+        }
+      }
     } else {
       final String metric = ((TimeSeriesStringId) 
           result.timeSeries().get(0)).metric();
@@ -817,25 +817,25 @@ public class Tsdb1xBigtableQueryNode implements SourceNode {
           }
           
           // TODO - what happens if we didn't resolve anything???
-//          synchronized (this) {
-//            executor = new Tsdb1xMultiGet(
-//                Tsdb1xBigtableQueryNode.this, 
-//                config, 
-//                tsuids);
-//            if (initialized.compareAndSet(false, true)) {
-//              if (child != null) {
-//                child.setSuccessTags()
-//                     .finish();
-//              }
-//              executor.fetchNext(new Tsdb1xBigtableQueryResult(
-//                  sequence_id.incrementAndGet(), 
-//                  Tsdb1xBigtableQueryNode.this, 
-//                  parent.schema()), 
-//              span);
-//            } else {
-//              LOG.error("WTF? We lost an initialization race??");
-//            }
-//          }
+          synchronized (this) {
+            executor = new Tsdb1xBigtableMultiGet(
+                Tsdb1xBigtableQueryNode.this, 
+                config, 
+                tsuids);
+            if (initialized.compareAndSet(false, true)) {
+              if (child != null) {
+                child.setSuccessTags()
+                     .finish();
+              }
+              executor.fetchNext(new Tsdb1xBigtableQueryResult(
+                  sequence_id.incrementAndGet(), 
+                  Tsdb1xBigtableQueryNode.this, 
+                  parent.schema()), 
+              span);
+            } else {
+              LOG.error("WTF? We lost an initialization race??");
+            }
+          }
           
           return null;
         }
