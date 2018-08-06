@@ -15,17 +15,11 @@
 package net.opentsdb.storage;
 
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyBoolean;
-import static org.mockito.Matchers.anyInt;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
-import static org.powermock.api.mockito.PowerMockito.mock;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -80,7 +74,6 @@ import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.ByteString;
-import com.stumbleupon.async.Deferred;
 
 /**
  * Mock HBase implementation useful in testing calls to and from storage with
@@ -134,7 +127,7 @@ public final class MockBigtable {
   private List<MockScanner> scanners = Lists.newArrayList();
   
   /** The multi-gets caught by this instance. */
-  //private List<List<GetRequest>> multi_gets = Lists.newArrayList();
+  private List<ReadRowsRequest> multi_gets = Lists.newArrayList();
 
   /** The default family for shortcuts */
   private byte[] default_family;
@@ -188,8 +181,8 @@ public final class MockBigtable {
           @Override
           public ResultScanner answer(final InvocationOnMock invocation)
               throws Throwable {
-            return new MockScanner((ReadRowsRequest) 
-                invocation.getArguments()[0]);
+            return spy(new MockScanner((ReadRowsRequest) 
+                invocation.getArguments()[0]));
           }
       });
     
@@ -701,16 +694,20 @@ public final class MockBigtable {
     scanners.clear();
   }
   
-//  /** @return The list of multi-gets sent to this mock client. */
-//  public List<List<GetRequest>> getMultiGets() {
-//    return multi_gets;
-//  }
-//  
-//  /** @return The last set of get requests sent to this mock client. */
-//  public List<GetRequest> getLastMultiGets() {
-//    return multi_gets.get(multi_gets.size() - 1);
-//  }
-//  
+  /** @return The list of multi-gets sent to this mock client. */
+  public List<ReadRowsRequest> getMultiGets() {
+    return multi_gets;
+  }
+  
+  /** @return The last set of get requests sent to this mock client. */
+  public ReadRowsRequest getLastMultiGets() {
+    return multi_gets.get(multi_gets.size() - 1);
+  }
+  
+  public void clearMultiGets() {
+    multi_gets.clear();
+  }
+  
   /**
    * Return the mocked TSDB object to use for HBaseClient access
    * @return
@@ -994,6 +991,7 @@ public final class MockBigtable {
     List<Row> response;
     
     MockGet(final ReadRowsRequest request) {
+      multi_gets.add(request);
       this.request = request;
       response = Lists.newArrayList();
       
@@ -1767,40 +1765,43 @@ public final class MockBigtable {
      */
     public MockScanner(final ReadRowsRequest request) {
       this.request = request;
-      
+      System.out.println("SCANNER INIT: " + request);
       // parse out the request
       start = request.getRows().getRowRanges(0).getStartKeyClosed().toByteArray();
       stop = request.getRows().getRowRanges(0).getEndKeyOpen().toByteArray();
       
       // get the column family and 
-      if (request.getFilter().hasChain()) {
-        int filters = 0;
-        for (final RowFilter filter : request.getFilter().getChain().getFiltersList()) {
-          if (!filter.getFamilyNameRegexFilterBytes().isEmpty()) {
-            family = filter.getFamilyNameRegexFilterBytes().toByteArray();
-            continue;
+      if (request.hasFilter()) {
+        System.out.println("FILTER: " + request.getFilter());
+        if (request.getFilter().hasChain()) {
+          int filters = 0;
+          for (final RowFilter filter : request.getFilter().getChain().getFiltersList()) {
+            if (!filter.getFamilyNameRegexFilterBytes().isEmpty()) {
+              family = filter.getFamilyNameRegexFilterBytes().toByteArray();
+              continue;
+            }
+            
+            if (!filter.getRowKeyRegexFilter().isEmpty()) {
+              row_key_regexp = filter.getRowKeyRegexFilter().toByteArray();
+              continue;
+            }
+            
+            // probably qualifier filters then.
+            filters++;
           }
           
-          if (!filter.getRowKeyRegexFilter().isEmpty()) {
-            row_key_regexp = filter.getRowKeyRegexFilter().toByteArray();
-            continue;
+          if (filters > 0) {
+            has_filter = true;
           }
           
+        } else if (!request.getFilter().getFamilyNameRegexFilterBytes().isEmpty()) {
+          family = request.getFilter().getFamilyNameRegexFilterBytes().toByteArray();
+        } else if (!request.getFilter().getRowKeyRegexFilter().isEmpty()) {
+          row_key_regexp = request.getFilter().getRowKeyRegexFilter().toByteArray();
+        } else {
           // probably qualifier filters then.
-          filters++;
-        }
-        
-        if (filters > 0) {
           has_filter = true;
         }
-        
-      } else if (!request.getFilter().getFamilyNameRegexFilterBytes().isEmpty()) {
-        family = request.getFilter().getFamilyNameRegexFilterBytes().toByteArray();
-      } else if (!request.getFilter().getRowKeyRegexFilter().isEmpty()) {
-        row_key_regexp = request.getFilter().getRowKeyRegexFilter().toByteArray();
-      } else {
-        // probably qualifier filters then.
-        has_filter = true;
       }
       scanners.add(this);
     }
@@ -1882,6 +1883,7 @@ public final class MockBigtable {
     @Override
     public FlatRow[] next(final int count) throws IOException {
       if (cursors == null) {
+        System.out.println("INITIALIZING SCANNER..........");
         final ByteMap<ByteMap<ByteMap<TreeMap<Long, byte[]>>>> map =
             storage.get(request.getTableNameBytes().toByteArray());
         if (map == null) {
@@ -1915,6 +1917,7 @@ public final class MockBigtable {
           cf_rows.put(family, null);
         }
       }
+      System.out.println("HASNEXT: " + hasNext());
 
       // If we're out of rows to scan, then we return an empty array like
       // Bigtable does.
@@ -1941,13 +1944,13 @@ public final class MockBigtable {
       int rows_read = 0;
       while (hasNext()) {
         advance();
-
         // if it's before the start row, after the end row or doesn't
         // match the given regex, continue on to the next row
         if (start != null && Bytes.memcmp(last_row, start) < 0) {
           continue;
         }
-        // asynchbase Scanner's logic:
+        
+        // TODO ??? Scanner's logic:
         // - start_key is inclusive, stop key is exclusive
         // - when start key is equal to the stop key,
         //   include the key in scan result
@@ -2022,7 +2025,7 @@ public final class MockBigtable {
         }
       }
 
-        if (results.isEmpty()) {
+      if (results.isEmpty()) {
         return new FlatRow[0];
       }
       

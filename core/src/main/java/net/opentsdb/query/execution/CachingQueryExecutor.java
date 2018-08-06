@@ -36,9 +36,11 @@ import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.Ordering;
 import com.google.common.hash.HashCode;
 import com.stumbleupon.async.Callback;
+import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.core.TSDBPlugin;
 import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.exceptions.QueryExecutionCanceled;
 import net.opentsdb.query.AbstractQueryNode;
@@ -71,7 +73,7 @@ import net.opentsdb.stats.Span;
  * 
  * @since 3.0
  */
-public class CachingQueryExecutor implements QuerySourceFactory {
+public class CachingQueryExecutor implements QuerySourceFactory, TSDBPlugin {
   private static final Logger LOG = LoggerFactory.getLogger(
       CachingQueryExecutor.class);
   
@@ -787,6 +789,24 @@ public class CachingQueryExecutor implements QuerySourceFactory {
   @Override
   public QueryNodeConfig parseConfig(ObjectMapper mapper, TSDB tsdb,
       JsonNode node) {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public Deferred<Object> initialize(TSDB tsdb) {
+    // TODO Auto-generated method stub
+    return Deferred.fromResult(null);
+  }
+
+  @Override
+  public Deferred<Object> shutdown() {
+    // TODO Auto-generated method stub
+    return Deferred.fromResult(null);
+  }
+
+  @Override
+  public String version() {
     // TODO Auto-generated method stub
     return null;
   }

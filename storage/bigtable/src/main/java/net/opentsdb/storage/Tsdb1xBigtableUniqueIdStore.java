@@ -54,7 +54,6 @@ import net.opentsdb.auth.AuthState;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.TimeSeriesDatumId;
-import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.stats.Span;
 import net.opentsdb.uid.IdOrError;
 import net.opentsdb.uid.RandomUniqueId;

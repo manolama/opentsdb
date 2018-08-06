@@ -33,6 +33,7 @@ import org.junit.runner.RunWith;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
+import com.google.bigtable.v2.Row;
 import com.google.cloud.bigtable.config.CredentialOptions;
 import com.google.cloud.bigtable.grpc.BigtableSession;
 import com.google.cloud.bigtable.grpc.scanner.FlatRow;
@@ -110,17 +111,33 @@ public class TestTsdb1xBigtableQueryResult extends UTBase {
     Tsdb1xBigtableQueryResult result = new Tsdb1xBigtableQueryResult(0, node, schema);
     
     final byte[] row_key = makeRowKey(METRIC_BYTES, TS_SINGLE_SERIES, TAGK_BYTES, TAGV_BYTES);
-    FlatRow row = buildFlatRow(row_key, 
+    FlatRow flat_row = buildFlatRow(row_key, 
         Tsdb1xBigtableDataStore.DATA_FAMILY, 
         NumericCodec.buildSecondQualifier(0, (short) 0) ,
         NumericCodec.vleEncodeLong(1));
     
-    result.decode(row, null);
+    result.decode(flat_row, null);
     
     assertEquals(1, result.timeSeries().size());
     TimeSeries series = result.timeSeries().iterator().next();
     Iterator<TimeSeriesValue<?>> it = series.iterator(NumericType.TYPE).get();
     TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+    assertEquals(TS_SINGLE_SERIES, v.timestamp().epoch());
+    assertEquals(1, v.value().longValue());
+    assertFalse(it.hasNext());
+    assertEquals(ChronoUnit.SECONDS, result.resolution());
+    
+    Row row = buildRow(row_key, 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        NumericCodec.buildSecondQualifier(0, (short) 0) ,
+        NumericCodec.vleEncodeLong(1));
+    result = new Tsdb1xBigtableQueryResult(0, node, schema);
+    result.decode(row, null);
+    
+    assertEquals(1, result.timeSeries().size());
+    series = result.timeSeries().iterator().next();
+    it = series.iterator(NumericType.TYPE).get();
+    v = (TimeSeriesValue<NumericType>) it.next();
     assertEquals(TS_SINGLE_SERIES, v.timestamp().epoch());
     assertEquals(1, v.value().longValue());
     assertFalse(it.hasNext());
@@ -440,7 +457,12 @@ public class TestTsdb1xBigtableQueryResult extends UTBase {
     Tsdb1xBigtableQueryResult result = new Tsdb1xBigtableQueryResult(0, node, schema);
     
     try {
-      result.decode(null, null);
+      result.decode((FlatRow) null, null);
+      fail("Expected NullPointerException");
+    } catch (NullPointerException e) { }
+    
+    try {
+      result.decode((Row) null, null);
       fail("Expected NullPointerException");
     } catch (NullPointerException e) { }
     

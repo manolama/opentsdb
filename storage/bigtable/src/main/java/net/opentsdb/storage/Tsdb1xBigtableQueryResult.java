@@ -17,6 +17,8 @@ package net.opentsdb.storage;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
 
+import com.google.bigtable.v2.Column;
+import com.google.bigtable.v2.Row;
 import com.google.cloud.bigtable.grpc.scanner.FlatRow;
 import com.google.cloud.bigtable.grpc.scanner.FlatRow.Cell;
 import com.google.common.collect.Maps;
@@ -143,4 +145,96 @@ public class Tsdb1xBigtableQueryResult extends
     }
   }
   
+  /**
+   * Parses a row for results. Since numerics are the most prevalent we
+   * have a dedicated rowSeq for those (if we're told to fetch em). For 
+   * other types we'll build out a map. After the row is finished we 
+   * call {@link RowSeq#dedupe(boolean, boolean)} on each one then
+   * pass it to the seq handler.
+   * Note: Since it's the fast path we don't check for nulls/empty in
+   * the row.
+   * 
+   * @param row A non-null and non-empty list of columns.
+   * @param interval An optional interval, may be null.
+   */
+  public void decode(final Row row,
+                     final RollupInterval interval) {
+    final byte[] key = row.getKey().toByteArray();
+    final byte[] tsuid = schema.getTSUID(key);
+    final long base_timestamp = schema.baseTimestamp(key);
+    final long hash = LongHashFunction.xx_r39().hashBytes(tsuid);
+    final RowSeq numerics;
+    if (((Tsdb1xBigtableQueryNode) node).fetchDataType(NUMERIC_TYPE)) {
+      if (interval != null) {
+        numerics = new NumericSummaryRowSeq(base_timestamp, interval);
+      } else {
+        numerics = new NumericRowSeq(base_timestamp);
+      }
+    } else {
+      numerics = null;
+    }
+    Map<Byte, RowSeq> row_sequences = null;
+    
+    for (final Column column : row.getFamilies(0).getColumnsList()) {
+      if (interval == null && (column.getQualifier().size() & 1) == 0) {
+        // it's a NumericDataType
+        if (!((Tsdb1xBigtableQueryNode) node).fetchDataType(NUMERIC_TYPE)) {
+          // filter doesn't want #'s
+          // TODO - dropped counters
+          continue;
+        }
+        numerics.addColumn(NUMERIC_PREFIX, 
+            column.getQualifier().toByteArray(), 
+            column.getCells(0).getValue().toByteArray());
+      } else if (interval == null) {
+        final byte[] qualifier = column.getQualifier().toByteArray();
+        final byte prefix = qualifier[0];
+        if (prefix == Schema.APPENDS_PREFIX) {
+          if (!((Tsdb1xBigtableQueryNode) node).fetchDataType((byte) 1)) {
+            // filter doesn't want #'s
+            continue;
+          } else {
+            numerics.addColumn(Schema.APPENDS_PREFIX, qualifier, 
+                column.getCells(0).getValue().toByteArray());
+          }
+        } else if (((Tsdb1xBigtableQueryNode) node).fetchDataType(prefix)) {
+          if (row_sequences == null) {
+            row_sequences = Maps.newHashMapWithExpectedSize(1);
+          }
+          RowSeq sequence = row_sequences.get(prefix);
+          if (sequence == null) {
+            sequence = schema.newRowSeq(prefix, base_timestamp);
+            if (sequence == null) {
+              // TODO - determine how to handle non-codec'd data.
+              continue;
+            }
+            row_sequences.put(prefix, sequence);
+          }
+          
+          sequence.addColumn(prefix, column.getQualifier().toByteArray(), 
+              column.getCells(0).getValue().toByteArray());
+        } else {
+          // TODO else count dropped data
+        }
+      } else {
+        // Only numerics are rolled up right now. And we shouldn't have
+        // a rollup query if the user doesn't want rolled-up data.
+        numerics.addColumn(NUMERIC_PREFIX, 
+            column.getQualifier().toByteArray(), 
+            column.getCells(0).getValue().toByteArray());
+      }
+    }
+    
+    if (numerics != null) {
+      final ChronoUnit resolution = numerics.dedupe(keep_earliest, reversed);
+      addSequence(hash, tsuid, numerics, resolution);
+    }
+    
+    if (row_sequences != null) {
+      for (final RowSeq sequence : row_sequences.values()) {
+        final ChronoUnit resolution = sequence.dedupe(keep_earliest, reversed);
+        addSequence(hash, tsuid, sequence, resolution);
+      }
+    }
+  }
 }

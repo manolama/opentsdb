@@ -33,7 +33,10 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.powermock.api.mockito.PowerMockito;
 
+import com.google.bigtable.v2.Column;
+import com.google.bigtable.v2.Family;
 import com.google.bigtable.v2.ReadRowsRequest;
+import com.google.bigtable.v2.Row;
 import com.google.cloud.bigtable.config.CredentialOptions;
 import com.google.cloud.bigtable.grpc.BigtableDataClient;
 import com.google.cloud.bigtable.grpc.BigtableInstanceName;
@@ -42,6 +45,7 @@ import com.google.cloud.bigtable.grpc.async.AsyncExecutor;
 import com.google.cloud.bigtable.grpc.async.BulkMutation;
 import com.google.cloud.bigtable.grpc.scanner.FlatRow;
 import com.google.cloud.bigtable.grpc.scanner.ResultScanner;
+import com.google.cloud.bigtable.grpc.scanner.FlatRow.Cell;
 import com.google.cloud.bigtable.util.ByteStringer;
 
 import net.opentsdb.common.Const;
@@ -219,7 +223,7 @@ public class UTBase {
     
     storage = new MockBigtable(session, executor, client, bulk_mutator);
     loadUIDTable();
-    //loadRawData();
+    loadRawData();
   }
   
   /**
@@ -315,168 +319,168 @@ public class UTBase {
     return key;
   }
   
-//  /**
-//   * Populates MockBase with some data.
-//   * @throws Exception
-//   */
-//  public static void loadRawData() throws Exception {
-//    final byte[] table = "tsdb".getBytes(Const.ISO_8859_CHARSET);
-//    for (int i = 0; i < TS_SINGLE_SERIES_COUNT; i++) {
-//      storage.addColumn(table, makeRowKey(
-//          METRIC_BYTES, 
-//          TS_SINGLE_SERIES + (i * TS_SINGLE_SERIES_INTERVAL), 
-//          TAGK_BYTES,
-//          TAGV_BYTES), 
-//        Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//        new byte[2], 
-//        new byte[] { 1 });
-//      
-//      storage.addColumn(table, makeRowKey(
-//          METRIC_B_BYTES, 
-//          TS_SINGLE_SERIES + (i * TS_SINGLE_SERIES_INTERVAL), 
-//          TAGK_BYTES,
-//          TAGV_BYTES), 
-//        Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//        new byte[2], 
-//        new byte[] { 1 });
-//    }
-//    
-//    for (int i = 0; i < TS_DOUBLE_SERIES_COUNT; i++) {
-//      storage.addColumn(table, makeRowKey(
-//          METRIC_BYTES, 
-//          TS_DOUBLE_SERIES + (i * TS_DOUBLE_SERIES_INTERVAL), 
-//          TAGK_BYTES,
-//          TAGV_BYTES), 
-//        Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//        new byte[2], 
-//        new byte[] { 1 });
-//      
-//      storage.addColumn(table, makeRowKey(
-//          METRIC_BYTES, 
-//          TS_DOUBLE_SERIES + (i * TS_DOUBLE_SERIES_INTERVAL), 
-//          TAGK_BYTES,
-//          TAGV_B_BYTES), 
-//        Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//        new byte[2], 
-//        new byte[] { 1 });
-//      
-//      storage.addColumn(table, makeRowKey(
-//          METRIC_B_BYTES, 
-//          TS_DOUBLE_SERIES + (i * TS_DOUBLE_SERIES_INTERVAL), 
-//          TAGK_BYTES,
-//          TAGV_BYTES), 
-//        Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//        new byte[2], 
-//        new byte[] { 1 });
-//      
-//      storage.addColumn(table, makeRowKey(
-//          METRIC_B_BYTES, 
-//          TS_DOUBLE_SERIES + (i * TS_DOUBLE_SERIES_INTERVAL), 
-//          TAGK_BYTES,
-//          TAGV_B_BYTES), 
-//        Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//        new byte[2], 
-//        new byte[] { 1 });
-//    }
-//    
-//    for (int i = 0; i < TS_MULTI_SERIES_EX_COUNT; i++) {
-//      storage.addColumn(table, makeRowKey(
-//          METRIC_BYTES, 
-//          TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
-//          TAGK_BYTES,
-//          TAGV_BYTES), 
-//        Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//        new byte[2], 
-//        new byte[] { 1 });
-//      
-//      storage.addColumn(table, makeRowKey(
-//          METRIC_BYTES, 
-//          TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
-//          TAGK_BYTES,
-//          TAGV_B_BYTES), 
-//        Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//        new byte[2], 
-//        new byte[] { 1 });
-//      
-//      storage.addColumn(table, makeRowKey(
-//          METRIC_B_BYTES, 
-//          TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
-//          TAGK_BYTES,
-//          TAGV_BYTES), 
-//        Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//        new byte[2], 
-//        new byte[] { 1 });
-//      
-//      storage.addColumn(table, makeRowKey(
-//          METRIC_B_BYTES, 
-//          TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
-//          TAGK_BYTES,
-//          TAGV_B_BYTES), 
-//        Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//        new byte[2], 
-//        new byte[] { 1 });
-//      
-//      if (i == TS_MULTI_SERIES_EX_INDEX) {
-//        storage.throwException(makeRowKey(
-//            METRIC_BYTES, 
-//            TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
-//            TAGK_BYTES,
-//            TAGV_BYTES),
-//            new UnitTestException(), true);
-//        
-//        storage.throwException(makeRowKey(
-//            METRIC_B_BYTES, 
-//            TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
-//            TAGK_BYTES,
-//            TAGV_BYTES),
-//            new UnitTestException(), true);
-//      }
-//    }
-//    
-//    for (int i = 0; i < TS_NSUI_SERIES_COUNT; i++) {
-//      storage.addColumn(table, makeRowKey(
-//          METRIC_BYTES, 
-//          TS_NSUI_SERIES + (i * TS_NSUI_SERIES_INTERVAL), 
-//          TAGK_BYTES,
-//          TAGV_BYTES), 
-//        Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//        new byte[2], 
-//        new byte[] { 1 });
-//      
-//      // offset a bit
-//      if (i > 0) {
-//        storage.addColumn(table, makeRowKey(
-//            METRIC_BYTES, 
-//            TS_NSUI_SERIES + (i * TS_NSUI_SERIES_INTERVAL), 
-//            TAGK_BYTES,
-//            NSUI_TAGV), 
-//          Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//          new byte[2], 
-//          new byte[] { 1 });
-//      }
-//      
-//      storage.addColumn(table, makeRowKey(
-//          METRIC_B_BYTES, 
-//          TS_NSUI_SERIES + (i * TS_NSUI_SERIES_INTERVAL), 
-//          TAGK_BYTES,
-//          TAGV_BYTES), 
-//        Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//        new byte[2], 
-//        new byte[] { 1 });
-//      
-//      if (i > 0) {
-//        storage.addColumn(table, makeRowKey(
-//            METRIC_B_BYTES, 
-//            TS_NSUI_SERIES + (i * TS_NSUI_SERIES_INTERVAL), 
-//            TAGK_BYTES,
-//            NSUI_TAGV), 
-//          Tsdb1xHBaseDataStore.DATA_FAMILY, 
-//          new byte[2], 
-//          new byte[] { 1 });
-//      }
-//    }
-//  }
-//  
+  /**
+   * Populates MockBase with some data.
+   * @throws Exception
+   */
+  public static void loadRawData() throws Exception {
+    final byte[] table = "tsdb".getBytes(Const.ISO_8859_CHARSET);
+    for (int i = 0; i < TS_SINGLE_SERIES_COUNT; i++) {
+      storage.addColumn(table, makeRowKey(
+          METRIC_BYTES, 
+          TS_SINGLE_SERIES + (i * TS_SINGLE_SERIES_INTERVAL), 
+          TAGK_BYTES,
+          TAGV_BYTES), 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        new byte[2], 
+        new byte[] { 1 });
+      
+      storage.addColumn(table, makeRowKey(
+          METRIC_B_BYTES, 
+          TS_SINGLE_SERIES + (i * TS_SINGLE_SERIES_INTERVAL), 
+          TAGK_BYTES,
+          TAGV_BYTES), 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        new byte[2], 
+        new byte[] { 1 });
+    }
+    
+    for (int i = 0; i < TS_DOUBLE_SERIES_COUNT; i++) {
+      storage.addColumn(table, makeRowKey(
+          METRIC_BYTES, 
+          TS_DOUBLE_SERIES + (i * TS_DOUBLE_SERIES_INTERVAL), 
+          TAGK_BYTES,
+          TAGV_BYTES), 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        new byte[2], 
+        new byte[] { 1 });
+      
+      storage.addColumn(table, makeRowKey(
+          METRIC_BYTES, 
+          TS_DOUBLE_SERIES + (i * TS_DOUBLE_SERIES_INTERVAL), 
+          TAGK_BYTES,
+          TAGV_B_BYTES), 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        new byte[2], 
+        new byte[] { 1 });
+      
+      storage.addColumn(table, makeRowKey(
+          METRIC_B_BYTES, 
+          TS_DOUBLE_SERIES + (i * TS_DOUBLE_SERIES_INTERVAL), 
+          TAGK_BYTES,
+          TAGV_BYTES), 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        new byte[2], 
+        new byte[] { 1 });
+      
+      storage.addColumn(table, makeRowKey(
+          METRIC_B_BYTES, 
+          TS_DOUBLE_SERIES + (i * TS_DOUBLE_SERIES_INTERVAL), 
+          TAGK_BYTES,
+          TAGV_B_BYTES), 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        new byte[2], 
+        new byte[] { 1 });
+    }
+    
+    for (int i = 0; i < TS_MULTI_SERIES_EX_COUNT; i++) {
+      storage.addColumn(table, makeRowKey(
+          METRIC_BYTES, 
+          TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
+          TAGK_BYTES,
+          TAGV_BYTES), 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        new byte[2], 
+        new byte[] { 1 });
+      
+      storage.addColumn(table, makeRowKey(
+          METRIC_BYTES, 
+          TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
+          TAGK_BYTES,
+          TAGV_B_BYTES), 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        new byte[2], 
+        new byte[] { 1 });
+      
+      storage.addColumn(table, makeRowKey(
+          METRIC_B_BYTES, 
+          TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
+          TAGK_BYTES,
+          TAGV_BYTES), 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        new byte[2], 
+        new byte[] { 1 });
+      
+      storage.addColumn(table, makeRowKey(
+          METRIC_B_BYTES, 
+          TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
+          TAGK_BYTES,
+          TAGV_B_BYTES), 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        new byte[2], 
+        new byte[] { 1 });
+      
+      if (i == TS_MULTI_SERIES_EX_INDEX) {
+        storage.throwException(makeRowKey(
+            METRIC_BYTES, 
+            TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
+            TAGK_BYTES,
+            TAGV_BYTES),
+            new UnitTestException(), true);
+        
+        storage.throwException(makeRowKey(
+            METRIC_B_BYTES, 
+            TS_MULTI_SERIES_EX + (i * TS_MULTI_SERIES_INTERVAL), 
+            TAGK_BYTES,
+            TAGV_BYTES),
+            new UnitTestException(), true);
+      }
+    }
+    
+    for (int i = 0; i < TS_NSUI_SERIES_COUNT; i++) {
+      storage.addColumn(table, makeRowKey(
+          METRIC_BYTES, 
+          TS_NSUI_SERIES + (i * TS_NSUI_SERIES_INTERVAL), 
+          TAGK_BYTES,
+          TAGV_BYTES), 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        new byte[2], 
+        new byte[] { 1 });
+      
+      // offset a bit
+      if (i > 0) {
+        storage.addColumn(table, makeRowKey(
+            METRIC_BYTES, 
+            TS_NSUI_SERIES + (i * TS_NSUI_SERIES_INTERVAL), 
+            TAGK_BYTES,
+            NSUI_TAGV), 
+          Tsdb1xBigtableDataStore.DATA_FAMILY, 
+          new byte[2], 
+          new byte[] { 1 });
+      }
+      
+      storage.addColumn(table, makeRowKey(
+          METRIC_B_BYTES, 
+          TS_NSUI_SERIES + (i * TS_NSUI_SERIES_INTERVAL), 
+          TAGK_BYTES,
+          TAGV_BYTES), 
+        Tsdb1xBigtableDataStore.DATA_FAMILY, 
+        new byte[2], 
+        new byte[] { 1 });
+      
+      if (i > 0) {
+        storage.addColumn(table, makeRowKey(
+            METRIC_B_BYTES, 
+            TS_NSUI_SERIES + (i * TS_NSUI_SERIES_INTERVAL), 
+            TAGK_BYTES,
+            NSUI_TAGV), 
+          Tsdb1xBigtableDataStore.DATA_FAMILY, 
+          new byte[2], 
+          new byte[] { 1 });
+      }
+    }
+  }
+  
   static void verifySpan(final String name) {
     verifySpan(name, 1);
   }
@@ -509,5 +513,18 @@ public class UTBase {
       final byte[] qualifier, final byte[] value) {
     builder.addCell(new String(cf), ByteStringer.wrap(qualifier), 1L, 
         ByteStringer.wrap(value));
+  }
+  
+  static Row buildRow(final byte[] key, final byte[] cf, final byte[] qualifier, final byte[] value) {
+    return Row.newBuilder()
+        .setKey(ByteStringer.wrap(key))
+        .addFamilies(Family.newBuilder()
+            .setNameBytes(ByteStringer.wrap(cf))
+            .addColumns(Column.newBuilder()
+                .setQualifier(ByteStringer.wrap(qualifier))
+                .addCells(com.google.bigtable.v2.Cell.newBuilder()
+                    .setTimestampMicros(1L)
+                    .setValue(ByteStringer.wrap(value)))))
+        .build();
   }
 }

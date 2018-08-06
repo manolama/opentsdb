@@ -698,22 +698,21 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
         // set qualifier filters
         if (node.rollupAggregation() != null && 
             node.rollupAggregation().equals("avg")) {
-         
           rollup_filter = RowFilter.Interleave.newBuilder()
-          .addFilters(RowFilter.newBuilder()
-              .setColumnQualifierRegexFilter(ByteStringer.wrap(
-                  "sum".getBytes(Const.ASCII_US_CHARSET))))
-          .addFilters(RowFilter.newBuilder()
-              .setColumnQualifierRegexFilter(ByteStringer.wrap(
-                  "count".getBytes(Const.ASCII_US_CHARSET))))
-          .addFilters(RowFilter.newBuilder()
-              .setColumnQualifierRegexFilter(ByteStringer.wrap(new byte[] { 
-                  (byte) node.schema().rollupConfig().getIdForAggregator("sum")
-              })))
-          .addFilters(RowFilter.newBuilder()
-              .setColumnQualifierRegexFilter(ByteStringer.wrap(new byte[] { 
-                  (byte) node.schema().rollupConfig().getIdForAggregator("count")
-              })));
+              .addFilters(RowFilter.newBuilder()
+                  .setColumnQualifierRegexFilter(ByteStringer.wrap(
+                      "sum".getBytes(Const.ASCII_US_CHARSET))))
+              .addFilters(RowFilter.newBuilder()
+                  .setColumnQualifierRegexFilter(ByteStringer.wrap(
+                      "count".getBytes(Const.ASCII_US_CHARSET))))
+              .addFilters(RowFilter.newBuilder()
+                  .setColumnQualifierRegexFilter(ByteStringer.wrap(new byte[] { 
+                      (byte) node.schema().rollupConfig().getIdForAggregator("sum")
+                  })))
+              .addFilters(RowFilter.newBuilder()
+                  .setColumnQualifierRegexFilter(ByteStringer.wrap(new byte[] { 
+                      (byte) node.schema().rollupConfig().getIdForAggregator("count")
+                  })));
         } else {
           // it's another aggregation
           rollup_filter = RowFilter.Interleave.newBuilder()
@@ -729,7 +728,7 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
       } else {
         rollup_filter = null;
       }
-      System.out.println("ROLLUP FILTER: " + rollup_filter);
+      
       int idx = 0;
       if (node.rollupIntervals() != null && 
           !node.rollupIntervals().isEmpty() && 
@@ -755,14 +754,7 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
                           .getBytes(Const.ASCII_US_CHARSET)));
             
             Chain.Builder bldr = RowFilter.Chain.newBuilder();
-            
-//            final Scanner scanner = node.parent()
-//                .client().newScanner(pre_aggregate ? 
-//                    interval.getGroupbyTable() : interval.getTemporalTable());
-            
-//            scanner.setFamily(Tsdb1xBigtableDataStore.DATA_FAMILY);
-//            scanner.setMaxNumRows(rows_per_scan);
-//            scanner.setReversed(reverse_scan);
+            // TODO reverse?
             
             if (node.schema().saltWidth() > 0) {
               final byte[] start_clone = Arrays.copyOf(start_key, start_key.length);
@@ -797,8 +789,6 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
             
             // Fuzzies are converted into regex filters, so we could add if we want
             // otherwise just leave for now.
-            //setScannerFilter(scanner, x, regex, fuzzy_key, fuzzy_mask, rollup_filter);
-            
             read_builder.setFilter(RowFilter.newBuilder()
                 .setChain(bldr));
             if (LOG.isDebugEnabled()) {
@@ -908,52 +898,6 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
     }
     scanNext(span);
   }
-  
-  /**
-   * Compiles the filter list to add to a scanner when applicable.
-   * @param scanner A non-null scanner to add the filters to.
-   * @param salt_bucket An optional salt bucket
-   * @param regex An optional regular expression to match.
-   * @param fuzzy_key An optional fuzzy row key filter.
-   * @param fuzzy_mask An optional mask for fuzzy matching. Can't be null
-   * if the fuzzy_key was set.
-   * @param rollup_filter An optional rollup filter.
-   */
-//  void setScannerFilter(final Scanner scanner, 
-//                        final int salt_bucket, 
-//                        final String regex, 
-//                        final byte[] fuzzy_key, 
-//                        final byte[] fuzzy_mask, 
-//                        final ScanFilter rollup_filter) {
-//    if (regex == null && fuzzy_key == null && rollup_filter == null) {
-//      return;
-//    }
-//    
-//    List<ScanFilter> filters = Lists.newArrayListWithCapacity(3);
-//    if (fuzzy_key != null) {
-//      final byte[] key = node.schema().saltWidth() < 1 ? 
-//          fuzzy_key : Arrays.copyOf(fuzzy_key, fuzzy_key.length);
-//      if (node.schema().saltWidth() > 0) {
-//        node.schema().prefixKeyWithSalt(key, salt_bucket);
-//      }
-//      filters.add(new FuzzyRowFilter(
-//              new FuzzyRowFilter.FuzzyFilterPair(key, fuzzy_mask)));
-//    }
-//    
-//    if (regex != null) {
-//      filters.add(new KeyRegexpFilter(regex, Const.ASCII_CHARSET));
-//    }
-//    
-//    if (rollup_filter != null) {
-//      filters.add(rollup_filter);
-//    }
-//    
-//    if (filters.size() == 1) {
-//      scanner.setFilter(filters.get(0));
-//    } else {
-//      scanner.setFilter(new FilterList(filters, Operator.MUST_PASS_ALL));
-//    }
-//  }
   
   /**
    * Called from {@link #fetchNext(Tsdb1xQueryResult, Span)} to iterate
@@ -1213,5 +1157,10 @@ public class Tsdb1xBigtableScanners implements BigtableExecutor {
   /** @return The parent node. */
   Tsdb1xBigtableQueryNode node() {
     return node;
+  }
+
+  /** @return The number of rows to read per scan. */
+  int rowsPerScan() {
+    return rows_per_scan;
   }
 }
