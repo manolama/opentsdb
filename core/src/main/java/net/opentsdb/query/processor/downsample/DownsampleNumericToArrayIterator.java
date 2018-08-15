@@ -233,7 +233,7 @@ public class DownsampleNumericToArrayIterator implements QueryIterator,
       }
     }
     
-    System.out.println(" GONNA DO DS TO ARRAY!!!!!!!!!!!!!  " + has_next);
+    System.out.println(" GONNA DO DS TO ARRAY!!!!!!!!!!!!!  " + has_next + "  ID: " + source.id());
   }
 
   @Override
@@ -281,7 +281,6 @@ public class DownsampleNumericToArrayIterator implements QueryIterator,
     return this;
   }
   
-
   @Override
   public TypeToken<NumericArrayType> type() {
     return NumericArrayType.TYPE;

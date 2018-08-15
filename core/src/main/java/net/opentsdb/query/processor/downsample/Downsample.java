@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
 import net.opentsdb.data.TypedIterator;
@@ -28,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.common.Const;
@@ -38,6 +40,8 @@ import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
+import net.opentsdb.data.types.numeric.NumericArrayType;
+import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.data.ZonedNanoTimeStamp;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryNode;
@@ -130,7 +134,7 @@ public class Downsample extends AbstractQueryNode {
    * A downsample result that's a member class of the main node so that we share
    * the references to the config and node.
    */
-  class DownsampleResult implements QueryResult, TimeSpecification {
+  class DownsampleResult implements QueryResult, TimeSpecification {    
     /** Countdown latch for closing the result set based on the upstreams. */
     private final CountDownLatch latch;
     
@@ -319,6 +323,8 @@ public class Downsample extends AbstractQueryNode {
      * iterators using the factory.
      */
     class DownsampleTimeSeries implements TimeSeries {
+      private final Set<TypeToken<?>> types;
+      
       /** The non-null source. */
       private final TimeSeries source;
       
@@ -328,6 +334,14 @@ public class Downsample extends AbstractQueryNode {
        */
       private DownsampleTimeSeries(final TimeSeries source) {
         this.source = source;
+        types = Sets.newHashSet();
+        for (final TypeToken<?> type : source.types()) {
+          if (type == NumericType.TYPE) {
+            types.add(NumericArrayType.TYPE);
+          } else {
+            types.add(type);
+          }
+        }
       }
       
       @Override
@@ -373,8 +387,7 @@ public class Downsample extends AbstractQueryNode {
 
       @Override
       public Collection<TypeToken<?>> types() {
-        // TODO - join with the factories supported.
-        return source.types();
+        return types;
       }
 
       @Override

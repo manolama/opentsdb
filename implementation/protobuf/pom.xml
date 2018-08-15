@@ -63,6 +63,11 @@
            <artifactId>grpc-protobuf</artifactId>
            <version>${grpc.version}</version>
          </dependency>
+         <dependency>
+           <groupId>io.grpc</groupId>
+           <artifactId>grpc-netty</artifactId>
+           <version>${grpc.version}</version>
+         </dependency>
       </dependencies>
    </dependencyManagement>
    
@@ -90,6 +95,10 @@
       <dependency>
         <groupId>io.grpc</groupId>
         <artifactId>grpc-protobuf</artifactId>
+      </dependency>
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-netty</artifactId>
       </dependency>
       
       <!-- TESTING Deps. -->

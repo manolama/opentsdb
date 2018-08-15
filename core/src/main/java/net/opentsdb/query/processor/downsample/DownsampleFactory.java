@@ -49,11 +49,11 @@ public class DownsampleFactory extends BaseQueryNodeFactory {
    */
   public DownsampleFactory() {
     super("downsample");
-    registerIteratorFactory(NumericType.TYPE, new NumericIteratorFactory());
+    registerIteratorFactory(NumericType.TYPE, new NumericToArrayIteratorFactory());
     registerIteratorFactory(NumericSummaryType.TYPE, 
         new NumericSummaryIteratorFactory());
     registerIteratorFactory(NumericArrayType.TYPE, 
-        new NumericArrayIteratorFactory());
+        new NumericToArrayIteratorFactory());
   }
 
   @Override
@@ -151,6 +151,31 @@ public class DownsampleFactory extends BaseQueryNodeFactory {
                                                     final QueryResult result,
                                                     final Map<String, TimeSeries> sources) {
       return new DownsampleNumericArrayIterator(node, result, sources.values().iterator().next());
+    }
+    
+    @Override
+    public Collection<TypeToken<?>> types() {
+      return Lists.newArrayList(NumericArrayType.TYPE);
+    }
+  }
+  
+  /**
+   * Handles arrays.
+   */
+  protected class NumericToArrayIteratorFactory implements QueryIteratorFactory {
+
+    @Override
+    public Iterator<TimeSeriesValue<?>> newIterator(final QueryNode node,
+                                                    final QueryResult result,
+                                                    final Collection<TimeSeries> sources) {
+      return new DownsampleNumericToArrayIterator(node, result, sources.iterator().next());
+    }
+
+    @Override
+    public Iterator<TimeSeriesValue<?>> newIterator(final QueryNode node,
+                                                    final QueryResult result,
+                                                    final Map<String, TimeSeries> sources) {
+      return new DownsampleNumericToArrayIterator(node, result, sources.values().iterator().next());
     }
     
     @Override
