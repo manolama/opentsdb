@@ -29,7 +29,6 @@ import net.opentsdb.data.TimeSeriesDataType;
  */
 public interface NumericArrayType extends TimeSeriesDataType {
 
-
   /** The data type reference to pass around. */
   public static final TypeToken<NumericArrayType> TYPE = 
       TypeToken.of(NumericArrayType.class);

@@ -45,6 +45,7 @@ import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp.Op;
+import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.exceptions.QueryExecutionException;
@@ -161,7 +162,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes, TSDBPlugin {
           json.writeArrayFieldStart("data");
           int idx = 0;
           
-          if (result.timeSeries().size() > 8) {
+          if (result.timeSeries().size() > 80000000) {
             final List<Pair<Integer, TimeSeries>> pairs = 
                 Lists.newArrayListWithExpectedSize(result.timeSeries().size());
             idx = 0;
@@ -173,122 +174,136 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes, TSDBPlugin {
                 Lists.newArrayListWithExpectedSize(result.timeSeries().size());
             pairs.stream().parallel().forEach((pair) -> {
               try {
-                final TypeToken<? extends TimeSeriesDataType> type;
+                ByteArrayOutputStream baos = null;
+                JsonGenerator json = null;
                 Optional<Iterator<TimeSeriesValue<?>>> optional = 
                     pair.getValue().iterator(NumericType.TYPE);
-                if (!optional.isPresent()) {
-                  return;
+                if (optional.isPresent()) {
+                  baos = new ByteArrayOutputStream();
+                  json = JSON.getFactory().createGenerator(baos);
+                  writeNumeric(opts, 
+                      optional.get(), 
+                      json, 
+                      ids != null ? ids.get(pair.getKey()) : (TimeSeriesStringId) pair.getValue().id(), 
+                      result);
+                }
+                
+                optional = pair.getValue().iterator(NumericArrayType.TYPE);
+                if (optional.isPresent()) {
+                  baos = new ByteArrayOutputStream();
+                  json = JSON.getFactory().createGenerator(baos);
+                  writeNumericArray(opts, 
+                      optional.get(), 
+                      json, 
+                      ids != null ? ids.get(pair.getKey()) : (TimeSeriesStringId) pair.getValue().id(), 
+                      result);
                 } else {
-                  type = NumericType.TYPE;
-                }
-                
-                final Iterator<TimeSeriesValue<?>> iterator = optional.get();
-                if (!iterator.hasNext()) {
-                  return;
-                }
-                TimeSeriesValue<? extends TimeSeriesDataType> value = 
-                    (TimeSeriesValue<TimeSeriesDataType>) iterator.next();
-                while (value != null && value.timestamp().compare(
-                    Op.LT, opts.start)) {
-                  if (iterator.hasNext()) {
-                    value = (TimeSeriesValue<NumericType>) iterator.next();
-                  } else {
-                    value = null;
-                  }
-                }
-                
-                if (value == null) {
-                  return;
-                }
-                if (value.timestamp().compare(Op.LT, opts.start()) ||
-                    value.timestamp().compare(Op.GT, opts.end)) {
                   return;
                 }
                 
-                final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                final JsonGenerator json = JSON.getFactory().createGenerator(baos);
-                json.writeStartObject();
                 
-                final TimeSeriesStringId id;
-                if (ids != null) {
-                  id = (ids.get(pair.getKey()));
-                } else {
-                  id = (TimeSeriesStringId) pair.getValue().id();
-                }
-                
-                json.writeStringField("metric", id.metric());
-                json.writeObjectFieldStart("tags");
-                for (final Entry<String, String> entry : id.tags().entrySet()) {
-                  json.writeStringField(entry.getKey(), entry.getValue());
-                }
-                json.writeEndObject();
-                json.writeArrayFieldStart("aggregateTags");
-                for (final String tag : id.aggregatedTags()) {
-                  json.writeString(tag);
-                }
-                json.writeEndArray();
-                if (result.timeSpecification() == null) {
-                  json.writeObjectFieldStart("NumericType");
-                  
-                  long ts = 0;
-                  while (value != null) {
-                    if (value.timestamp().compare(Op.GT, opts.end())) {
-                      break;
-                    }
-                    
-                    ts = (opts != null && opts.msResolution()) 
-                        ? value.timestamp().msEpoch() 
-                        : value.timestamp().msEpoch() / 1000;
-                    final String ts_string = Long.toString(ts);
-                    if (value.value() == null) {
-                      json.writeNullField(ts_string);
-                    } else if (type == NumericType.TYPE) {
-                      if (((TimeSeriesValue<NumericType>) value).value().isInteger()) {
-                        json.writeNumberField(ts_string, 
-                            ((TimeSeriesValue<NumericType>) value).value().longValue());
-                      } else {
-                        json.writeNumberField(ts_string, 
-                            ((TimeSeriesValue<NumericType>) value).value().doubleValue());
-                      }
-                    }
-                    
-                    if (iterator.hasNext()) {
-                      value = (TimeSeriesValue<NumericType>) iterator.next();
-                    } else {
-                      value = null;
-                    }
-                  }
-                  json.writeEndObject();
-                } else {
-                  // just write the values.
-                  json.writeArrayFieldStart("NumericType");
-                  while (value != null) {
-                    if (value.timestamp().compare(Op.GT, opts.end())) {
-                      break;
-                    }
-                    
-                    if (value.value() == null) {
-                      json.writeNull();
-                    } else if (type == NumericType.TYPE) {
-                      if (((TimeSeriesValue<NumericType>) value).value().isInteger()) {
-                        json.writeNumber( 
-                            ((TimeSeriesValue<NumericType>) value).value().longValue());
-                      } else {
-                        json.writeNumber(
-                            ((TimeSeriesValue<NumericType>) value).value().doubleValue());
-                      }
-                    }
-                    
-                    if (iterator.hasNext()) {
-                      value = (TimeSeriesValue<NumericType>) iterator.next();
-                    } else {
-                      value = null;
-                    }
-                  }
-                  json.writeEndArray();
-                }
-                
-                json.writeEndObject();
+//                final Iterator<TimeSeriesValue<?>> iterator = optional.get();
+//                if (!iterator.hasNext()) {
+//                  return;
+//                }
+//                TimeSeriesValue<? extends TimeSeriesDataType> value = 
+//                    (TimeSeriesValue<TimeSeriesDataType>) iterator.next();
+//                while (value != null && value.timestamp().compare(
+//                    Op.LT, opts.start)) {
+//                  if (iterator.hasNext()) {
+//                    value = (TimeSeriesValue<NumericType>) iterator.next();
+//                  } else {
+//                    value = null;
+//                  }
+//                }
+//                
+//                if (value == null) {
+//                  return;
+//                }
+//                if (value.timestamp().compare(Op.LT, opts.start()) ||
+//                    value.timestamp().compare(Op.GT, opts.end)) {
+//                  return;
+//                }
+//                
+//                final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+//                final JsonGenerator json = JSON.getFactory().createGenerator(baos);
+//                json.writeStartObject();
+//                
+
+//                
+//                json.writeStringField("metric", id.metric());
+//                json.writeObjectFieldStart("tags");
+//                for (final Entry<String, String> entry : id.tags().entrySet()) {
+//                  json.writeStringField(entry.getKey(), entry.getValue());
+//                }
+//                json.writeEndObject();
+//                json.writeArrayFieldStart("aggregateTags");
+//                for (final String tag : id.aggregatedTags()) {
+//                  json.writeString(tag);
+//                }
+//                json.writeEndArray();
+//                if (result.timeSpecification() == null) {
+//                  json.writeObjectFieldStart("NumericType");
+//                  
+//                  long ts = 0;
+//                  while (value != null) {
+//                    if (value.timestamp().compare(Op.GT, opts.end())) {
+//                      break;
+//                    }
+//                    
+//                    ts = (opts != null && opts.msResolution()) 
+//                        ? value.timestamp().msEpoch() 
+//                        : value.timestamp().msEpoch() / 1000;
+//                    final String ts_string = Long.toString(ts);
+//                    if (value.value() == null) {
+//                      json.writeNullField(ts_string);
+//                    } else if (type == NumericType.TYPE) {
+//                      if (((TimeSeriesValue<NumericType>) value).value().isInteger()) {
+//                        json.writeNumberField(ts_string, 
+//                            ((TimeSeriesValue<NumericType>) value).value().longValue());
+//                      } else {
+//                        json.writeNumberField(ts_string, 
+//                            ((TimeSeriesValue<NumericType>) value).value().doubleValue());
+//                      }
+//                    }
+//                    
+//                    if (iterator.hasNext()) {
+//                      value = (TimeSeriesValue<NumericType>) iterator.next();
+//                    } else {
+//                      value = null;
+//                    }
+//                  }
+//                  json.writeEndObject();
+//                } else {
+//                  // just write the values.
+//                  json.writeArrayFieldStart("NumericType");
+//                  while (value != null) {
+//                    if (value.timestamp().compare(Op.GT, opts.end())) {
+//                      break;
+//                    }
+//                    
+//                    if (value.value() == null) {
+//                      json.writeNull();
+//                    } else if (type == NumericType.TYPE) {
+//                      if (((TimeSeriesValue<NumericType>) value).value().isInteger()) {
+//                        json.writeNumber( 
+//                            ((TimeSeriesValue<NumericType>) value).value().longValue());
+//                      } else {
+//                        json.writeNumber(
+//                            ((TimeSeriesValue<NumericType>) value).value().doubleValue());
+//                      }
+//                    }
+//                    
+//                    if (iterator.hasNext()) {
+//                      value = (TimeSeriesValue<NumericType>) iterator.next();
+//                    } else {
+//                      value = null;
+//                    }
+//                  }
+//                  json.writeEndArray();
+//                }
+//                
+//                json.writeEndObject();
                 json.close();
                 synchronized(sets) {
                   sets.add(new String(baos.toByteArray(), Const.UTF8_CHARSET));
@@ -315,117 +330,131 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes, TSDBPlugin {
               final TypeToken<? extends TimeSeriesDataType> type;
               Optional<Iterator<TimeSeriesValue<?>>> optional = 
                   series.iterator(NumericType.TYPE);
-              if (!optional.isPresent()) {
-                continue;
+//              if (optional.isPresent()) {
+//                writeNumeric(opts, 
+//                    optional.get(), 
+//                    json, 
+//                    ids != null ? ids.get(idx++) : (TimeSeriesStringId) series.id(), 
+//                    result);
+//              }
+              
+              optional = series.iterator(NumericArrayType.TYPE);
+              if (optional.isPresent()) {
+                writeNumericArray(opts, 
+                    optional.get(), 
+                    json, 
+                    ids != null ? ids.get(idx++) : (TimeSeriesStringId) series.id(), 
+                    result);
               } else {
-                type = NumericType.TYPE;
-              }
-              
-              final Iterator<TimeSeriesValue<?>> iterator = optional.get();
-              if (!iterator.hasNext()) {
-                continue;
-              }
-              TimeSeriesValue<? extends TimeSeriesDataType> value = 
-                  (TimeSeriesValue<TimeSeriesDataType>) iterator.next();
-              while (value != null && value.timestamp().compare(
-                  Op.LT, opts.start)) {
-                if (iterator.hasNext()) {
-                  value = (TimeSeriesValue<NumericType>) iterator.next();
-                } else {
-                  value = null;
-                }
-              }
-              
-              if (value == null) {
-                continue;
-              }
-              if (value.timestamp().compare(Op.LT, opts.start()) ||
-                  value.timestamp().compare(Op.GT, opts.end)) {
                 continue;
               }
               
-              json.writeStartObject();
+//              final Iterator<TimeSeriesValue<?>> iterator = optional.get();
+//              if (!iterator.hasNext()) {
+//                continue;
+//              }
+//              TimeSeriesValue<? extends TimeSeriesDataType> value = 
+//                  (TimeSeriesValue<TimeSeriesDataType>) iterator.next();
+//              while (value != null && value.timestamp().compare(
+//                  Op.LT, opts.start)) {
+//                if (iterator.hasNext()) {
+//                  value = (TimeSeriesValue<NumericType>) iterator.next();
+//                } else {
+//                  value = null;
+//                }
+//              }
+//              
+//              if (value == null) {
+//                continue;
+//              }
+//              if (value.timestamp().compare(Op.LT, opts.start()) ||
+//                  value.timestamp().compare(Op.GT, opts.end)) {
+//                continue;
+//              }
+//              
+//              json.writeStartObject();
+//              
+//              final TimeSeriesStringId id;
+//              if (ids != null) {
+//                id = (ids.get(idx++));
+//              } else {
+//                id = (TimeSeriesStringId) series.id();
+//              }
+//              
+//              json.writeStringField("metric", id.metric());
+//              json.writeObjectFieldStart("tags");
+//              for (final Entry<String, String> entry : id.tags().entrySet()) {
+//                json.writeStringField(entry.getKey(), entry.getValue());
+//              }
+//              json.writeEndObject();
+//              json.writeArrayFieldStart("aggregateTags");
+//              for (final String tag : id.aggregatedTags()) {
+//                json.writeString(tag);
+//              }
+//              json.writeEndArray();
+//              if (result.timeSpecification() == null) {
+//                json.writeObjectFieldStart("NumericType");
+//                
+//                long ts = 0;
+//                while (value != null) {
+//                  if (value.timestamp().compare(Op.GT, opts.end())) {
+//                    break;
+//                  }
+//                  
+//                  ts = (opts != null && opts.msResolution()) 
+//                      ? value.timestamp().msEpoch() 
+//                      : value.timestamp().msEpoch() / 1000;
+//                  final String ts_string = Long.toString(ts);
+//                  if (value.value() == null) {
+//                    json.writeNullField(ts_string);
+//                  } else if (type == NumericType.TYPE) {
+//                    if (((TimeSeriesValue<NumericType>) value).value().isInteger()) {
+//                      json.writeNumberField(ts_string, 
+//                          ((TimeSeriesValue<NumericType>) value).value().longValue());
+//                    } else {
+//                      json.writeNumberField(ts_string, 
+//                          ((TimeSeriesValue<NumericType>) value).value().doubleValue());
+//                    }
+//                  }
+//                  
+//                  if (iterator.hasNext()) {
+//                    value = (TimeSeriesValue<NumericType>) iterator.next();
+//                  } else {
+//                    value = null;
+//                  }
+//                }
+//                json.writeEndObject();
+//              } else {
+//                // just write the values.
+//                json.writeArrayFieldStart("NumericType");
+//                while (value != null) {
+//                  if (value.timestamp().compare(Op.GT, opts.end())) {
+//                    break;
+//                  }
+//                  
+//                  if (value.value() == null) {
+//                    json.writeNull();
+//                  } else if (type == NumericType.TYPE) {
+//                    if (((TimeSeriesValue<NumericType>) value).value().isInteger()) {
+//                      json.writeNumber( 
+//                          ((TimeSeriesValue<NumericType>) value).value().longValue());
+//                    } else {
+//                      json.writeNumber(
+//                          ((TimeSeriesValue<NumericType>) value).value().doubleValue());
+//                    }
+//                  }
+//                  
+//                  if (iterator.hasNext()) {
+//                    value = (TimeSeriesValue<NumericType>) iterator.next();
+//                  } else {
+//                    value = null;
+//                  }
+//                }
+//                json.writeEndArray();
+//              }
+//              
+//              json.writeEndObject();
               
-              final TimeSeriesStringId id;
-              if (ids != null) {
-                id = (ids.get(idx++));
-              } else {
-                id = (TimeSeriesStringId) series.id();
-              }
-              
-              json.writeStringField("metric", id.metric());
-              json.writeObjectFieldStart("tags");
-              for (final Entry<String, String> entry : id.tags().entrySet()) {
-                json.writeStringField(entry.getKey(), entry.getValue());
-              }
-              json.writeEndObject();
-              json.writeArrayFieldStart("aggregateTags");
-              for (final String tag : id.aggregatedTags()) {
-                json.writeString(tag);
-              }
-              json.writeEndArray();
-              if (result.timeSpecification() == null) {
-                json.writeObjectFieldStart("NumericType");
-                
-                long ts = 0;
-                while (value != null) {
-                  if (value.timestamp().compare(Op.GT, opts.end())) {
-                    break;
-                  }
-                  
-                  ts = (opts != null && opts.msResolution()) 
-                      ? value.timestamp().msEpoch() 
-                      : value.timestamp().msEpoch() / 1000;
-                  final String ts_string = Long.toString(ts);
-                  if (value.value() == null) {
-                    json.writeNullField(ts_string);
-                  } else if (type == NumericType.TYPE) {
-                    if (((TimeSeriesValue<NumericType>) value).value().isInteger()) {
-                      json.writeNumberField(ts_string, 
-                          ((TimeSeriesValue<NumericType>) value).value().longValue());
-                    } else {
-                      json.writeNumberField(ts_string, 
-                          ((TimeSeriesValue<NumericType>) value).value().doubleValue());
-                    }
-                  }
-                  
-                  if (iterator.hasNext()) {
-                    value = (TimeSeriesValue<NumericType>) iterator.next();
-                  } else {
-                    value = null;
-                  }
-                }
-                json.writeEndObject();
-              } else {
-                // just write the values.
-                json.writeArrayFieldStart("NumericType");
-                while (value != null) {
-                  if (value.timestamp().compare(Op.GT, opts.end())) {
-                    break;
-                  }
-                  
-                  if (value.value() == null) {
-                    json.writeNull();
-                  } else if (type == NumericType.TYPE) {
-                    if (((TimeSeriesValue<NumericType>) value).value().isInteger()) {
-                      json.writeNumber( 
-                          ((TimeSeriesValue<NumericType>) value).value().longValue());
-                    } else {
-                      json.writeNumber(
-                          ((TimeSeriesValue<NumericType>) value).value().doubleValue());
-                    }
-                  }
-                  
-                  if (iterator.hasNext()) {
-                    value = (TimeSeriesValue<NumericType>) iterator.next();
-                  } else {
-                    value = null;
-                  }
-                }
-                json.writeEndArray();
-              }
-              
-              json.writeEndObject();
               json.flush();
             }
             // end of the data array
@@ -484,4 +513,140 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes, TSDBPlugin {
         + "class: " + getClass().getCanonicalName()));
   }
 
+  void writeNumericArray(final JsonV2QuerySerdesOptions options, 
+      final Iterator<TimeSeriesValue<?>> iterator, 
+      final JsonGenerator json,
+      final TimeSeriesStringId id,
+      final QueryResult result) throws IOException {
+    json.writeStartObject();
+    
+    json.writeStringField("metric", id.metric());
+    json.writeObjectFieldStart("tags");
+    for (final Entry<String, String> entry : id.tags().entrySet()) {
+      json.writeStringField(entry.getKey(), entry.getValue());
+    }
+    json.writeEndObject();
+    json.writeArrayFieldStart("aggregateTags");
+    for (final String tag : id.aggregatedTags()) {
+      json.writeString(tag);
+    }
+    json.writeEndArray();
+    
+    json.writeArrayFieldStart("NumericType");
+    TimeSeriesValue<NumericArrayType> value = (TimeSeriesValue<NumericArrayType>) iterator.next();
+    if (value.value().isInteger()) {
+      for (final long v : value.value().longArray()) {
+        json.writeNumber(v);
+      }
+    } else {
+      for (final double v : value.value().doubleArray()) {
+        json.writeNumber(v);
+      }
+    }
+    json.writeEndArray();
+  
+    json.writeEndObject();
+    json.close();
+  }
+  
+  void writeNumeric(final JsonV2QuerySerdesOptions options, 
+      final Iterator<TimeSeriesValue<?>> iterator, 
+      final JsonGenerator json,
+      final TimeSeriesStringId id,
+      final QueryResult result) throws IOException {
+    TimeSeriesValue<? extends TimeSeriesDataType> value = 
+        (TimeSeriesValue<TimeSeriesDataType>) iterator.next();
+    while (value != null && value.timestamp().compare(
+        Op.LT, options.start)) {
+      if (iterator.hasNext()) {
+        value = (TimeSeriesValue<NumericType>) iterator.next();
+      } else {
+        value = null;
+      }
+    }
+    
+    if (value == null) {
+      return;
+    }
+    if (value.timestamp().compare(Op.LT, options.start()) ||
+        value.timestamp().compare(Op.GT, options.end)) {
+      return;
+    }
+    json.writeStartObject();
+    
+    json.writeStringField("metric", id.metric());
+    json.writeObjectFieldStart("tags");
+    for (final Entry<String, String> entry : id.tags().entrySet()) {
+      json.writeStringField(entry.getKey(), entry.getValue());
+    }
+    json.writeEndObject();
+    json.writeArrayFieldStart("aggregateTags");
+    for (final String tag : id.aggregatedTags()) {
+      json.writeString(tag);
+    }
+    json.writeEndArray();
+    if (result.timeSpecification() == null) {
+      json.writeObjectFieldStart("NumericType");
+      
+      long ts = 0;
+      while (value != null) {
+        if (value.timestamp().compare(Op.GT, options.end())) {
+          break;
+        }
+        
+        ts = (options != null && options.msResolution()) 
+            ? value.timestamp().msEpoch() 
+            : value.timestamp().msEpoch() / 1000;
+        final String ts_string = Long.toString(ts);
+        if (value.value() == null) {
+          json.writeNullField(ts_string);
+        } else {
+          if (((TimeSeriesValue<NumericType>) value).value().isInteger()) {
+            json.writeNumberField(ts_string, 
+                ((TimeSeriesValue<NumericType>) value).value().longValue());
+          } else {
+            json.writeNumberField(ts_string, 
+                ((TimeSeriesValue<NumericType>) value).value().doubleValue());
+          }
+        }
+        
+        if (iterator.hasNext()) {
+          value = (TimeSeriesValue<NumericType>) iterator.next();
+        } else {
+          value = null;
+        }
+      }
+      json.writeEndObject();
+    } else {
+      // just write the values.
+      json.writeArrayFieldStart("NumericType");
+      while (value != null) {
+        if (value.timestamp().compare(Op.GT, options.end())) {
+          break;
+        }
+        
+        if (value.value() == null) {
+          json.writeNull();
+        } else {
+          if (((TimeSeriesValue<NumericType>) value).value().isInteger()) {
+            json.writeNumber( 
+                ((TimeSeriesValue<NumericType>) value).value().longValue());
+          } else {
+            json.writeNumber(
+                ((TimeSeriesValue<NumericType>) value).value().doubleValue());
+          }
+        }
+        
+        if (iterator.hasNext()) {
+          value = (TimeSeriesValue<NumericType>) iterator.next();
+        } else {
+          value = null;
+        }
+      }
+      json.writeEndArray();
+    }
+    
+    json.writeEndObject();
+    json.close();
+  }
 }

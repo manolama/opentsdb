@@ -2,10 +2,12 @@ package net.opentsdb.query.processor.groupby;
 
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.TimeSeries;
@@ -21,6 +23,10 @@ import net.opentsdb.query.QueryResult;
 public class GroupByNumericArrayIterator implements QueryIterator, 
   TimeSeriesValue<NumericArrayType> {
 
+  private final GroupBy node;
+  
+  private final GroupByResult result;
+  
   /** The aggregator. */
   private final NumericArrayAggregator aggregator;
   
@@ -28,7 +34,7 @@ public class GroupByNumericArrayIterator implements QueryIterator,
    * of the time series has a real value. */
   private boolean has_next = false;
   
-  private TimeStamp timestamp;
+  private final List<Iterator<TimeSeriesValue<?>>> iterators;
   
   /**
    * Default ctor.
@@ -52,7 +58,6 @@ public class GroupByNumericArrayIterator implements QueryIterator,
    * @throws IllegalArgumentException if a required parameter or config is 
    * not present.
    */
-  @SuppressWarnings("unchecked")
   public GroupByNumericArrayIterator(final QueryNode node, 
                                      final QueryResult result,
                                      final Collection<TimeSeries> sources) {
@@ -68,12 +73,14 @@ public class GroupByNumericArrayIterator implements QueryIterator,
     if (Strings.isNullOrEmpty(((GroupByConfig) node.config()).getAggregator())) {
       throw new IllegalArgumentException("Aggregator cannot be null or empty."); 
     }
-    
-    // TODO - better way of supporting aggregators
+    System.out.println("     GONNA group by on arrays!!!");
+    this.node = (GroupBy) node;
+    this.result = (GroupByResult) result;
     aggregator = node.pipelineContext().tsdb()
         .getRegistry().getPlugin(NumericArrayAggregator.class, 
             ((GroupByConfig) node.config()).getAggregator());
 
+    iterators = Lists.newArrayListWithExpectedSize(sources.size());
     for (final TimeSeries source : sources) {
       if (source == null) {
         throw new IllegalArgumentException("Null time series are not "
@@ -83,28 +90,15 @@ public class GroupByNumericArrayIterator implements QueryIterator,
           source.iterator(NumericArrayType.TYPE);
       if (optional.isPresent()) {
         final Iterator<TimeSeriesValue<?>> iterator = optional.get();
+        iterators.add(iterator);
         if (iterator.hasNext()) {
-          final TimeSeriesValue<NumericArrayType> array = 
-              (TimeSeriesValue<NumericArrayType>) iterator.next();
-          if (timestamp == null) {
-            timestamp = array.timestamp().getCopy();
-          }
-          if (array.value().isInteger()) {
-            if (array.value().longArray().length > 0) {
-              aggregator.accumulate(array.value().longArray());
-              has_next = true;
-            } else if (array.value().doubleArray().length > 0) {
-              aggregator.accumulate(array.value().doubleArray(), 
-                  ((GroupByConfig) node.config()).getInfectiousNan());
-              has_next = true;
-            }
-          }
+          has_next = true;
         }
       }
     }
+    System.out.println("                     has next: " + has_next);
   }
 
-  
   @Override
   public boolean hasNext() {
     return has_next;
@@ -112,12 +106,26 @@ public class GroupByNumericArrayIterator implements QueryIterator,
 
   @Override
   public TimeSeriesValue<? extends TimeSeriesDataType> next() {
+    has_next = false;
+    for (final Iterator<TimeSeriesValue<?>> iterator : iterators) {
+      final TimeSeriesValue<NumericArrayType> array = 
+          (TimeSeriesValue<NumericArrayType>) iterator.next();
+      if (array.value().isInteger()) {
+        if (array.value().longArray().length > 0) {
+          aggregator.accumulate(array.value().longArray());
+        } else if (array.value().doubleArray().length > 0) {
+          aggregator.accumulate(array.value().doubleArray(), 
+              ((GroupByConfig) node.config()).getInfectiousNan());
+        }
+      }
+    }
+    
     return this;
   }
 
   @Override
   public TimeStamp timestamp() {
-    return timestamp;
+    return result.sourceResult().timeSpecification().start();
   }
 
   @Override

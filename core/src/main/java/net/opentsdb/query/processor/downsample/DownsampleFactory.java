@@ -27,6 +27,7 @@ import com.google.common.reflect.TypeToken;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesValue;
+import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryIteratorFactory;
@@ -51,6 +52,8 @@ public class DownsampleFactory extends BaseQueryNodeFactory {
     registerIteratorFactory(NumericType.TYPE, new NumericIteratorFactory());
     registerIteratorFactory(NumericSummaryType.TYPE, 
         new NumericSummaryIteratorFactory());
+    registerIteratorFactory(NumericArrayType.TYPE, 
+        new NumericArrayIteratorFactory());
   }
 
   @Override
@@ -85,6 +88,10 @@ public class DownsampleFactory extends BaseQueryNodeFactory {
     public Iterator<TimeSeriesValue<?>> newIterator(final QueryNode node,
                                                     final QueryResult result,
                                                     final Collection<TimeSeries> sources) {
+      if (((DownsampleConfig) node.config()).fill()) {
+        return new DownsampleNumericToArrayIterator(node, result, sources.iterator().next());
+      }
+      
       return new DownsampleNumericIterator(node, result, sources.iterator().next());
     }
 
@@ -127,4 +134,28 @@ public class DownsampleFactory extends BaseQueryNodeFactory {
     }
   }
   
+  /**
+   * Handles arrays.
+   */
+  protected class NumericArrayIteratorFactory implements QueryIteratorFactory {
+
+    @Override
+    public Iterator<TimeSeriesValue<?>> newIterator(final QueryNode node,
+                                                    final QueryResult result,
+                                                    final Collection<TimeSeries> sources) {
+      return new DownsampleNumericArrayIterator(node, result, sources.iterator().next());
+    }
+
+    @Override
+    public Iterator<TimeSeriesValue<?>> newIterator(final QueryNode node,
+                                                    final QueryResult result,
+                                                    final Map<String, TimeSeries> sources) {
+      return new DownsampleNumericArrayIterator(node, result, sources.values().iterator().next());
+    }
+    
+    @Override
+    public Collection<TypeToken<?>> types() {
+      return Lists.newArrayList(NumericArrayType.TYPE);
+    }
+  }
 }

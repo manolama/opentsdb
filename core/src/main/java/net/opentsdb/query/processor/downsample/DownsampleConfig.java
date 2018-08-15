@@ -30,6 +30,8 @@ import com.google.common.hash.HashCode;
 
 import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.MillisecondTimeStamp;
+import net.opentsdb.data.TimeStamp;
 import net.opentsdb.query.BaseQueryNodeConfigWithInterpolators;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.TimeSeriesQuery;
@@ -82,6 +84,10 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
   /** The interval converted to a duration. */
   private final TemporalAmount duration;
   
+  private final TimeStamp start_time;
+  
+  private final TimeStamp end_time;
+  
   /**
    * Default ctor.
    * @param builder A non-null builder to pull settings from.
@@ -114,6 +120,23 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
       interval_part = 0;
       units = null;
       duration = null;
+    }
+    
+    if (!Strings.isNullOrEmpty(builder.start)) {
+      start_time = new MillisecondTimeStamp(
+          DateTime.parseDateTimeString(builder.start, builder.timezone));
+      start_time.snapToPreviousInterval(interval_part, units);
+    } else {
+      start_time = null;
+    }
+    
+    if (!Strings.isNullOrEmpty(builder.end)) {
+      end_time = new MillisecondTimeStamp(
+          DateTime.parseDateTimeString(builder.end, builder.timezone));
+      end_time.snapToPreviousInterval(interval_part, units);
+      // TODO - fall to next interval?
+    } else {
+      end_time = null;
     }
   }
   
@@ -193,6 +216,14 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
     }
   }
   
+  public TimeStamp startTime() {
+    return start_time;
+  }
+  
+  public TimeStamp endTime() {
+    return end_time;
+  }
+  
   @Override
   public int compareTo(QueryNodeConfig o) {
     // TODO Auto-generated method stub
@@ -224,6 +255,10 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
     private boolean run_all;
     @JsonProperty
     private boolean fill;
+    @JsonProperty
+    private String start;
+    @JsonProperty
+    private String end;
     
     /**
      * @param id A non-null and on-empty Id for the group by function.
@@ -289,6 +324,16 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
       return this;
     }
     
+    public Builder setStart(final String start) {
+      this.start = start;
+      return this;
+    }
+    
+    public Builder setEnd(final String end) {
+      this.end = end;
+      return this;
+    }
+    
     /** @return The constructed config.
      * @throws IllegalArgumentException if a required parameter is missing or
      * invalid. */
@@ -339,6 +384,16 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
     n = node.get("fill");
     if (n != null) {
       builder.setFill(n.asBoolean());
+    }
+    
+    n = node.get("start");
+    if (n != null) {
+      builder.setStart(n.asText());
+    }
+    
+    n = node.get("end");
+    if (n != null) {
+      builder.setEnd(n.asText());
     }
     
     n = node.get("interpolatorConfigs");

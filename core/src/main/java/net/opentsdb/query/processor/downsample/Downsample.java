@@ -310,6 +310,10 @@ public class Downsample extends AbstractQueryNode {
       return config.timezone();
     }
     
+    QueryResult sourceResult() {
+      return results;
+    }
+    
     /**
      * The super simple wrapper around the time series source that generates 
      * iterators using the factory.
