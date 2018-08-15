@@ -355,7 +355,7 @@ public class Downsample extends AbstractQueryNode {
         if (type == null) {
           throw new IllegalArgumentException("Type cannot be null.");
         }
-        if (!source.types().contains(type)) {
+        if (!types().contains(type)) {
           return Optional.empty();
         }
         final Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator = 
@@ -396,8 +396,7 @@ public class Downsample extends AbstractQueryNode {
       }
       
     }
-
-    
+  
   }
   
 }

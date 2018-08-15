@@ -22,6 +22,7 @@ import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
@@ -233,7 +234,8 @@ public class DownsampleNumericToArrayIterator implements QueryIterator,
       }
     }
     
-    System.out.println(" GONNA DO DS TO ARRAY!!!!!!!!!!!!!  " + has_next + "  ID: " + source.id());
+    System.out.println(" GONNA DO DS TO ARRAY!!!!!!!!!!!!!  " + has_next + "  ID: " + 
+        ((TimeSeriesStringId) source.id()).tags()  + "   Width: " + width);
   }
 
   @Override

@@ -96,7 +96,7 @@ public class GroupByNumericArrayIterator implements QueryIterator,
         }
       }
     }
-    System.out.println("                     has next: " + has_next);
+    System.out.println("             has next: " + has_next);
   }
 
   @Override
@@ -113,10 +113,10 @@ public class GroupByNumericArrayIterator implements QueryIterator,
       if (array.value().isInteger()) {
         if (array.value().longArray().length > 0) {
           aggregator.accumulate(array.value().longArray());
-        } else if (array.value().doubleArray().length > 0) {
-          aggregator.accumulate(array.value().doubleArray(), 
-              ((GroupByConfig) node.config()).getInfectiousNan());
         }
+      } else if (array.value().doubleArray().length > 0) {
+        aggregator.accumulate(array.value().doubleArray(), 
+            ((GroupByConfig) node.config()).getInfectiousNan());
       }
     }
     

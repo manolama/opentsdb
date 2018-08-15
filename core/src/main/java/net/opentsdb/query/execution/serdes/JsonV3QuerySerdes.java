@@ -327,8 +327,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes, TSDBPlugin {
             for (final TimeSeries series : 
               series != null ? series : result.timeSeries()) {
               
-              
-              
               final TypeToken<? extends TimeSeriesDataType> type;
               Optional<Iterator<TimeSeriesValue<?>>> optional = 
                   series.iterator(NumericType.TYPE);
@@ -343,7 +341,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes, TSDBPlugin {
               
               optional = series.iterator(NumericArrayType.TYPE);
               System.out.println("  ARRAY TYPE: " + optional.isPresent());
-              if (optional.isPresent()) {
+              if (optional.isPresent() && optional.get().hasNext()) {
                 writeNumericArray(opts, 
                     optional.get(), 
                     json, 
@@ -551,7 +549,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes, TSDBPlugin {
     json.writeEndArray();
   
     json.writeEndObject();
-    json.close();
   }
   
   void writeNumeric(final JsonV2QuerySerdesOptions options, 
