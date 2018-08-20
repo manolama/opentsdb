@@ -41,49 +41,7 @@ import net.opentsdb.query.interpolation.QueryInterpolator;
 import net.opentsdb.query.interpolation.QueryInterpolatorConfig;
 
 /**
- * Iterator that downsamples data points using an {@link Aggregator} following
- * various rules:
- * <ul>
- * <li>If {@link DownsampleConfig#fill()} is enabled, then a value is emitted
- * for every timestamp between {@link DownsampleConfig#start()} and 
- * {@link DownsampleConfig#end()} inclusive. Otherwise only values that are 
- * not null or {@link Double#isNaN()} will be emitted.</li>
- * <li>If the source time series does not have any real values (non-null or filled)
- * or the values are outside of the query bounds set in the config, then the 
- * iterator will false for {@link #hasNext()} even if filling is enabled.</li>
- * <li>Values emitted from this iterator are inclusive of the config 
- * {@link DownsampleConfig#start()} and {@link DownsampleConfig#end()} timestamps.
- * <li>Value timestamps emitted from the iterator are aligned to the <b>top</b>
- * of the interval. E.g. if the interval is set to 1 day, then the timestamp will
- * always be the midnight hour at the start of the day and includes values from
- * [midnight of day, midnight of next day). This implies:
- * <ul>
- * <li>If a source timestamp is earlier than the {@link DownsampleConfig#start()}
- * it will not be included in the results even though the query may have a start
- * timestamp earlier than {@link DownsampleConfig#start()} (due to the fact that
- * the config will snap to the earliest interval greater than or equal to the
- * query start timestamp.</li>
- * <li>If a source timestamp is later than the {@link DownsampleConfig#end()}
- * time but is within the interval defined by {@link DownsampleConfig#end()},
- * it <b>will</b> be included in the results.</li>
- * </ul></li>
- * </ul>
- * <p>
- * Note that in order to optimistically take advantage of special instruction
- * sets on CPUs, we dump values into an array as we downsample and grow the 
- * array as needed, never shrinking it or deleting it. We assume that values
- * are longs until we encounter a double at which point we switch to an alternate
- * array and copy the longs over. So there is potential here that two big
- * arrays could be created but in generally there should only be a few of these
- * iterators instantiated at any time for a query.
- * <p>
- * This combines the old filling downsampler and downsampler classes from 
- * OpenTSDB 2.x.
- * <p>
- * <b>WARNING:</b> For now, the arrays grow by doubling. That means there's a 
- * potential for eating up a ton of heap if there are massive amounts of values
- * (e.g. nano second data points) in an interval. 
- * TODO - look at a better way of growing the arrays.
+ * TODO
  * @since 3.0
  */
 public class DownsampleNumericToArrayIterator implements QueryIterator,
@@ -217,8 +175,9 @@ public class DownsampleNumericToArrayIterator implements QueryIterator,
     if (has_next) {
       final TimeStamp ts;
       if (((DownsampleConfig) node.config()).startTime() == null) {
-        ts = ((SemanticQuery) node.pipelineContext().query()).startTime();
-        ts.snapToPreviousInterval(((DownsampleConfig) node.config()).intervalPart(), ((DownsampleConfig) node.config()).units());;
+        ts = ((SemanticQuery) node.pipelineContext().query()).startTime().getCopy();
+        ts.snapToPreviousInterval(((DownsampleConfig) node.config()).intervalPart(), 
+            ((DownsampleConfig) node.config()).units());
       } else {
         ts = ((DownsampleConfig) node.config()).startTime().getCopy();
       }
@@ -234,6 +193,8 @@ public class DownsampleNumericToArrayIterator implements QueryIterator,
       }
     }
     
+    long_values = null;
+    double_values = null;
     System.out.println(" GONNA DO DS TO ARRAY!!!!!!!!!!!!!  " + has_next + "  ID: " + 
         ((TimeSeriesStringId) source.id()).tags()  + "   Width: " + width);
   }
@@ -251,15 +212,11 @@ public class DownsampleNumericToArrayIterator implements QueryIterator,
   @Override
   public TimeSeriesValue<NumericArrayType> next() {
     has_next = false;
-    return this;
-  }
-  
-  @Override
-  public NumericArrayType value() {
     long_values = new long[width];
     
     TimeSeriesValue<NumericType> value;
     int idx = 0;
+    try {
     while (idx < width) {
       value = interpolator.next(interval_ts);
       if (value.value().isInteger() && long_values != null) {
@@ -270,16 +227,24 @@ public class DownsampleNumericToArrayIterator implements QueryIterator,
           for (int i = 0; i < idx; i++) {
             double_values[i] = long_values[i];
           }
+          System.out.println("     flipped");
           long_values = null;
         }
         double_values[idx] = value.value().toDouble();
       }
-      //System.out.println("TS: " + interval_ts);
       interval_ts.add(((DownsampleConfig) node.config()).interval());
       idx++;
     }
-    
-    System.out.println("VALUE: " + Arrays.toString(long_values) + "  " + Arrays.toString(double_values));
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+    System.out.println("(DS) VALUE: "+((TimeSeriesStringId) source.id()).metric() + " " 
+        + ((TimeSeriesStringId) source.id()).tags() + " => "+ Arrays.toString(long_values) + "  " + Arrays.toString(double_values));
+    return this;
+  }
+  
+  @Override
+  public NumericArrayType value() {
     return this;
   }
   
