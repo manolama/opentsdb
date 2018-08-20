@@ -226,10 +226,6 @@ public class MockDataStore implements ReadableTimeSeriesDataStore, WritableTimeS
       sources = Maps.newHashMap();
       // TODO - other types
       if (value.type() == NumericType.TYPE) {
-        sources.put(NumericType.TYPE, new NumericMillisecondShard(
-            this.id,
-            new MillisecondTimeStamp(base_timestamp), 
-            new MillisecondTimeStamp(base_timestamp + ROW_WIDTH)));
         addValue(value);
       }
     }
@@ -348,7 +344,6 @@ public class MockDataStore implements ReadableTimeSeriesDataStore, WritableTimeS
             }
           }
         }
-
       }
     }
   }
