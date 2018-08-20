@@ -195,8 +195,8 @@ public class DownsampleNumericToArrayIterator implements QueryIterator,
     
     long_values = null;
     double_values = null;
-    System.out.println(" GONNA DO DS TO ARRAY!!!!!!!!!!!!!  " + has_next + "  ID: " + 
-        ((TimeSeriesStringId) source.id()).tags()  + "   Width: " + width);
+//    System.out.println(" GONNA DO DS TO ARRAY!!!!!!!!!!!!!  " + has_next + "  ID: " + 
+//        ((TimeSeriesStringId) source.id()).tags()  + "   Width: " + width);
   }
 
   @Override
@@ -227,7 +227,6 @@ public class DownsampleNumericToArrayIterator implements QueryIterator,
           for (int i = 0; i < idx; i++) {
             double_values[i] = long_values[i];
           }
-          System.out.println("     flipped");
           long_values = null;
         }
         double_values[idx] = value.value().toDouble();
@@ -238,8 +237,8 @@ public class DownsampleNumericToArrayIterator implements QueryIterator,
     } catch (Exception e) {
       e.printStackTrace();
     }
-    System.out.println("(DS) VALUE: "+((TimeSeriesStringId) source.id()).metric() + " " 
-        + ((TimeSeriesStringId) source.id()).tags() + " => "+ Arrays.toString(long_values) + "  " + Arrays.toString(double_values));
+//    System.out.println("(DS) VALUE: "+((TimeSeriesStringId) source.id()).metric() + " " 
+//        + ((TimeSeriesStringId) source.id()).tags() + " => "+ Arrays.toString(long_values) + "  " + Arrays.toString(double_values));
     return this;
   }
   
