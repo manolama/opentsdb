@@ -412,7 +412,7 @@ public class RawQueryRpc {
     final QueryContext context = (QueryContext) request.getAttribute(CONTEXT_KEY);
     final SemanticQuery query = (SemanticQuery) request.getAttribute(QUERY_KEY);
     final Trace trace;
-    if (context != null && context.stats().trace() != null) {
+    if (context != null && context.stats() != null && context.stats().trace() != null) {
       trace = context.stats().trace();
     } else {
       trace = null;

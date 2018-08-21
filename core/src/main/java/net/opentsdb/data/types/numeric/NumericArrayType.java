@@ -21,6 +21,8 @@ import net.opentsdb.data.TimeSeriesDataType;
 /**
  * TODO - scratch work for now when we have a normalized timeseries.
  * 
+ * TODO - I may want to return an offset and length in here.
+ * 
  * Can only be used in conjunction with a downsampled time specification.
  * 
  * Since this can be returned in a value iterator we can return the 
