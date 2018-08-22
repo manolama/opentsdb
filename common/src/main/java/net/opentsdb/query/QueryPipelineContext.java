@@ -18,6 +18,7 @@ import java.util.Collection;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.TimeSeriesDataSource;
+import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.stats.Span;
 
 /**
@@ -43,6 +44,8 @@ public interface QueryPipelineContext extends QueryNode {
    * @return The user's query context.
    */
   public QueryContext queryContext();
+  
+  public ExecutionGraph executionGraph();
   
   /**
    * Called by the user's {@link #pipelineContext()} to initialize the pipeline. Must

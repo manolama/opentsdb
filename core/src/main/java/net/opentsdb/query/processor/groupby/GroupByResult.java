@@ -169,6 +169,7 @@ public class GroupByResult implements QueryResult {
   
   @Override
   public TimeSpecification timeSpecification() {
+    System.out.println("NEXT TIME SPEC: " + next + "  SPEC: " + next.timeSpecification());
     return next.timeSpecification();
   }
 

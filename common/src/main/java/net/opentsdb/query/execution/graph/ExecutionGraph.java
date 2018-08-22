@@ -80,6 +80,12 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
     }
     id = builder.id;
     nodes = builder.nodes;
+    if (builder.configNodes != null) {
+      node_configs = Maps.newHashMapWithExpectedSize(builder.configNodes.size());
+      for (final QueryNodeConfig config : builder.configNodes) {
+        node_configs.put(config.getId(), config);
+      }
+    }
   }
 
   /** @return The unique ID of this graph. */
@@ -196,6 +202,23 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
         .toString();
   }
   
+  public QueryNodeConfig configOfType(final Class<?> clazz) {
+    if (node_configs != null) {
+      for (final QueryNodeConfig config : node_configs.values()) {
+        if (config.getClass().equals(clazz)) {
+          return config;
+        }
+      }
+    }
+    for (final ExecutionGraphNode node : nodes) {
+      if (node.getConfig() != null && 
+          node.getConfig().getClass().equals(clazz)) {
+        return node.getConfig();
+      }
+    }
+    return null;
+  }
+  
   /** @return A new builder for constructing graphs. */
   public static Builder newBuilder() {
     return new Builder();
@@ -226,6 +249,8 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
     private String id;
     @JsonProperty
     private List<ExecutionGraphNode> nodes;
+    @JsonProperty
+    private List<QueryNodeConfig> configNodes;
     
     /**
      * @param id The non-null and non-empty ID of the graph.
@@ -274,6 +299,11 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
         nodes.add(node.build());
         Collections.sort(nodes);
       }
+      return this;
+    }
+    
+    public Builder setNodeConfigs(final List<QueryNodeConfig> config_nodes) {
+      this.configNodes = config_nodes;
       return this;
     }
     
@@ -342,6 +372,38 @@ public class ExecutionGraph implements Comparable<ExecutionGraph> {
       }
       
       builder.addNode(node_builder.build());
+    }
+    
+    final JsonNode node_configs_node = graph_root.get("nodeConfigs");
+    if (node_configs_node != null) {
+      List<QueryNodeConfig> config_nodes = Lists.newArrayList();
+      for (final JsonNode node : node_configs_node) {
+        final JsonNode type_node = node.get("type");
+        final String id = node.get("id").asText();
+        final String type;
+        if (type_node != null) {
+           type = type_node.asText();
+        } else {
+          type = null;
+        }
+        final QueryNodeFactory factory;
+        if (!Strings.isNullOrEmpty(type)) {
+          factory = tsdb.getRegistry().getQueryNodeFactory(type.toLowerCase());
+          if (factory == null) {
+            throw new IllegalArgumentException("No node factory found "
+                + "for node type: " + type);
+          }
+        } else {
+          factory = tsdb.getRegistry().getQueryNodeFactory(id.toLowerCase());
+          if (factory == null) {
+            throw new IllegalArgumentException("No node factory found "
+                + "for node type: " + id);
+          }
+        }
+        final QueryNodeConfig node_config = factory.parseConfig(mapper, tsdb, node);
+        config_nodes.add(node_config);
+      }
+      builder.setNodeConfigs(config_nodes);
     }
     
     return builder;

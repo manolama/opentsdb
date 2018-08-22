@@ -19,6 +19,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import org.jgrapht.experimental.dag.DirectedAcyclicGraph;
@@ -113,6 +114,8 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   /** Used in a sync streaming mode to track how many sinks are done. */
   protected int completed_sinks;
   
+  protected DirectedAcyclicGraph<QueryNodeConfig, DefaultEdge> config_graph;
+  
   /** The graph of query nodes. 
    * PRIVATE so that we can swap out the graph implementation at a later date.
    */
@@ -171,6 +174,11 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   @Override
   public QueryPipelineContext pipelineContext() {
     return this;
+  }
+  
+  @Override
+  public ExecutionGraph executionGraph() {
+    return execution_graph;
   }
   
   @Override
@@ -473,6 +481,19 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     final Set<String> unique_ids = 
         Sets.newHashSetWithExpectedSize(execution_graph.getNodes().size());
     List<Pair<MultiQueryNodeFactory, ExecutionGraphNode>> multis = null;
+    
+    // blech
+    for (final Entry<String, QueryNodeConfig> entry : node_configs.entrySet()) {
+      if (entry.getValue() instanceof DownsampleConfig) {
+        QueryNodeConfig node_config = 
+            DownsampleConfig.newBuilder((DownsampleConfig) entry.getValue())
+              .setStart(((SemanticQuery) query).getStart())
+              .setEnd(((SemanticQuery) query).getEnd())
+              .build();
+        node_configs.put(entry.getKey(), node_config);
+      }
+    }
+    
     
     // first pass to instantiate the nodes.
     for (final ExecutionGraphNode node : nodes) {
