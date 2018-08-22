@@ -28,10 +28,6 @@ public class DownsampleNumericArrayIterator implements QueryIterator,
   /** The aggregator. */
   private final NumericAggregator aggregator;
   
-  /** Whether or not another real value is present. True while at least one 
-   * of the time series has a real value. */
-  private boolean has_next = false;
-  
   private final QueryNode node;
   private final DownsampleResult result;
   private int width;
@@ -58,7 +54,7 @@ public class DownsampleNumericArrayIterator implements QueryIterator,
     if (source == null) {
       throw new IllegalArgumentException("Source cannot be null.");
     }
-    if (Strings.isNullOrEmpty(((GroupByConfig) node.config()).getAggregator())) {
+    if (Strings.isNullOrEmpty(((DownsampleConfig) node.config()).aggregator())) {
       throw new IllegalArgumentException("Aggregator cannot be null or empty."); 
     }
     this.node = node;
@@ -70,11 +66,7 @@ public class DownsampleNumericArrayIterator implements QueryIterator,
         source.iterator(NumericArrayType.TYPE);
     if (optional.isPresent()) {
       iterator = optional.get();
-      has_next = iterator.hasNext();
-      final TimeStamp ts = ((DownsampleConfig) node.config()).startTime().getCopy();
-      while (ts.compare(Op.LTE, ((DownsampleConfig) node.config()).endTime())) {
-        width++;
-      }
+      width = ((DownsampleConfig) node.config()).intervals();
       
     } else {
       iterator = null;
@@ -83,7 +75,7 @@ public class DownsampleNumericArrayIterator implements QueryIterator,
   
   @Override
   public boolean hasNext() {
-    return has_next;
+    return iterator == null ? false : iterator.hasNext();
   }
 
   @Override
@@ -172,8 +164,6 @@ public class DownsampleNumericArrayIterator implements QueryIterator,
         }
       }
     }
-    
-    has_next = false;
     return this;
   }
 

@@ -358,6 +358,7 @@ public class Downsample extends AbstractQueryNode {
         if (!types().contains(type)) {
           return Optional.empty();
         }
+        
         final Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator = 
             ((ProcessorFactory) Downsample.this.factory()).newTypedIterator(
                 type, 

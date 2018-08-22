@@ -53,7 +53,7 @@ public class DownsampleFactory extends BaseQueryNodeFactory {
     registerIteratorFactory(NumericSummaryType.TYPE, 
         new NumericSummaryIteratorFactory());
     registerIteratorFactory(NumericArrayType.TYPE, 
-        new NumericToArrayIteratorFactory());
+        new NumericArrayIteratorFactory());
   }
 
   @Override

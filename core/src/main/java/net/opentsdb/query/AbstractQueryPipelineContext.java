@@ -42,6 +42,7 @@ import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
+import net.opentsdb.query.processor.downsample.DownsampleConfig;
 import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.stats.Span;
 import net.opentsdb.utils.Pair;
@@ -511,6 +512,13 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
         node_config = node_configs.get(node.getType());
       }
       if (node_config != null) {
+        // ugg!!!!
+        if (node_config instanceof DownsampleConfig) {
+          node_config = DownsampleConfig.newBuilder((DownsampleConfig) node_config)
+              .setStart(((SemanticQuery) query).getStart())
+              .setEnd(((SemanticQuery) query).getEnd())
+              .build();
+        }
         query_node = ((SingleQueryNodeFactory) factory)
             .newNode(this, node.getId(), node_config);
       } else {

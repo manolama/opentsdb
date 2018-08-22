@@ -26,12 +26,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.hash.HashCode;
 
 import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.TimeStamp;
+import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.query.BaseQueryNodeConfigWithInterpolators;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.TimeSeriesQuery;
@@ -136,7 +138,8 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
       end_time.snapToPreviousInterval(interval_part, units);
       // TODO - fall to next interval?
     } else {
-      end_time = null;
+      end_time = new MillisecondTimeStamp(DateTime.currentTimeMillis());
+      end_time.snapToPreviousInterval(interval_part, units);
     }
   }
   
@@ -224,6 +227,16 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
     return end_time;
   }
   
+  public int intervals() {
+    TimeStamp ts = start_time.getCopy();
+    int intervals = 0;
+    while (ts.compare(Op.LT, end_time)) {
+      intervals++;
+      ts.add(duration);
+    }
+    return intervals;
+  }
+  
   @Override
   public int compareTo(QueryNodeConfig o) {
     // TODO Auto-generated method stub
@@ -239,6 +252,17 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
   /** @return A new builder to work from. */
   public static Builder newBuilder() {
     return new Builder();
+  }
+  
+  public static Builder newBuilder(final DownsampleConfig config) {
+    return (Builder) new Builder()
+        .setAggregator(config.aggregator)
+        .setFill(config.fill)
+        .setInfectiousNan(config.infectious_nan)
+        .setInterval(config.interval)
+        .setTimeZone(config.timezone.toString())
+        .setInterpolatorConfigs(Lists.newArrayList(config.interpolator_configs.values()))
+        .setId(config.id);
   }
   
   @JsonIgnoreProperties(ignoreUnknown = true)

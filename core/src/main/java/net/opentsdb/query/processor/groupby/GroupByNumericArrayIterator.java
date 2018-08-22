@@ -106,6 +106,7 @@ public class GroupByNumericArrayIterator implements QueryIterator,
     }
     iterators = Lists.newArrayListWithExpectedSize(sources.size());
     for (final TimeSeries source : sources) {
+      try {
       if (source == null) {
         throw new IllegalArgumentException("Null time series are not "
             + "allowed in the sources.");
@@ -118,6 +119,9 @@ public class GroupByNumericArrayIterator implements QueryIterator,
         if (iterator.hasNext()) {
           has_next = true;
         }
+      }
+      } catch (Exception e) {
+        e.printStackTrace();
       }
     }
   }
@@ -142,7 +146,6 @@ public class GroupByNumericArrayIterator implements QueryIterator,
             ((GroupByConfig) node.config()).getInfectiousNan());
       }
     }
-    
     return this;
   }
 
