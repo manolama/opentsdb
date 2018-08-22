@@ -336,11 +336,11 @@ public class Downsample extends AbstractQueryNode {
         this.source = source;
         types = Sets.newHashSet();
         for (final TypeToken<?> type : source.types()) {
-          if (type == NumericType.TYPE) {
-            types.add(NumericArrayType.TYPE);
-          } else {
+//          if (type == NumericType.TYPE) {
+//            types.add(NumericArrayType.TYPE);
+//          } else {
             types.add(type);
-          }
+//          }
         }
       }
       

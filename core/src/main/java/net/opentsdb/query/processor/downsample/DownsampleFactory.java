@@ -49,7 +49,7 @@ public class DownsampleFactory extends BaseQueryNodeFactory {
    */
   public DownsampleFactory() {
     super("downsample");
-    registerIteratorFactory(NumericType.TYPE, new NumericToArrayIteratorFactory());
+    registerIteratorFactory(NumericType.TYPE, new NumericIteratorFactory());
     registerIteratorFactory(NumericSummaryType.TYPE, 
         new NumericSummaryIteratorFactory());
     registerIteratorFactory(NumericArrayType.TYPE, 
@@ -88,9 +88,9 @@ public class DownsampleFactory extends BaseQueryNodeFactory {
     public Iterator<TimeSeriesValue<?>> newIterator(final QueryNode node,
                                                     final QueryResult result,
                                                     final Collection<TimeSeries> sources) {
-      if (((DownsampleConfig) node.config()).fill()) {
-        return new DownsampleNumericToArrayIterator(node, result, sources.iterator().next());
-      }
+//      if (((DownsampleConfig) node.config()).fill()) {
+//        return new DownsampleNumericToArrayIterator(node, result, sources.iterator().next());
+//      }
       
       return new DownsampleNumericIterator(node, result, sources.iterator().next());
     }

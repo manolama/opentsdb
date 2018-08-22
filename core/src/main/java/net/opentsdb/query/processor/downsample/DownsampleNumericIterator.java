@@ -293,11 +293,9 @@ public class DownsampleNumericIterator implements QueryIterator {
           source.iterator(NumericType.TYPE);
       if (optional.isPresent()) {
         iterator = optional.get();
+        next_dp = (TimeSeriesValue<NumericType>) iterator.next();
       } else {
         iterator = null;
-      }
-      if (iterator.hasNext()) {
-        next_dp = (TimeSeriesValue<NumericType>) iterator.next();
       }
       
       dp = new MutableNumericValue();

@@ -326,27 +326,26 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes, TSDBPlugin {
           } else {
             for (final TimeSeries series : 
               series != null ? series : result.timeSeries()) {
-              
               final TypeToken<? extends TimeSeriesDataType> type;
               Optional<Iterator<TimeSeriesValue<?>>> optional = 
                   series.iterator(NumericType.TYPE);
-//              if (optional.isPresent()) {
-//                writeNumeric(opts, 
-//                    optional.get(), 
-//                    json, 
-//                    ids != null ? ids.get(idx++) : (TimeSeriesStringId) series.id(), 
-//                    result);
-//              }
-              
-              optional = series.iterator(NumericArrayType.TYPE);
-              if (optional.isPresent() && optional.get().hasNext()) {
-                writeNumericArray(opts, 
+              if (optional.isPresent()) {
+                writeNumeric(opts, 
                     optional.get(), 
                     json, 
                     ids != null ? ids.get(idx++) : (TimeSeriesStringId) series.id(), 
                     result);
               } else {
-                continue;
+                optional = series.iterator(NumericArrayType.TYPE);
+                if (optional.isPresent() && optional.get().hasNext()) {
+                  writeNumericArray(opts, 
+                      optional.get(), 
+                      json, 
+                      ids != null ? ids.get(idx++) : (TimeSeriesStringId) series.id(), 
+                      result);
+                } else {
+                  continue;
+                }
               }
               
 //              final Iterator<TimeSeriesValue<?>> iterator = optional.get();
@@ -646,6 +645,5 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes, TSDBPlugin {
     }
     
     json.writeEndObject();
-    json.close();
   }
 }

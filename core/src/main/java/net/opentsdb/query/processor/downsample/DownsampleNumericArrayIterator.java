@@ -92,7 +92,10 @@ public class DownsampleNumericArrayIterator implements QueryIterator,
   public NumericArrayType value() {
     final TimeSeriesValue<NumericArrayType> value =
         (TimeSeriesValue<NumericArrayType>) iterator.next();
-    
+    // TODO - need to have a query optimizer to discard this.
+    if (true) {
+      return value.value();
+    }
     // TODO - also depends on the agg method if we return a double or long
     long[] long_source = null;
     double[] double_source = null;

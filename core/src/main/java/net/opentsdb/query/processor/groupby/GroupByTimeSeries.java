@@ -154,6 +154,7 @@ public class GroupByTimeSeries implements TimeSeries {
           iterator.remove();
         }
       }
+      types_unioned = true;
     }
     return types;
   }
