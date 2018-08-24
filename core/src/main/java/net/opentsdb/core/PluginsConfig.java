@@ -112,7 +112,7 @@ public class PluginsConfig extends Validatable {
     DEFAULT_TYPES.add("net.opentsdb.query.interpolation.QueryInterpolatorFactory");
     DEFAULT_TYPES.add("net.opentsdb.storage.DatumIdValidator");
     DEFAULT_TYPES.add("net.opentsdb.uid.UniqueIdFactory");
-    DEFAULT_TYPES.add("net.opentsdb.data.types.numeric.NumericArrayAggregator");
+    DEFAULT_TYPES.add("net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregatorFactory");
     DEFAULT_TYPES.add("net.opentsdb.query.serdes.SerdesFactory");
     DEFAULT_TYPES.add("net.opentsdb.query.execution.QueryExecutorFactory");
     DEFAULT_TYPES.add("net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStoreFactory");

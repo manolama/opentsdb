@@ -28,8 +28,9 @@ import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
-import net.opentsdb.data.types.numeric.NumericArrayAggregator;
 import net.opentsdb.data.types.numeric.NumericArrayType;
+import net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregator;
+import net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregatorFactory;
 import net.opentsdb.query.QueryIterator;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
@@ -44,8 +45,10 @@ import net.opentsdb.query.QueryResult;
 public class GroupByNumericArrayIterator implements QueryIterator, 
   TimeSeriesValue<NumericArrayType> {
 
+  /** The node we belong to. */
   private final GroupBy node;
   
+  /** The result we belong to. */
   private final GroupByResult result;
   
   /** The aggregator. */
@@ -55,6 +58,7 @@ public class GroupByNumericArrayIterator implements QueryIterator,
    * of the time series has a real value. */
   private boolean has_next = false;
   
+  /** List of iterators. */
   private final List<Iterator<TimeSeriesValue<?>>> iterators;
   
   /**
@@ -97,16 +101,20 @@ public class GroupByNumericArrayIterator implements QueryIterator,
     
     this.node = (GroupBy) node;
     this.result = (GroupByResult) result;
-    aggregator = node.pipelineContext().tsdb()
-        .getRegistry().getPlugin(NumericArrayAggregator.class, 
+    final NumericArrayAggregatorFactory factory = node.pipelineContext().tsdb()
+        .getRegistry().getPlugin(NumericArrayAggregatorFactory.class, 
             ((GroupByConfig) node.config()).getAggregator());
+    if (factory == null) {
+      throw new IllegalArgumentException("No aggregator factory found of type: " 
+          + ((GroupByConfig) node.config()).getAggregator());
+    }
+    aggregator = factory.newAggregator(((GroupByConfig) node.config()).getInfectiousNan());
     if (aggregator == null) {
       throw new IllegalArgumentException("No aggregator found of type: " 
           + ((GroupByConfig) node.config()).getAggregator());
     }
     iterators = Lists.newArrayListWithExpectedSize(sources.size());
     for (final TimeSeries source : sources) {
-      try {
       if (source == null) {
         throw new IllegalArgumentException("Null time series are not "
             + "allowed in the sources.");
@@ -119,9 +127,6 @@ public class GroupByNumericArrayIterator implements QueryIterator,
         if (iterator.hasNext()) {
           has_next = true;
         }
-      }
-      } catch (Exception e) {
-        e.printStackTrace();
       }
     }
   }
@@ -142,8 +147,7 @@ public class GroupByNumericArrayIterator implements QueryIterator,
           aggregator.accumulate(array.value().longArray());
         }
       } else if (array.value().doubleArray().length > 0) {
-        aggregator.accumulate(array.value().doubleArray(), 
-            ((GroupByConfig) node.config()).getInfectiousNan());
+        aggregator.accumulate(array.value().doubleArray());
       }
     }
     return this;

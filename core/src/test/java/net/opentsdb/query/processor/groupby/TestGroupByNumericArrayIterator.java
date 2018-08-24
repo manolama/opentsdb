@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017-2018  The OpenTSDB Authors.
+// Copyright (C) 2018  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@ package net.opentsdb.query.processor.groupby;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
@@ -28,7 +27,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import net.opentsdb.data.TypedIterator;
@@ -48,20 +46,13 @@ import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeSpecification;
-import net.opentsdb.data.types.numeric.MockNumericTimeSeries;
-import net.opentsdb.data.types.numeric.MutableNumericValue;
-import net.opentsdb.data.types.numeric.NumericArrayTimeSeries;
-import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericArrayTimeSeries;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.aggregators.ArraySum;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
-import net.opentsdb.query.interpolation.QueryInterpolatorFactory;
-import net.opentsdb.query.interpolation.DefaultInterpolatorFactory;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
-import net.opentsdb.query.interpolation.types.numeric.ScalarNumericInterpolatorConfig;
 import net.opentsdb.query.pojo.FillPolicy;
 import net.opentsdb.query.processor.groupby.GroupByConfig;
 
@@ -108,7 +99,7 @@ public class TestGroupByNumericArrayIterator {
     registry = mock(Registry.class);
     when(tsdb.getRegistry()).thenReturn(registry);
     when(registry.getPlugin(any(Class.class), anyString()))
-      .thenReturn(new ArraySum());
+      .thenReturn(new ArraySum(false));
     when(result.sourceResult()).thenReturn(source_result);
     when(source_result.timeSpecification()).thenReturn(time_spec);
     when(time_spec.start()).thenReturn(new MillisecondTimeStamp(1000));
@@ -282,669 +273,179 @@ public class TestGroupByNumericArrayIterator {
     assertFalse(iterator.hasNext());
   }
   
-//  @Test
-//  public void iterateDoubles() throws Exception {
-//    ts1 = new NumericArrayTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build(), new MillisecondTimeStamp(1000), new MillisecondTimeStamp(7000));
-//    ((NumericArrayTimeSeries) ts1).add(1000, 1.5);
-//    ((NumericArrayTimeSeries) ts1).add(3000, 5.75);
-//    ((NumericArrayTimeSeries) ts1).add(5000, 2.3);
-//    ((NumericArrayTimeSeries) ts1).add(7000, 1.8);
-//    
-//    ts2 = new NumericArrayTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build(), new MillisecondTimeStamp(1000), new MillisecondTimeStamp(7000));
-//    ((NumericArrayTimeSeries) ts2).add(1000, 4.1);
-//    ((NumericArrayTimeSeries) ts2).add(3000, 10.25);
-//    ((NumericArrayTimeSeries) ts2).add(5000, 8.89);
-//    ((NumericArrayTimeSeries) ts2).add(7000, 6.01);
-//    
-//    ts3 = new NumericArrayTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build(), new MillisecondTimeStamp(1000), new MillisecondTimeStamp(7000));
-//    ((NumericArrayTimeSeries) ts3).add(1000, 0.4);
-//    ((NumericArrayTimeSeries) ts3).add(3000, 7.89);
-//    ((NumericArrayTimeSeries) ts3).add(5000, 3.51);
-//    ((NumericArrayTimeSeries) ts3).add(7000, 7.4);
-//    
-//    source_map = Maps.newHashMapWithExpectedSize(3);
-//    source_map.put("a", ts1);
-//    source_map.put("b", ts2);
-//    source_map.put("c", ts3);
-//    
-//    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
-//    assertTrue(iterator.hasNext());
-//    
-//    assertTrue(iterator.hasNext());
-//    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(1000, v.timestamp().msEpoch());
-//    assertFalse(v.value().isInteger());
-//    assertEquals(6.0, v.value().doubleValue(), 0.001);
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(3000, v.timestamp().msEpoch());
-//    assertFalse(v.value().isInteger());
-//    assertEquals(23.89, v.value().doubleValue(), 0.001);
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(5000, v.timestamp().msEpoch());
-//    assertFalse(v.value().isInteger());
-//    assertEquals(14.7, v.value().doubleValue(), 0.001);
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(7000, v.timestamp().msEpoch());
-//    assertFalse(v.value().isInteger());
-//    assertEquals(15.21, v.value().doubleValue(), 0.001);
-//    
-//    assertFalse(iterator.hasNext());
-//  }
-//  
-//  @Test
-//  public void iterateOneSeriesWithoutNumerics() throws Exception {
-//    source_map = Maps.newHashMapWithExpectedSize(3);
-//    source_map.put("a", ts1);
-//    source_map.put("b", new MockSeries());
-//    source_map.put("c", ts3);
-//    
-//    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
-//    assertTrue(iterator.hasNext());
-//    
-//    assertTrue(iterator.hasNext());
-//    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(1000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(1, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(3000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(12, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(5000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(5, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(7000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(8, v.value().longValue());
-//    
-//    assertFalse(iterator.hasNext());
-//  }
-//  
-//  @Test
-//  public void iterateNoNumerics() throws Exception {
-//    source_map = Maps.newHashMapWithExpectedSize(3);
-//    source_map.put("a", new MockSeries());
-//    source_map.put("b", new MockSeries());
-//    source_map.put("c", new MockSeries());
-//    
-//    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
-//    assertFalse(iterator.hasNext());
-//  }
-//  
-//  @Test
-//  public void itearateFillNonInfectiousNans() throws Exception {
-//    numeric_config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
-//        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
-//        .setRealFillPolicy(FillWithRealPolicy.NONE)
-//        .setDataType(NumericArrayType.TYPE.toString())
-//        .build();
-//    
-//    config = (GroupByConfig) GroupByConfig.newBuilder()
-//        .setAggregator("sum")
-//        .addTagKey("dc")
-//        .setId("Testing")
-//        .addInterpolatorConfig(numeric_config)
-//        .build();
-//    when(node.config()).thenReturn(config);
-//    
-//    ts2 = new NumericArrayTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build(), new MillisecondTimeStamp(1000), new MillisecondTimeStamp(7000));
-//    ((NumericArrayTimeSeries) ts2).add(1000, 4);
-//    //((NumericArrayTimeSeries) ts2).add(2000, 10);
-//    ((NumericArrayTimeSeries) ts2).add(5000, 8);
-//    //((NumericArrayTimeSeries) ts2).add(7000, 6);
-//    
-//    source_map = Maps.newHashMapWithExpectedSize(3);
-//    source_map.put("a", ts1);
-//    source_map.put("b", ts2);
-//    source_map.put("c", ts3);
-//    
-//    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
-//    assertTrue(iterator.hasNext());
-//    
-//    assertTrue(iterator.hasNext());
-//    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(1000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(5, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(3000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(12, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(5000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(13, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(7000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(8, v.value().longValue());
-//    
-//    assertFalse(iterator.hasNext());
-//  }
-//  
-//  @Test
-//  public void itearateFillNulls() throws Exception {
-//    numeric_config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
-//        .setFillPolicy(FillPolicy.NULL)
-//        .setRealFillPolicy(FillWithRealPolicy.NONE)
-//        .setDataType(NumericArrayType.TYPE.toString())
-//        .build();
-//    
-//    config = (GroupByConfig) GroupByConfig.newBuilder()
-//        .setAggregator("sum")
-//        .addTagKey("dc")
-//        .setId("Testing")
-//        .addInterpolatorConfig(numeric_config)
-//        .build();
-//    when(node.config()).thenReturn(config);
-//    
-//    ts2 = new NumericArrayTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build(), new MillisecondTimeStamp(1000), new MillisecondTimeStamp(7000));
-//    ((NumericArrayTimeSeries) ts2).add(1000, 4);
-//    //((NumericArrayTimeSeries) ts2).add(2000, 10);
-//    ((NumericArrayTimeSeries) ts2).add(5000, 8);
-//    //((NumericArrayTimeSeries) ts2).add(7000, 6);
-//    
-//    source_map = Maps.newHashMapWithExpectedSize(3);
-//    source_map.put("a", ts1);
-//    source_map.put("b", ts2);
-//    source_map.put("c", ts3);
-//    
-//    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
-//    assertTrue(iterator.hasNext());
-//    
-//    assertTrue(iterator.hasNext());
-//    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(1000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(5, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(3000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(12, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(5000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(13, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(7000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(8, v.value().longValue());
-//    
-//    assertFalse(iterator.hasNext());
-//  }
-//  
-//  @Test
-//  public void itearateFillInfectiousNan() throws Exception {
-//    numeric_config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
-//        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
-//        .setRealFillPolicy(FillWithRealPolicy.NONE)
-//        .setDataType(NumericArrayType.TYPE.toString())
-//        .build();
-//    
-//    config = (GroupByConfig) GroupByConfig.newBuilder()
-//        .setAggregator("sum")
-//        .addTagKey("dc")
-//        .setInfectiousNan(true)
-//        .setId("Testing")
-//        .addInterpolatorConfig(numeric_config)
-//        .build();
-//    when(node.config()).thenReturn(config);
-//    
-//    ts2 = new NumericArrayTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build(), new MillisecondTimeStamp(1000), new MillisecondTimeStamp(7000));
-//    ((NumericArrayTimeSeries) ts2).add(1000, 4);
-//    //((NumericArrayTimeSeries) ts2).add(2000, 10);
-//    ((NumericArrayTimeSeries) ts2).add(5000, 8);
-//    //((NumericArrayTimeSeries) ts2).add(7000, 6);
-//    
-//    source_map = Maps.newHashMapWithExpectedSize(3);
-//    source_map.put("a", ts1);
-//    source_map.put("b", ts2);
-//    source_map.put("c", ts3);
-//    
-//    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
-//    assertTrue(iterator.hasNext());
-//    
-//    assertTrue(iterator.hasNext());
-//    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(1000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(5, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(3000, v.timestamp().msEpoch());
-//    assertFalse(v.value().isInteger());
-//    assertTrue(Double.isNaN(v.value().doubleValue()));
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(5000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(13, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(7000, v.timestamp().msEpoch());
-//    assertFalse(v.value().isInteger());
-//    assertTrue(Double.isNaN(v.value().doubleValue()));
-//    assertFalse(iterator.hasNext());
-//  }
-//  
-//  @Test
-//  public void itearateNonInfectiousNan() throws Exception {
-//    numeric_config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
-//        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
-//        .setRealFillPolicy(FillWithRealPolicy.NONE)
-//        .setDataType(NumericArrayType.TYPE.toString())
-//        .build();
-//    
-//    config = (GroupByConfig) GroupByConfig.newBuilder()
-//        .setAggregator("sum")
-//        .addTagKey("dc")
-//        .setInfectiousNan(false)
-//        .setId("Testing")
-//        .addInterpolatorConfig(numeric_config)
-//        .build();
-//    when(node.config()).thenReturn(config);
-//    
-//    ts2 = new MockNumericTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build());
-//    MutableNumericValue dp = new MutableNumericValue(
-//        new MillisecondTimeStamp(1000), 4);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 8);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    
-//    source_map = Maps.newHashMapWithExpectedSize(3);
-//    source_map.put("a", ts1);
-//    source_map.put("b", ts2);
-//    source_map.put("c", ts3);
-//    
-//    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
-//    assertTrue(iterator.hasNext());
-//    
-//
-//    assertTrue(iterator.hasNext());
-//    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(1000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(5, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(3000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(12, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(5000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(13, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(7000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(8, v.value().longValue());
-//    
-//    assertFalse(iterator.hasNext());
-//  }
-//  
-//  @Test
-//  public void itearateInfectiousNan() throws Exception {
-//    numeric_config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
-//        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
-//        .setRealFillPolicy(FillWithRealPolicy.NONE)
-//        .setDataType(NumericArrayType.TYPE.toString())
-//        .build();
-//    
-//    config = (GroupByConfig) GroupByConfig.newBuilder()
-//        .setAggregator("sum")
-//        .addTagKey("dc")
-//        .setInfectiousNan(true)
-//        .setId("Testing")
-//        .addInterpolatorConfig(numeric_config)
-//        .build();
-//    when(node.config()).thenReturn(config);
-//    
-//    ts2 = new MockNumericTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build());
-//    MutableNumericValue dp = new MutableNumericValue(
-//        new MillisecondTimeStamp(1000), 4);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 8);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    
-//    source_map = Maps.newHashMapWithExpectedSize(3);
-//    source_map.put("a", ts1);
-//    source_map.put("b", ts2);
-//    source_map.put("c", ts3);
-//    
-//    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
-//    assertTrue(iterator.hasNext());
-//    
-//    assertTrue(iterator.hasNext());
-//    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(1000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(5, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(3000, v.timestamp().msEpoch());
-//    assertFalse(v.value().isInteger());
-//    assertTrue(Double.isNaN(v.value().doubleValue()));
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(5000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(13, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(7000, v.timestamp().msEpoch());
-//    assertFalse(v.value().isInteger());
-//    assertTrue(Double.isNaN(v.value().doubleValue()));
-//    
-//    assertFalse(iterator.hasNext());
-//  }
-//  
-//  @Test
-//  public void itearateNulls() throws Exception {
-//    config = (GroupByConfig) GroupByConfig.newBuilder()
-//        .setAggregator("sum")
-//        .addTagKey("dc")
-//        .setInfectiousNan(true)
-//        .setId("Testing")        
-//        .addInterpolatorConfig(numeric_config)
-//        .build();
-//    when(node.config()).thenReturn(config);
-//    
-//    ts2 = new MockNumericTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build());
-//    MutableNumericValue dp = new MutableNumericValue(
-//        new MillisecondTimeStamp(1000), 4);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
-//    dp.resetNull(new MillisecondTimeStamp(3000));
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 8);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
-//    dp.resetNull(new MillisecondTimeStamp(7000));
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    
-//    source_map = Maps.newHashMapWithExpectedSize(3);
-//    source_map.put("a", ts1);
-//    source_map.put("b", ts2);
-//    source_map.put("c", ts3);
-//    
-//    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
-//    assertTrue(iterator.hasNext());
-//    
-//    assertTrue(iterator.hasNext());
-//    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(1000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(5, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(3000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(12, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(5000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(13, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(7000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(8, v.value().longValue());
-//    
-//    assertFalse(iterator.hasNext());
-//  }
-//  
-//  @Test
-//  public void itearateDownsampledNulls() throws Exception {
-//    config = (GroupByConfig) GroupByConfig.newBuilder()
-//        .setAggregator("sum")
-//        .addTagKey("dc")
-//        .setInfectiousNan(true)
-//        .setId("Testing")
-//        .addInterpolatorConfig(numeric_config)
-//        .build();
-//    when(node.config()).thenReturn(config);
-//    
-//    ts1 = new MockNumericTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build());
-//    MutableNumericValue dp = new MutableNumericValue(
-//        new MillisecondTimeStamp(1000), 1);
-//    ((MockNumericTimeSeries) ts1).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
-//    dp.resetNull(new MillisecondTimeStamp(3000));
-//    ((MockNumericTimeSeries) ts1).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 2);
-//    ((MockNumericTimeSeries) ts1).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
-//    dp.resetNull(new MillisecondTimeStamp(7000));
-//    ((MockNumericTimeSeries) ts1).add(dp);
-//    
-//    ts2 = new MockNumericTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build());
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(1000), 4);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
-//    dp.resetNull(new MillisecondTimeStamp(3000));
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 8);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
-//    dp.resetNull(new MillisecondTimeStamp(7000));
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    
-//    ts3 = new MockNumericTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build());
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(1000), 0);
-//    ((MockNumericTimeSeries) ts3).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
-//    dp.resetNull(new MillisecondTimeStamp(3000));
-//    ((MockNumericTimeSeries) ts3).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 3);
-//    ((MockNumericTimeSeries) ts3).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
-//    dp.resetNull(new MillisecondTimeStamp(7000));
-//    ((MockNumericTimeSeries) ts3).add(dp);
-//    
-//    source_map = Maps.newHashMapWithExpectedSize(3);
-//    source_map.put("a", ts1);
-//    source_map.put("b", ts2);
-//    source_map.put("c", ts3);
-//    
-//    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
-//    assertTrue(iterator.hasNext());
-//    
-//    assertTrue(iterator.hasNext());
-//    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(1000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(5, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(3000, v.timestamp().msEpoch());
-//    assertNull(v.value());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(5000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(13, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(7000, v.timestamp().msEpoch());
-//    assertNull(v.value());
-//    
-//    assertFalse(iterator.hasNext());
-//  }
-//  
-//  @Test
-//  public void itearateDownsampledNaNs() throws Exception {
-//    config = (GroupByConfig) GroupByConfig.newBuilder()
-//        .setAggregator("sum")
-//        .addTagKey("dc")
-//        .setInfectiousNan(true)
-//        .setId("Testing")
-//        .addInterpolatorConfig(numeric_config)
-//        .build();
-//    when(node.config()).thenReturn(config);
-//    
-//    ts1 = new MockNumericTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build());
-//    MutableNumericValue dp = new MutableNumericValue(
-//        new MillisecondTimeStamp(1000), 1);
-//    ((MockNumericTimeSeries) ts1).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
-//    ((MockNumericTimeSeries) ts1).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 2);
-//    ((MockNumericTimeSeries) ts1).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
-//    ((MockNumericTimeSeries) ts1).add(dp);
-//    
-//    ts2 = new MockNumericTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build());
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(1000), 4);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 8);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
-//    ((MockNumericTimeSeries) ts2).add(dp);
-//    
-//    ts3 = new MockNumericTimeSeries(
-//        BaseTimeSeriesStringId.newBuilder()
-//        .setMetric("a")
-//        .build());
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(1000), 0);
-//    ((MockNumericTimeSeries) ts3).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(3000), Double.NaN);
-//    ((MockNumericTimeSeries) ts3).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(5000), 3);
-//    ((MockNumericTimeSeries) ts3).add(dp);
-//    dp = new MutableNumericValue(new MillisecondTimeStamp(7000), Double.NaN);
-//    ((MockNumericTimeSeries) ts3).add(dp);
-//    
-//    source_map = Maps.newHashMapWithExpectedSize(3);
-//    source_map.put("a", ts1);
-//    source_map.put("b", ts2);
-//    source_map.put("c", ts3);
-//    
-//    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
-//    assertTrue(iterator.hasNext());
-//    
-//    assertTrue(iterator.hasNext());
-//    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(1000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(5, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(3000, v.timestamp().msEpoch());
-//    assertFalse(v.value().isInteger());
-//    assertTrue(Double.isNaN(v.value().doubleValue()));
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(5000, v.timestamp().msEpoch());
-//    assertTrue(v.value().isInteger());
-//    assertEquals(13, v.value().longValue());
-//    
-//    assertTrue(iterator.hasNext());
-//    v = (TimeSeriesValue<NumericArrayType>) iterator.next();
-//    assertEquals(7000, v.timestamp().msEpoch());
-//    assertFalse(v.value().isInteger());
-//    assertTrue(Double.isNaN(v.value().doubleValue()));
-//    
-//    assertFalse(iterator.hasNext());
-//  }
-//  
+  @Test
+  public void iterateDoubles() throws Exception {
+    ts1 = new NumericArrayTimeSeries(
+        BaseTimeSeriesStringId.newBuilder()
+        .setMetric("a")
+        .build(), new MillisecondTimeStamp(1000));
+    ((NumericArrayTimeSeries) ts1).add(1.5);
+    ((NumericArrayTimeSeries) ts1).add(5.75);
+    ((NumericArrayTimeSeries) ts1).add(2.3);
+    ((NumericArrayTimeSeries) ts1).add(1.8);
+    
+    ts2 = new NumericArrayTimeSeries(
+        BaseTimeSeriesStringId.newBuilder()
+        .setMetric("a")
+        .build(), new MillisecondTimeStamp(1000));
+    ((NumericArrayTimeSeries) ts2).add(4.1);
+    ((NumericArrayTimeSeries) ts2).add(10.25);
+    ((NumericArrayTimeSeries) ts2).add(8.89);
+    ((NumericArrayTimeSeries) ts2).add(6.01);
+    
+    ts3 = new NumericArrayTimeSeries(
+        BaseTimeSeriesStringId.newBuilder()
+        .setMetric("a")
+        .build(), new MillisecondTimeStamp(1000));
+    ((NumericArrayTimeSeries) ts3).add(0.4);
+    ((NumericArrayTimeSeries) ts3).add(7.89);
+    ((NumericArrayTimeSeries) ts3).add(3.51);
+    ((NumericArrayTimeSeries) ts3).add(7.4);
+    
+    source_map = Maps.newHashMapWithExpectedSize(3);
+    source_map.put("a", ts1);
+    source_map.put("b", ts2);
+    source_map.put("c", ts3);
+    
+    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
+    assertTrue(iterator.hasNext());
+    
+    assertTrue(iterator.hasNext());
+    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
+    assertEquals(1000, v.timestamp().msEpoch());
+    assertFalse(v.value().isInteger());
+    assertEquals(6.0, v.value().doubleArray()[0], 0.001);
+    assertEquals(23.89, v.value().doubleArray()[1], 0.001);
+    assertEquals(14.7, v.value().doubleArray()[2], 0.001);
+    assertEquals(15.21, v.value().doubleArray()[3], 0.001);
+    
+    assertFalse(iterator.hasNext());
+  }
+  
+  @Test
+  public void iterateOneSeriesWithoutNumerics() throws Exception {
+    source_map = Maps.newHashMapWithExpectedSize(3);
+    source_map.put("a", ts1);
+    source_map.put("b", new MockSeries());
+    source_map.put("c", ts3);
+    
+    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
+    assertTrue(iterator.hasNext());
+    
+    assertTrue(iterator.hasNext());
+    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
+    assertEquals(1000, v.timestamp().msEpoch());
+    assertTrue(v.value().isInteger());
+    assertEquals(1, v.value().longArray()[0]);
+    assertEquals(12, v.value().longArray()[1]);
+    assertEquals(5, v.value().longArray()[2]);
+    assertEquals(8, v.value().longArray()[3]);
+    
+    assertFalse(iterator.hasNext());
+  }
+  
+  @Test
+  public void iterateNoNumerics() throws Exception {
+    source_map = Maps.newHashMapWithExpectedSize(3);
+    source_map.put("a", new MockSeries());
+    source_map.put("b", new MockSeries());
+    source_map.put("c", new MockSeries());
+    
+    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
+    assertFalse(iterator.hasNext());
+  }
+  
+  @Test
+  public void itearateFillNonInfectiousNans() throws Exception {
+    numeric_config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
+        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
+        .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setDataType(NumericArrayType.TYPE.toString())
+        .build();
+    
+    config = (GroupByConfig) GroupByConfig.newBuilder()
+        .setAggregator("sum")
+        .addTagKey("dc")
+        .setId("Testing")
+        .addInterpolatorConfig(numeric_config)
+        .build();
+    when(node.config()).thenReturn(config);
+    
+    ts2 = new NumericArrayTimeSeries(
+        BaseTimeSeriesStringId.newBuilder()
+        .setMetric("a")
+        .build(), new MillisecondTimeStamp(1000));
+    ((NumericArrayTimeSeries) ts2).add(4);
+    ((NumericArrayTimeSeries) ts2).add(Double.NaN);
+    ((NumericArrayTimeSeries) ts2).add(8);
+    ((NumericArrayTimeSeries) ts2).add(Double.NaN);
+    
+    source_map = Maps.newHashMapWithExpectedSize(3);
+    source_map.put("a", ts1);
+    source_map.put("b", ts2);
+    source_map.put("c", ts3);
+    
+    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
+    assertTrue(iterator.hasNext());
+    
+    assertTrue(iterator.hasNext());
+    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
+    assertEquals(1000, v.timestamp().msEpoch());
+    assertFalse(v.value().isInteger());
+    assertEquals(5, v.value().doubleArray()[0], 0.001);
+    assertEquals(12, v.value().doubleArray()[1], 0.001);
+    assertEquals(13, v.value().doubleArray()[2], 0.001);
+    assertEquals(8, v.value().doubleArray()[3], 0.001);
+    
+    assertFalse(iterator.hasNext());
+  }
+  
+  @Test
+  public void itearateFillInfectiousNan() throws Exception {
+    numeric_config = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
+        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
+        .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setDataType(NumericArrayType.TYPE.toString())
+        .build();
+    
+    config = (GroupByConfig) GroupByConfig.newBuilder()
+        .setAggregator("sum")
+        .addTagKey("dc")
+        .setInfectiousNan(true)
+        .setId("Testing")
+        .addInterpolatorConfig(numeric_config)
+        .build();
+    when(node.config()).thenReturn(config);
+    
+    ts2 = new NumericArrayTimeSeries(
+        BaseTimeSeriesStringId.newBuilder()
+        .setMetric("a")
+        .build(), new MillisecondTimeStamp(1000));
+    ((NumericArrayTimeSeries) ts2).add(4);
+    ((NumericArrayTimeSeries) ts2).add(Double.NaN);
+    ((NumericArrayTimeSeries) ts2).add(8);
+    ((NumericArrayTimeSeries) ts2).add(Double.NaN);
+    
+    source_map = Maps.newHashMapWithExpectedSize(3);
+    source_map.put("a", ts1);
+    source_map.put("b", ts2);
+    source_map.put("c", ts3);
+    
+    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(node, result, source_map);
+    assertTrue(iterator.hasNext());
+    
+    assertTrue(iterator.hasNext());
+    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
+    assertEquals(1000, v.timestamp().msEpoch());
+    assertFalse(v.value().isInteger());
+    assertEquals(5, v.value().doubleArray()[0], 0.001);
+    assertTrue(Double.isNaN(v.value().doubleArray()[1]));
+    assertEquals(13, v.value().doubleArray()[2], 0.001);
+    assertTrue(Double.isNaN(v.value().doubleArray()[3]));
+    
+    assertFalse(iterator.hasNext());
+  }
+  
   class MockSeries implements TimeSeries {
 
     @Override
