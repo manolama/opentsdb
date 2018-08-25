@@ -163,8 +163,7 @@ public class TSDBV2QueryContextBuilder implements QueryContextBuilder {
             .asChildOf(stats.querySpan())
             .start();
       }
-      context = new LocalPipeline(tsdb, query, this, 
-          ((SemanticQuery) query).getExecutionGraph(), sinks);
+      context = new LocalPipeline(tsdb, query, this, sinks);
       context.initialize(local_span);
     }
     
@@ -207,8 +206,8 @@ public class TSDBV2QueryContextBuilder implements QueryContextBuilder {
   class LocalPipeline extends AbstractQueryPipelineContext {
 
     public LocalPipeline(TSDB tsdb, TimeSeriesQuery query, QueryContext context,
-        ExecutionGraph execution_graph, Collection<QuerySink> sinks) {
-      super(tsdb, query, context, execution_graph, sinks);
+        Collection<QuerySink> sinks) {
+      super(tsdb, query, context, sinks);
     }
 
     @Override

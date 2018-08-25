@@ -14,7 +14,14 @@
 // limitations under the License.
 package net.opentsdb.query;
 
+import java.util.List;
+
 import com.google.common.hash.HashCode;
+
+import net.opentsdb.data.TimeStamp;
+import net.opentsdb.query.execution.graph.ExecutionGraph;
+import net.opentsdb.query.filter.NamedFilter;
+import net.opentsdb.query.filter.QueryFilter;
 
 /**
  * The base interface for OpenTSDB queries.
@@ -24,6 +31,25 @@ import com.google.common.hash.HashCode;
  */
 public interface TimeSeriesQuery extends Comparable<TimeSeriesQuery> {
 
+  public String getStart();
+  
+  public String getEnd();
+  
+  public String getTimezone();
+  
+  public QueryMode getMode();
+  
+  public List<NamedFilter> getFilters();
+
+  public QueryFilter getFilter(final String filter_id);
+  
+  public ExecutionGraph getExecutionGraph();
+  
+  public TimeStamp startTime();
+  
+  public TimeStamp endTime();
+  
   /** @return A HashCode object for deterministic, non-secure hashing */
   public HashCode buildHashCode();
+  
 }

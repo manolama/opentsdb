@@ -109,7 +109,7 @@ public class ExpressionFactory extends BaseMultiQueryNodeFactory {
       // recursively.
       String last_source = null;
       if ((parse_node.leftType() == OperandType.VARIABLE)) {
-        String ds = validate2(parse_node, true, nodes, exp, 0);
+        String ds = validate(parse_node, true, nodes, exp, 0);
         if (ds != null) {
           builder.addSource(ds);
           last_source = ds;
@@ -119,7 +119,7 @@ public class ExpressionFactory extends BaseMultiQueryNodeFactory {
       }
       
       if ((parse_node.rightType() == OperandType.VARIABLE)) {
-        String ds = validate2(parse_node, false, nodes, exp, 0);
+        String ds = validate(parse_node, false, nodes, exp, 0);
         if (ds != null) {
           // dedupe
           if (last_source == null || !last_source.equals(ds)) {
@@ -146,11 +146,11 @@ public class ExpressionFactory extends BaseMultiQueryNodeFactory {
     }
   }
   
-  static String validate2(final ExpressionParseNode node, 
-                          final boolean left, 
-                          final List<ExecutionGraphNode> nodes, 
-                          final ExecutionGraphNode downstream, 
-                          final int depth) {
+  static String validate(final ExpressionParseNode node, 
+                         final boolean left, 
+                         final List<ExecutionGraphNode> nodes, 
+                         final ExecutionGraphNode downstream, 
+                         final int depth) {
     final String key = left ? (String) node.left() : (String) node.right();
     if (depth > 0 && 
         !Strings.isNullOrEmpty(downstream.getType()) && 
@@ -193,7 +193,7 @@ public class ExpressionFactory extends BaseMultiQueryNodeFactory {
       for (final String source : downstream.getSources()) {
         for (final ExecutionGraphNode graph_node : nodes) {
           if (graph_node.getId().equals(source)) {
-            final String ds = validate2(node, left, nodes, graph_node, depth + 1);
+            final String ds = validate(node, left, nodes, graph_node, depth + 1);
             if (ds != null) {
               if (depth == 0) {
                 return ds;

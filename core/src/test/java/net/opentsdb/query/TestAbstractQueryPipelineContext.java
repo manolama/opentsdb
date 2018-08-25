@@ -1197,8 +1197,8 @@ public class TestAbstractQueryPipelineContext {
   
   class TestContext extends AbstractQueryPipelineContext {
     public TestContext(TSDB tsdb, TimeSeriesQuery query, QueryContext context,
-        ExecutionGraph execution_graph, Collection<QuerySink> sinks) {
-      super(tsdb, query, context, execution_graph, sinks);
+        Collection<QuerySink> sinks) {
+      super(tsdb, query, context, sinks);
     }
   
     @Override

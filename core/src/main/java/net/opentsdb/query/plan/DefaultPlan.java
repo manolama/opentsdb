@@ -41,29 +41,33 @@ import net.opentsdb.utils.Pair;
  */
 public class DefaultPlan {
 
-  private SemanticQuery query;
-  private TSDB tsdb;
+  private final QueryPipelineContext context;
   private List<QueryNode> roots;
   private QueryNode sink;
+  private DirectedAcyclicGraph<QueryNode, DefaultEdge> graph;
+  List<TimeSeriesDataSource> sources;
   
   DirectedAcyclicGraph<ExecutionGraphNode, DefaultEdge> base_config_graph;
   
-  DefaultPlan(final TSDB tsdb, final SemanticQuery query,
+  public DefaultPlan(final QueryPipelineContext context,
       final QueryNode sink) {
-    this.tsdb = tsdb;
-    this.query = query;
+    this.context = context;
     roots = Lists.newArrayList();
     this.sink = sink;
+    graph = new DirectedAcyclicGraph<QueryNode, DefaultEdge>(DefaultEdge.class);
+    sources = Lists.newArrayList();
   }
   
-  DirectedAcyclicGraph<QueryNode, DefaultEdge> plan(final QueryPipelineContext context) {
+  public void plan() {
     final Map<String, ExecutionGraphNode> config_map = 
-        Maps.newHashMapWithExpectedSize(query.getExecutionGraph().getNodes().size());
+        Maps.newHashMapWithExpectedSize(
+            context.query().getExecutionGraph().getNodes().size());
     
     DirectedAcyclicGraph<ExecutionGraphNode, DefaultEdge> config_graph = new 
         DirectedAcyclicGraph<ExecutionGraphNode, DefaultEdge>(DefaultEdge.class);
     
-    for (final ExecutionGraphNode node : query.getExecutionGraph().getNodes()) {
+    for (final ExecutionGraphNode node : 
+        context.query().getExecutionGraph().getNodes()) {
       if (config_map.putIfAbsent(node.getId(), node) != null) {
         throw new IllegalArgumentException("The node id \"" 
             + node.getId() + "\" appeared more than once in the "
@@ -74,7 +78,8 @@ public class DefaultPlan {
     }
     
     // now link em
-    for (final ExecutionGraphNode node : query.getExecutionGraph().getNodes()) {
+    for (final ExecutionGraphNode node : 
+        context.query().getExecutionGraph().getNodes()) {
       if (node.getSources() != null) {
         for (final String source : node.getSources()) {
           try {
@@ -105,15 +110,15 @@ public class DefaultPlan {
       }
       
       QueryNodeConfig config = node.getConfig() != null ? node.getConfig() :
-        query.getExecutionGraph().nodeConfigs().get(node.getId());
+        context.query().getExecutionGraph().nodeConfigs().get(node.getId());
       
       if (config instanceof QuerySourceConfig) {
         final QueryNodeFactory factory;
         if (!Strings.isNullOrEmpty(node.getType())) {
-          factory = tsdb.getRegistry().getQueryNodeFactory(node.getType().toLowerCase());
+          factory = context.tsdb().getRegistry().getQueryNodeFactory(node.getType().toLowerCase());
           System.out.println("  DS: " + node.getType().toLowerCase());
         } else {
-          factory = tsdb.getRegistry().getQueryNodeFactory(node.getId().toLowerCase());
+          factory = context.tsdb().getRegistry().getQueryNodeFactory(node.getId().toLowerCase());
           System.out.println("  DS: " + node.getId().toLowerCase());
         }
         
@@ -146,14 +151,14 @@ public class DefaultPlan {
       }
     }
     
-    DirectedAcyclicGraph<QueryNode, DefaultEdge> graph = 
-        new DirectedAcyclicGraph<QueryNode, DefaultEdge>(DefaultEdge.class);
     graph.addVertex(sink);
+    System.out.println("ADDED GRAPH SINK: " + sink);
     
     List<Long> initialized = Lists.newArrayList();
     BreadthFirstIterator<ExecutionGraphNode, DefaultEdge> bfi = 
         new BreadthFirstIterator<ExecutionGraphNode, DefaultEdge>(base_config_graph);
     Map<String, QueryNode> nodes_map = Maps.newHashMap();
+    nodes_map.put(sink.id(), sink);
     while (bfi.hasNext()) {
       final ExecutionGraphNode node = bfi.next();
       if (base_config_graph.incomingEdgesOf(node).isEmpty()) {
@@ -191,9 +196,7 @@ public class DefaultPlan {
         node.initialize(null /* TODO */);
       }
     }
-    //sources.addAll(source_set);
-    
-    return graph;
+    sources.addAll(source_set);
   }
   
   DefaultEdge pushDown(
@@ -202,8 +205,8 @@ public class DefaultPlan {
       TimeSeriesDataStoreFactory factory, 
       ExecutionGraphNode node,
       List<ExecutionGraphNode> push_downs) {
-    QueryNodeConfig config = node.getConfig() != null ? node.getConfig() :
-      query.getExecutionGraph().nodeConfigs().get(node.getId());
+    final QueryNodeConfig config = node.getConfig() != null ? node.getConfig() :
+      context.query().getExecutionGraph().nodeConfigs().get(node.getId());
     if (!factory.supportsPushdown(config.getClass())) {
       if (!base_config_graph.containsEdge(node, parent)) {
         try {
@@ -265,34 +268,37 @@ public class DefaultPlan {
       List<Long> initialized,
       Map<String, QueryNode> nodes_map) {
     if (initialized.contains(node.buildHashCode().asLong())) {
+      System.out.println("   ALREADY INITED: " + node.getId());
       return nodes_map.get(node.getId());
     }
     
     List<QueryNode> sources = Lists.newArrayList();
     for (final DefaultEdge edge : base_config_graph.outgoingEdgesOf(node)) {
+      System.out.println("   TGT: " + base_config_graph.getEdgeTarget(edge));
       sources.add(buildNodeGraph(context, graph, 
           base_config_graph.getEdgeTarget(edge), initialized, nodes_map));
     }
     
     final QueryNodeFactory factory;
     if (!Strings.isNullOrEmpty(node.getType())) {
-      factory = tsdb.getRegistry().getQueryNodeFactory(node.getType().toLowerCase());
+      factory = context.tsdb().getRegistry().getQueryNodeFactory(node.getType().toLowerCase());
     } else {
-      factory = tsdb.getRegistry().getQueryNodeFactory(node.getId().toLowerCase());
+      factory = context.tsdb().getRegistry().getQueryNodeFactory(node.getId().toLowerCase());
     }
     if (factory == null) {
       throw new IllegalArgumentException("No node factory found for "
           + "configuration " + node);
     }
     
-    QueryNodeConfig node_config = node.getConfig() != null ? 
-        node.getConfig() : query.getExecutionGraph().nodeConfigs().get(node.getId());
+    QueryNodeConfig node_config = node.getConfig() != null ? node.getConfig() : 
+          context.query().getExecutionGraph().nodeConfigs().get(node.getId());
     if (node_config == null) {
-      node_config = query.getExecutionGraph().nodeConfigs().get(node.getType());
+      node_config = context.query().getExecutionGraph().nodeConfigs().get(node.getType());
     }
     
     QueryNode query_node = null;
-    List<ExecutionGraphNode> configs = Lists.newArrayList(node);
+    List<ExecutionGraphNode> configs = Lists.newArrayList(
+        context.query().getExecutionGraph().getNodes());
     Map<String, QueryNode> map = Maps.newHashMap();
     if (!(factory instanceof SingleQueryNodeFactory)) {
       final Collection<QueryNode> query_nodes = 
@@ -302,54 +308,92 @@ public class DefaultPlan {
         throw new IllegalStateException("Factory returned a null or "
             + "empty list of nodes for " + node.getId());
       }
+      
+      Collection<DefaultEdge> tgts = base_config_graph.outgoingEdgesOf(node);
+      
+      QueryNode last = null;
       for (final QueryNode n : query_nodes) {
         if (n == null) {
           throw new IllegalStateException("Factory returned a null "
               + "node for " + node.getId());
         }
+        if (query_node == null) {
+          query_node = n;
+        }
+        last = n;
         
         map.put(n.id(), n);
         graph.addVertex(n);
+        nodes_map.put(n.id(), n);
+        System.out.println("    PUT NODE: " + n);
       }
       
-      for (final ExecutionGraphNode config : configs) {
-        if (config.getSources() != null) {
-          final QueryNode mnode = map.get(config.getId());
-          for (final String source : config.getSources()) {
-            final QueryNode snode = map.get(source);
-            if (snode != null) {
-              try {
-                graph.addDagEdge(mnode, snode);
-              } catch (CycleFoundException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-              }
-            } else {
-              // should be in the map now
-              for (final QueryNode source_node : sources) {
-                try {
-                  graph.addDagEdge(mnode, source_node);
-                } catch (CycleFoundException e) {
-                  // TODO Auto-generated catch block
-                  e.printStackTrace();
-                }
-              }
-            }
-          }
-        } else {
-          // its the "root" node
-          query_node = map.get(config.getId());
-        }
-      }
+//      for (final ExecutionGraphNode config : configs) {
+//        if (context.query().getExecutionGraph().getNodes().contains(config)) {
+//          System.out.println("Skipping: " + config);
+//          continue;
+//        }
+//        
+////        if (config.getSources() != null) {
+////          QueryNode mnode = map.get(config.getId());
+////          if (mnode == null) {
+////            mnode = nodes_map.get(config.getId());
+////          }
+////          
+////          System.out.println("WANT MNODE: " + config.getId() + "  => " + mnode);
+//////          for (final String source : config.getSources()) {
+//////            QueryNode snode = map.get(source);
+//////            if (snode != null) {
+//////              System.out.println("SNODE: " + snode + "   mNode: " + mnode);
+//////              try {
+//////                graph.addDagEdge(mnode, snode);
+//////              } catch (CycleFoundException e) {
+//////                // TODO Auto-generated catch block
+//////                e.printStackTrace();
+//////              }
+//////            } else {
+//////              snode = nodes_map.get(source);
+//////              if (snode == null) {
+//////                // we use the bits above
+//////                
+//////              }
+//////              System.out.println("  NEW SN: " + snode);
+////////              // should be in the map now
+////////              for (final QueryNode source_node : sources) {
+////////                System.out.println("SNODE: " + source_node + "   mNode: " + mnode);
+////////                try {
+////////                  graph.addDagEdge(mnode, source_node);
+////////                } catch (CycleFoundException e) {
+////////                  // TODO Auto-generated catch block
+////////                  e.printStackTrace();
+////////                }
+////////              }
+//////              System.out.println("NO SOURCE: " + source);
+//////            }
+//////          }
+////        } else {
+////          // its the "root" node
+////          query_node = map.get(config.getId());
+////          System.out.println("ROOT NODE: " + query_node);
+////        }
+//      }
       
       initialized.add(node.buildHashCode().asLong());
+      for (final QueryNode source : sources) {
+        try {
+          graph.addDagEdge(last, source);
+        } catch (CycleFoundException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
+      }
     } else {
       if (node_config != null) {
         // ugg!!!!
         if (node_config instanceof DownsampleConfig) {
           node_config = DownsampleConfig.newBuilder((DownsampleConfig) node_config)
-              .setStart(((SemanticQuery) query).getStart())
-              .setEnd(((SemanticQuery) query).getEnd())
+              .setStart(context.query().getStart())
+              .setEnd(context.query().getEnd())
               .build();
         }
         query_node = ((SingleQueryNodeFactory) factory)
@@ -366,13 +410,15 @@ public class DefaultPlan {
       }
       
       graph.addVertex(query_node);
+      nodes_map.put(query_node.id(), query_node);
+      System.out.println("ADDED GRAPH NODE: " + query_node);
     }
     
-    nodes_map.put(node.getId(), query_node);
     initialized.add(node.buildHashCode().asLong());
     
     for (final QueryNode source_node : sources) {
       try {
+        System.out.println("QN: " + query_node + "  SN: " + source_node);
         graph.addDagEdge(query_node, source_node);
       } catch (CycleFoundException e) {
         // TODO Auto-generated catch block
@@ -381,5 +427,17 @@ public class DefaultPlan {
     }
     
     return query_node;
+  }
+
+  public List<QueryNode> roots() {
+    return roots;
+  }
+  
+  public DirectedAcyclicGraph<QueryNode, DefaultEdge> graph() {
+    return graph;
+  }
+  
+  public List<TimeSeriesDataSource> sources() {
+    return sources;
   }
 }

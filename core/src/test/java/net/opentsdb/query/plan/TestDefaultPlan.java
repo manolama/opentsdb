@@ -10,6 +10,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.Collection;
+
 import org.junit.Before;
 import org.junit.Test;
 
@@ -19,14 +21,18 @@ import net.opentsdb.core.DefaultRegistry;
 import net.opentsdb.core.MockTSDB;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.query.AbstractQueryPipelineContext;
+import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.QueryDataSourceFactory;
 import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
+import net.opentsdb.query.QuerySink;
 import net.opentsdb.query.QuerySourceConfig;
 import net.opentsdb.query.SemanticQuery;
+import net.opentsdb.query.TimeSeriesQuery;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
 import net.opentsdb.query.execution.graph.ExecutionGraph;
 import net.opentsdb.query.execution.graph.ExecutionGraphNode;
@@ -38,19 +44,34 @@ import net.opentsdb.query.pojo.FillPolicy;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
 import net.opentsdb.query.processor.expressions.ExpressionConfig;
 import net.opentsdb.query.processor.groupby.GroupByConfig;
+import net.opentsdb.stats.Span;
 import net.opentsdb.storage.TimeSeriesDataStoreFactory;
 
 public class TestDefaultPlan {
 
   private MockTSDB tsdb;
+  private QueryContext query_context;
   
   @Before
   public void before() throws Exception {
     tsdb = new MockTSDB();
     tsdb.registry = spy(new DefaultRegistry(tsdb));
+    query_context = mock(QueryContext.class);
     try {
       ((DefaultRegistry) tsdb.registry).initialize(true).join();
     } catch (Exception e) { }
+    
+    TimeSeriesDataStoreFactory factory = mock(TimeSeriesDataStoreFactory.class);
+    when(factory.supportsPushdown(GroupByConfig.class)).thenReturn(true);
+    when(factory.supportsPushdown(DownsampleConfig.class)).thenReturn(true);
+    
+    QueryDataSourceFactory source_factory = mock(QueryDataSourceFactory.class);
+    when(source_factory.getFactory()).thenReturn(factory);
+    when(source_factory.newNode(any(QueryPipelineContext.class), anyString(), any(QueryNodeConfig.class)))
+      .thenReturn(mock(QueryNode.class));
+    
+    when(tsdb.registry.getQueryNodeFactory("datasource"))
+      .thenReturn((QueryNodeFactory) source_factory);
   }
   
   @Test
@@ -122,22 +143,11 @@ public class TestDefaultPlan {
             .build())
         .build();
     
-    TimeSeriesDataStoreFactory factory = mock(TimeSeriesDataStoreFactory.class);
-    when(factory.supportsPushdown(GroupByConfig.class)).thenReturn(true);
-    when(factory.supportsPushdown(DownsampleConfig.class)).thenReturn(true);
+    MockPipeline context = new MockPipeline(tsdb, query, 
+        query_context, Lists.newArrayList(mock(QuerySink.class)));
+    context.initialize(null);
     
-    QueryDataSourceFactory source_factory = mock(QueryDataSourceFactory.class);
-    when(source_factory.getFactory()).thenReturn(factory);
-    when(source_factory.newNode(any(QueryPipelineContext.class), anyString(), any(QueryNodeConfig.class)))
-      .thenReturn(mock(QueryNode.class));
-    
-    when(tsdb.registry.getQueryNodeFactory("datasource"))
-      .thenReturn((QueryNodeFactory) source_factory);
-    
-    DefaultPlan plan = new DefaultPlan(tsdb, query, mock(QueryNode.class));
-    plan.plan(mock(QueryPipelineContext.class));
-    
-    System.out.println(plan.base_config_graph);
+    System.out.println(context.plan().base_config_graph);
   }
   
   @Test
@@ -219,9 +229,12 @@ public class TestDefaultPlan {
     
     when(tsdb.registry.getQueryNodeFactory("datasource"))
       .thenReturn((QueryNodeFactory) source_factory);
+    QueryPipelineContext context = mock(QueryPipelineContext.class);
+    when(context.tsdb()).thenReturn(tsdb);
+    when(context.query()).thenReturn(query);
     
-    DefaultPlan plan = new DefaultPlan(tsdb, query, mock(QueryNode.class));
-    plan.plan(mock(QueryPipelineContext.class));
+    DefaultPlan plan = new DefaultPlan(context, mock(QueryNode.class));
+    plan.plan();
     
     System.out.println(plan.base_config_graph);
   }
@@ -277,21 +290,32 @@ public class TestDefaultPlan {
             .build())
         .build();
     
-    TimeSeriesDataStoreFactory factory = mock(TimeSeriesDataStoreFactory.class);
-    when(factory.supportsPushdown(GroupByConfig.class)).thenReturn(true);
-    when(factory.supportsPushdown(DownsampleConfig.class)).thenReturn(true);
+    MockPipeline context = new MockPipeline(tsdb, query, 
+        query_context, Lists.newArrayList(mock(QuerySink.class)));
+    context.initialize(null);
     
-    QueryDataSourceFactory source_factory = mock(QueryDataSourceFactory.class);
-    when(source_factory.getFactory()).thenReturn(factory);
-    when(source_factory.newNode(any(QueryPipelineContext.class), anyString(), any(QueryNodeConfig.class)))
-      .thenReturn(mock(QueryNode.class));
+    System.out.println(context.plan().base_config_graph);
+  }
+  
+  class MockPipeline extends AbstractQueryPipelineContext {
+
+    public MockPipeline(TSDB tsdb, TimeSeriesQuery query, QueryContext context,
+        Collection<QuerySink> sinks) {
+      super(tsdb, query, context, sinks);
+      // TODO Auto-generated constructor stub
+    }
+
+    @Override
+    public void initialize(Span span) {
+      // TODO Auto-generated method stub
+      initializeGraph(span);
+    }
+
+    @Override
+    public String id() {
+      // TODO Auto-generated method stub
+      return null;
+    }
     
-    when(tsdb.registry.getQueryNodeFactory("datasource"))
-      .thenReturn((QueryNodeFactory) source_factory);
-    
-    DefaultPlan plan = new DefaultPlan(tsdb, query, mock(QueryNode.class));
-    plan.plan(mock(QueryPipelineContext.class));
-    
-    System.out.println(plan.base_config_graph);
   }
 }

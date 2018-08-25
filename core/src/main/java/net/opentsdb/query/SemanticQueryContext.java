@@ -48,7 +48,7 @@ public class SemanticQueryContext implements QueryContext {
           .start();
     }
     
-    pipeline = new LocalPipeline(tsdb, query, this, query.getExecutionGraph(), query.getSinks());
+    pipeline = new LocalPipeline(tsdb, query, this, query.getSinks());
     pipeline.initialize(local_span);
   }
   
@@ -143,8 +143,8 @@ public class SemanticQueryContext implements QueryContext {
   class LocalPipeline extends AbstractQueryPipelineContext {
 
     public LocalPipeline(TSDB tsdb, TimeSeriesQuery query, QueryContext context,
-        ExecutionGraph execution_graph, Collection<QuerySink> sinks) {
-      super(tsdb, query, context, execution_graph, sinks);
+        Collection<QuerySink> sinks) {
+      super(tsdb, query, context, sinks);
     }
 
     @Override
