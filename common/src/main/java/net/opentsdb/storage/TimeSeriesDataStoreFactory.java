@@ -14,11 +14,16 @@
 // limitations under the License.
 package net.opentsdb.storage;
 
+import java.time.temporal.TemporalAmount;
+import java.util.List;
+
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDBPlugin;
+import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.query.QueryNodeConfig;
 
 /**
  * A factory responsible for instantiating and returning references to
@@ -44,4 +49,9 @@ public interface TimeSeriesDataStoreFactory extends TSDBPlugin {
    */
   public TypeToken<? extends TimeSeriesId> idType();
   
+  public boolean supportsPushdown(final Class<? extends QueryNodeConfig> function);
+  
+  public boolean supportsType(final TypeToken<? extends TimeSeriesDataType> type);
+  
+  public List<TemporalAmount> durations();
 }

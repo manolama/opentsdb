@@ -141,7 +141,10 @@ public class ExecutionGraphNode implements Comparable<ExecutionGraphNode> {
             source, Const.UTF8_CHARSET).hash());
       }
       if (config != null) {
-        hashes.add(config.buildHashCode());
+        HashCode config_hash = config.buildHashCode();
+        if (config_hash != null) {
+          hashes.add(config.buildHashCode());
+        }
       }
       return Hashing.combineOrdered(hashes);
     }

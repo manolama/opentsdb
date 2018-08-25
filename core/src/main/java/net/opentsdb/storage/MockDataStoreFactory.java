@@ -14,12 +14,17 @@
 // limitations under the License.
 package net.opentsdb.storage;
 
+import java.time.temporal.TemporalAmount;
+import java.util.List;
+
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.common.Const;
 import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.query.QueryNodeConfig;
 
 /**
  * Simple little factory that returns a {@link MockDataStore}.
@@ -60,5 +65,23 @@ public class MockDataStoreFactory extends BaseTSDBPlugin
   public String version() {
     // TODO Implement
     return "3.0.0";
+  }
+
+  @Override
+  public boolean supportsPushdown(Class<? extends QueryNodeConfig> function) {
+    // TODO Auto-generated method stub
+    return false;
+  }
+
+  @Override
+  public boolean supportsType(TypeToken<? extends TimeSeriesDataType> type) {
+    // TODO Auto-generated method stub
+    return false;
+  }
+
+  @Override
+  public List<TemporalAmount> durations() {
+    // TODO Auto-generated method stub
+    return null;
   }
 }

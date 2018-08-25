@@ -14,6 +14,8 @@
 // limitations under the License.
 package net.opentsdb.storage.schemas.tsdb1x;
 
+import java.time.temporal.TemporalAmount;
+import java.util.List;
 import java.util.Map;
 
 import com.google.common.base.Strings;
@@ -24,7 +26,9 @@ import net.opentsdb.common.Const;
 import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.DefaultRegistry;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.storage.ReadableTimeSeriesDataStore;
 import net.opentsdb.storage.TimeSeriesDataStoreFactory;
 import net.opentsdb.storage.WritableTimeSeriesDataStore;
@@ -121,6 +125,24 @@ public class SchemaFactory extends BaseTSDBPlugin
   public String version() {
     // TODO Implement
     return "3.0.0";
+  }
+
+  @Override
+  public boolean supportsPushdown(Class<? extends QueryNodeConfig> function) {
+    // TODO Auto-generated method stub
+    return false;
+  }
+
+  @Override
+  public boolean supportsType(TypeToken<? extends TimeSeriesDataType> type) {
+    // TODO Auto-generated method stub
+    return false;
+  }
+
+  @Override
+  public List<TemporalAmount> durations() {
+    // TODO Auto-generated method stub
+    return null;
   }
 
 }

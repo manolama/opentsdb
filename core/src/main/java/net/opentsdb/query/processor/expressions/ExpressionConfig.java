@@ -153,7 +153,7 @@ public class ExpressionConfig extends BaseQueryNodeConfigWithInterpolators {
     hashes.add(join_config.buildHashCode());
     hashes.add(Const.HASH_FUNCTION().newHasher()
         .putBoolean(infectious_nan)
-        .putString(id, Const.UTF8_CHARSET)
+        .putString(id == null ? "null" : id, Const.UTF8_CHARSET)
         .putString(expression, Const.UTF8_CHARSET)
         .putString(as, Const.UTF8_CHARSET)
         .hash());
