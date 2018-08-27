@@ -19,6 +19,8 @@ import java.io.ByteArrayOutputStream;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.jgrapht.experimental.dag.DirectedAcyclicGraph;
+import org.jgrapht.graph.DefaultEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,8 +53,11 @@ import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.QuerySourceFactory;
+import net.opentsdb.query.TimeSeriesQuery;
 import net.opentsdb.query.execution.cache.QueryCachePlugin;
 import net.opentsdb.query.execution.cache.TimeSeriesCacheKeyGenerator;
+import net.opentsdb.query.execution.graph.ExecutionGraph;
+import net.opentsdb.query.execution.graph.ExecutionGraphNode;
 import net.opentsdb.query.execution.serdes.BaseSerdesOptions;
 import net.opentsdb.query.serdes.SerdesOptions;
 import net.opentsdb.query.serdes.TimeSeriesSerdes;
@@ -769,6 +774,12 @@ public class CachingQueryExecutor implements QuerySourceFactory, TSDBPlugin {
       }
       
     }
+
+    @Override
+    public boolean pushDown() {
+      // TODO Auto-generated method stub
+      return false;
+    }
     
   }
   
@@ -794,6 +805,13 @@ public class CachingQueryExecutor implements QuerySourceFactory, TSDBPlugin {
     return null;
   }
 
+  public void setupGraph(
+      final TimeSeriesQuery query, 
+      final ExecutionGraphNode config, 
+      final DirectedAcyclicGraph<ExecutionGraphNode, DefaultEdge> graph) {
+    // TODO
+  }
+  
   @Override
   public Deferred<Object> initialize(TSDB tsdb) {
     // TODO Auto-generated method stub

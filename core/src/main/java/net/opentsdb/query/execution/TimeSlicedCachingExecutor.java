@@ -844,6 +844,12 @@ public class TimeSlicedCachingExecutor<T> extends QueryExecutor<T> {
       }
       
     }
+
+    @Override
+    public boolean pushDown() {
+      // TODO Auto-generated method stub
+      return false;
+    }
   }
   
   @VisibleForTesting

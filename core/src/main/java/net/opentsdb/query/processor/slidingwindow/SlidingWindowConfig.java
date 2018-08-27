@@ -90,6 +90,11 @@ public class SlidingWindowConfig extends BaseQueryNodeConfig {
   }
   
   @Override
+  public boolean pushDown() {
+    return false;
+  }
+  
+  @Override
   public HashCode buildHashCode() {
     // TODO Auto-generated method stub
     return null;

@@ -14,6 +14,9 @@
 // limitations under the License.
 package net.opentsdb.query;
 
+import org.jgrapht.experimental.dag.DirectedAcyclicGraph;
+import org.jgrapht.graph.DefaultEdge;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
@@ -23,6 +26,8 @@ import net.opentsdb.core.DefaultRegistry;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDBPlugin;
 import net.opentsdb.exceptions.QueryExecutionException;
+import net.opentsdb.query.execution.graph.ExecutionGraph;
+import net.opentsdb.query.execution.graph.ExecutionGraphNode;
 import net.opentsdb.query.filter.MetricFilter;
 import net.opentsdb.query.filter.QueryFilter;
 import net.opentsdb.query.filter.QueryFilterFactory;
@@ -158,4 +163,11 @@ public class QueryDataSourceFactory implements SingleQueryNodeFactory, TSDBPlugi
     return builder.build();
   }
 
+  public void setupGraph(
+      final TimeSeriesQuery query, 
+      final ExecutionGraphNode config, 
+      final DirectedAcyclicGraph<ExecutionGraphNode, DefaultEdge> graph) {
+    // TODO
+  }
+  
 }

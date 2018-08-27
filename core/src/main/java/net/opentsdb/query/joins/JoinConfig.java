@@ -116,6 +116,11 @@ public class JoinConfig extends BaseQueryNodeConfig {
   }
   
   @Override
+  public boolean pushDown() {
+    return false;
+  }
+  
+  @Override
   public HashCode buildHashCode() {
     final Hasher hasher = Const.HASH_FUNCTION().newHasher()
         .putString(id == null ? "null" : id, Const.UTF8_CHARSET)

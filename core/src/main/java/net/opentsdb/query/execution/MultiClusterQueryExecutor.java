@@ -701,5 +701,11 @@ public class MultiClusterQueryExecutor<T> extends QueryExecutor<T> {
       }
     }
 
+    @Override
+    public boolean pushDown() {
+      // TODO Auto-generated method stub
+      return false;
+    }
+
   }
 }

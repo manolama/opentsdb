@@ -38,6 +38,11 @@ public class DedupConfig extends BaseQueryNodeConfig {
   }
 
   @Override
+  public boolean pushDown() {
+    return false;
+  }
+  
+  @Override
   public boolean equals(Object o) {
     // TODO Auto-generated method stub
     return false;

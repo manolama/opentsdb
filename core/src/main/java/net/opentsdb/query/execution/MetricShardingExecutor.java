@@ -475,6 +475,12 @@ public class MetricShardingExecutor<T> extends QueryExecutor<T> {
         return new Config(this);
       }
     }
+
+    @Override
+    public boolean pushDown() {
+      // TODO Auto-generated method stub
+      return false;
+    }
     
   }
 }

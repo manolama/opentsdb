@@ -62,13 +62,12 @@ public class DefaultPlan {
     final Map<String, ExecutionGraphNode> config_map = 
         Maps.newHashMapWithExpectedSize(
             context.query().getExecutionGraph().getNodes().size());
-    
     DirectedAcyclicGraph<ExecutionGraphNode, DefaultEdge> config_graph = new 
         DirectedAcyclicGraph<ExecutionGraphNode, DefaultEdge>(DefaultEdge.class);
     
     for (final ExecutionGraphNode node : 
-        context.query().getExecutionGraph().getNodes()) {
-      if (config_map.putIfAbsent(node.getId(), node) != null) {
+      context.query().getExecutionGraph().getNodes()) {
+    if (config_map.putIfAbsent(node.getId(), node) != null) {
         throw new IllegalArgumentException("The node id \"" 
             + node.getId() + "\" appeared more than once in the "
             + "graph. It must be unique.");
@@ -81,7 +80,9 @@ public class DefaultPlan {
     for (final ExecutionGraphNode node : 
         context.query().getExecutionGraph().getNodes()) {
       if (node.getSources() != null) {
-        for (final String source : node.getSources()) {
+        
+        List<String> wtf = node.getSources();
+        for ( String source : wtf) {
           try {
             config_graph.addDagEdge(node, config_map.get(source));
           } catch (IllegalArgumentException e) {
@@ -98,9 +99,18 @@ public class DefaultPlan {
     // we'll mutate this shallow clone.
     base_config_graph = (DirectedAcyclicGraph<ExecutionGraphNode, DefaultEdge>) config_graph.clone();
     
-    // now we walk and expand/optimize
+    // next we walk and let the factories update the graph as needed.
     DepthFirstIterator<ExecutionGraphNode, DefaultEdge> iterator = 
         new DepthFirstIterator<ExecutionGraphNode, DefaultEdge>(config_graph);
+    while (iterator.hasNext()) {
+      final ExecutionGraphNode node = iterator.next();
+      final QueryNodeFactory factory = 
+          context.tsdb().getRegistry().getQueryNodeFactory(node.getType().toLowerCase());
+      factory.setupGraph(context.query(), node, base_config_graph);
+    }
+    
+    // next, push down
+    iterator = new DepthFirstIterator<ExecutionGraphNode, DefaultEdge>(config_graph);
     while (iterator.hasNext()) {
       final ExecutionGraphNode node = iterator.next();
       
@@ -109,10 +119,8 @@ public class DefaultPlan {
         continue;
       }
       
-      QueryNodeConfig config = node.getConfig() != null ? node.getConfig() :
-        context.query().getExecutionGraph().nodeConfigs().get(node.getId());
-      
-      if (config instanceof QuerySourceConfig) {
+      // node.getConfig() guaranteed non-null here.
+      if (node.getConfig() instanceof QuerySourceConfig) {
         final QueryNodeFactory factory;
         if (!Strings.isNullOrEmpty(node.getType())) {
           factory = context.tsdb().getRegistry().getQueryNodeFactory(node.getType().toLowerCase());
@@ -147,10 +155,13 @@ public class DefaultPlan {
         if (!push_downs.isEmpty()) {
           push_downs.add(node);
         }
+        
+        // TODO - pushdown into the data source config.
         System.out.println("PUSH DOWNS: " + push_downs);
       }
     }
     
+    // now go and build the node graph
     graph.addVertex(sink);
     System.out.println("ADDED GRAPH SINK: " + sink);
     
@@ -199,15 +210,156 @@ public class DefaultPlan {
     sources.addAll(source_set);
   }
   
+//  public void plan2() {
+//    final Map<String, ExecutionGraphNode> config_map = 
+//        Maps.newHashMapWithExpectedSize(
+//            context.query().getExecutionGraph().getNodes().size());
+//    
+//    DirectedAcyclicGraph<ExecutionGraphNode, DefaultEdge> config_graph = new 
+//        DirectedAcyclicGraph<ExecutionGraphNode, DefaultEdge>(DefaultEdge.class);
+//    
+//    for (final ExecutionGraphNode node : 
+//        context.query().getExecutionGraph().getNodes()) {
+//      if (config_map.putIfAbsent(node.getId(), node) != null) {
+//        throw new IllegalArgumentException("The node id \"" 
+//            + node.getId() + "\" appeared more than once in the "
+//            + "graph. It must be unique.");
+//      }
+//      
+//      config_graph.addVertex(node);
+//    }
+//    
+//    // now link em
+//    for (final ExecutionGraphNode node : 
+//        context.query().getExecutionGraph().getNodes()) {
+//      if (node.getSources() != null) {
+//        
+//        List<String> wtf = node.getSources();
+//        for ( String source : wtf) {
+//          try {
+//            config_graph.addDagEdge(node, config_map.get(source));
+//          } catch (IllegalArgumentException e) {
+//            throw new IllegalArgumentException("Failed to add node: " 
+//                + node, e);
+//          } catch (CycleFoundException e) {
+//            throw new IllegalArgumentException("A cycle was detected "
+//                + "adding node: " + node, e);
+//          }
+//        }
+//      }
+//    }
+//    
+//    // we'll mutate this shallow clone.
+//    base_config_graph = (DirectedAcyclicGraph<ExecutionGraphNode, DefaultEdge>) config_graph.clone();
+//    
+//    // now we walk and expand/optimize
+//    DepthFirstIterator<ExecutionGraphNode, DefaultEdge> iterator = 
+//        new DepthFirstIterator<ExecutionGraphNode, DefaultEdge>(config_graph);
+//    while (iterator.hasNext()) {
+//      final ExecutionGraphNode node = iterator.next();
+//      
+//      final Set<DefaultEdge> incoming = config_graph.incomingEdgesOf(node);
+//      if (incoming.isEmpty()) {
+//        continue;
+//      }
+//      
+//      QueryNodeConfig config = node.getConfig() != null ? node.getConfig() :
+//        context.query().getExecutionGraph().nodeConfigs().get(node.getId());
+//      
+//      if (config instanceof QuerySourceConfig) {
+//        final QueryNodeFactory factory;
+//        if (!Strings.isNullOrEmpty(node.getType())) {
+//          factory = context.tsdb().getRegistry().getQueryNodeFactory(node.getType().toLowerCase());
+//          System.out.println("  DS: " + node.getType().toLowerCase());
+//        } else {
+//          factory = context.tsdb().getRegistry().getQueryNodeFactory(node.getId().toLowerCase());
+//          System.out.println("  DS: " + node.getId().toLowerCase());
+//        }
+//        
+//        // TODO - cleanup the source factories. ugg!!!
+//        if (factory == null || !(factory instanceof QueryDataSourceFactory)) {
+//          throw new IllegalArgumentException("No node factory found for "
+//              + "configuration " + node);
+//        }
+//        
+//        List<ExecutionGraphNode> push_downs = Lists.newArrayList();
+//        
+//        for (final DefaultEdge edge : incoming) {
+//          final ExecutionGraphNode n = base_config_graph.getEdgeSource(edge);
+//          DefaultEdge e = pushDown(node, node, 
+//              ((QueryDataSourceFactory) factory).getFactory(), n, push_downs);
+//          if (e != null) {
+//            base_config_graph.removeEdge(e);
+//          }
+//          if (base_config_graph.outgoingEdgesOf(n).isEmpty()) {
+//            if (base_config_graph.removeVertex(n)) {
+//              push_downs.add(n);
+//            }
+//          }
+//        }
+//        
+//        if (!push_downs.isEmpty()) {
+//          push_downs.add(node);
+//        }
+//        System.out.println("PUSH DOWNS: " + push_downs);
+//      }
+//    }
+//    
+//    graph.addVertex(sink);
+//    System.out.println("ADDED GRAPH SINK: " + sink);
+//    
+//    List<Long> initialized = Lists.newArrayList();
+//    BreadthFirstIterator<ExecutionGraphNode, DefaultEdge> bfi = 
+//        new BreadthFirstIterator<ExecutionGraphNode, DefaultEdge>(base_config_graph);
+//    Map<String, QueryNode> nodes_map = Maps.newHashMap();
+//    nodes_map.put(sink.id(), sink);
+//    while (bfi.hasNext()) {
+//      final ExecutionGraphNode node = bfi.next();
+//      if (base_config_graph.incomingEdgesOf(node).isEmpty()) {
+//        buildNodeGraph(context, graph, node, initialized, nodes_map);
+//      }
+//    }
+//    
+//    // depth first initiation of the executors since we have to init
+//    // the ones without any downstream dependencies first.
+//    final DepthFirstIterator<QueryNode, DefaultEdge> node_iterator = 
+//        new DepthFirstIterator<QueryNode, DefaultEdge>(graph);
+//    final Set<TimeSeriesDataSource> source_set = Sets.newHashSet();
+//    while (node_iterator.hasNext()) {
+//      final QueryNode node = node_iterator.next();
+//      if (node == sink) {
+//        continue;
+//      }
+//      
+//      final Set<DefaultEdge> incoming = graph.incomingEdgesOf(node);
+//      if (incoming.size() == 0 && node != this) {
+//        try {
+//          graph.addDagEdge(sink, node);
+//        } catch (CycleFoundException e) {
+//          throw new IllegalArgumentException(
+//              "Invalid graph configuration", e);
+//        }
+//        roots.add(node);
+//      }
+//      
+//      if (node instanceof TimeSeriesDataSource) {
+//        source_set.add((TimeSeriesDataSource) node);
+//      }
+//      
+//      if (node != this) {
+//        node.initialize(null /* TODO */);
+//      }
+//    }
+//    sources.addAll(source_set);
+//  }
+  
   DefaultEdge pushDown(
       final ExecutionGraphNode parent,
       final ExecutionGraphNode source, 
       TimeSeriesDataStoreFactory factory, 
       ExecutionGraphNode node,
       List<ExecutionGraphNode> push_downs) {
-    final QueryNodeConfig config = node.getConfig() != null ? node.getConfig() :
-      context.query().getExecutionGraph().nodeConfigs().get(node.getId());
-    if (!factory.supportsPushdown(config.getClass())) {
+    if (!factory.supportsPushdown(node.getConfig().getClass())) {
       if (!base_config_graph.containsEdge(node, parent)) {
         try {
           base_config_graph.addDagEdge(node, parent);
@@ -216,6 +368,10 @@ public class DefaultPlan {
           e.printStackTrace();
         }
       }
+      return null;
+    }
+    
+    if (!node.getConfig().pushDown()) {
       return null;
     }
     
@@ -295,7 +451,10 @@ public class DefaultPlan {
     if (node_config == null) {
       node_config = context.query().getExecutionGraph().nodeConfigs().get(node.getType());
     }
-    
+    if (node_config == null) {
+      throw new RuntimeException("No node config for " + node.getId() + " or " + node.getType());
+    }
+    System.out.println("WANNA WORK CONFIG: " + node.getId() + " / " + node.getType() + "  => " + node_config.getId());
     QueryNode query_node = null;
     List<ExecutionGraphNode> configs = Lists.newArrayList(
         context.query().getExecutionGraph().getNodes());

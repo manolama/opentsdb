@@ -14,10 +14,15 @@
 // limitations under the License.
 package net.opentsdb.query;
 
+import org.jgrapht.experimental.dag.DirectedAcyclicGraph;
+import org.jgrapht.graph.DefaultEdge;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.query.execution.graph.ExecutionGraph;
+import net.opentsdb.query.execution.graph.ExecutionGraphNode;
 
 /**
  * The factory used to generate a {@link QueryNode} for a new query execution.
@@ -43,4 +48,9 @@ public interface QueryNodeFactory {
   public QueryNodeConfig parseConfig(final ObjectMapper mapper,
                                      final TSDB tsdb, 
                                      final JsonNode node);
+
+  public void setupGraph(
+      final TimeSeriesQuery query, 
+      final ExecutionGraphNode config, 
+      final DirectedAcyclicGraph<ExecutionGraphNode, DefaultEdge> graph);
 }

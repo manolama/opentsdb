@@ -39,6 +39,8 @@ public interface QueryNodeConfig extends Comparable<QueryNodeConfig> {
   /** @return An optional map of query parameter overrides. May be null. */
   public Map<String, String> getOverrides();
   
+  public boolean pushDown();
+  
   /**
    * Retrieve a query-time override as a string.
    * @param config A non-null config object.

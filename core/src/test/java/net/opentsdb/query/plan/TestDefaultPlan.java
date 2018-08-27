@@ -75,7 +75,7 @@ public class TestDefaultPlan {
   }
   
   @Test
-  public void voo() throws Exception {
+  public void oneExpressionPushDown() throws Exception {
     SemanticQuery query = SemanticQuery.newBuilder()
         .setStart("1h-ago")
         .setMode(QueryMode.SINGLE)
@@ -151,7 +151,7 @@ public class TestDefaultPlan {
   }
   
   @Test
-  public void voo2() throws Exception {
+  public void expressionFirstNoPushDown() throws Exception {
     SemanticQuery query = SemanticQuery.newBuilder()
         .setStart("1h-ago")
         .setMode(QueryMode.SINGLE)
@@ -212,35 +212,22 @@ public class TestDefaultPlan {
                         .setRealFillPolicy(FillWithRealPolicy.PREFER_NEXT)
                         .setDataType(NumericType.TYPE.toString())
                         .build())
+                    .setId("expression")
                     .build())
                 .build())
             
             .build())
         .build();
     
-    TimeSeriesDataStoreFactory factory = mock(TimeSeriesDataStoreFactory.class);
-    when(factory.supportsPushdown(GroupByConfig.class)).thenReturn(true);
-    when(factory.supportsPushdown(DownsampleConfig.class)).thenReturn(true);
+    MockPipeline context = new MockPipeline(tsdb, query, 
+        query_context, Lists.newArrayList(mock(QuerySink.class)));
+    context.initialize(null);
     
-    QueryDataSourceFactory source_factory = mock(QueryDataSourceFactory.class);
-    when(source_factory.getFactory()).thenReturn(factory);
-    when(source_factory.newNode(any(QueryPipelineContext.class), anyString(), any(QueryNodeConfig.class)))
-      .thenReturn(mock(QueryNode.class));
-    
-    when(tsdb.registry.getQueryNodeFactory("datasource"))
-      .thenReturn((QueryNodeFactory) source_factory);
-    QueryPipelineContext context = mock(QueryPipelineContext.class);
-    when(context.tsdb()).thenReturn(tsdb);
-    when(context.query()).thenReturn(query);
-    
-    DefaultPlan plan = new DefaultPlan(context, mock(QueryNode.class));
-    plan.plan();
-    
-    System.out.println(plan.base_config_graph);
+    System.out.println(context.plan().base_config_graph);
   }
   
   @Test
-  public void voo3() throws Exception {
+  public void SimpleMetricPushDown() throws Exception {
     SemanticQuery query = SemanticQuery.newBuilder()
         .setStart("1h-ago")
         .setMode(QueryMode.SINGLE)
@@ -287,6 +274,93 @@ public class TestDefaultPlan {
                     .build())
                 .build())
            
+            .build())
+        .build();
+    
+    MockPipeline context = new MockPipeline(tsdb, query, 
+        query_context, Lists.newArrayList(mock(QuerySink.class)));
+    context.initialize(null);
+    
+    System.out.println(context.plan().base_config_graph);
+  }
+  
+  @Test
+  public void multiMetricExpressionPushDown() throws Exception {
+    SemanticQuery query = SemanticQuery.newBuilder()
+        .setStart("1h-ago")
+        .setMode(QueryMode.SINGLE)
+        .setExecutionGraph(ExecutionGraph.newBuilder()
+            .setId("voo")
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("m1")
+                .setType("DataSource")
+                .setConfig(QuerySourceConfig.newBuilder()
+                    .setMetric(MetricLiteralFilter.newBuilder()
+                        .setMetric("sys.cpu.user")
+                        .build())
+                    .setId("m1")
+                    .build())
+                .build())
+            
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("m2")
+                .setType("DataSource")
+                .setConfig(QuerySourceConfig.newBuilder()
+                    .setMetric(MetricLiteralFilter.newBuilder()
+                        .setMetric("sys.cpu.sys")
+                        .build())
+                    .setId("m2")
+                    .build())
+                .build())
+            
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("downsample")
+                .setSources(Lists.newArrayList("m1", "m2"))
+                .setConfig(DownsampleConfig.newBuilder()
+                    .setId("downsample")
+                    .setAggregator("sum")
+                    .setInterval("1m")
+                    .addInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+                        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
+                        .setRealFillPolicy(FillWithRealPolicy.PREFER_NEXT)
+                        .setDataType(NumericType.TYPE.toString())
+                        .build())
+                    .build())
+                .build())
+            
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("groupby")
+                .setSources(Lists.newArrayList("downsample"))
+                .setConfig(GroupByConfig.newBuilder()
+                    .setAggregator("sum")
+                    .setGroupAll(true)
+                    .setId("groupby")
+                    .addInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+                        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
+                        .setRealFillPolicy(FillWithRealPolicy.PREFER_NEXT)
+                        .setDataType(NumericType.TYPE.toString())
+                        .build())
+                    .build())
+                .build())
+            
+            .addNode(ExecutionGraphNode.newBuilder()
+                .setId("expression")
+                .setSources(Lists.newArrayList("groupby"))
+                .setConfig(ExpressionConfig.newBuilder()
+                    .setAs("e1")
+                    .setExpression("(m1 + m2) / 1024")
+                    .setJoinConfig((JoinConfig) JoinConfig.newBuilder()
+                        .setType(JoinType.NATURAL)
+                        .build())
+                    .addInterpolatorConfig(NumericInterpolatorConfig.newBuilder()
+                        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
+                        .setRealFillPolicy(FillWithRealPolicy.PREFER_NEXT)
+                        .setDataType(NumericType.TYPE.toString())
+                        .build())
+                    .setId("expression")
+                    .build())
+                .build())
+            
             .build())
         .build();
     
