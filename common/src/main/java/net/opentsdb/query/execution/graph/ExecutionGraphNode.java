@@ -206,7 +206,8 @@ public class ExecutionGraphNode implements Comparable<ExecutionGraphNode> {
   }
   
   /** 
-   * A node builder set with parameters cloned from the given node
+   * A node builder set with parameters cloned from the given node <b>
+   * except</b> for the nested config.
    * @param node A non-null node to pull from.
    * @return A non-null builder.
    */

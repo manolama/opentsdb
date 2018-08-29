@@ -129,6 +129,7 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
           DateTime.parseDateTimeString(builder.start, builder.timezone));
       start_time.snapToPreviousInterval(interval_part, units);
     } else {
+      System.out.println("       NO DS???? " + this);
       start_time = null;
     }
     
@@ -239,7 +240,7 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
   
   @Override
   public boolean pushDown() {
-    return false;
+    return true;
   }
   
   @Override

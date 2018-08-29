@@ -21,6 +21,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -28,6 +29,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,12 +48,23 @@ import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.common.Const;
+import net.opentsdb.core.DefaultRegistry;
+import net.opentsdb.core.MockTSDB;
 import net.opentsdb.data.BaseTimeSeriesByteId;
+import net.opentsdb.data.BaseTimeSeriesStringId;
+import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
+import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.data.TimeSeriesValue;
+import net.opentsdb.data.types.numeric.NumericArrayTimeSeries;
+import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.data.types.numeric.aggregators.ArraySum;
+import net.opentsdb.data.types.numeric.aggregators.ArraySumFactory;
+import net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregatorFactory;
 import net.opentsdb.exceptions.QueryUpstreamException;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeFactory;
@@ -62,6 +76,7 @@ import net.opentsdb.query.interpolation.types.numeric.NumericSummaryInterpolator
 import net.opentsdb.query.pojo.FillPolicy;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.ReadableTimeSeriesDataStore;
+import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.UnitTestException;
 
 @RunWith(PowerMockRunner.class)
@@ -279,5 +294,71 @@ public class TestGroupBy {
       .onError(any(Throwable.class));
     gb.onError(ex);
     verify(upstream, times(2)).onError(ex);
+  }
+
+  @Test
+  public void arrayTest() throws Exception {
+    MockTSDB tsdb = new MockTSDB();
+    when(tsdb.registry.getPlugin(NumericArrayAggregatorFactory.class, "sum"))
+    .thenReturn(new ArraySumFactory());
+    
+    long start = DateTime.nanoTime();
+    int series = 15_000;
+    int nums = 1_440;
+    List<TimeSeries> timeseries = Lists.newArrayListWithExpectedSize(series);
+    for (int i = 0; i < series; i++) {
+      TimeSeriesId id = BaseTimeSeriesStringId.newBuilder()
+          .setMetric("sys.cpu")
+          .addTags("container", "ctr" + i)
+          .addTags("host", "foo")
+          .build();
+      NumericArrayTimeSeries ts = new NumericArrayTimeSeries(id, 
+          new MillisecondTimeStamp(1000));
+      for (int x = 0; x < nums; x++) {
+        ts.add((double) x);
+      }
+      timeseries.add(ts);
+    }
+    System.out.println("LOAD TIME: " + DateTime.msFromNanoDiff(DateTime.nanoTime(), start));
+    
+    when(context.tsdb()).thenReturn(tsdb);
+    QueryResult results = mock(QueryResult.class);
+    when(results.timeSeries()).thenReturn(timeseries);
+    when(results.idType()).thenAnswer(new Answer<TypeToken>() {
+      @Override
+      public TypeToken answer(InvocationOnMock invocation) throws Throwable {
+        return Const.TS_STRING_ID;
+      }
+    });
+    
+    doAnswer(new Answer<Void>() {
+
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        QueryResult r = (QueryResult) invocation.getArguments()[0];
+        System.out.println("TIME SERIES: " + r.timeSeries().size());
+        long start = DateTime.nanoTime();
+        Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> it = 
+            r.timeSeries().iterator().next().iterator(NumericArrayType.TYPE).get();
+        if (it.hasNext()) {
+          TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) it.next();
+          if (v.value().isInteger()) {
+            System.out.println(Arrays.toString(v.value().longArray()));
+          } else {
+            System.out.println(Arrays.toString(v.value().doubleArray()));
+          }
+        } else {
+          System.out.println("WTF? Nothing next?");
+        }
+        System.out.println("AGG TIME: " + DateTime.msFromNanoDiff(DateTime.nanoTime(), start));
+        return null;
+      }
+
+    }).when(upstream).onNext(any(QueryResult.class));
+    
+    GroupBy gb = new GroupBy(factory, context, null, config);
+    gb.initialize(null);
+    
+    gb.onNext(results);
   }
 }
