@@ -43,6 +43,8 @@ import net.opentsdb.common.Const;
 import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDBPlugin;
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.data.TimeSeriesStringId;
@@ -521,6 +523,18 @@ public class CachingQueryExecutor extends BaseTSDBPlugin implements QuerySourceF
           LOG.warn("Failed canceling downstream execution: " + downstream, e);
         }
       }
+    }
+
+    @Override
+    public void push(ResultSeries series) {
+      // TODO Auto-generated method stub
+      
+    }
+
+    @Override
+    public void complete(ResultShard shard) {
+      // TODO Auto-generated method stub
+      
     }
   
   }

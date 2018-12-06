@@ -14,6 +14,9 @@
 // limitations under the License.
 package net.opentsdb.query;
 
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
+
 /**
  * An interface implemented by an upstream consumer or the final pipeline sink
  * to receive results from a query. This follows the observer pattern with the
@@ -65,4 +68,9 @@ public interface QuerySink {
    * @param t The exception that was thrown.
    */
   public void onError(final Throwable t);
+
+  public void push(final ResultSeries series);
+  
+  public void complete(final ResultShard shard);
+  
 }

@@ -32,7 +32,11 @@ import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeriesDataSource;
+import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.data.TimeStamp;
 import net.opentsdb.query.plan.DefaultQueryPlanner;
 import net.opentsdb.stats.Span;
 
@@ -344,6 +348,30 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   }
   
   @Override
+  public void push(final ResultSeries series) {
+    for (final QuerySink sink : sinks) {
+      try {
+        sink.push(series);
+      } catch (Throwable e) {
+        LOG.error("Exception thrown passing results to sink: " + sink, e);
+        // TODO - should we kill the query here?
+      }
+    }
+  }
+  
+  @Override
+  public void complete(final ResultShard shard) {
+    for (final QuerySink sink : sinks) {
+      try {
+        sink.complete(shard);
+      } catch (Throwable e) {
+        LOG.error("Exception thrown passing results to sink: " + sink, e);
+        // TODO - should we kill the query here?
+      }
+    }
+  }
+  
+  @Override
   public QueryNodeConfig config() {
     return null;
   }
@@ -461,4 +489,67 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     }
   }
   
+  private class ShardWrapper implements ResultShard {
+    final ResultShard source;
+    ShardWrapper(final ResultShard source) {
+      this.source = source;
+    }
+    @Override
+    public int totalShards() {
+      return source.totalShards();
+    }
+
+    @Override
+    public QueryNode node() {
+      return source.node();
+    }
+
+    @Override
+    public String dataSource() {
+      return source.dataSource();
+    }
+
+    @Override
+    public TimeStamp start() {
+      return source.start();
+    }
+
+    @Override
+    public TimeStamp end() {
+      return source.end();
+    }
+
+    @Override
+    public TimeSeriesId id(long hash) {
+      return source.id(hash);
+    }
+
+    @Override
+    public int seriesCount() {
+      return source.seriesCount();
+    }
+
+    @Override
+    public String sourceId() {
+      return source.sourceId();
+    }
+
+    @Override
+    public void close() {
+//      if (result.source().config() instanceof TimeSeriesDataSourceConfig ||
+//          result.source().config().joins()) {
+//        countdowns.get(result.dataSource()).decrementAndGet();
+//      } else {
+//        countdowns.get(result.source().config().getId() + ":" 
+//            + result.dataSource()).decrementAndGet();
+//      }
+//      checkComplete();
+//      try {
+//        result.close();
+//      } catch (Throwable t) {
+//        LOG.error("Failed to close result: " + result, t);
+//      }
+    }
+    
+  }
 }

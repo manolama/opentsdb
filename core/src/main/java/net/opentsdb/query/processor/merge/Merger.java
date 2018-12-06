@@ -20,6 +20,8 @@ import java.util.Map;
 import com.google.common.collect.Maps;
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryNodeFactory;
@@ -110,6 +112,18 @@ public class Merger extends AbstractQueryNode {
   /** @return The number of upstream consumers. */
   protected int upstreams() {
     return upstream.size();
+  }
+
+  @Override
+  public void push(ResultSeries series) {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public void complete(ResultShard shard) {
+    // TODO Auto-generated method stub
+    
   }
   
 }

@@ -16,7 +16,9 @@ package net.opentsdb.storage;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAmount;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
@@ -46,6 +48,8 @@ import net.opentsdb.common.Const;
 import net.opentsdb.configuration.ConfigurationException;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.MillisecondTimeStamp;
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesSharedTagsAndTimeData;
 import net.opentsdb.data.TimeSeriesDataSource;
@@ -72,6 +76,7 @@ import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.BaseTimeSeriesDataSourceConfig;
 import net.opentsdb.query.SemanticQuery;
+import net.opentsdb.query.TimeSeriesQuery;
 import net.opentsdb.query.TimeSeriesQuery.LogLevel;
 import net.opentsdb.query.filter.FilterUtils;
 import net.opentsdb.query.filter.QueryFilter;
@@ -125,6 +130,11 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
           false, "Whether or not to execute results in an asynchronous "
               + "thread pool or not.");
     }
+    if (!tsdb.getConfig().hasProperty("MockDataStore.push")) {
+      tsdb.getConfig().register("MockDataStore.push", false, 
+          true, "Whether or not to push results.");
+    }
+    
     if (tsdb.getConfig().getBoolean("MockDataStore.threadpool.enable")) {
       thread_pool = Executors.newCachedThreadPool();
     } else {
@@ -398,14 +408,17 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
           }
           return;
         }
-        
-        final LocalResult result = new LocalResult(context, this, config, 
-            sequence_id.getAndIncrement(), trace_span);
-        
-        if (thread_pool == null) {
-          result.run();
+        if (tsdb.getConfig().getBoolean("MockDataStore.push")) {
+          pushIt();
         } else {
-          thread_pool.submit(result);
+          final LocalResult result = new LocalResult(context, this, config, 
+              sequence_id.getAndIncrement(), trace_span);
+          
+          if (thread_pool == null) {
+            result.run();
+          } else {
+            thread_pool.submit(result);
+          }
         }
       } catch (Exception e) {
         e.printStackTrace();
@@ -432,6 +445,166 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       return context;
     }
     
+    void pushIt() {
+      System.out.println("****** PUSHING!!!!");
+      final TimeStamp st = context.query().startTime().getCopy();
+      st.snapToPreviousInterval(3600, ChronoUnit.SECONDS);
+      TimeStamp e = context.query().endTime().getCopy();
+      e.snapToPreviousInterval(3600, ChronoUnit.SECONDS);
+      e.add(Duration.ofSeconds(3600));
+      final int total = (int) (e.epoch() - st.epoch()) / 3600;
+      
+      QueryFilter filter = config.getFilter();
+      if (filter == null && !Strings.isNullOrEmpty(config.getFilterId())) {
+        filter = context.query().getFilter(config.getFilterId());
+      }
+      
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Running the filter: " + filter);
+      }
+      
+      Map<Long, TimeSeriesId> ids = Maps.newHashMap();
+      
+      while (st.compare(Op.LT, context.query().endTime())) {
+        AtomicInteger cntr = new AtomicInteger();
+        final ResultShard shard = new ResultShard() {
+          final TimeStamp start = st.getCopy();
+          TimeStamp end;
+          
+          @Override
+          public QueryNode node() {
+            return LocalNode.this;
+          }
+
+          @Override
+          public TimeStamp start() {
+            return start;
+          }
+
+          @Override
+          public TimeStamp end() {
+            if (end == null) {
+              synchronized(this) {
+                if (end == null) {
+                  end = start.getCopy();
+                  end.add(Duration.ofSeconds(3600));
+                }
+              }
+            }
+            return end;
+          }
+
+          @Override
+          public TimeSeriesId id(final long hash) {
+            return ids.get(hash);
+          }
+
+          @Override
+          public int totalShards() {
+            return total;
+          }
+
+          @Override
+          public String dataSource() {
+            return config.getId();
+          }
+
+          @Override
+          public int seriesCount() {
+            return cntr.get();
+          }
+
+          @Override
+          public String sourceId() {
+            return config.getId() + ":" + config.getId();
+          }
+
+          @Override
+          public void close() {
+            // TODO Auto-generated method stub
+            
+          }
+          
+        };
+        
+        System.out.println("      NEW shard: " + shard.start());
+        
+        for (final Entry<TimeSeriesDatumStringId, MockSpan> entry : database.entrySet()) {
+          // TODO - handle filter types
+          if (!config.getMetric().matches(entry.getKey().metric())) {
+            continue;
+          }
+          
+          if (filter != null) {
+            if (!FilterUtils.matchesTags(filter, entry.getKey().tags())) {
+              continue;
+            }
+          }
+          final long epoch = st.msEpoch();
+          
+          // matched the filters
+          for (final MockRow row : entry.getValue().rows) {
+            //System.out.println("  " + row.base_timestamp + "  " + epoch);
+            if (row.base_timestamp == epoch) {
+              final SlicedTimeSeries ts = new SlicedTimeSeries();
+              ts.addSource(row);
+              
+              
+              final long id_hash = ts.id().buildHashCode();
+              ids.putIfAbsent(id_hash, ts.id());
+              
+              cntr.incrementAndGet();
+              
+              System.out.println("               sending up: " + id_hash);
+              sendUpstream(new ResultSeries() {
+
+                @Override
+                public long idHash() {
+                  return id_hash;
+                }
+                
+                @Override
+                public TypeToken<? extends TimeSeriesDataType> getType() {
+                  return NumericType.TYPE;
+                }
+
+                @Override
+                public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator() {
+                  return new LocalIt();
+                }
+                
+                class LocalIt implements Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> {
+                  Iterator<TimeSeriesValue<?>> iterator = ts.iterator(NumericType.TYPE).get();
+                  @Override
+                  public boolean hasNext() {
+                    return iterator.hasNext();
+                  }
+  
+                  @Override
+                  public TimeSeriesValue<? extends TimeSeriesDataType> next() {
+                    return iterator.next();
+                  }
+                }
+
+                @Override
+                public ResultShard shard() {
+                  return shard;
+                }
+                
+              });
+            }
+          }
+          
+        }
+        System.out.println("    &&&&& Sending shard: " + shard.start().epoch());
+        completeUpstream(shard);
+        System.out.println(" ***** Sent shard complete: " + shard.start().epoch());
+        st.add(Duration.ofSeconds(3600));
+      }
+      
+      System.out.println("********* Done with mock data");
+    }
+    
     Collection<QueryNode> upstream() {
       return upstream;
     }
@@ -452,10 +625,24 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     public void onError(final Throwable t) {
       throw new UnsupportedOperationException("This is a source node!");
     }
-
+    
+    @Override
+    public void push(ResultSeries series) {
+      throw new UnsupportedOperationException("This is a source node!");
+    }
+    
+    @Override
+    public void complete(ResultShard shard) {
+      throw new UnsupportedOperationException("This is a source node!");
+    }
+    
     @Override
     public QueryNodeConfig config() {
       return config;
+    }
+    
+    public String pushIntervals(final TimeSeriesQuery query) {
+      return "1h";
     }
     
   }
@@ -866,4 +1053,5 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
         id.equals(MockDataStoreFactory.TYPE) ? "" : id + ".")
           + suffix;
   }
+  
 }

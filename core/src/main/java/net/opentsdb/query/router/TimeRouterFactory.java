@@ -266,4 +266,10 @@ public class TimeRouterFactory extends BaseQueryNodeFactory
     }
   }
 
+  @Override
+  public String pushIntervals(TimeSeriesQuery query) {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
 }

@@ -23,6 +23,8 @@ import com.google.common.collect.Maps;
 import com.stumbleupon.async.Callback;
 
 import net.opentsdb.common.Const;
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.exceptions.QueryDownstreamException;
 import net.opentsdb.query.AbstractQueryNode;
@@ -273,5 +275,17 @@ public class BinaryExpressionNode extends AbstractQueryNode {
   
   byte[] rightMetric() {
     return right_metric;
+  }
+
+  @Override
+  public void push(ResultSeries series) {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public void complete(ResultShard shard) {
+    // TODO Auto-generated method stub
+    
   }
 }

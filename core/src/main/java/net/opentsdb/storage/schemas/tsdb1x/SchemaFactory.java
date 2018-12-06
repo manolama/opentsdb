@@ -143,4 +143,10 @@ public class SchemaFactory extends BaseTSDBPlugin
       final Span span) {
     return schema.getIds(UniqueIdType.METRIC, join_metrics, span);
   }
+
+  @Override
+  public String pushIntervals(TimeSeriesQuery query) {
+    // TODO Auto-generated method stub
+    return null;
+  }
 }

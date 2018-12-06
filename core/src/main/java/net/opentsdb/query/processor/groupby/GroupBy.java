@@ -21,6 +21,8 @@ import com.google.common.collect.Lists;
 import com.stumbleupon.async.Callback;
 
 import net.opentsdb.common.Const;
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataSourceFactory;
@@ -128,5 +130,17 @@ public class GroupBy extends AbstractQueryNode {
   /** @return The number of upstream consumers. */
   protected int upstreams() {
     return upstream.size();
+  }
+
+  @Override
+  public void push(ResultSeries series) {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public void complete(ResultShard shard) {
+    // TODO Auto-generated method stub
+    
   }
 }

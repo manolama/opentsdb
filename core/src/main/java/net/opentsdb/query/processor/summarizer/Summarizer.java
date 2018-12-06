@@ -17,6 +17,8 @@ package net.opentsdb.query.processor.summarizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
@@ -74,6 +76,18 @@ public class Summarizer extends AbstractQueryNode {
         results.close();
       }
     }
+  }
+
+  @Override
+  public void push(ResultSeries series) {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public void complete(ResultShard shard) {
+    // TODO Auto-generated method stub
+    
   }
   
 }

@@ -629,5 +629,11 @@ public class HAClusterFactory extends BaseQueryNodeFactory implements
       canPushDown(predecessors.iterator().next(), factory, push_downs, planner);
     }
   }
+
+  @Override
+  public String pushIntervals(TimeSeriesQuery query) {
+    // TODO Auto-generated method stub
+    return null;
+  }
   
 }

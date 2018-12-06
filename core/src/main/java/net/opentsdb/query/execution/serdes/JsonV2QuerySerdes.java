@@ -33,6 +33,8 @@ import com.stumbleupon.async.Deferred;
 import com.stumbleupon.async.DeferredGroupException;
 
 import net.opentsdb.common.Const;
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataType;
@@ -476,5 +478,17 @@ public class JsonV2QuerySerdes implements TimeSeriesSerdes {
       
       timestamp.add(result.timeSpecification().interval());
     }
+  }
+
+  @Override
+  public Deferred<Object> serialize(ResultSeries series, Span span) {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public Deferred<Object> complete(ResultShard shard) {
+    // TODO Auto-generated method stub
+    return null;
   }
 }

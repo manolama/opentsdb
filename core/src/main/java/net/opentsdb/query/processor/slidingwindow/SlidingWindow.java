@@ -21,6 +21,8 @@ import java.util.Optional;
 import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
 
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
@@ -180,5 +182,17 @@ public class SlidingWindow extends AbstractQueryNode {
       }
       
     }
+  }
+
+  @Override
+  public void push(ResultSeries series) {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public void complete(ResultShard shard) {
+    // TODO Auto-generated method stub
+    
   }
 }

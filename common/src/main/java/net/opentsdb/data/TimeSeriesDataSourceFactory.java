@@ -66,6 +66,8 @@ public interface TimeSeriesDataSourceFactory extends TSDBPlugin,
   public boolean supportsPushdown(
       final Class<? extends QueryNodeConfig> operation);
   
+  public String pushIntervals(final TimeSeriesQuery query);
+  
   /**
    * For stores that are able to encode time series IDs, this method should
    * resolve the IDs to a string ID suitable for display or further 

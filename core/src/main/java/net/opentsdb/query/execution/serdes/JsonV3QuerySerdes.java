@@ -18,8 +18,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 
 import org.slf4j.Logger;
@@ -27,14 +30,26 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 import com.stumbleupon.async.DeferredGroupException;
 
+import gnu.trove.iterator.TLongIterator;
+import gnu.trove.iterator.TLongObjectIterator;
+import gnu.trove.map.TIntObjectMap;
+import gnu.trove.map.TLongObjectMap;
+import gnu.trove.map.hash.TIntObjectHashMap;
+import gnu.trove.map.hash.TLongObjectHashMap;
+import gnu.trove.set.TLongSet;
+import gnu.trove.set.hash.TLongHashSet;
 import net.opentsdb.common.Const;
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataType;
+import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
@@ -74,6 +89,11 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
   
   /** Whether or not we've serialized the first result set. */
   private boolean initialized;
+  
+  // <source, <series hash, <shard timestamp, series>>>
+  //Map<String, TLongObjectMap<TIntObjectMap<byte[]>>> serialized = Maps.newHashMap();
+  Map<String, TIntObjectMap<ShardWrapper>> shards = Maps.newHashMap();
+  Map<String, TLongSet> ids = Maps.newHashMap();
   
   /**
    * Default ctor.
@@ -556,4 +576,225 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
     json.writeEndArray();
   }
 
+  @Override
+  public Deferred<Object> serialize(ResultSeries series, Span span) {
+    // TODO - break out
+    ByteArrayOutputStream stream = new ByteArrayOutputStream();
+    int count = 0;
+    try {
+      // simple serdes for a json fragment.
+      final Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator = 
+          series.iterator();
+      while (iterator.hasNext()) {
+        if (count++ > 0) {
+          stream.write(',');
+        }
+        TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) iterator.next();
+        stream.write('"');
+        stream.write(Long.toString(v.timestamp().epoch()).getBytes());
+        stream.write('"');
+        stream.write(':');
+        if (v.value() == null) {
+          stream.write("null".getBytes());
+        } else if (v.value().isInteger()) {
+          stream.write(Long.toString(v.value().longValue()).getBytes());
+        } else {
+          if (Double.isNaN(v.value().doubleValue())) {
+            stream.write("NaN".getBytes());
+          } else {
+            // TODO - check for finite
+            stream.write(Double.toString(v.value().doubleValue()).getBytes());
+          }
+        }
+      }
+    } catch (IOException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
+    
+    synchronized (this) {
+//      TLongObjectMap<TIntObjectMap<byte[]>> ts_to_shards = serialized.get(series.shard().sourceId());
+//      if (ts_to_shards == null) {
+//        ts_to_shards = new TLongObjectHashMap<TIntObjectMap<byte[]>>();
+//        serialized.put(series.shard().sourceId(), ts_to_shards);
+//      }
+//      
+//      TIntObjectMap<byte[]> extant = ts_to_shards.get(series.idHash());
+//      if (extant == null) {
+//        extant = new TIntObjectHashMap<byte[]>();
+//        ts_to_shards.put(series.idHash(), extant);
+//      }
+//      extant.put((int) series.shard().start().epoch(), stream.toByteArray());
+      
+      TLongSet group_ids = ids.get(series.shard().sourceId());
+      if (group_ids == null) {
+        group_ids = new TLongHashSet();
+        ids.put(series.shard().sourceId(), group_ids);
+      }
+      group_ids.add(series.idHash());
+      
+      TIntObjectMap<ShardWrapper> source_shards = shards.get(series.shard().sourceId());
+      if (source_shards == null) {
+        source_shards = new TIntObjectHashMap<ShardWrapper>();
+        shards.put(series.shard().sourceId(), source_shards);
+      }
+      
+      ShardWrapper shard = source_shards.get((int) series.shard().start().epoch());
+      if (shard == null) {
+        shard = new ShardWrapper();
+        //shard.shard = series.shard();
+        source_shards.put((int) series.shard().start().epoch(), shard);
+      }
+      shard.series.put(series.idHash(), stream.toByteArray());
+      
+      if (shard.shard == null || shard.series.size() != shard.shard.seriesCount()) {
+        return Deferred.fromResult(null);
+      }
+    }
+    
+    // might be done with data (SINGLE MODE FOR NOW) so see if we can serialize it.
+    return serializeShard(series.shard());
+  }
+
+  @Override
+  public Deferred<Object> complete(ResultShard shard) {
+    System.out.println(" [[[[[[[ SHARD: " + shard.start().epoch());
+    synchronized (this) {
+      TIntObjectMap<ShardWrapper> source_shards = shards.get(shard.sourceId());
+      if (source_shards == null) {
+        source_shards = new TIntObjectHashMap<ShardWrapper>();
+        shards.put(shard.sourceId(), source_shards);
+      }
+      
+      ShardWrapper wrapper = source_shards.get((int) shard.start().epoch());
+      if (wrapper == null) {
+        wrapper = new ShardWrapper();
+        wrapper.shard = shard;
+        source_shards.put((int) shard.start().epoch(), wrapper);
+      } else {
+        wrapper.shard = shard;
+      }
+      
+      System.out.println("------ size: " + source_shards.size() + " => " + shard.totalShards());
+      if (source_shards.size() != shard.totalShards()) {
+        System.out.println("      not ready yet.");
+        return Deferred.fromResult(null);
+      }
+      
+      // TODO don't loop every time, maintain counter outside
+      for (final TIntObjectMap<ShardWrapper> entry : shards.values()) {
+        for (final ShardWrapper w : entry.valueCollection()) {
+          if (wrapper.shard == null) {
+            return Deferred.fromResult(null);
+          }
+          if (wrapper.series.size() != w.shard.seriesCount()) {
+            return Deferred.fromResult(null);
+          }
+        }
+      }
+    }
+    
+    System.out.println("      serdes from complete");
+    serializePush();
+    return Deferred.fromResult(true);
+  }
+
+  Deferred<Object> serializeShard(ResultShard shard) {
+    synchronized (this) {      
+      // TODO don't loop every time, maintain counter outside
+      for (final TIntObjectMap<ShardWrapper> entry : shards.values()) {
+        for (final ShardWrapper w : entry.valueCollection()) {
+          if (w.series.size() != w.shard.seriesCount()) {
+            return Deferred.fromResult(null);
+          }
+        }
+      }
+    }
+    System.out.println("      serdes from shard......");
+    serializePush();
+    return Deferred.fromResult(true);
+  }
+  
+  class ShardWrapper {
+    ResultShard shard;
+    TLongObjectMap<byte[]> series = new TLongObjectHashMap<byte[]>();
+  }
+  
+  void serializePush() {
+    System.out.println("********** SERDES!!!!");
+    final JsonV2QuerySerdesOptions opts = (JsonV2QuerySerdesOptions) options;
+   
+    try {
+      json.writeStartObject();
+      json.writeArrayFieldStart("results");
+      
+      for (final Entry<String, TIntObjectMap<ShardWrapper>> entry : shards.entrySet()) {
+        int[] keys = entry.getValue().keys();
+        Arrays.sort(keys);
+        System.out.println("     KEYS: " + keys.length);
+        
+        final ShardWrapper shard = entry.getValue().get(keys[0]);
+        
+        json.writeStartObject();
+        json.writeStringField("source", shard.shard.sourceId());
+        // TODO - array of data sources
+        
+        // serdes time spec if present
+//        if (result.timeSpecification() != null) {
+//          json.writeObjectFieldStart("timeSpecification");
+//          // TODO - ms, second, nanos, etc
+//          json.writeNumberField("start", result.timeSpecification().start().epoch());
+//          json.writeNumberField("end", result.timeSpecification().end().epoch());
+//          json.writeStringField("intervalISO", result.timeSpecification().interval().toString());
+//          json.writeStringField("interval", result.timeSpecification().stringInterval());
+//          //json.writeNumberField("intervalNumeric", result.timeSpecification().interval().get(result.timeSpecification().units()));
+//          if (result.timeSpecification().timezone() != null) {
+//            json.writeStringField("timeZone", result.timeSpecification().timezone().toString());
+//          }
+//          json.writeStringField("units", result.timeSpecification().units().toString());
+//          json.writeEndObject();
+//        }
+        
+        json.writeArrayFieldStart("data");
+
+        TLongSet group_ids = ids.get(entry.getKey());
+        final TLongIterator iterator = group_ids.iterator();
+        while (iterator.hasNext()) {
+          final long id_hash = iterator.next();
+          // serialize the ID
+          json.writeStartObject();
+          TimeSeriesId raw_id = shard.shard.id(id_hash);
+          if (raw_id == null) {
+            // MISSING! Fill
+            continue;
+          }
+          TimeSeriesStringId id = (TimeSeriesStringId) raw_id;
+          json.writeStringField("metric", id.metric());
+          json.writeObjectFieldStart("NumericType");
+          int count = 0;
+          for (final int idx : keys) {
+            final ShardWrapper w = entry.getValue().get(idx);
+            byte[] s = w.series.get(id_hash);
+            if (s == null) {
+              // TODO - fill!!
+            } else {
+              if (count++ > 0) {
+                json.writeRaw(",");
+              }
+              json.writeRaw(new String(s));
+            }
+          }
+          json.writeEndObject();
+          json.writeEndObject();
+        }
+        json.writeEndArray();
+        json.writeEndObject();
+      }
+      
+    } catch (IOException e) {
+      throw new RuntimeException("WTF?", e);
+    }
+    
+    //serializeComplete(null);
+  }
 }

@@ -37,6 +37,8 @@ import com.stumbleupon.async.DeferredGroupException;
 import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.MillisecondTimeStamp;
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesStringId;
@@ -397,6 +399,18 @@ public class JsonV2ExpQuerySerdes implements TimeSeriesSerdes {
                           final Span span) {
     node.onError(new UnsupportedOperationException("Not implemented for this "
         + "class: " + getClass().getCanonicalName()));
+  }
+
+  @Override
+  public Deferred<Object> serialize(ResultSeries series, Span span) {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public Deferred<Object> complete(ResultShard shard) {
+    // TODO Auto-generated method stub
+    return null;
   }
 
 }

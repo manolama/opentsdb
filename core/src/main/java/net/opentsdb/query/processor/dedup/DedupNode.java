@@ -22,6 +22,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
+
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
@@ -168,6 +171,18 @@ public class DedupNode extends AbstractQueryNode {
     public TypeToken<? extends TimeSeriesDataType> getType() {
       return NumericType.TYPE;
     }
+    
+  }
+
+  @Override
+  public void push(ResultSeries series) {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public void complete(ResultShard shard) {
+    // TODO Auto-generated method stub
     
   }
 }

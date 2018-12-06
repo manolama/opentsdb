@@ -24,6 +24,8 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.ImmutableMap;
 import com.stumbleupon.async.Callback;
 
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.exceptions.QueryExecutionException;
 import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.QueryMode;
@@ -256,6 +258,27 @@ public class ServletSink implements QuerySink {
         .setTag("query", JSON.serializeToString(context.query()))
         .finish();        
       }
+    }
+  }
+
+  @Override
+  public void push(ResultSeries series) {
+    serdes.serialize(series, null);
+  }
+
+  @Override
+  public void complete(ResultShard shard) {
+    try {
+      Object result = serdes.complete(shard).join();
+      if (result != null && (boolean) result == true) {
+        onComplete();
+      }
+    } catch (InterruptedException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    } catch (Exception e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
     }
   }
 }

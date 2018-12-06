@@ -134,4 +134,9 @@ public class MockDataStoreFactory extends BaseTSDBPlugin
       final Span span) {
     return Deferred.fromError(new UnsupportedOperationException());
   }
+
+  @Override
+  public String pushIntervals(TimeSeriesQuery query) {
+    return "1h";
+  }
 }

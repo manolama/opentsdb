@@ -14,6 +14,8 @@
 // limitations under the License.
 package net.opentsdb.query.processor.topn;
 
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryNodeFactory;
@@ -61,6 +63,18 @@ public class TopN extends AbstractQueryNode {
     // TODO - separate thread if necessary.
     final TopNResult result = new TopNResult(this, next);
     result.run();
+  }
+
+  @Override
+  public void push(ResultSeries series) {
+    // TODO Auto-generated method stub
+    
+  }
+
+  @Override
+  public void complete(ResultShard shard) {
+    // TODO Auto-generated method stub
+    
   }
   
 }

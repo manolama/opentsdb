@@ -21,6 +21,8 @@ import org.slf4j.LoggerFactory;
 
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.exceptions.QueryUpstreamException;
 import net.opentsdb.stats.Span;
@@ -175,6 +177,28 @@ public abstract class AbstractQueryNode implements QueryNode {
         node.onError(t);
       } catch (Exception e) {
         LOG.warn("Failed to send exception upstream to node: " + node, e);
+      }
+    }
+  }
+  
+  protected void sendUpstream(final ResultSeries series) {
+    for (final QueryNode node : upstream) {
+      try {
+        node.push(series);
+      } catch (Exception e) {
+        throw new QueryUpstreamException("Failed to send series "
+            + "upstream to node: " + node, e);
+      }
+    }
+  }
+  
+  protected void completeUpstream(final ResultShard shard) {
+    for (final QueryNode node : upstream) {
+      try {
+        node.complete(shard);
+      } catch (Exception e) {
+        throw new QueryUpstreamException("Failed to send series "
+            + "upstream to node: " + node, e);
       }
     }
   }

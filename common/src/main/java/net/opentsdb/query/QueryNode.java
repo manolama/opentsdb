@@ -16,6 +16,8 @@ package net.opentsdb.query;
 
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.stats.Span;
 
 /**
@@ -76,4 +78,9 @@ public interface QueryNode {
    * @param t A non-null exception.
    */
   public void onError(final Throwable t);
+
+  public void push(final ResultSeries series);
+  
+  public void complete(final ResultShard shard);
+  
 }
