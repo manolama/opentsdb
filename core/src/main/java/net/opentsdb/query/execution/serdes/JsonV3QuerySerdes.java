@@ -770,6 +770,17 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           }
           TimeSeriesStringId id = (TimeSeriesStringId) raw_id;
           json.writeStringField("metric", id.metric());
+          json.writeObjectFieldStart("tags");
+          for (final Entry<String, String> pair : id.tags().entrySet()) {
+            json.writeStringField(pair.getKey(), pair.getValue());
+          }
+          json.writeEndObject();
+          json.writeArrayFieldStart("aggregateTags");
+          for (final String tag : id.aggregatedTags()) {
+            json.writeString(tag);
+          }
+          json.writeEndArray();
+          
           json.writeObjectFieldStart("NumericType");
           int count = 0;
           for (final int idx : keys) {

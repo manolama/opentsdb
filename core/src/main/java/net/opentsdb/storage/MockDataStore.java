@@ -558,6 +558,8 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
               System.out.println("               sending up: " + id_hash);
               sendUpstream(new ResultSeries() {
 
+                int references;
+                
                 @Override
                 public long idHash() {
                   return id_hash;
@@ -570,10 +572,13 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
 
                 @Override
                 public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator() {
+                  synchronized (this) {
+                    references++;
+                  }
                   return new LocalIt();
                 }
                 
-                class LocalIt implements Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> {
+                class LocalIt implements Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> {                  
                   Iterator<TimeSeriesValue<?>> iterator = ts.iterator(NumericType.TYPE).get();
                   @Override
                   public boolean hasNext() {
@@ -589,6 +594,15 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
                 @Override
                 public ResultShard shard() {
                   return shard;
+                }
+
+                @Override
+                public void close() throws Exception {
+                  synchronized (this) {
+                    if (--references < 1) {
+                      ts.close();
+                    }
+                  }
                 }
                 
               });

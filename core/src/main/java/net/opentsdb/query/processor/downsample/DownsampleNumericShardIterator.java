@@ -87,10 +87,13 @@ import net.opentsdb.query.interpolation.QueryInterpolatorConfig;
  */
 public class DownsampleNumericShardIterator implements ResultSeries {
   
+  private int references;
+  
   private final QueryNode node;
   
-  /** The aggregator. */ // TODO - move this to the config!!! one ref
-  private final NumericAggregator aggregator;
+  /** Values to populate. */
+  protected long[] long_values;
+  protected double[] double_values;
   
   /** The source to pull an iterator from. */
   private final ResultSeries source;
@@ -163,14 +166,17 @@ public class DownsampleNumericShardIterator implements ResultSeries {
       throw new IllegalArgumentException("No interpolator implementation found for: " + 
           interpolator_config.getDataType() == null ? "Default" : interpolator_config.getDataType());
     }
+    
     interpolator = (QueryInterpolator<NumericType>) interp;
     interval_ts = source.shard().start().getCopy();
     interval_ts.snapToPreviousInterval(
         ((DownsampleConfig) node.config()).intervalPart(), 
         ((DownsampleConfig) node.config()).units());
     
-    if ( ((DownsampleConfig) node.config()).getFill() && 
-        ! ((DownsampleConfig) node.config()).getRunAll()) {
+    
+    
+    if (((DownsampleConfig) node.config()).getFill() && 
+        !((DownsampleConfig) node.config()).getRunAll()) {
       if (!interpolator.hasNext()) {
         has_next = false;
       } else {
@@ -474,5 +480,18 @@ public class DownsampleNumericShardIterator implements ResultSeries {
   @Override
   public long idHash() {
     return source.idHash();
+  }
+
+  @Override
+  public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  
+  @Override
+  public void close() throws Exception {
+    // TODO Auto-generated method stub
+    
   }
 }
