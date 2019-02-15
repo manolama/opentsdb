@@ -23,7 +23,7 @@ import com.google.common.collect.Maps;
 import com.stumbleupon.async.Callback;
 
 import net.opentsdb.common.Const;
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.exceptions.QueryDownstreamException;
@@ -278,7 +278,7 @@ public class BinaryExpressionNode extends AbstractQueryNode {
   }
 
   @Override
-  public void push(ResultSeries series) {
+  public void push(PartialTimeSeries series) {
     // TODO Auto-generated method stub
     
   }

@@ -16,7 +16,7 @@ package net.opentsdb.query.serdes;
 
 import com.stumbleupon.async.Deferred;
 
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
@@ -40,7 +40,7 @@ public interface TimeSeriesSerdes {
   public Deferred<Object> serialize(final QueryResult result,
                                     final Span span);
   
-  public Deferred<Object> serialize(final ResultSeries series, final Span span);
+  public Deferred<Object> serialize(final PartialTimeSeries series, final Span span);
   
   public Deferred<Object> complete(final ResultShard shard);
   

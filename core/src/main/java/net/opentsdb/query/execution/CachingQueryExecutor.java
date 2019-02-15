@@ -43,7 +43,7 @@ import net.opentsdb.common.Const;
 import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDBPlugin;
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataSource;
@@ -526,7 +526,7 @@ public class CachingQueryExecutor extends BaseTSDBPlugin implements QuerySourceF
     }
 
     @Override
-    public void push(ResultSeries series) {
+    public void push(PartialTimeSeries series) {
       // TODO Auto-generated method stub
       
     }

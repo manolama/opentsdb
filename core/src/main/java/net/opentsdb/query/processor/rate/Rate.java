@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
 
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
@@ -190,7 +190,7 @@ public class Rate extends AbstractQueryNode {
   }
 
   @Override
-  public void push(ResultSeries series) {
+  public void push(PartialTimeSeries series) {
     // TODO Auto-generated method stub
     
   }

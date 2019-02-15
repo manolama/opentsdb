@@ -23,7 +23,7 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
@@ -175,7 +175,7 @@ public class DedupNode extends AbstractQueryNode {
   }
 
   @Override
-  public void push(ResultSeries series) {
+  public void push(PartialTimeSeries series) {
     // TODO Auto-generated method stub
     
   }

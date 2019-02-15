@@ -104,6 +104,7 @@ public class PluginsConfig extends Validatable {
   
   public static final List<String> DEFAULT_TYPES = Lists.newArrayList();
   static {
+    DEFAULT_TYPES.add("net.opentsdb.pools.Allocator");
     DEFAULT_TYPES.add("net.opentsdb.query.processor.ProcessorFactory");
     DEFAULT_TYPES.add("net.opentsdb.query.filter.QueryFilterFactory");
     DEFAULT_TYPES.add("net.opentsdb.stats.StatsCollector");

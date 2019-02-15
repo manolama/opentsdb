@@ -32,7 +32,7 @@ import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.data.TimeSeriesId;
@@ -348,7 +348,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   }
   
   @Override
-  public void push(final ResultSeries series) {
+  public void push(final PartialTimeSeries series) {
     for (final QuerySink sink : sinks) {
       try {
         sink.push(series);
@@ -525,8 +525,8 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     }
 
     @Override
-    public int seriesCount() {
-      return source.seriesCount();
+    public int timeSeriesCount() {
+      return source.timeSeriesCount();
     }
 
     @Override

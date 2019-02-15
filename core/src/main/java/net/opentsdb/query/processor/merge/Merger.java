@@ -20,7 +20,7 @@ import java.util.Map;
 import com.google.common.collect.Maps;
 import com.stumbleupon.async.Deferred;
 
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryNodeConfig;
@@ -115,7 +115,7 @@ public class Merger extends AbstractQueryNode {
   }
 
   @Override
-  public void push(ResultSeries series) {
+  public void push(PartialTimeSeries series) {
     // TODO Auto-generated method stub
     
   }

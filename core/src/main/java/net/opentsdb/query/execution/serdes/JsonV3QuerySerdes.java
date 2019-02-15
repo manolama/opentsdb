@@ -44,7 +44,7 @@ import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.TLongSet;
 import gnu.trove.set.hash.TLongHashSet;
 import net.opentsdb.common.Const;
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
@@ -577,7 +577,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
   }
 
   @Override
-  public Deferred<Object> serialize(ResultSeries series, Span span) {
+  public Deferred<Object> serialize(PartialTimeSeries series, Span span) {
     // TODO - break out
     ByteArrayOutputStream stream = new ByteArrayOutputStream();
     int count = 0;
@@ -647,7 +647,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       }
       shard.series.put(series.idHash(), stream.toByteArray());
       
-      if (shard.shard == null || shard.series.size() != shard.shard.seriesCount()) {
+      if (shard.shard == null || shard.series.size() != shard.shard.timeSeriesCount()) {
         return Deferred.fromResult(null);
       }
     }
@@ -687,7 +687,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           if (wrapper.shard == null) {
             return Deferred.fromResult(null);
           }
-          if (wrapper.series.size() != w.shard.seriesCount()) {
+          if (wrapper.series.size() != w.shard.timeSeriesCount()) {
             return Deferred.fromResult(null);
           }
         }
@@ -704,7 +704,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       // TODO don't loop every time, maintain counter outside
       for (final TIntObjectMap<ShardWrapper> entry : shards.values()) {
         for (final ShardWrapper w : entry.valueCollection()) {
-          if (w.series.size() != w.shard.seriesCount()) {
+          if (w.series.size() != w.shard.timeSeriesCount()) {
             return Deferred.fromResult(null);
           }
         }

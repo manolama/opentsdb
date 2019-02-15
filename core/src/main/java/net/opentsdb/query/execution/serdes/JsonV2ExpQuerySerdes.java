@@ -37,7 +37,7 @@ import com.stumbleupon.async.DeferredGroupException;
 import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.MillisecondTimeStamp;
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
@@ -402,7 +402,7 @@ public class JsonV2ExpQuerySerdes implements TimeSeriesSerdes {
   }
 
   @Override
-  public Deferred<Object> serialize(ResultSeries series, Span span) {
+  public Deferred<Object> serialize(PartialTimeSeries series, Span span) {
     // TODO Auto-generated method stub
     return null;
   }

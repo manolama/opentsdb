@@ -34,6 +34,7 @@ import com.stumbleupon.async.Deferred;
 import net.opentsdb.configuration.ConfigurationEntrySchema;
 import net.opentsdb.data.TimeSeriesDataSourceFactory;
 import net.opentsdb.data.TimeSeriesDataType;
+import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryIteratorFactory;
@@ -129,12 +130,17 @@ public class DefaultRegistry implements Registry {
     type_map.put("numerictype", NumericType.TYPE);
     type_map.put(NumericType.TYPE.toString().toLowerCase(), 
         NumericType.TYPE);
+    type_map.put("numericarray", NumericArrayType.TYPE);
+    type_map.put("numericarraytype", NumericArrayType.TYPE);
+    type_map.put(NumericArrayType.TYPE.toString().toLowerCase(), 
+        NumericArrayType.TYPE);
     type_map.put("numericsummary", NumericSummaryType.TYPE);
     type_map.put("numericsummarytype", NumericSummaryType.TYPE);
     type_map.put(NumericSummaryType.TYPE.toString().toLowerCase(), 
         NumericSummaryType.TYPE);
     
     default_type_name_map.put(NumericType.TYPE, "Numeric");
+    default_type_name_map.put(NumericArrayType.TYPE, "NumericArray");
     default_type_name_map.put(NumericSummaryType.TYPE, "NumericSummary");
   }
   

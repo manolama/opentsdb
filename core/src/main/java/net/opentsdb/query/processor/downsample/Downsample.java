@@ -30,7 +30,7 @@ import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.common.Const;
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
@@ -337,7 +337,7 @@ public class Downsample extends AbstractQueryNode {
   }
   
   @Override
-  public void push(final ResultSeries series) {
+  public void push(final PartialTimeSeries series) {
     if (series.getType() == NumericType.TYPE) {
       sendUpstream(new DownsampleNumericShardIterator(this, series));
     }

@@ -14,7 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query;
 
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 
 /**
@@ -69,7 +69,7 @@ public interface QuerySink {
    */
   public void onError(final Throwable t);
 
-  public void push(final ResultSeries series);
+  public void push(final PartialTimeSeries series);
   
   public void complete(final ResultShard shard);
   

@@ -14,7 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.topn;
 
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryNodeConfig;
@@ -66,7 +66,7 @@ public class TopN extends AbstractQueryNode {
   }
 
   @Override
-  public void push(ResultSeries series) {
+  public void push(PartialTimeSeries series) {
     // TODO Auto-generated method stub
     
   }

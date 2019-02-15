@@ -19,7 +19,8 @@ import java.util.Optional;
 
 import com.google.common.reflect.TypeToken;
 
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.Aggregator;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
@@ -85,7 +86,7 @@ import net.opentsdb.query.interpolation.QueryInterpolatorConfig;
  * TODO - look at a better way of growing the arrays.
  * @since 3.0
  */
-public class DownsampleNumericShardIterator implements ResultSeries {
+public class DownsampleNumericShardIterator implements PartialTimeSeries {
   
   private int references;
   
@@ -96,7 +97,7 @@ public class DownsampleNumericShardIterator implements ResultSeries {
   protected double[] double_values;
   
   /** The source to pull an iterator from. */
-  private final ResultSeries source;
+  private final PartialTimeSeries source;
   
   /** The interpolator to use for filling missing intervals. */
   private final QueryInterpolator<NumericType> interpolator;
@@ -113,6 +114,8 @@ public class DownsampleNumericShardIterator implements ResultSeries {
   /** The value we'll actually return to a caller. */
   private MutableNumericValue response;
   
+  NumericAggregator aggregator;
+  
   /**
    * Default ctor. This will seek to the proper source timestamp.
    * 
@@ -123,7 +126,7 @@ public class DownsampleNumericShardIterator implements ResultSeries {
    */
   @SuppressWarnings("unchecked")
   public DownsampleNumericShardIterator(final QueryNode node,
-                                        final ResultSeries source) {
+                                        final PartialTimeSeries source) {
     if (node == null) {
       throw new IllegalArgumentException("Query node cannot be null.");
     }
@@ -218,46 +221,46 @@ public class DownsampleNumericShardIterator implements ResultSeries {
     response = new MutableNumericValue();
   }
 
-  @Override
-  public boolean hasNext() {
-    return has_next;
-  }
-  
-  @Override
-  public TimeSeriesValue<? extends TimeSeriesDataType> next() {
-    has_next = false;
-
-    response.reset(value);
-    interval_ts.add(((DownsampleConfig) node.config()).interval());
-    
-    if (((DownsampleConfig) node.config()).getFill() && 
-        !((DownsampleConfig) node.config()).getRunAll()) {
-      value = interpolator.next(interval_ts);
-      if (interval_ts.compare(Op.LTE, source.shard().end())) {
-        has_next = true;
-      }
-    } else if (interpolator.hasNext()) {
-      value = interpolator.next(interval_ts);
-      while (value != null && (value.value() == null || 
-          (!value.value().isInteger() && Double.isNaN(value.value().doubleValue())))) {
-        if (interpolator.hasNext()) {
-          interval_ts.add(((DownsampleConfig) node.config()).interval());
-          if (interval_ts.compare(Op.GT, source.shard().end())) {
-            value = null;
-            break;
-          }
-          value = interpolator.next(interval_ts);
-        } else {
-          value = null;
-        }
-      }
-      
-      if (value != null) {
-        has_next = true;
-      }
-    }
-    return response;
-  }
+//  @Override
+//  public boolean hasNext() {
+//    return has_next;
+//  }
+//  
+//  @Override
+//  public TimeSeriesValue<? extends TimeSeriesDataType> next() {
+//    has_next = false;
+//
+//    response.reset(value);
+//    interval_ts.add(((DownsampleConfig) node.config()).interval());
+//    
+//    if (((DownsampleConfig) node.config()).getFill() && 
+//        !((DownsampleConfig) node.config()).getRunAll()) {
+//      value = interpolator.next(interval_ts);
+//      if (interval_ts.compare(Op.LTE, source.shard().end())) {
+//        has_next = true;
+//      }
+//    } else if (interpolator.hasNext()) {
+//      value = interpolator.next(interval_ts);
+//      while (value != null && (value.value() == null || 
+//          (!value.value().isInteger() && Double.isNaN(value.value().doubleValue())))) {
+//        if (interpolator.hasNext()) {
+//          interval_ts.add(((DownsampleConfig) node.config()).interval());
+//          if (interval_ts.compare(Op.GT, source.shard().end())) {
+//            value = null;
+//            break;
+//          }
+//          value = interpolator.next(interval_ts);
+//        } else {
+//          value = null;
+//        }
+//      }
+//      
+//      if (value != null) {
+//        has_next = true;
+//      }
+//    }
+//    return response;
+//  }
   
   @Override
   public TypeToken<? extends TimeSeriesDataType> getType() {
@@ -295,6 +298,8 @@ public class DownsampleNumericShardIterator implements ResultSeries {
     /** The current interval end timestamp. */
     private TimeStamp interval_end;
     
+    Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> it;
+    
     /**
      * Default ctor.
      */
@@ -307,13 +312,13 @@ public class DownsampleNumericShardIterator implements ResultSeries {
         interval_end = source.shard().start().getCopy();
         interval_end.add(((DownsampleConfig) node.config()).interval());
       }
-      
-      if (source.hasNext()) {
-        next_dp = (TimeSeriesValue<NumericType>) source.next();
+      it = source.iterator();
+      if (it.hasNext()) {
+        next_dp = (TimeSeriesValue<NumericType>) it.next();
       }
       
       dp = new MutableNumericValue();
-      has_next = source.hasNext();
+      has_next = it.hasNext();
       long_values = new long[2];
       
       // blow out anything earlier than the first timestamp
@@ -325,8 +330,8 @@ public class DownsampleNumericShardIterator implements ResultSeries {
         
         while (next_dp != null && next_dp.value() != null && 
             next_dp.timestamp().compare(Op.LT, interval_start)) {
-          if (source.hasNext()) {
-            next_dp = (TimeSeriesValue<NumericType>) source.next();
+          if (it.hasNext()) {
+            next_dp = (TimeSeriesValue<NumericType>) it.next();
           } else {
             next_dp = null;
           }
@@ -428,8 +433,8 @@ public class DownsampleNumericShardIterator implements ResultSeries {
             }
           }
           
-          if (source.hasNext()) {
-            next_dp = (TimeSeriesValue<NumericType>) source.next();
+          if (it.hasNext()) {
+            next_dp = (TimeSeriesValue<NumericType>) it.next();
           } else {
             next_dp = null;
           }

@@ -48,7 +48,7 @@ import net.opentsdb.common.Const;
 import net.opentsdb.configuration.ConfigurationException;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.MillisecondTimeStamp;
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesSharedTagsAndTimeData;
@@ -510,7 +510,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
           }
 
           @Override
-          public int seriesCount() {
+          public int timeSeriesCount() {
             return cntr.get();
           }
 
@@ -556,7 +556,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
               cntr.incrementAndGet();
               
               System.out.println("               sending up: " + id_hash);
-              sendUpstream(new ResultSeries() {
+              sendUpstream(new PartialTimeSeries() {
 
                 int references;
                 
@@ -641,7 +641,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     }
     
     @Override
-    public void push(ResultSeries series) {
+    public void push(PartialTimeSeries series) {
       throw new UnsupportedOperationException("This is a source node!");
     }
     

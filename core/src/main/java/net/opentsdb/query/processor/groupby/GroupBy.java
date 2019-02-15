@@ -21,7 +21,7 @@ import com.google.common.collect.Lists;
 import com.stumbleupon.async.Callback;
 
 import net.opentsdb.common.Const;
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
@@ -133,7 +133,7 @@ public class GroupBy extends AbstractQueryNode {
   }
 
   @Override
-  public void push(ResultSeries series) {
+  public void push(PartialTimeSeries series) {
     // TODO Auto-generated method stub
     
   }

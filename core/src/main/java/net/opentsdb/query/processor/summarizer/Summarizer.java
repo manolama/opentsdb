@@ -17,7 +17,7 @@ package net.opentsdb.query.processor.summarizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryNode;
@@ -79,7 +79,7 @@ public class Summarizer extends AbstractQueryNode {
   }
 
   @Override
-  public void push(ResultSeries series) {
+  public void push(PartialTimeSeries series) {
     // TODO Auto-generated method stub
     
   }

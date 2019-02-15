@@ -25,7 +25,7 @@ import com.stumbleupon.async.Deferred;
 
 import io.netty.util.Timeout;
 import io.netty.util.TimerTask;
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataSource;
@@ -324,7 +324,7 @@ public class HACluster extends AbstractQueryNode {
   }
 
   @Override
-  public void push(ResultSeries series) {
+  public void push(PartialTimeSeries series) {
     // TODO Auto-generated method stub
     
   }

@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.ImmutableMap;
 import com.stumbleupon.async.Callback;
 
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.exceptions.QueryExecutionException;
 import net.opentsdb.query.QueryContext;
@@ -262,7 +262,7 @@ public class ServletSink implements QuerySink {
   }
 
   @Override
-  public void push(ResultSeries series) {
+  public void push(PartialTimeSeries series) {
     serdes.serialize(series, null);
   }
 

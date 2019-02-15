@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import com.stumbleupon.async.Deferred;
 
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.exceptions.QueryUpstreamException;
@@ -181,7 +181,7 @@ public abstract class AbstractQueryNode implements QueryNode {
     }
   }
   
-  protected void sendUpstream(final ResultSeries series) {
+  protected void sendUpstream(final PartialTimeSeries series) {
     for (final QueryNode node : upstream) {
       try {
         node.push(series);

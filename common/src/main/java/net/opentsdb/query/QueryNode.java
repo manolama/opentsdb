@@ -16,7 +16,7 @@ package net.opentsdb.query;
 
 import com.stumbleupon.async.Deferred;
 
-import net.opentsdb.data.ResultSeries;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.stats.Span;
 
@@ -79,8 +79,25 @@ public interface QueryNode {
    */
   public void onError(final Throwable t);
 
-  public void push(final ResultSeries series);
+  /**
+   * Called asynchronously from downstream node(s) with results for a single
+   * time series.
+   * 
+   * NOTE: GSK each node should be runnable so these are queued and picked up by
+   * thread workers to send on to the next node.
+   * 
+   * @param series
+   */
+  public void push(final PartialTimeSeries series);
   
+  /**
+   * Called asynchronously from downstream node(s) with a shard result when
+   * and only when that shard has found the total number of ResultSeries have been
+   * fetched and emitted. 
+   * NOTE: that some series may not have been sent to {@link #push(PartialTimeSeries)} yet.
+   * 
+   * @param shard
+   */
   public void complete(final ResultShard shard);
   
 }
