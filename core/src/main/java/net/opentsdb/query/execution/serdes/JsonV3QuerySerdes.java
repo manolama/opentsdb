@@ -578,13 +578,13 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
 
   @Override
   public Deferred<Object> serialize(PartialTimeSeries series, Span span) {
+    System.out.println("OBJ " + series);
     // TODO - break out
     ByteArrayOutputStream stream = new ByteArrayOutputStream();
     int count = 0;
     try {
       // simple serdes for a json fragment.
-      final Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator = 
-          series.iterator();
+      final TypedTimeSeriesIterator iterator = series.iterator();
       while (iterator.hasNext()) {
         if (count++ > 0) {
           stream.write(',');
@@ -606,6 +606,12 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
             stream.write(Double.toString(v.value().doubleValue()).getBytes());
           }
         }
+      }
+      try {
+        iterator.close();
+      } catch (Exception e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
       }
     } catch (IOException e) {
       // TODO Auto-generated catch block
@@ -646,6 +652,14 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
         source_shards.put((int) series.shard().start().epoch(), shard);
       }
       shard.series.put(series.idHash(), stream.toByteArray());
+      
+
+      try {
+        series.close();
+      } catch (Exception e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
       
       if (shard.shard == null || shard.series.size() != shard.shard.timeSeriesCount()) {
         return Deferred.fromResult(null);

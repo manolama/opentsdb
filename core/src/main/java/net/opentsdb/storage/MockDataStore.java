@@ -46,6 +46,7 @@ import com.stumbleupon.async.Deferred;
 import net.opentsdb.auth.AuthState;
 import net.opentsdb.common.Const;
 import net.opentsdb.configuration.ConfigurationException;
+import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.PartialTimeSeries;
@@ -68,6 +69,9 @@ import net.opentsdb.data.iterators.SlicedTimeSeries;
 import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericMillisecondShard;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.pools.Allocator;
+import net.opentsdb.pools.ObjectPool.Poolable;
+import net.opentsdb.pools.StormPotPool;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryNode;
@@ -115,6 +119,9 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
   /** Thread pool used by the executions. */
   private final ExecutorService thread_pool;
   
+  StormPotPool objpool;
+  StormPotPool itpool;
+  
   public MockDataStore(final TSDB tsdb, final String id) {
     this.tsdb = tsdb;
     this.id = id;
@@ -122,6 +129,12 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Intantiating mock data store with ID: " + this.id + "@" + System.identityHashCode(this));
     }
+    
+    objpool = new StormPotPool();
+    objpool.initialize(tsdb, null);
+
+    itpool = new StormPotPool();
+    itpool.initialize(tsdb, "itpool");
     
     database = Maps.newHashMap();
     generateMockData();
@@ -556,56 +569,68 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
               cntr.incrementAndGet();
               
               System.out.println("               sending up: " + id_hash);
-              sendUpstream(new PartialTimeSeries() {
-
-                int references;
-                
-                @Override
-                public long idHash() {
-                  return id_hash;
-                }
-                
-                @Override
-                public TypeToken<? extends TimeSeriesDataType> getType() {
-                  return NumericType.TYPE;
-                }
-
-                @Override
-                public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator() {
-                  synchronized (this) {
-                    references++;
-                  }
-                  return new LocalIt();
-                }
-                
-                class LocalIt implements Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> {                  
-                  Iterator<TimeSeriesValue<?>> iterator = ts.iterator(NumericType.TYPE).get();
-                  @Override
-                  public boolean hasNext() {
-                    return iterator.hasNext();
-                  }
-  
-                  @Override
-                  public TimeSeriesValue<? extends TimeSeriesDataType> next() {
-                    return iterator.next();
-                  }
-                }
-
-                @Override
-                public ResultShard shard() {
-                  return shard;
-                }
-
-                @Override
-                public void close() throws Exception {
-                  synchronized (this) {
-                    if (--references < 1) {
-                      ts.close();
-                    }
-                  }
-                }
-                
-              });
+              Poolable pable = objpool.claim();
+              if (pable == null) {
+                throw new RuntimeException("AHWHWHWHWHWHW");
+              }
+              PooledPartialTimeSeries ppts = (PooledPartialTimeSeries) pable.object();
+              ppts.id = id_hash;
+              ppts.shard = shard;
+              ppts.ts = ts;
+              ppts.poolable = pable;
+              ppts.itpool = itpool;
+              
+              sendUpstream(ppts);
+//              sendUpstream(new PartialTimeSeries() {
+//
+//                int references;
+//                
+//                @Override
+//                public long idHash() {
+//                  return id_hash;
+//                }
+//                
+//                @Override
+//                public TypeToken<? extends TimeSeriesDataType> getType() {
+//                  return NumericType.TYPE;
+//                }
+//
+//                @Override
+//                public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator() {
+//                  synchronized (this) {
+//                    references++;
+//                  }
+//                  return new LocalIt();
+//                }
+//                
+//                class LocalIt implements Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> {                  
+//                  Iterator<TimeSeriesValue<?>> iterator = ts.iterator(NumericType.TYPE).get();
+//                  @Override
+//                  public boolean hasNext() {
+//                    return iterator.hasNext();
+//                  }
+//  
+//                  @Override
+//                  public TimeSeriesValue<? extends TimeSeriesDataType> next() {
+//                    return iterator.next();
+//                  }
+//                }
+//
+//                @Override
+//                public ResultShard shard() {
+//                  return shard;
+//                }
+//
+//                @Override
+//                public void close() throws Exception {
+//                  synchronized (this) {
+//                    if (--references < 1) {
+//                      ts.close();
+//                    }
+//                  }
+//                }
+//                
+//              });
             }
           }
           
@@ -657,6 +682,164 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     
     public String pushIntervals(final TimeSeriesQuery query) {
       return "1h";
+    }
+    
+  }
+  
+  public static class PTSAllocator extends BaseTSDBPlugin implements Allocator {
+
+    @Override
+    public int size() {
+      // TODO Auto-generated method stub
+      return 1;
+    }
+
+    @Override
+    public Object allocate() {
+      return new PooledPartialTimeSeries();
+    }
+
+    @Override
+    public void deallocate(Object object) {
+      // TODO Auto-generated method stub
+      
+    }
+
+    @Override
+    public TypeToken<?> dataType() {
+      // TODO Auto-generated method stub
+      return TypeToken.of(PooledPartialTimeSeries.class);
+    }
+
+    @Override
+    public String type() {
+      // TODO Auto-generated method stub
+      return "FOO";
+    }
+
+    @Override
+    public String version() {
+      // TODO Auto-generated method stub
+      return "3.0.0";
+    }
+    
+    @Override
+    public Deferred<Object> initialize(final TSDB tsdb, final String id) {
+      this.tsdb = tsdb;
+      this.id = "MockAlloc";
+      return Deferred.fromResult(null);
+    }
+
+  }
+  
+  public static class PooledPartialTimeSeries implements PartialTimeSeries {
+    long id;
+    ResultShard shard;
+    SlicedTimeSeries ts;
+    Poolable poolable;
+    StormPotPool itpool;
+    
+    @Override
+    public void close() throws Exception {
+      poolable.release();
+      System.out.println("--------------- RELEASED!");
+    }
+    
+    @Override
+    public long idHash() {
+      return id;
+    }
+
+    @Override
+    public ResultShard shard() {
+      return shard;
+    }
+
+    @Override
+    public TypeToken<? extends TimeSeriesDataType> getType() {
+      return NumericType.TYPE;
+    }
+
+    @Override
+    public TypedTimeSeriesIterator iterator() {
+      Poolable pable = itpool.claim();
+      if (pable == null) {
+        throw new IllegalStateException("WTF?");
+      }
+      PoolableIterator it = (PoolableIterator) pable.object();
+      it.iterator = ts.iterator(NumericType.TYPE).get();
+      it.poolable = pable;
+      return it;
+    }
+    
+  }
+  
+  public static class ItAlloc extends BaseTSDBPlugin implements Allocator {
+
+    @Override
+    public int size() {
+      // TODO Auto-generated method stub
+      return 2;
+    }
+
+    @Override
+    public Object allocate() {
+      return new PoolableIterator();
+    }
+
+    @Override
+    public void deallocate(Object object) {
+      // TODO Auto-generated method stub
+      
+    }
+
+    @Override
+    public TypeToken<?> dataType() {
+      return TypeToken.of(PoolableIterator.class);
+    }
+
+    @Override
+    public String type() {
+      return "ItAlloc";
+    }
+
+    @Override
+    public String version() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+    
+    @Override
+    public Deferred<Object> initialize(final TSDB tsdb, final String id) {
+      this.tsdb = tsdb;
+      this.id = "ItAlloc";
+      return Deferred.fromResult(null);
+    }
+    
+  }
+  
+  public static class PoolableIterator implements TypedTimeSeriesIterator {
+    Iterator<TimeSeriesValue<?>> iterator;
+    Poolable poolable;
+    
+    @Override
+    public boolean hasNext() {
+      return iterator.hasNext();
+    }
+
+    @Override
+    public TimeSeriesValue<? extends TimeSeriesDataType> next() {
+      return iterator.next();
+    }
+
+    @Override
+    public void close() throws Exception {
+      poolable.release();
+    }
+
+    @Override
+    public TypeToken<? extends TimeSeriesDataType> getType() {
+      return NumericType.TYPE;
     }
     
   }
@@ -1058,6 +1241,12 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       @Override
       public TypeToken<? extends TimeSeriesDataType> getType() {
         return type;
+      }
+
+      @Override
+      public void close() throws Exception {
+        // TODO Auto-generated method stub
+        
       }
     }
   }

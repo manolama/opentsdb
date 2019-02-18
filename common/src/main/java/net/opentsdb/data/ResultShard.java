@@ -18,7 +18,7 @@ public interface ResultShard {
   // node this shard came from.
   public QueryNode node();
   
-  // metric name
+  // metric ID
   public String dataSource();
   
   public TimeStamp start();

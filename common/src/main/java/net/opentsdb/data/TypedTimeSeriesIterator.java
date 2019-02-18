@@ -24,7 +24,7 @@ import java.util.Iterator;
  * @since 3.0
  */
 public interface TypedTimeSeriesIterator extends 
-    Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> {
+    Iterator<TimeSeriesValue<? extends TimeSeriesDataType>>, AutoCloseable {
 
   /**
    * @return The non-null type of data returned in the iterator.

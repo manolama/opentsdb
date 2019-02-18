@@ -21,6 +21,6 @@ public interface PartialTimeSeries extends AutoCloseable {
   public TypeToken<? extends TimeSeriesDataType> getType();
   
   // a thread safe iterator over the data for this series and shard slice.
-  public Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator();
+  public TypedTimeSeriesIterator iterator();
   
 }

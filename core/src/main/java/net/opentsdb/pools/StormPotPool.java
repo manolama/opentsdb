@@ -3,8 +3,11 @@ package net.opentsdb.pools;
 import java.time.temporal.ChronoUnit;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.base.Strings;
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.configuration.Configuration;
+import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.pools.ObjectPoolException;
@@ -12,8 +15,8 @@ import stormpot.BlazePool;
 import stormpot.PoolException;
 import stormpot.Slot;
 
-public class StormPotPool implements ObjectPool {
-
+public class StormPotPool extends BaseTSDBPlugin implements ObjectPool {
+  
   private Allocator allocator;
   
   private stormpot.BlazePool<MyPoolable> stormpot;
@@ -27,6 +30,7 @@ public class StormPotPool implements ObjectPool {
       if (poolable != null) {
         return poolable;
       }
+      System.out.println("$$$$$$$$$ WARN: Allocating a new one ");
       return new MyPoolable(allocator.allocate(), null);
     } catch (PoolException e) {
       throw new ObjectPoolException(e);
@@ -83,10 +87,20 @@ public class StormPotPool implements ObjectPool {
 
   @Override
   public Deferred<Object> initialize(TSDB tsdb, String id) {
+    this.id = id;
+    registerConfigs(tsdb.getConfig());
+    
+    allocator = tsdb.getRegistry().getPlugin(Allocator.class, 
+        tsdb.getConfig().getString(myConfig(ALLOCATOR_KEY)));
+    System.out.println("******** LOADED ALLOC: " + allocator + " KEY: " + myConfig(ALLOCATOR_KEY));
+    if (allocator == null) {
+      return Deferred.fromError(new IllegalArgumentException("No allocator found for: " + myConfig(ALLOCATOR_KEY)));
+    }
+    
     stormpot.Config<MyPoolable> config = 
         new stormpot.Config<MyPoolable>()
         .setAllocator(new MyAllocator())
-        .setSize(4096);
+        .setSize(tsdb.getConfig().getInt(myConfig(INITIAL_COUNT_KEY)));
     stormpot = new BlazePool<MyPoolable>(config);
     default_timeout = new stormpot.Timeout(1, TimeUnit.NANOSECONDS);
     return null;
@@ -102,6 +116,19 @@ public class StormPotPool implements ObjectPool {
   public String version() {
     // TODO Auto-generated method stub
     return null;
+  }
+  
+  String myConfig(final String key) {
+    return PREFIX + (Strings.isNullOrEmpty(id) ? "" : id + ".") + key;
+  }
+  
+  void registerConfigs(final Configuration config) {
+    if (!config.hasProperty(myConfig(ALLOCATOR_KEY))) {
+      config.register(myConfig(ALLOCATOR_KEY), null, false, "TODO");
+    }
+    if (!config.hasProperty(myConfig(INITIAL_COUNT_KEY))) {
+      config.register(myConfig(INITIAL_COUNT_KEY), 4096, false, "TODO");
+    }
   }
   
   class MyPoolable implements stormpot.Poolable, Poolable {
