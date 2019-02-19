@@ -6,8 +6,8 @@ import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
 
-public class LongArrayAllocator implements Allocator {
-  private static final String TYPE = "LongArrayAllocator";
+public class LongArrayPool implements Allocator {
+  private static final String TYPE = "LongArrayPool";
   private static final TypeToken<?> TYPE_TOKEN = TypeToken.of(long[].class);
   private int length;
   private String id;
@@ -39,6 +39,8 @@ public class LongArrayAllocator implements Allocator {
     }
     length = tsdb.getConfig().getInt(key);
     size = (8 * length) +  + 16 /* 64-bit overhead */;
+    
+    ObjectPoolFactory factory = tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, id);
     return Deferred.fromResult(null);
   }
 

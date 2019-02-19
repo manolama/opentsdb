@@ -37,6 +37,7 @@ import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.query.QueryIteratorFactory;
 import net.opentsdb.query.interpolation.QueryInterpolatorFactory;
 import net.opentsdb.query.processor.ProcessorFactory;
@@ -79,6 +80,8 @@ public class DefaultRegistry implements Registry {
   private final Map<String, QueryNodeFactory> node_factories;
   
   private final Map<String, WritableTimeSeriesDataStore> write_stores;
+  
+  private final Map<String, ObjectPool> pools;
   
   /** A concurrent map of shared objects used by various plugins such as 
    * connection pools, etc. */
@@ -123,6 +126,7 @@ public class DefaultRegistry implements Registry {
     node_factories = Maps.newHashMap();
     write_stores = Maps.newHashMap();
     shared_objects = Maps.newConcurrentMap();
+    pools = Maps.newHashMap();
     cleanup_pool = Executors.newFixedThreadPool(1);
     
     // TODO - better registration
@@ -486,6 +490,19 @@ public class DefaultRegistry implements Registry {
   public QueryIteratorFactory getQueryIteratorFactory(String id) {
     // TODO Auto-generated method stub
     return null;
+  }
+
+  @Override
+  public void registerObjectPool(ObjectPool pool) {
+    ObjectPool extant = pools.putIfAbsent(pool.id(), pool);
+    if (extant != null) {
+      throw new IllegalArgumentException("Pool existed with id: " + pool.id());
+    }
+  }
+
+  @Override
+  public ObjectPool getObjectPool(String id) {
+    return pools.get(id);
   }
   
 }

@@ -3,6 +3,8 @@ package net.opentsdb.pools;
 import java.time.temporal.ChronoUnit;
 import java.util.concurrent.TimeUnit;
 
+import org.openjdk.jol.info.ClassLayout;
+
 import com.google.common.base.Strings;
 import com.stumbleupon.async.Deferred;
 
@@ -11,17 +13,32 @@ import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.pools.ObjectPoolException;
+import net.opentsdb.pools.StormPotPool.MyAllocator;
+import net.opentsdb.pools.StormPotPool.MyPoolable;
 import stormpot.BlazePool;
 import stormpot.PoolException;
 import stormpot.Slot;
 
-public class StormPotPool extends BaseTSDBPlugin implements ObjectPool {
-  
+public class StormPotPool implements ObjectPool {
+  private static final int SIZE = (int) (
+      ClassLayout.parseClass(MyPoolable.class).instanceSize() + 8 /* ref in pool */);
   protected Allocator allocator;
   
   protected stormpot.BlazePool<MyPoolable> stormpot;
   
   protected stormpot.Timeout default_timeout;
+  
+  protected PoolConfig config;
+  
+  protected StormPotPool(final TSDB tsdb, final PoolConfig config) {
+    allocator = config.getAllocator();
+    stormpot.Config<MyPoolable> storm_pot_config = 
+        new stormpot.Config<MyPoolable>()
+        .setAllocator(new MyAllocator())
+        .setSize(config.initialCount());
+    stormpot = new BlazePool<MyPoolable>(storm_pot_config);
+    default_timeout = new stormpot.Timeout(1, TimeUnit.NANOSECONDS);
+  }
   
   @Override
   public Poolable claim() {
@@ -74,55 +91,20 @@ public class StormPotPool extends BaseTSDBPlugin implements ObjectPool {
   }
 
   @Override
-  public String type() {
-    // TODO Auto-generated method stub
-    return null;
+  public int overhead() {
+    return SIZE;
   }
   
-  @Override
-  public Deferred<Object> initialize(TSDB tsdb, String id) {
-    this.id = id;
-    registerConfigs(tsdb.getConfig());
-    
-    allocator = tsdb.getRegistry().getPlugin(Allocator.class, 
-        tsdb.getConfig().getString(myConfig(ALLOCATOR_KEY)));
-    System.out.println("******** LOADED ALLOC: " + allocator + " KEY: " + myConfig(ALLOCATOR_KEY));
-    if (allocator == null) {
-      return Deferred.fromError(new IllegalArgumentException("No allocator found for: " + myConfig(ALLOCATOR_KEY)));
-    }
-    
-    stormpot.Config<MyPoolable> config = 
-        new stormpot.Config<MyPoolable>()
-        .setAllocator(new MyAllocator())
-        .setSize(tsdb.getConfig().getInt(myConfig(INITIAL_COUNT_KEY)));
-    stormpot = new BlazePool<MyPoolable>(config);
-    default_timeout = new stormpot.Timeout(1, TimeUnit.NANOSECONDS);
-    return Deferred.fromResult(null);
-  }
-
   @Override
   public Deferred<Object> shutdown() {
+    // TODO - WTF? Why doesn't his completion return a Void or null at least?
     stormpot.shutdown();
-    return null;
+    return Deferred.fromResult(null);
   }
-
+  
   @Override
-  public String version() {
-    // TODO Auto-generated method stub
-    return null;
-  }
-  
-  String myConfig(final String key) {
-    return PREFIX + (Strings.isNullOrEmpty(id) ? "" : id + ".") + key;
-  }
-  
-  void registerConfigs(final Configuration config) {
-    if (!config.hasProperty(myConfig(ALLOCATOR_KEY))) {
-      config.register(myConfig(ALLOCATOR_KEY), null, false, "TODO");
-    }
-    if (!config.hasProperty(myConfig(INITIAL_COUNT_KEY))) {
-      config.register(myConfig(INITIAL_COUNT_KEY), 4096, false, "TODO");
-    }
+  public String id() {
+    return config.id();
   }
   
   class MyPoolable implements stormpot.Poolable, Poolable {

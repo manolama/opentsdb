@@ -21,6 +21,7 @@ import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.data.TimeSeriesDataType;
+import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.query.QueryIteratorFactory;
 import net.opentsdb.query.interpolation.QueryInterpolatorFactory;
 import net.opentsdb.query.QueryNodeFactory;
@@ -98,6 +99,10 @@ public interface Registry {
   
   /** @return An unmodifiable map of shared objects. */
   public Map<String, Object> sharedObjects();
+  
+  public void registerObjectPool(final ObjectPool pool);
+  
+  public ObjectPool getObjectPool(final String id);
   
   /**
    * Registers a query node factory using the name as the ID.

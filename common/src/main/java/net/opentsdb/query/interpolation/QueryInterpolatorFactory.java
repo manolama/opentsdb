@@ -62,7 +62,7 @@ public interface QueryInterpolatorFactory extends TSDBPlugin {
       final Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator, 
       final QueryInterpolatorConfig config);
   
-  public QueryInterpolator<? extends TimeSeriesDataType> newInterpolator(
+  public QueryInterpolator2<? extends TimeSeriesDataType> newInterpolator(
       final TypeToken<? extends TimeSeriesDataType> type, 
       final PartialTimeSeries pts, 
       final QueryInterpolatorConfig config);

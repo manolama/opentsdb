@@ -34,6 +34,8 @@ import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
+import net.opentsdb.pools.ObjectPool;
+import net.opentsdb.pools.ObjectPool.Poolable;
 import net.opentsdb.query.interpolation.QueryInterpolatorFactory;
 import net.opentsdb.utils.Pair;
 
@@ -54,7 +56,7 @@ public abstract class BaseQueryIntperolatorFactory extends BaseTSDBPlugin
   protected Map<TypeToken<?>, Pair<Constructor<?>, Constructor<?>>> types
      = Maps.newHashMap();
   
-  protected Map<TypeToken<?>, Constructor<?>> push_types = Maps.newHashMap();
+  protected Map<TypeToken<?>, ObjectPool> push_types = Maps.newHashMap();
   
   protected Map<TypeToken<?>, QueryInterpolatorConfigParser> parsers = 
       Maps.newHashMap();
@@ -124,33 +126,23 @@ public abstract class BaseQueryIntperolatorFactory extends BaseTSDBPlugin
   }
   
   @Override
-  public QueryInterpolator<? extends TimeSeriesDataType> newInterpolator(
+  public QueryInterpolator2<? extends TimeSeriesDataType> newInterpolator(
       TypeToken<? extends TimeSeriesDataType> type, PartialTimeSeries pts,
       QueryInterpolatorConfig config) {
     if (config == null) {
       throw new IllegalArgumentException("Config cannot be null.");
     }
-    final Constructor<?> ctor = push_types.get(type);
-    if (ctor == null) {
-      return null;
+    final ObjectPool pool = push_types.get(type);
+    if (pool == null) {
+      throw new IllegalArgumentException("No pool for type: " + type);
     }
-    try {
-      return (QueryInterpolator<? extends TimeSeriesDataType>) 
-          ctor.newInstance(pts, config);
-      // TODO - can I get the class out for exceptions?
-    } catch (InstantiationException e) {
-      throw new IllegalStateException("Registered class failed to "
-          + "instantiate for " + ctor, e);
-    } catch (IllegalAccessException e) {
-      throw new IllegalStateException("Unable to access constructor for " 
-          + ctor, e);
-    } catch (IllegalArgumentException e) {
-      throw new IllegalStateException("Registered class failed to "
-          + "instantiate for " + ctor, e);
-    } catch (InvocationTargetException e) {
-      throw new IllegalStateException("Registered class failed to "
-          + "instantiate for " + ctor, e);
-    }
+    
+    final Poolable poolable = pool.claim();
+    final QueryInterpolator2<? extends TimeSeriesDataType> interpolator = 
+        (QueryInterpolator2<? extends TimeSeriesDataType>) poolable.object();
+    interpolator.setConfig(config);
+    interpolator.setSeries(pts);
+    return interpolator;
   }
   
   @Override
@@ -192,24 +184,29 @@ public abstract class BaseQueryIntperolatorFactory extends BaseTSDBPlugin
            + "class " + clazz + " and data type: " + type, e); 
     }
     
-    try {
-      Constructor<?> push_ctor = clazz.getDeclaredConstructor(
-          PartialTimeSeries.class, QueryInterpolatorConfig.class);
-      push_types.put(type, push_ctor);
-      LOG.info("Stored push interpolator builder for type " + type + " in " 
-          + id() + " Class: " + clazz);
-    } catch (NoSuchMethodException e) {
-      LOG.error("Unable to find the required "
-          + "constructors for the class " + clazz + " and data type: " 
-          + type, e);
-    } catch (SecurityException e) {
-      LOG.error("Unable to extract constructors for "
-           + "class " + clazz + " and data type: " + type, e); 
-    }
     // if we made it this far, register the parser Replacement is ok.
     parsers.put(type, parser);
   }
 
+  public void register(final TypeToken<? extends TimeSeriesDataType> type,
+      final ObjectPool pool,
+      final QueryInterpolatorConfigParser parser) {
+    if (type == null) {
+      throw new IllegalArgumentException("Type cannot be null.");
+    }
+    if (pool == null) {
+      throw new IllegalArgumentException("Object pool cannot be null.");
+    }
+    if (parser == null) {
+      throw new IllegalArgumentException("Parser cannot be null.");
+    }
+    
+    push_types.put(type, pool);
+    
+    // if we made it this far, register the parser Replacement is ok.
+    parsers.put(type, parser);
+  }
+  
   @Override
   public QueryInterpolatorConfig parseConfig(final ObjectMapper mapper, 
                                              final TSDB tsdb,

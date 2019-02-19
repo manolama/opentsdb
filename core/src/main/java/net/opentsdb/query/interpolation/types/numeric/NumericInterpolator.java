@@ -18,7 +18,6 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
-import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
@@ -125,11 +124,6 @@ public class NumericInterpolator implements QueryInterpolator<NumericType> {
     response = new MutableNumericValue();
   }
     
-  public NumericInterpolator(PartialTimeSeries pts,
-      QueryInterpolatorConfig config) {
-    
-  }
-  
   @Override
   public boolean hasNext() {
     return has_next;

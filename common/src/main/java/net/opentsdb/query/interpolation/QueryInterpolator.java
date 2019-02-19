@@ -14,7 +14,6 @@
 // limitations under the License.
 package net.opentsdb.query.interpolation;
 
-import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
@@ -29,7 +28,7 @@ import net.opentsdb.query.QueryFillPolicy;
  * 
  * @since 3.0
  */
-public interface QueryInterpolator<T extends TimeSeriesDataType> extends AutoCloseable {
+public interface QueryInterpolator<T extends TimeSeriesDataType> {
   
   /** @return Whether or not the underlying source has another real value. */
   public boolean hasNext();
@@ -46,7 +45,5 @@ public interface QueryInterpolator<T extends TimeSeriesDataType> extends AutoClo
   
   /** @return The fill policy used by the interpolator. */
   public QueryFillPolicy<T> fillPolicy();
-  
-  public void addPartial(final PartialTimeSeries pts);
   
 }
