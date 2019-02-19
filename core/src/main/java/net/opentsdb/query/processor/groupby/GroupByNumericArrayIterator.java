@@ -168,4 +168,11 @@ public class GroupByNumericArrayIterator implements QueryIterator,
     return NumericArrayType.TYPE;
   }
 
+  
+  @Override
+  public void close() throws Exception {
+    // TODO Auto-generated method stub
+    
+  }
+
 }

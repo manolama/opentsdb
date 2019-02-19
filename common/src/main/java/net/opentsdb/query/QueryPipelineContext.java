@@ -131,7 +131,6 @@ public interface QueryPipelineContext extends QueryNode {
    */
   public void close();
   
-  
   public void addTimeSeriesId(final TimeSeriesId id);
   
   public TimeSeriesId getTimeSeriesId(final long hash);

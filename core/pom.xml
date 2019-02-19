@@ -65,6 +65,12 @@
           <version>4.5</version>
         </dependency>
         
+                <dependency>
+    <groupId>org.openjdk.jol</groupId>
+    <artifactId>jol-core</artifactId>
+    <version>0.8</version>
+</dependency>
+        
         <dependency>
   <groupId>com.github.chrisvest</groupId>
   <artifactId>stormpot</artifactId>
@@ -131,6 +137,11 @@
         <groupId>org.antlr</groupId>
         <artifactId>antlr4</artifactId>
       </dependency>
+      
+              <dependency>
+    <groupId>org.openjdk.jol</groupId>
+    <artifactId>jol-core</artifactId>
+</dependency>
       
       <dependency>
   <groupId>com.github.chrisvest</groupId>

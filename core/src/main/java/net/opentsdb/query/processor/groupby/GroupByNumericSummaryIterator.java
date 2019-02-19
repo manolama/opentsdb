@@ -329,4 +329,10 @@ public class GroupByNumericSummaryIterator implements QueryIterator,
       accumulator.reset();
     }
   }
+
+  @Override
+  public void close() throws Exception {
+    // TODO Auto-generated method stub
+    
+  }
 }

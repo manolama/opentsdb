@@ -14,9 +14,12 @@
 // limitations under the License.
 package net.opentsdb.query.interpolation;
 
+import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.PartialTimeSeries;
+import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolator;
@@ -54,5 +57,6 @@ public class DefaultInterpolatorFactory extends BaseQueryIntperolatorFactory {
   public String version() {
     return "3.0.0";
   }
+
   
 }

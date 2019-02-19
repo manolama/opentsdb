@@ -18,6 +18,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import com.google.common.collect.Lists;
+import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Callback;
 
 import net.opentsdb.common.Const;
@@ -26,7 +27,13 @@ import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataSourceFactory;
+import net.opentsdb.data.TimeSeriesDataType;
+import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.data.TimeStamp;
+import net.opentsdb.data.TypedTimeSeriesIterator;
+import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.AbstractQueryNode;
+import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
@@ -49,7 +56,9 @@ public class GroupBy extends AbstractQueryNode {
   
   /** The config for this group by node. */
   private final GroupByConfig config;
-    
+  
+  private List<GBShard> shards;
+  
   /**
    * Default ctor.
    * @param factory The non-null factory for generating iterators.
@@ -143,4 +152,107 @@ public class GroupBy extends AbstractQueryNode {
     // TODO Auto-generated method stub
     
   }
+  
+  class GBShard implements ResultShard {
+
+    @Override
+    public int totalShards() {
+      // TODO Auto-generated method stub
+      return 0;
+    }
+
+    @Override
+    public QueryNode node() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public String dataSource() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public TimeStamp start() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public TimeStamp end() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public TimeSeriesId id(long hash) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public int timeSeriesCount() {
+      // TODO Auto-generated method stub
+      return 0;
+    }
+
+    @Override
+    public String sourceId() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public void close() {
+      // TODO Auto-generated method stub
+      
+    }
+    
+  }
+  
+  static class GBNumericTs implements PartialTimeSeries {
+
+    List<PartialTimeSeries> series = Lists.newArrayList();
+    ResultShard shard;
+    
+    GBNumericTs(final ResultShard shard) {
+      this.shard = shard;
+    }
+    
+    void addSeries(final PartialTimeSeries series) {
+      this.series.add(series);
+    }
+    
+    @Override
+    public void close() throws Exception {
+      for (final PartialTimeSeries pts : series) {
+        pts.close();
+      }
+    }
+
+    @Override
+    public long idHash() {
+      // TODO Auto-generated method stub
+      return 0;
+    }
+
+    @Override
+    public ResultShard shard() {
+      return shard;
+    }
+
+    @Override
+    public TypeToken<? extends TimeSeriesDataType> getType() {
+      return NumericType.TYPE;
+    }
+
+    @Override
+    public TypedTimeSeriesIterator iterator() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+    
+  }
+  
 }

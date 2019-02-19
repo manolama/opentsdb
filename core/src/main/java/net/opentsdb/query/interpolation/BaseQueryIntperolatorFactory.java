@@ -30,6 +30,7 @@ import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
@@ -52,6 +53,8 @@ public abstract class BaseQueryIntperolatorFactory extends BaseTSDBPlugin
   /** The map of types to <TimeSeries, Iterator> constructors. */
   protected Map<TypeToken<?>, Pair<Constructor<?>, Constructor<?>>> types
      = Maps.newHashMap();
+  
+  protected Map<TypeToken<?>, Constructor<?>> push_types = Maps.newHashMap();
   
   protected Map<TypeToken<?>, QueryInterpolatorConfigParser> parsers = 
       Maps.newHashMap();
@@ -121,6 +124,36 @@ public abstract class BaseQueryIntperolatorFactory extends BaseTSDBPlugin
   }
   
   @Override
+  public QueryInterpolator<? extends TimeSeriesDataType> newInterpolator(
+      TypeToken<? extends TimeSeriesDataType> type, PartialTimeSeries pts,
+      QueryInterpolatorConfig config) {
+    if (config == null) {
+      throw new IllegalArgumentException("Config cannot be null.");
+    }
+    final Constructor<?> ctor = push_types.get(type);
+    if (ctor == null) {
+      return null;
+    }
+    try {
+      return (QueryInterpolator<? extends TimeSeriesDataType>) 
+          ctor.newInstance(pts, config);
+      // TODO - can I get the class out for exceptions?
+    } catch (InstantiationException e) {
+      throw new IllegalStateException("Registered class failed to "
+          + "instantiate for " + ctor, e);
+    } catch (IllegalAccessException e) {
+      throw new IllegalStateException("Unable to access constructor for " 
+          + ctor, e);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalStateException("Registered class failed to "
+          + "instantiate for " + ctor, e);
+    } catch (InvocationTargetException e) {
+      throw new IllegalStateException("Registered class failed to "
+          + "instantiate for " + ctor, e);
+    }
+  }
+  
+  @Override
   public void register(final TypeToken<? extends TimeSeriesDataType> type,
                        final Class<? extends QueryInterpolator<?>> clazz,
                        final QueryInterpolatorConfigParser parser) {
@@ -148,6 +181,8 @@ public abstract class BaseQueryIntperolatorFactory extends BaseTSDBPlugin
           ts_ctor, iterator_ctor));
       LOG.info("Stored interpolator builder for type " + type + " in " 
           + id() + " Class: " + clazz);
+      
+      
     } catch (NoSuchMethodException e) {
       throw new IllegalArgumentException("Unable to find the required "
           + "constructors for the class " + clazz + " and data type: " 
@@ -157,6 +192,20 @@ public abstract class BaseQueryIntperolatorFactory extends BaseTSDBPlugin
            + "class " + clazz + " and data type: " + type, e); 
     }
     
+    try {
+      Constructor<?> push_ctor = clazz.getDeclaredConstructor(
+          PartialTimeSeries.class, QueryInterpolatorConfig.class);
+      push_types.put(type, push_ctor);
+      LOG.info("Stored push interpolator builder for type " + type + " in " 
+          + id() + " Class: " + clazz);
+    } catch (NoSuchMethodException e) {
+      LOG.error("Unable to find the required "
+          + "constructors for the class " + clazz + " and data type: " 
+          + type, e);
+    } catch (SecurityException e) {
+      LOG.error("Unable to extract constructors for "
+           + "class " + clazz + " and data type: " + type, e); 
+    }
     // if we made it this far, register the parser Replacement is ok.
     parsers.put(type, parser);
   }

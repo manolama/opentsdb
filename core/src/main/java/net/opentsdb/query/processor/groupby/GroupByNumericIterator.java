@@ -277,4 +277,10 @@ public class GroupByNumericIterator implements QueryIterator,
       double_values[i] = (double) long_values[i];
     }
   }
+
+  @Override
+  public void close() throws Exception {
+    // TODO Auto-generated method stub
+    
+  }
 }

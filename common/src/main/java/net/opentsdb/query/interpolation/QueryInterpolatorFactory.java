@@ -22,6 +22,7 @@ import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDBPlugin;
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
@@ -59,6 +60,11 @@ public interface QueryInterpolatorFactory extends TSDBPlugin {
   public QueryInterpolator<? extends TimeSeriesDataType> newInterpolator(
       final TypeToken<? extends TimeSeriesDataType> type, 
       final Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator, 
+      final QueryInterpolatorConfig config);
+  
+  public QueryInterpolator<? extends TimeSeriesDataType> newInterpolator(
+      final TypeToken<? extends TimeSeriesDataType> type, 
+      final PartialTimeSeries pts, 
       final QueryInterpolatorConfig config);
 
   /**

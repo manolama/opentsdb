@@ -43,6 +43,7 @@ import net.opentsdb.storage.WritableTimeSeriesDataStore;
 import net.opentsdb.storage.WritableTimeSeriesDataStoreFactory;
 import net.opentsdb.utils.Deferreds;
 import net.opentsdb.utils.JSON;
+import net.opentsdb.utils.Pair;
 import net.opentsdb.utils.PluginLoader;
 
 /**
@@ -117,15 +118,21 @@ public class PluginsConfig extends Validatable {
     DEFAULT_TYPES.add("net.opentsdb.query.QuerySinkFactory");
   }
   
-  public static final Map<String, String> DEFAULT_IMPLEMENTATIONS = 
+  public static final Map<String, Pair<String, String>> DEFAULT_IMPLEMENTATIONS = 
       Maps.newLinkedHashMap();
   static {
     DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.query.interpolation.QueryInterpolatorFactory", 
-        "net.opentsdb.query.interpolation.DefaultInterpolatorFactory");    
+        new Pair<String, String>("net.opentsdb.query.interpolation.DefaultInterpolatorFactory", null));    
     DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.query.serdes.SerdesFactory", 
-        "net.opentsdb.query.execution.serdes.JsonV2QuerySerdesFactory");
+        new Pair<String, String>("net.opentsdb.query.execution.serdes.JsonV2QuerySerdesFactory", null));
     DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.storage.DatumIdValidator", 
-        "net.opentsdb.storage.DefaultDatumIdValidator");
+        new Pair<String, String>("net.opentsdb.storage.DefaultDatumIdValidator", null));
+    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.ObjectPool", 
+        new Pair<String, String>("net.opentsdb.pools.LongArrayPool", "LongArrayPool"));
+    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.ObjectPool", 
+        new Pair<String, String>("net.opentsdb.pools.DoubleArrayPool", "DoubleArrayPool"));
+    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.ObjectPool", 
+        new Pair<String, String>("net.opentsdb.pools.MutableNumericValuePool", "MutableNumericValuePool"));
   }
   
   /** The list of plugin configs. */
@@ -849,12 +856,16 @@ public class PluginsConfig extends Validatable {
     if (configs == null) {
       configs = Lists.newArrayListWithExpectedSize(DEFAULT_IMPLEMENTATIONS.size());
     }
-    for (final Entry<String, String> type : DEFAULT_IMPLEMENTATIONS.entrySet()) {
-      final PluginConfig config = PluginConfig.newBuilder()
+    for (final Entry<String, Pair<String, String>> type : DEFAULT_IMPLEMENTATIONS.entrySet()) {
+      final PluginConfig.Builder builder = PluginConfig.newBuilder()
           .setType(type.getKey())
-          .setPlugin(type.getValue())
-          .setIsDefault(true)
-          .build();
+          .setPlugin(type.getValue().getKey());
+      if (Strings.isNullOrEmpty(type.getValue().getValue())) {
+        builder.setIsDefault(true);
+      } else {
+        builder.setId(type.getValue().getValue());
+      }
+      final PluginConfig config = builder.build();
       if (configs == null || !configs.contains(config)) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Will try to load default plugin implementation: " 
