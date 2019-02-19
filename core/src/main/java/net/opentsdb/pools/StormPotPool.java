@@ -17,11 +17,11 @@ import stormpot.Slot;
 
 public class StormPotPool extends BaseTSDBPlugin implements ObjectPool {
   
-  private Allocator allocator;
+  protected Allocator allocator;
   
-  private stormpot.BlazePool<MyPoolable> stormpot;
+  protected stormpot.BlazePool<MyPoolable> stormpot;
   
-  private stormpot.Timeout default_timeout;
+  protected stormpot.Timeout default_timeout;
   
   @Override
   public Poolable claim() {
@@ -78,13 +78,7 @@ public class StormPotPool extends BaseTSDBPlugin implements ObjectPool {
     // TODO Auto-generated method stub
     return null;
   }
-
-  @Override
-  public String id() {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
+  
   @Override
   public Deferred<Object> initialize(TSDB tsdb, String id) {
     this.id = id;
@@ -103,7 +97,7 @@ public class StormPotPool extends BaseTSDBPlugin implements ObjectPool {
         .setSize(tsdb.getConfig().getInt(myConfig(INITIAL_COUNT_KEY)));
     stormpot = new BlazePool<MyPoolable>(config);
     default_timeout = new stormpot.Timeout(1, TimeUnit.NANOSECONDS);
-    return null;
+    return Deferred.fromResult(null);
   }
 
   @Override
