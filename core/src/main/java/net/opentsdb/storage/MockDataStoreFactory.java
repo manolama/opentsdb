@@ -19,7 +19,9 @@ import java.util.List;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
+import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.common.Const;
@@ -29,6 +31,7 @@ import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataSourceFactory;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSeriesStringId;
+import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
@@ -38,6 +41,9 @@ import net.opentsdb.query.DefaultTimeSeriesDataSourceConfig;
 import net.opentsdb.query.TimeSeriesQuery;
 import net.opentsdb.query.plan.QueryPlanner;
 import net.opentsdb.stats.Span;
+import net.opentsdb.storage.MockDataStore.ItAlloc;
+import net.opentsdb.storage.MockDataStore.PTSAllocator;
+import net.opentsdb.utils.Deferreds;
 
 /**
  * Simple little factory that returns a {@link MockDataStore}.
@@ -51,6 +57,9 @@ public class MockDataStoreFactory extends BaseTSDBPlugin
   
   /** The data store. */
   private MockDataStore mds;
+  
+  ObjectPool objpool;
+  ObjectPool itpool;
   
   @Override
   public QueryNodeConfig parseConfig(final ObjectMapper mapper, 
@@ -81,7 +90,7 @@ public class MockDataStoreFactory extends BaseTSDBPlugin
   @Override
   public QueryNode newNode(final QueryPipelineContext context, 
                            final QueryNodeConfig config) {
-    return mds.new LocalNode(context, (BaseTimeSeriesDataSourceConfig) config);
+    return mds.new LocalNode(this, context, (BaseTimeSeriesDataSourceConfig) config);
   }
   
   @Override
@@ -104,7 +113,38 @@ public class MockDataStoreFactory extends BaseTSDBPlugin
   @Override
   public Deferred<Object> initialize(final TSDB tsdb, final String id) {
     this.id = Strings.isNullOrEmpty(id) ? TYPE : id;
-    mds = new MockDataStore(tsdb, this.id);
+    mds = new MockDataStore(tsdb, this.id, this);
+    
+    objpool = tsdb.getRegistry().getObjectPool("MockAlloc");
+    itpool = tsdb.getRegistry().getObjectPool("ItAlloc");
+    
+    if (objpool == null || itpool == null) {
+      List<Deferred<Object>> deferreds = Lists.newArrayListWithCapacity(2);
+      deferreds.add(new PTSAllocator().initialize(tsdb, "MockAlloc"));
+      deferreds.add(new ItAlloc().initialize(tsdb, "MockAlloc"));
+      
+      class GroupCB implements Callback<Object, Object> {
+        @Override
+        public Object call(final Object ignored) {
+          objpool = tsdb.getRegistry().getObjectPool("MockAlloc");
+          itpool = tsdb.getRegistry().getObjectPool("ItAlloc");
+          return null;
+        }
+      }
+     
+      return Deferred.group(deferreds)
+          .addCallback(Deferreds.NULL_GROUP_CB)
+          .addErrback(new Callback<Object, Exception>() {
+  
+            @Override
+            public Object call(Exception arg) throws Exception {
+              arg.printStackTrace();
+              return null;
+            }
+            
+          })
+          .addCallback(new GroupCB());
+    }
     return Deferred.fromResult(null);
   }
 
@@ -139,4 +179,5 @@ public class MockDataStoreFactory extends BaseTSDBPlugin
   public String pushIntervals(TimeSeriesQuery query) {
     return "1h";
   }
+
 }

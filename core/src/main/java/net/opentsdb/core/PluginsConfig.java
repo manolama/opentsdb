@@ -105,7 +105,6 @@ public class PluginsConfig extends Validatable {
   
   public static final List<String> DEFAULT_TYPES = Lists.newArrayList();
   static {
-    DEFAULT_TYPES.add("net.opentsdb.pools.Allocator");
     DEFAULT_TYPES.add("net.opentsdb.query.processor.ProcessorFactory");
     DEFAULT_TYPES.add("net.opentsdb.query.filter.QueryFilterFactory");
     DEFAULT_TYPES.add("net.opentsdb.stats.StatsCollector");
@@ -123,12 +122,19 @@ public class PluginsConfig extends Validatable {
   static {
     DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.query.interpolation.QueryInterpolatorFactory", 
         new Pair<String, String>("net.opentsdb.query.interpolation.DefaultInterpolatorFactory", null));    
-    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.query.serdes.SerdesFactory", 
-        new Pair<String, String>("net.opentsdb.query.execution.serdes.JsonV2QuerySerdesFactory", null));
-    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.storage.DatumIdValidator", 
-        new Pair<String, String>("net.opentsdb.storage.DefaultDatumIdValidator", null));
+//    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.query.serdes.SerdesFactory", 
+//        new Pair<String, String>("net.opentsdb.query.execution.serdes.JsonV2QuerySerdesFactory", null));
+//    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.storage.DatumIdValidator", 
+//        new Pair<String, String>("net.opentsdb.storage.DefaultDatumIdValidator", null));
     DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.ObjectPoolFactory", 
         new Pair<String, String>("net.opentsdb.pools.StormPotPoolFactory", null));
+    // object pool allocators
+    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.Allocator", 
+        new Pair<String, String>("net.opentsdb.pools.LongArrayPool", "LongArrayPool"));
+    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.Allocator", 
+        new Pair<String, String>("net.opentsdb.pools.LongArrayPool", "DoubleArrayPool"));
+    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.Allocator", 
+        new Pair<String, String>("net.opentsdb.pools.MutableNumericValuePool", "MutableNumericValuePool"));
   }
   
   /** The list of plugin configs. */
@@ -365,16 +371,28 @@ public class PluginsConfig extends Validatable {
         }
       }
     }
-    
+    for (final PluginConfig c : configs) {
+      LOG.info("-----------: " + c.type + "  =>  " + c.plugin);
+    }
+    LOG.info("#######################################################################");
     if (load_default_types) {
+      LOG.debug("Attempting to load default plugins.");
       loadDefaultTypes();
     }
-    
+    for (final PluginConfig c : configs) {
+      LOG.info("-----------: " + c.type + "  =>  " + c.plugin);
+    }
+    LOG.info("#######################################################################");
     if (load_default_instances) {
+      LOG.debug("Attempting to load default instances.");
       loadDefaultInstances();
     }
     
+    for (final PluginConfig c : configs) {
+      LOG.info("-----------: " + c.type + "  =>  " + c.plugin);
+    }
     if (configs == null || configs.isEmpty()) {
+      LOG.debug("No plugin config detected. Starting TSDB with the default plugins.");
       return Deferred.fromResult(null);
     }
     
@@ -849,6 +867,10 @@ public class PluginsConfig extends Validatable {
   
   /** Loads the {@link #DEFAULT_IMPLEMENTATIONS} */
   void loadDefaultInstances() {
+    final List<PluginConfig> config_clones = 
+        Lists.newArrayListWithExpectedSize(configs == null ? DEFAULT_TYPES.size() :
+          configs.size() + DEFAULT_TYPES.size());
+    
     if (configs == null) {
       configs = Lists.newArrayListWithExpectedSize(DEFAULT_IMPLEMENTATIONS.size());
     }
@@ -867,9 +889,15 @@ public class PluginsConfig extends Validatable {
           LOG.debug("Will try to load default plugin implementation: " 
               + type.getValue());
         }
-        configs.add(config);
+        config_clones.add(config);
+      } else {
+        LOG.warn("Already have a config for " + config);
       }
     }
+    if (configs != null) {
+      config_clones.addAll(configs);
+    }
+    configs = config_clones;
   }
   
   Map<Class<?>, Map<String, TSDBPlugin>> plugins() {

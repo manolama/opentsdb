@@ -123,20 +123,19 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
   /** Thread pool used by the executions. */
   private final ExecutorService thread_pool;
   
-  ObjectPool objpool;
-  ObjectPool itpool;
+  private final MockDataStoreFactory factory;
   
-  public MockDataStore(final TSDB tsdb, final String id) {
+  public MockDataStore(final TSDB tsdb, 
+                       final String id, 
+                       final MockDataStoreFactory factory) {
     this.tsdb = tsdb;
     this.id = id;
+    this.factory = factory;
     
     if (LOG.isDebugEnabled()) {
       LOG.debug("Intantiating mock data store with ID: " + this.id + "@" + System.identityHashCode(this));
     }
-    
-    objpool = tsdb.getRegistry().getObjectPool("MockAlloc");
-    itpool = tsdb.getRegistry().getObjectPool("ItAlloc");
-    
+   
     database = Maps.newHashMap();
     generateMockData();
     if (!tsdb.getConfig().hasProperty("MockDataStore.threadpool.enable")) {
@@ -396,9 +395,10 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     private BaseTimeSeriesDataSourceConfig config;
     private final net.opentsdb.stats.Span trace_span;
     
-    public LocalNode(final QueryPipelineContext context,
+    public LocalNode(final MockDataStoreFactory factory,
+                     final QueryPipelineContext context,
                      final BaseTimeSeriesDataSourceConfig config) {
-      super(null, context);
+      super(factory, context);
       this.config = config;
       if (context.queryContext().stats() != null && 
           context.queryContext().stats().trace() != null) {
@@ -570,7 +570,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
               cntr.incrementAndGet();
               
               System.out.println("               sending up: " + id_hash);
-              Poolable pable = objpool.claim();
+              Poolable pable = ((MockDataStoreFactory) factory).objpool.claim();
               if (pable == null) {
                 throw new RuntimeException("AHWHWHWHWHWHW");
               }
@@ -579,7 +579,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
               ppts.shard = shard;
               ppts.ts = ts;
               ppts.poolable = pable;
-              ppts.itpool = itpool;
+              ppts.itpool = ((MockDataStoreFactory) factory).itpool;
               
               sendUpstream(ppts);
 //              sendUpstream(new PartialTimeSeries() {
@@ -730,15 +730,15 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       this.id = "MockAlloc";
       
       final ObjectPoolFactory factory = 
-          tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, id);
+          tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, null);
       if (factory == null) {
-        return Deferred.fromError(new RuntimeException("No pool factory found for: " + id));
+        return Deferred.fromError(new RuntimeException("No default pool factory found."));
       }
       
       final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
           .setAllocator(this)
           .setInitialCount(256) // TODO
-          .setId(id)
+          .setId(this.id)
           .build();
       
       final ObjectPool pool = factory.newPool(config);
@@ -836,15 +836,15 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       this.id = "ItAlloc";
       
       final ObjectPoolFactory factory = 
-          tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, id);
+          tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, null);
       if (factory == null) {
-        return Deferred.fromError(new RuntimeException("No pool factory found for: " + id));
+        return Deferred.fromError(new RuntimeException("No default pool factory found."));
       }
       
       final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
           .setAllocator(this)
           .setInitialCount(256) // TODO
-          .setId(id)
+          .setId(this.id)
           .build();
       
       final ObjectPool pool = factory.newPool(config);

@@ -10,7 +10,7 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.data.types.numeric.MutableNumericValue;
 
 public class MutableNumericValuePool implements Allocator {
-  private static final String TYPE = "MutableNumericValueAllocator";
+  private static final String TYPE = "MutableNumericValuePool";
   private static final TypeToken<?> TYPE_TOKEN = TypeToken.of(MutableNumericValue.class);
   private String id;
   private int size;
@@ -36,9 +36,9 @@ public class MutableNumericValuePool implements Allocator {
     size = (int) ClassLayout.parseClass(MutableNumericValue.class).instanceSize();
     
     final ObjectPoolFactory factory = 
-        tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, id);
+        tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, null);
     if (factory == null) {
-      return Deferred.fromError(new RuntimeException("No pool factory found for: " + id));
+      return Deferred.fromError(new RuntimeException("No default pool factory found."));
     }
     
     final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()

@@ -31,6 +31,7 @@ public class StormPotPool implements ObjectPool {
   protected ObjectPoolConfig config;
   
   protected StormPotPool(final TSDB tsdb, final ObjectPoolConfig config) {
+    this.config = config;
     allocator = config.getAllocator();
     stormpot.Config<MyPoolable> storm_pot_config = 
         new stormpot.Config<MyPoolable>()

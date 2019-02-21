@@ -12,7 +12,6 @@ public class StormPotPoolFactory extends BaseTSDBPlugin implements ObjectPoolFac
   @Override
   public ObjectPool newPool(final ObjectPoolConfig config) {
     StormPotPool pool = new StormPotPool(tsdb, config);
-    tsdb.getRegistry().registerObjectPool(pool);
     return pool;
   }
 
@@ -29,6 +28,7 @@ public class StormPotPoolFactory extends BaseTSDBPlugin implements ObjectPoolFac
   @Override
   public Deferred<Object> initialize(TSDB tsdb, String id) {
     this.id = id;
+    this.tsdb = tsdb;
     registerConfigs(tsdb.getConfig());
     return Deferred.fromResult(null);
   }

@@ -41,9 +41,9 @@ public class DoubleArrayPool implements Allocator {
     size = (8 * length) + 16 /* 64-bit overhead */;
     
     final ObjectPoolFactory factory = 
-        tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, id);
+        tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, null);
     if (factory == null) {
-      return Deferred.fromError(new RuntimeException("No pool factory found for: " + id));
+      return Deferred.fromError(new RuntimeException("No default pool factory found for."));
     }
     
     final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
