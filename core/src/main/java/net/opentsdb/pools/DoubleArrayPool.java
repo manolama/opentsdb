@@ -1,32 +1,75 @@
 package net.opentsdb.pools;
 
-import java.util.concurrent.TimeUnit;
-
+import com.google.common.base.Strings;
+import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
-import stormpot.BlazePool;
 
-public class DoubleArrayPool extends StormPotPool {
+public class DoubleArrayAllocator implements Allocator {
+  private static final String TYPE = "DoubleArrayAllocator";
+  private static final TypeToken<?> TYPE_TOKEN = TypeToken.of(double[].class);
+  private int length;
+  private String id;
+  private int size;
+  
+  @Override
+  public String type() {
+    return TYPE;
+  }
 
   @Override
-  public Deferred<Object> initialize(TSDB tsdb, String id) {
-    this.id = id;
-    registerConfigs(tsdb.getConfig());
-    
-    allocator = tsdb.getRegistry().getPlugin(Allocator.class, "DoubleArrayPool");
-    System.out.println("******** LOADED ALLOC: " + allocator + " KEY: " + myConfig(ALLOCATOR_KEY));
-    if (allocator == null) {
-      return Deferred.fromError(new IllegalArgumentException("No allocator found for: " + myConfig(ALLOCATOR_KEY)));
+  public String id() {
+    return id;
+  }
+
+  @Override
+  public Deferred<Object> initialize(final TSDB tsdb, final String id) {
+    final String key = "pool.allocator." + (Strings.isNullOrEmpty(id) ? "" : id) 
+        + ".primitive.array.length";
+    if (Strings.isNullOrEmpty(id)) {
+      this.id = TYPE;
+    } else {
+      this.id = id;
     }
     
-    stormpot.Config<MyPoolable> config = 
-        new stormpot.Config<MyPoolable>()
-        .setAllocator(new MyAllocator())
-        .setSize(tsdb.getConfig().getInt(myConfig(INITIAL_COUNT_KEY)));
-    stormpot = new BlazePool<MyPoolable>(config);
-    default_timeout = new stormpot.Timeout(1, TimeUnit.NANOSECONDS);
+    if (!tsdb.getConfig().hasProperty(key)) {
+      tsdb.getConfig().register(key, 4096, false, 
+          "The length of each primitive array to allocate");
+    }
+    length = tsdb.getConfig().getInt(key);
+    size = (8 * length) + 16 /* 64-bit overhead */;
     return Deferred.fromResult(null);
+  }
+
+  @Override
+  public Deferred<Object> shutdown() {
+    return Deferred.fromResult(null);
+  }
+
+  @Override
+  public String version() {
+    return "3.0.0";
+  }
+
+  @Override
+  public int size() {
+    return size;
+  }
+  
+  @Override
+  public Object allocate() {
+    return new double[length];
+  }
+
+  @Override
+  public void deallocate(final Object object) {
+    // no-op
+  }
+
+  @Override
+  public TypeToken<?> dataType() {
+    return TYPE_TOKEN;
   }
   
 }
