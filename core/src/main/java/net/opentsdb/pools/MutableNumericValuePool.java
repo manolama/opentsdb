@@ -9,7 +9,7 @@ import com.stumbleupon.async.Deferred;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.types.numeric.MutableNumericValue;
 
-public class MutableNumericValueAllocator implements Allocator {
+public class MutableNumericValuePool implements Allocator {
   private static final String TYPE = "MutableNumericValueAllocator";
   private static final TypeToken<?> TYPE_TOKEN = TypeToken.of(MutableNumericValue.class);
   private String id;
@@ -34,6 +34,25 @@ public class MutableNumericValueAllocator implements Allocator {
     }
     
     size = (int) ClassLayout.parseClass(MutableNumericValue.class).instanceSize();
+    
+    final ObjectPoolFactory factory = 
+        tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, id);
+    if (factory == null) {
+      return Deferred.fromError(new RuntimeException("No pool factory found for: " + id));
+    }
+    
+    final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
+        .setAllocator(this)
+        .setInitialCount(4096) // TODO
+        .setId(id)
+        .build();
+    
+    final ObjectPool pool = factory.newPool(config);
+    if (pool != null) {
+      tsdb.getRegistry().registerObjectPool(pool);
+    } else {
+      return Deferred.fromError(new RuntimeException("Null pool returned for: " + id));
+    }
     return Deferred.fromResult(null);
   }
 

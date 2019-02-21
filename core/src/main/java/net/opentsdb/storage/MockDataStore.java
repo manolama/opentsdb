@@ -70,7 +70,11 @@ import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericMillisecondShard;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.pools.Allocator;
-import net.opentsdb.pools.ObjectPool.Poolable;
+import net.opentsdb.pools.DefaultObjectPoolConfig;
+import net.opentsdb.pools.ObjectPool;
+import net.opentsdb.pools.ObjectPoolConfig;
+import net.opentsdb.pools.ObjectPoolFactory;
+import net.opentsdb.pools.Poolable;
 import net.opentsdb.pools.StormPotPool;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryMode;
@@ -119,8 +123,8 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
   /** Thread pool used by the executions. */
   private final ExecutorService thread_pool;
   
-  StormPotPool objpool;
-  StormPotPool itpool;
+  ObjectPool objpool;
+  ObjectPool itpool;
   
   public MockDataStore(final TSDB tsdb, final String id) {
     this.tsdb = tsdb;
@@ -130,11 +134,8 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       LOG.debug("Intantiating mock data store with ID: " + this.id + "@" + System.identityHashCode(this));
     }
     
-    objpool = new StormPotPool();
-    objpool.initialize(tsdb, null);
-
-    itpool = new StormPotPool();
-    itpool.initialize(tsdb, "itpool");
+    objpool = tsdb.getRegistry().getObjectPool("MockAlloc");
+    itpool = tsdb.getRegistry().getObjectPool("ItAlloc");
     
     database = Maps.newHashMap();
     generateMockData();
@@ -727,6 +728,26 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     public Deferred<Object> initialize(final TSDB tsdb, final String id) {
       this.tsdb = tsdb;
       this.id = "MockAlloc";
+      
+      final ObjectPoolFactory factory = 
+          tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, id);
+      if (factory == null) {
+        return Deferred.fromError(new RuntimeException("No pool factory found for: " + id));
+      }
+      
+      final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
+          .setAllocator(this)
+          .setInitialCount(256) // TODO
+          .setId(id)
+          .build();
+      
+      final ObjectPool pool = factory.newPool(config);
+      if (pool != null) {
+        tsdb.getRegistry().registerObjectPool(pool);
+      } else {
+        return Deferred.fromError(new RuntimeException("Null pool returned for: " + id));
+      }
+      
       return Deferred.fromResult(null);
     }
 
@@ -737,7 +758,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     ResultShard shard;
     SlicedTimeSeries ts;
     Poolable poolable;
-    StormPotPool itpool;
+    ObjectPool itpool;
     
     @Override
     public void close() throws Exception {
@@ -813,6 +834,26 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     public Deferred<Object> initialize(final TSDB tsdb, final String id) {
       this.tsdb = tsdb;
       this.id = "ItAlloc";
+      
+      final ObjectPoolFactory factory = 
+          tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, id);
+      if (factory == null) {
+        return Deferred.fromError(new RuntimeException("No pool factory found for: " + id));
+      }
+      
+      final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
+          .setAllocator(this)
+          .setInitialCount(256) // TODO
+          .setId(id)
+          .build();
+      
+      final ObjectPool pool = factory.newPool(config);
+      if (pool != null) {
+        tsdb.getRegistry().registerObjectPool(pool);
+      } else {
+        return Deferred.fromError(new RuntimeException("Null pool returned for: " + id));
+      }
+      
       return Deferred.fromResult(null);
     }
     

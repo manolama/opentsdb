@@ -127,12 +127,8 @@ public class PluginsConfig extends Validatable {
         new Pair<String, String>("net.opentsdb.query.execution.serdes.JsonV2QuerySerdesFactory", null));
     DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.storage.DatumIdValidator", 
         new Pair<String, String>("net.opentsdb.storage.DefaultDatumIdValidator", null));
-    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.ObjectPool", 
-        new Pair<String, String>("net.opentsdb.pools.LongArrayPool", "LongArrayPool"));
-    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.ObjectPool", 
-        new Pair<String, String>("net.opentsdb.pools.DoubleArrayPool", "DoubleArrayPool"));
-    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.ObjectPool", 
-        new Pair<String, String>("net.opentsdb.pools.MutableNumericValuePool", "MutableNumericValuePool"));
+    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.ObjectPoolFactory", 
+        new Pair<String, String>("net.opentsdb.pools.StormPotPoolFactory", null));
   }
   
   /** The list of plugin configs. */

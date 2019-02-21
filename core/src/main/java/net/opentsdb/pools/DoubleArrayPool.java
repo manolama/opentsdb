@@ -6,7 +6,7 @@ import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
 
-public class DoubleArrayAllocator implements Allocator {
+public class DoubleArrayPool implements Allocator {
   private static final String TYPE = "DoubleArrayAllocator";
   private static final TypeToken<?> TYPE_TOKEN = TypeToken.of(double[].class);
   private int length;
@@ -39,6 +39,25 @@ public class DoubleArrayAllocator implements Allocator {
     }
     length = tsdb.getConfig().getInt(key);
     size = (8 * length) + 16 /* 64-bit overhead */;
+    
+    final ObjectPoolFactory factory = 
+        tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, id);
+    if (factory == null) {
+      return Deferred.fromError(new RuntimeException("No pool factory found for: " + id));
+    }
+    
+    final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
+        .setAllocator(this)
+        .setInitialCount(tsdb.getConfig().getInt(key))
+        .setId(id)
+        .build();
+    
+    final ObjectPool pool = factory.newPool(config);
+    if (pool != null) {
+      tsdb.getRegistry().registerObjectPool(pool);
+    } else {
+      return Deferred.fromError(new RuntimeException("Null pool returned for: " + id));
+    }
     return Deferred.fromResult(null);
   }
 

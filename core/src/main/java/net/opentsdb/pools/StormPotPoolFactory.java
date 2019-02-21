@@ -6,12 +6,11 @@ import com.stumbleupon.async.Deferred;
 import net.opentsdb.configuration.Configuration;
 import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.pools.ObjectPool.PoolConfig;
 
 public class StormPotPoolFactory extends BaseTSDBPlugin implements ObjectPoolFactory {
   
   @Override
-  public ObjectPool newPool(final PoolConfig config) {
+  public ObjectPool newPool(final ObjectPoolConfig config) {
     StormPotPool pool = new StormPotPool(tsdb, config);
     tsdb.getRegistry().registerObjectPool(pool);
     return pool;

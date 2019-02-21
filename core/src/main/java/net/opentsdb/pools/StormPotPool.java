@@ -28,9 +28,9 @@ public class StormPotPool implements ObjectPool {
   
   protected stormpot.Timeout default_timeout;
   
-  protected PoolConfig config;
+  protected ObjectPoolConfig config;
   
-  protected StormPotPool(final TSDB tsdb, final PoolConfig config) {
+  protected StormPotPool(final TSDB tsdb, final ObjectPoolConfig config) {
     allocator = config.getAllocator();
     stormpot.Config<MyPoolable> storm_pot_config = 
         new stormpot.Config<MyPoolable>()
