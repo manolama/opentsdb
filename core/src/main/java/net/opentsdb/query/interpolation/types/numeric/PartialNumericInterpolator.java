@@ -11,15 +11,23 @@ import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryFillPolicy;
-import net.opentsdb.query.interpolation.QueryInterpolator2;
+import net.opentsdb.query.interpolation.PartialQueryInterpolator;
+import net.opentsdb.query.interpolation.PartialQueryInterpolatorContainer;
 import net.opentsdb.query.interpolation.QueryInterpolatorConfig;
 
-public class PushNumericInterpolator implements QueryInterpolator2<NumericType> {
+/**
+ * 
+ * NOTE!!!!!!!!!!!! Big race condition here on {@link #setSeries(PartialTimeSeries)}
+ * 
+ * Gotta figure this sucker out so it supports interpolating across boundaries
+ * and is thread safe/concurrent AND poolable.
+ * 
+ * could keep PTs ID and a first + last values
+ *
+ */
+public class PartialNumericInterpolator implements PartialQueryInterpolator<NumericType> {
 
   private static final TimeStamp ZERO = new MillisecondTimeStamp(0L);
-  
-  /** The config. */
-  protected NumericInterpolatorConfig config;
   
   /** The previous real value. */
   protected MutableNumericValue previous;
@@ -32,15 +40,19 @@ public class PushNumericInterpolator implements QueryInterpolator2<NumericType> 
   
   /** Whether or not the source iterator has more data. */
   protected boolean has_next;
-  
-  // TODO - handle out of order and pre/post series data for proper interp.
-  protected PartialTimeSeries current_series;
-  
+  PartialQueryInterpolatorContainer<NumericType> container;
   protected Iterator<TimeSeriesValue<?>> iterator;
   
-  public PushNumericInterpolator() {
+  public PartialNumericInterpolator() {
     response = new MutableNumericValue();
     previous = new MutableNumericValue();
+  }
+  
+  @Override
+  public void reset(PartialQueryInterpolatorContainer<NumericType> container,
+      PartialTimeSeries pts) {
+    this.container = container;
+    iterator = pts.iterator();
   }
   
   @Override
@@ -48,22 +60,7 @@ public class PushNumericInterpolator implements QueryInterpolator2<NumericType> 
     // TODO Auto-generated method stub
     
   }
-
-  @Override
-  public void setConfig(QueryInterpolatorConfig config) {
-    this.config = (NumericInterpolatorConfig) config;
-    previous.resetTimestamp(ZERO);
-    // TODO - reset others
-  }
-
-  @Override
-  public void setSeries(PartialTimeSeries series) {
-    // TODO Auto-generated method stub
-    current_series = series;
-    iterator = current_series.iterator();
-    has_next = iterator.hasNext();
-  }
-
+  
   @Override
   public boolean hasNext() {
     return has_next;
@@ -109,14 +106,9 @@ public class PushNumericInterpolator implements QueryInterpolator2<NumericType> 
     }
     return next.timestamp();
   }
-
-  @Override
-  public QueryFillPolicy<NumericType> fillPolicy() {
-    return config.queryFill();
-  }
-
+  
   protected TimeSeriesValue<NumericType> fill(final TimeStamp timestamp) {
-    switch (config.getRealFillPolicy()) {
+    switch (((NumericInterpolatorConfig) container.config()).getRealFillPolicy()) {
     case PREVIOUS_ONLY:
       if (previous != null) {
         response.reset(timestamp, previous.value());
@@ -153,7 +145,7 @@ public class PushNumericInterpolator implements QueryInterpolator2<NumericType> 
       break;
     }
     
-    final NumericType fill = config.queryFill().fill();
+    final NumericType fill = ((NumericInterpolatorConfig) container.config()).queryFill().fill();
     if (fill == null) {
       response.resetNull(timestamp);
     } else {
@@ -161,4 +153,6 @@ public class PushNumericInterpolator implements QueryInterpolator2<NumericType> 
     }
     return response;
   }
+
+  
 }

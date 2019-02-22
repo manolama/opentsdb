@@ -10,7 +10,7 @@ import net.opentsdb.pools.Allocator;
 
 public class NumericInterpolatorAllocator extends BaseTSDBPlugin implements Allocator {
   private static final int SIZE = 
-      (int) (ClassLayout.parseClass(PushNumericInterpolator.class).instanceSize()
+      (int) (ClassLayout.parseClass(PartialNumericInterpolator.class).instanceSize()
             + (ClassLayout.parseClass(MutableNumericValue.class).instanceSize() * 2));
   
   @Override
@@ -20,13 +20,13 @@ public class NumericInterpolatorAllocator extends BaseTSDBPlugin implements Allo
 
   @Override
   public Object allocate() {
-    return new PushNumericInterpolator();
+    return new PartialNumericInterpolator();
   }
 
   @Override
   public void deallocate(Object object) {
     try {
-      ((PushNumericInterpolator) object).close();
+      ((PartialNumericInterpolator) object).close();
     } catch (Exception e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
@@ -35,7 +35,7 @@ public class NumericInterpolatorAllocator extends BaseTSDBPlugin implements Allo
 
   @Override
   public TypeToken<?> dataType() {
-    return TypeToken.of(PushNumericInterpolator.class);
+    return TypeToken.of(PartialNumericInterpolator.class);
   }
 
   @Override

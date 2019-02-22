@@ -49,7 +49,7 @@ public class DoubleArrayPool implements Allocator {
     final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
         .setAllocator(this)
         .setInitialCount(tsdb.getConfig().getInt(key))
-        .setId(id)
+        .setId(this.id)
         .build();
     
     final ObjectPool pool = factory.newPool(config);

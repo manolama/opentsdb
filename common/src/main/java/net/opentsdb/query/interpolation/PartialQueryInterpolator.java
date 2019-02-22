@@ -4,14 +4,11 @@ import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
-import net.opentsdb.query.QueryFillPolicy;
 
-public interface QueryInterpolator2<T extends TimeSeriesDataType> extends AutoCloseable {
+public interface PartialQueryInterpolator<T extends TimeSeriesDataType> extends AutoCloseable {
 
-  // Call this first and use it as a trigger to reset the interpolator state
-  public void setConfig(final QueryInterpolatorConfig config);
-  
-  public void setSeries(final PartialTimeSeries series);
+  public void reset(final PartialQueryInterpolatorContainer<T> container, 
+                    final PartialTimeSeries pts);
   
   /** @return Whether or not the underlying source has another real value. */
   public boolean hasNext();
@@ -26,7 +23,5 @@ public interface QueryInterpolator2<T extends TimeSeriesDataType> extends AutoCl
    * if no real value is available. */
   public TimeStamp nextReal();
   
-  /** @return The fill policy used by the interpolator. */
-  public QueryFillPolicy<T> fillPolicy();
   
 }

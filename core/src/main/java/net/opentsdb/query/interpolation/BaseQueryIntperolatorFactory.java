@@ -126,7 +126,7 @@ public abstract class BaseQueryIntperolatorFactory extends BaseTSDBPlugin
   }
   
   @Override
-  public QueryInterpolator2<? extends TimeSeriesDataType> newInterpolator(
+  public PartialQueryInterpolator<? extends TimeSeriesDataType> newInterpolator(
       TypeToken<? extends TimeSeriesDataType> type, PartialTimeSeries pts,
       QueryInterpolatorConfig config) {
     if (config == null) {
@@ -138,8 +138,8 @@ public abstract class BaseQueryIntperolatorFactory extends BaseTSDBPlugin
     }
     
     final Poolable poolable = pool.claim();
-    final QueryInterpolator2<? extends TimeSeriesDataType> interpolator = 
-        (QueryInterpolator2<? extends TimeSeriesDataType>) poolable.object();
+    final PartialQueryInterpolator<? extends TimeSeriesDataType> interpolator = 
+        (PartialQueryInterpolator<? extends TimeSeriesDataType>) poolable.object();
     interpolator.setConfig(config);
     interpolator.setSeries(pts);
     return interpolator;

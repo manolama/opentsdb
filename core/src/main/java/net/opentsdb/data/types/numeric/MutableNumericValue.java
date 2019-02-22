@@ -20,6 +20,8 @@ import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
+import net.opentsdb.pools.CloseablePoolable;
+import net.opentsdb.pools.Poolable;
 
 /**
  * A simple mutable data point for holding primitive signed numbers including 
@@ -30,7 +32,9 @@ import net.opentsdb.data.TimeStamp.Op;
  * @since 3.0
  */
 public final class MutableNumericValue implements NumericType, 
-                                                 TimeSeriesValue<NumericType> {
+                                                 TimeSeriesValue<NumericType>,
+                                                 AutoCloseable,
+                                                 CloseablePoolable {
 
   //NOTE: Fields are not final to make an instance available to store a new
   // pair of a timestamp and a value to reduce memory burden.
@@ -46,6 +50,8 @@ public final class MutableNumericValue implements NumericType,
   
   /** Whether or not the current value is null. */
   private boolean nulled; 
+  
+  private Poolable poolable;
   
   /**
    * Initialize a new mutable data point with a {@link Long} value of 0.
@@ -368,6 +374,19 @@ public final class MutableNumericValue implements NumericType,
       return this.timestamp.compare(Op.EQ, that.timestamp) && this.value == that.value
           && this.is_integer == that.is_integer && this.nulled == that.nulled;
     }
+  }
+
+  
+  @Override
+  public void close() throws Exception {
+    if (poolable != null) {
+      poolable.release();
+    }
+  }
+
+  @Override
+  public void setPoolable(Poolable poolable) {
+    this.poolable = poolable;
   }
 
 }

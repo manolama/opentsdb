@@ -20,26 +20,39 @@ import java.util.Map;
 
 import com.google.common.base.Strings;
 import com.google.common.reflect.TypeToken;
+import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.core.TSDB;
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.PartialTimeSeries;
+import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
+import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.data.types.numeric.aggregators.NumericAggregator;
 import net.opentsdb.data.types.numeric.aggregators.NumericAggregatorFactory;
-import net.opentsdb.pools.MutableNumericValuePool.PooledMutableNumericValue;
+import net.opentsdb.pools.Allocator;
+import net.opentsdb.pools.CloseablePoolable;
+import net.opentsdb.pools.DefaultObjectPoolConfig;
 import net.opentsdb.pools.ObjectPool;
+import net.opentsdb.pools.ObjectPoolConfig;
+import net.opentsdb.pools.ObjectPoolFactory;
+import net.opentsdb.pools.Poolable;
 import net.opentsdb.query.QueryIterator;
 import net.opentsdb.query.interpolation.QueryInterpolatorFactory;
+import net.opentsdb.query.interpolation.types.numeric.PartialNumericInterpolator;
+import net.opentsdb.query.interpolation.types.numeric.PartialNumericInterpolatorContainer;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.interpolation.QueryInterpolator;
 import net.opentsdb.query.interpolation.QueryInterpolatorConfig;
+import net.opentsdb.query.processor.groupby.GroupBy.GBNumericTs;
+import net.opentsdb.query.processor.groupby.GroupBy.GBTypedPTS;
 import net.opentsdb.query.processor.groupby.GroupByConfig;
 
 /**
@@ -54,13 +67,12 @@ import net.opentsdb.query.processor.groupby.GroupByConfig;
  * 
  * @since 3.0
  */
-public class GroupByNumericIteratorPush implements QueryIterator, 
-    TimeSeriesValue<NumericType> {
-  /** Whether or not NaNs are sentinels or real values. */
-  private final boolean infectious_nan;
+public class GroupByNumericPTS implements GBTypedPTS {
   
+  GBNumericTs ts;
+    
   /** The aggregator. */
-  private final NumericAggregator aggregator;
+  private NumericAggregator aggregator;
   
   /** The next timestamp to return. */
   private final TimeStamp next_ts = new MillisecondTimeStamp(0);
@@ -69,17 +81,8 @@ public class GroupByNumericIteratorPush implements QueryIterator,
   private final TimeStamp next_next_ts = new MillisecondTimeStamp(0);
   
   /** The data point set and returned by the iterator. */
-  private final PooledMutableNumericValue dp;
-  
-  /** The list of interpolators containing the real sources. */
-  private final QueryInterpolator<NumericType>[] interpolators;
-  
-  /** An array of long values used when all sources return longs. */
-  private long[] long_values;
-  
-  /** An array of double values used when one or more sources return a double. */
-  private double[] double_values;
-
+  private final MutableNumericValue dp;
+    
   /** An index in the sources array used when pulling numeric iterators from the
    * sources. Must be less than or equal to the number of sources. */
   private int iterator_max;
@@ -91,6 +94,8 @@ public class GroupByNumericIteratorPush implements QueryIterator,
    * of the time series has a real value. */
   private boolean has_next = false;
   
+  Poolable poolable;
+  
   /**
    * Default ctor.
    * @param node The non-null node this iterator belongs to.
@@ -99,60 +104,52 @@ public class GroupByNumericIteratorPush implements QueryIterator,
    * @throws IllegalArgumentException if a required parameter or config is 
    * not present.
    */
-  public GroupByNumericIteratorPush(final QueryNode node, 
-                                    final List<PartialTimeSeries> series) {
-    if (node == null) {
-      throw new IllegalArgumentException("Query node cannot be null.");
-    }
-    if (series == null) {
-      throw new IllegalArgumentException("series cannot be null.");
-    }
-    
-    dp = (PooledMutableNumericValue) node.pipelineContext().tsdb().getRegistry().getPlugin(ObjectPool.class, "MutableNumericValuePool").claim();
-    next_ts.setMax();
-    dp.resetNull(next_ts);
-    NumericAggregatorFactory agg_factory = node.pipelineContext().tsdb()
-        .getRegistry().getPlugin(NumericAggregatorFactory.class, 
-            ((GroupByConfig) node.config()).getAggregator());
-    if (agg_factory == null) {
-      throw new IllegalArgumentException("No aggregator found for type: " 
-          + ((GroupByConfig) node.config()).getAggregator());
-    }
-    aggregator = agg_factory.newAggregator(
-        ((GroupByConfig) node.config()).getInfectiousNan());
-    infectious_nan = ((GroupByConfig) node.config()).getInfectiousNan();
-    interpolators = new QueryInterpolator[series.size()];
-    
-    QueryInterpolatorConfig interpolator_config = ((GroupByConfig) node.config()).interpolatorConfig(NumericType.TYPE);
-    if (interpolator_config == null) {
-      throw new IllegalArgumentException("No interpolator config found for type");
-    }
-    
-    QueryInterpolatorFactory factory = node.pipelineContext().tsdb()
-        .getRegistry().getPlugin(QueryInterpolatorFactory.class, 
-            interpolator_config.getType());
-    if (factory == null) {
-      throw new IllegalArgumentException("No interpolator factory found for: " + 
-          interpolator_config.getType() == null ? "Default" : 
-            interpolator_config.getType());
-    }
-    
-    for (final PartialTimeSeries source : series) {
-      if (source == null) {
-        throw new IllegalArgumentException("Null time series are not "
-            + "allowed in the sources.");
-      }
-      interpolators[iterator_max] = (QueryInterpolator<NumericType>) 
-          factory.newInterpolator(NumericType.TYPE, source, interpolator_config);
-      if (interpolators[iterator_max].hasNext()) {
-        has_next = true;
-        if (interpolators[iterator_max].nextReal().compare(Op.LT, next_ts)) {
-          next_ts.update(interpolators[iterator_max].nextReal());
-        }
-      }
-      iterator_max++;
-    }
-    long_values = new long[sources.size()];
+  public GroupByNumericPTS() {
+    dp = new MutableNumericValue();//(MutableNumericValue) node.pipelineContext().tsdb().getRegistry().getObjectPool("MutableNumericValuePool").claim().object();
+//    next_ts.setMax();
+//    dp.resetNull(next_ts);
+//    NumericAggregatorFactory agg_factory = node.pipelineContext().tsdb()
+//        .getRegistry().getPlugin(NumericAggregatorFactory.class, 
+//            ((GroupByConfig) node.config()).getAggregator());
+//    if (agg_factory == null) {
+//      throw new IllegalArgumentException("No aggregator found for type: " 
+//          + ((GroupByConfig) node.config()).getAggregator());
+//    }
+//    aggregator = agg_factory.newAggregator(
+//        ((GroupByConfig) node.config()).getInfectiousNan());
+//    infectious_nan = ((GroupByConfig) node.config()).getInfectiousNan();
+//    interpolators = new QueryInterpolator[series.size()];
+//    
+//    QueryInterpolatorConfig interpolator_config = ((GroupByConfig) node.config()).interpolatorConfig(NumericType.TYPE);
+//    if (interpolator_config == null) {
+//      throw new IllegalArgumentException("No interpolator config found for type");
+//    }
+//    
+//    QueryInterpolatorFactory factory = node.pipelineContext().tsdb()
+//        .getRegistry().getPlugin(QueryInterpolatorFactory.class, 
+//            interpolator_config.getType());
+//    if (factory == null) {
+//      throw new IllegalArgumentException("No interpolator factory found for: " + 
+//          interpolator_config.getType() == null ? "Default" : 
+//            interpolator_config.getType());
+//    }
+//    
+//    for (final PartialTimeSeries source : series) {
+//      if (source == null) {
+//        throw new IllegalArgumentException("Null time series are not "
+//            + "allowed in the sources.");
+//      }
+//      interpolators[iterator_max] = (QueryInterpolator<NumericType>) 
+//          factory.newInterpolator(NumericType.TYPE, source, interpolator_config);
+//      if (interpolators[iterator_max].hasNext()) {
+//        has_next = true;
+//        if (interpolators[iterator_max].nextReal().compare(Op.LT, next_ts)) {
+//          next_ts.update(interpolators[iterator_max].nextReal());
+//        }
+//      }
+//      iterator_max++;
+//    }
+//    long_values = new long[sources.size()];
   }
 
   @Override
@@ -262,7 +259,121 @@ public class GroupByNumericIteratorPush implements QueryIterator,
 
   @Override
   public void close() throws Exception {
+    dp.close();
+    
+  }
+
+  @Override
+  public void setPoolable(Poolable poolable) {
+    this.poolable = poolable;
+  }
+
+  @Override
+  public long idHash() {
+    // TODO Auto-generated method stub
+    return 0;
+  }
+
+  @Override
+  public ResultShard shard() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public TypedTimeSeriesIterator iterator() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public void addSeries(PartialTimeSeries series) {
     // TODO Auto-generated method stub
     
+  }
+
+
+  public static class GroupByNumericPTSPool implements Allocator {
+    public static final String TYPE = "GroupByNumericPTS";
+    private static final TypeToken<?> TYPE_TOKEN = 
+        TypeToken.of(GroupByNumericPTSPool.class);
+    private int length;
+    private String id;
+    private int size;
+    private TSDB tsdb;
+    
+    @Override
+    public String type() {
+      return TYPE;
+    }
+
+    @Override
+    public String id() {
+      return id;
+    }
+
+    @Override
+    public Deferred<Object> initialize(TSDB tsdb, String id) {
+      this.tsdb = tsdb;
+      if (Strings.isNullOrEmpty(id)) {
+        this.id = TYPE;
+      } else {
+        this.id = id;
+      }
+      
+      final ObjectPoolFactory factory = 
+          tsdb.getRegistry().getPlugin(ObjectPoolFactory.class, null);
+      if (factory == null) {
+        return Deferred.fromError(new RuntimeException("No default pool factory found."));
+      }
+      
+      final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
+          .setAllocator(this)
+          .setInitialCount(4096) // TODO
+          .setId(this.id)
+          .build();
+      
+      final ObjectPool pool = factory.newPool(config);
+      if (pool != null) {
+        tsdb.getRegistry().registerObjectPool(pool);
+      } else {
+        return Deferred.fromError(new RuntimeException("Null pool returned for: " + id));
+      }
+      return Deferred.fromResult(null);
+    }
+
+    @Override
+    public Deferred<Object> shutdown() {
+      return Deferred.fromResult(null);
+    }
+
+    @Override
+    public String version() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public int size() {
+      // TODO Auto-generated method stub
+      return 0;
+    }
+
+    @Override
+    public Object allocate() {
+      return new GroupByNumericPTS();
+    }
+
+    @Override
+    public void deallocate(Object object) {
+      // TODO Auto-generated method stub
+      
+    }
+
+    @Override
+    public TypeToken<?> dataType() {
+      // TODO Auto-generated method stub
+      return TYPE_TOKEN;
+    }
   }
 }

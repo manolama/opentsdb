@@ -115,6 +115,9 @@ public class StormPotPool implements ObjectPool {
     MyPoolable(final Object object, final Slot slot) {
       this.object = object;
       this.slot = slot;
+      if (object instanceof CloseablePoolable) {
+        ((CloseablePoolable) object).setPoolable(this);
+      }
     }
     
     @Override
@@ -129,6 +132,10 @@ public class StormPotPool implements ObjectPool {
       }
     }
     
+    @Override
+    public void updateSize(final int size) {
+      // TODO -
+    }
   }
 
   class MyAllocator implements stormpot.Allocator<MyPoolable> {

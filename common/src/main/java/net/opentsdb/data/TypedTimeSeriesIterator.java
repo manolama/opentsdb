@@ -15,6 +15,9 @@
 package net.opentsdb.data;
 
 import com.google.common.reflect.TypeToken;
+
+import net.opentsdb.pools.CloseablePoolable;
+
 import java.util.Iterator;
 
 /**
@@ -24,7 +27,7 @@ import java.util.Iterator;
  * @since 3.0
  */
 public interface TypedTimeSeriesIterator extends 
-    Iterator<TimeSeriesValue<? extends TimeSeriesDataType>>, AutoCloseable {
+    Iterator<TimeSeriesValue<? extends TimeSeriesDataType>>, CloseablePoolable {
 
   /**
    * @return The non-null type of data returned in the iterator.

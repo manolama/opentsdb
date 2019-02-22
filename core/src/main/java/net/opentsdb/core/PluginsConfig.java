@@ -103,38 +103,56 @@ public class PluginsConfig extends Validatable {
   /** The key used for finding the plugin directory. */
   public static final String PLUGIN_PATH_KEY = "tsd.core.plugin_path";
   
-  public static final List<String> DEFAULT_TYPES = Lists.newArrayList();
-  static {
-    DEFAULT_TYPES.add("net.opentsdb.query.processor.ProcessorFactory");
-    DEFAULT_TYPES.add("net.opentsdb.query.filter.QueryFilterFactory");
-    DEFAULT_TYPES.add("net.opentsdb.stats.StatsCollector");
-    DEFAULT_TYPES.add("net.opentsdb.query.interpolation.QueryInterpolatorFactory");
-    DEFAULT_TYPES.add("net.opentsdb.data.types.numeric.aggregators.NumericAggregatorFactory");
-    DEFAULT_TYPES.add("net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregatorFactory");
-    DEFAULT_TYPES.add("net.opentsdb.storage.DatumIdValidator");
-    DEFAULT_TYPES.add("net.opentsdb.uid.UniqueIdFactory");
-    DEFAULT_TYPES.add("net.opentsdb.query.serdes.SerdesFactory");
-    DEFAULT_TYPES.add("net.opentsdb.query.QuerySinkFactory");
-  }
+//  public static final List<String> DEFAULT_TYPES = Lists.newArrayList();
+//  static {
+//    DEFAULT_TYPES.add("net.opentsdb.query.processor.ProcessorFactory");
+//    DEFAULT_TYPES.add("net.opentsdb.query.filter.QueryFilterFactory");
+//    DEFAULT_TYPES.add("net.opentsdb.stats.StatsCollector");
+//    DEFAULT_TYPES.add("net.opentsdb.query.interpolation.QueryInterpolatorFactory");
+//    DEFAULT_TYPES.add("net.opentsdb.data.types.numeric.aggregators.NumericAggregatorFactory");
+//    DEFAULT_TYPES.add("net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregatorFactory");
+//    DEFAULT_TYPES.add("net.opentsdb.storage.DatumIdValidator");
+//    DEFAULT_TYPES.add("net.opentsdb.uid.UniqueIdFactory");
+//    DEFAULT_TYPES.add("net.opentsdb.query.serdes.SerdesFactory");
+//    DEFAULT_TYPES.add("net.opentsdb.query.QuerySinkFactory");
+//  }
   
-  public static final Map<String, Pair<String, String>> DEFAULT_IMPLEMENTATIONS = 
-      Maps.newLinkedHashMap();
+  public static final List<List<String>> DEFAULT_IMPLEMENTATIONS = Lists.newArrayList();
   static {
-    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.query.interpolation.QueryInterpolatorFactory", 
-        new Pair<String, String>("net.opentsdb.query.interpolation.DefaultInterpolatorFactory", null));    
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.query.processor.ProcessorFactory"));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.query.filter.QueryFilterFactory"));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.stats.StatsCollector"));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.query.interpolation.QueryInterpolatorFactory"));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.data.types.numeric.aggregators.NumericAggregatorFactory"));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregatorFactory"));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.storage.DatumIdValidator"));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.uid.UniqueIdFactory"));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.query.serdes.SerdesFactory"));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.query.QuerySinkFactory"));
+    
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.query.interpolation.QueryInterpolatorFactory", 
+        "net.opentsdb.query.interpolation.DefaultInterpolatorFactory"));    
 //    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.query.serdes.SerdesFactory", 
 //        new Pair<String, String>("net.opentsdb.query.execution.serdes.JsonV2QuerySerdesFactory", null));
 //    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.storage.DatumIdValidator", 
 //        new Pair<String, String>("net.opentsdb.storage.DefaultDatumIdValidator", null));
-    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.ObjectPoolFactory", 
-        new Pair<String, String>("net.opentsdb.pools.StormPotPoolFactory", null));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.pools.ObjectPoolFactory", 
+        "net.opentsdb.pools.StormPotPoolFactory"));
     // object pool allocators
-    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.Allocator", 
-        new Pair<String, String>("net.opentsdb.pools.LongArrayPool", "LongArrayPool"));
-    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.Allocator", 
-        new Pair<String, String>("net.opentsdb.pools.LongArrayPool", "DoubleArrayPool"));
-    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.pools.Allocator", 
-        new Pair<String, String>("net.opentsdb.pools.MutableNumericValuePool", "MutableNumericValuePool"));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.pools.Allocator"));
   }
   
   /** The list of plugin configs. */
@@ -371,14 +389,14 @@ public class PluginsConfig extends Validatable {
         }
       }
     }
-    for (final PluginConfig c : configs) {
-      LOG.info("-----------: " + c.type + "  =>  " + c.plugin);
-    }
-    LOG.info("#######################################################################");
-    if (load_default_types) {
-      LOG.debug("Attempting to load default plugins.");
-      loadDefaultTypes();
-    }
+//    for (final PluginConfig c : configs) {
+//      LOG.info("-----------: " + c.type + "  =>  " + c.plugin);
+//    }
+//    LOG.info("#######################################################################");
+//    if (load_default_types) {
+//      LOG.debug("Attempting to load default plugins.");
+//      loadDefaultTypes();
+//    }
     for (final PluginConfig c : configs) {
       LOG.info("-----------: " + c.type + "  =>  " + c.plugin);
     }
@@ -844,50 +862,51 @@ public class PluginsConfig extends Validatable {
   }
   
   /** Loads the the {@link #DEFAULT_TYPES} */
-  void loadDefaultTypes() {
-    final List<PluginConfig> config_clones = 
-        Lists.newArrayListWithExpectedSize(configs == null ? DEFAULT_TYPES.size() :
-          configs.size() + DEFAULT_TYPES.size());
-    for (final String type : DEFAULT_TYPES) {
-      final PluginConfig config = PluginConfig.newBuilder()
-          .setType(type)
-          .build();
-      if (configs == null || !configs.contains(config)) {
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Will try to load default plugin type: " + type);
-        }
-        config_clones.add(config);
-      }
-    }
-    if (configs != null) {
-      config_clones.addAll(configs);
-    }
-    configs = config_clones;
-  }
+//  void loadDefaultTypes() {
+//    final List<PluginConfig> config_clones = 
+//        Lists.newArrayListWithExpectedSize(configs == null ? DEFAULT_TYPES.size() :
+//          configs.size() + DEFAULT_TYPES.size());
+//    for (final String type : DEFAULT_TYPES) {
+//      final PluginConfig config = PluginConfig.newBuilder()
+//          .setType(type)
+//          .build();
+//      if (configs == null || !configs.contains(config)) {
+//        if (LOG.isDebugEnabled()) {
+//          LOG.debug("Will try to load default plugin type: " + type);
+//        }
+//        config_clones.add(config);
+//      }
+//    }
+//    if (configs != null) {
+//      config_clones.addAll(configs);
+//    }
+//    configs = config_clones;
+//  }
   
   /** Loads the {@link #DEFAULT_IMPLEMENTATIONS} */
   void loadDefaultInstances() {
     final List<PluginConfig> config_clones = 
-        Lists.newArrayListWithExpectedSize(configs == null ? DEFAULT_TYPES.size() :
-          configs.size() + DEFAULT_TYPES.size());
+        Lists.newArrayListWithExpectedSize(configs == null ? DEFAULT_IMPLEMENTATIONS.size() :
+          configs.size() + DEFAULT_IMPLEMENTATIONS.size());
     
     if (configs == null) {
       configs = Lists.newArrayListWithExpectedSize(DEFAULT_IMPLEMENTATIONS.size());
     }
-    for (final Entry<String, Pair<String, String>> type : DEFAULT_IMPLEMENTATIONS.entrySet()) {
+    for (final List<String> params : DEFAULT_IMPLEMENTATIONS) {
       final PluginConfig.Builder builder = PluginConfig.newBuilder()
-          .setType(type.getKey())
-          .setPlugin(type.getValue().getKey());
-      if (Strings.isNullOrEmpty(type.getValue().getValue())) {
+          .setType(params.get(0));
+      if (params.size() > 1) {
+        builder.setPlugin(params.get(1));
+      }
+      if (params.size() == 2) {
         builder.setIsDefault(true);
-      } else {
-        builder.setId(type.getValue().getValue());
+      } else if (params.size() == 3) {
+        builder.setId(params.get(2));
       }
       final PluginConfig config = builder.build();
       if (configs == null || !configs.contains(config)) {
         if (LOG.isDebugEnabled()) {
-          LOG.debug("Will try to load default plugin implementation: " 
-              + type.getValue());
+          LOG.debug("Will try to load default plugin implementation: " + config);
         }
         config_clones.add(config);
       } else {
