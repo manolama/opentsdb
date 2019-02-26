@@ -120,6 +120,11 @@ public class PluginsConfig extends Validatable {
   public static final List<List<String>> DEFAULT_IMPLEMENTATIONS = Lists.newArrayList();
   static {
     DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.pools.ObjectPoolFactory", 
+        "net.opentsdb.pools.StormPotPoolFactory"));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
+        "net.opentsdb.pools.Allocator"));
+    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
         "net.opentsdb.query.processor.ProcessorFactory"));
     DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
         "net.opentsdb.query.filter.QueryFilterFactory"));
@@ -147,12 +152,7 @@ public class PluginsConfig extends Validatable {
 //        new Pair<String, String>("net.opentsdb.query.execution.serdes.JsonV2QuerySerdesFactory", null));
 //    DEFAULT_IMPLEMENTATIONS.put("net.opentsdb.storage.DatumIdValidator", 
 //        new Pair<String, String>("net.opentsdb.storage.DefaultDatumIdValidator", null));
-    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
-        "net.opentsdb.pools.ObjectPoolFactory", 
-        "net.opentsdb.pools.StormPotPoolFactory"));
     // object pool allocators
-    DEFAULT_IMPLEMENTATIONS.add(Lists.newArrayList(
-        "net.opentsdb.pools.Allocator"));
   }
   
   /** The list of plugin configs. */

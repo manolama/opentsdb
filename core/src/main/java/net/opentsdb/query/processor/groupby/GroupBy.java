@@ -18,6 +18,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -28,6 +31,7 @@ import com.stumbleupon.async.Deferred;
 import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.map.TLongObjectMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
+import net.openhft.hashing.LongHashFunction;
 import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.PartialTimeSeries;
@@ -37,6 +41,7 @@ import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataSourceFactory;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericType;
@@ -73,11 +78,12 @@ import net.opentsdb.utils.Pair;
  * @since 3.0
  */
 public class GroupBy extends AbstractQueryNode {
+  private static final Logger LOG = LoggerFactory.getLogger(GroupBy.class);
   
   /** The config for this group by node. */
   private final GroupByConfig config;
   
-  private List<GBShard> shards;
+  private TLongObjectMap<GBShard> shards;
   
   /**
    * Default ctor.
@@ -93,6 +99,7 @@ public class GroupBy extends AbstractQueryNode {
       throw new IllegalArgumentException("Group By config cannot be null.");
     }
     this.config = config;
+    shards = new TLongObjectHashMap<GBShard>();
   }
     
   @Override
@@ -163,46 +170,52 @@ public class GroupBy extends AbstractQueryNode {
 
   @Override
   public void push(PartialTimeSeries series) {
-    // TODO Auto-generated method stub
-    
+    GBShard shard = shards.get(series.shard().start().msEpoch());
+    if (shard == null) {
+      shard = new GBShard(series.shard());
+      shards.put(series.shard().start().msEpoch(), shard);
+    }
+    shard.addSeries(series);
   }
 
   @Override
   public void complete(ResultShard shard) {
-    // TODO Auto-generated method stub
-    
+    GBShard gb_shard = shards.get(shard.start().msEpoch());
+    gb_shard.completed(shard);
   }
   
   class GBShard implements ResultShard {
 
+    TLongObjectMap<GBNContainer> groups;
+    ResultShard shard;
+    GBShard(ResultShard shard) {
+      groups = new TLongObjectHashMap<GBNContainer>();
+      this.shard = shard;
+    }
+    
     @Override
     public int totalShards() {
-      // TODO Auto-generated method stub
-      return 0;
+      return shard.totalShards();
     }
 
     @Override
     public QueryNode node() {
-      // TODO Auto-generated method stub
-      return null;
+      return GroupBy.this;
     }
 
     @Override
     public String dataSource() {
-      // TODO Auto-generated method stub
-      return null;
+      return shard.dataSource();
     }
 
     @Override
     public TimeStamp start() {
-      // TODO Auto-generated method stub
-      return null;
+      return shard.start();
     }
 
     @Override
     public TimeStamp end() {
-      // TODO Auto-generated method stub
-      return null;
+      return shard.end();
     }
 
     @Override
@@ -213,8 +226,7 @@ public class GroupBy extends AbstractQueryNode {
 
     @Override
     public int timeSeriesCount() {
-      // TODO Auto-generated method stub
-      return 0;
+      return groups.size();
     }
 
     @Override
@@ -229,8 +241,50 @@ public class GroupBy extends AbstractQueryNode {
       
     }
     
+    void addSeries(final PartialTimeSeries series) {
+      TimeSeriesId raw_id = series.shard().id(series.idHash());
+      
+      boolean matched = true;
+      if (raw_id.type().equals(Const.TS_STRING_ID)) {
+        final TimeSeriesStringId id = (TimeSeriesStringId) raw_id;
+        final StringBuilder buf = new StringBuilder()
+            .append(id.metric());
+        
+        if (!((GroupByConfig) config).getTagKeys().isEmpty()) {
+
+          for (final String key : ((GroupByConfig) config).getTagKeys()) {
+            final String tagv = id.tags().get(key);
+            if (tagv == null) {
+              if (LOG.isDebugEnabled()) {
+                LOG.debug("Dropping series from group by due to missing tag key: " 
+                    + key + "  " + id);
+              }
+              matched = false;
+              break;
+            }
+            buf.append(tagv);
+          }
+        }
+        
+        if (matched) {
+          final long hash = LongHashFunction.xx_r39().hashChars(buf.toString());
+          GBNContainer container = groups.get(hash);
+          if (container == null) {
+            container = new GBNContainer();
+            container.gb = GroupBy.this;
+            groups.put(hash, container);
+          }
+          container.addSeries(series);
+        }
+      }
+    }
+
+    void completed(ResultShard shard) {
+      for (final GBNContainer container : groups.valueCollection()) {
+        container.completed(shard);
+      }
+    }
   }
-  
   
   static class GBNContainer implements CloseablePoolable {
     TLongObjectMap<GBNumericTs> series;
@@ -238,8 +292,14 @@ public class GroupBy extends AbstractQueryNode {
     GroupBy gb;
     Poolable poolable;
     
+    GBNContainer() {
+      series = new TLongObjectHashMap<GBNumericTs>();
+      interpolators = new TLongObjectHashMap<PartialNumericInterpolatorContainer>();
+    }
+    
     void completed(ResultShard shard) {
       // This shard is done so we can run through and group the series for it.
+      gb.sendUpstream(series.get(shard.start().msEpoch()));
     }
     
     void addSeries(final PartialTimeSeries series) {
@@ -309,7 +369,7 @@ public class GroupBy extends AbstractQueryNode {
     void addSeries(final PartialTimeSeries series) {
       GBTypedPTS pts = this.series.get(series.getType());
       if (pts == null) {
-        pts = (GBTypedPTS) gb.pipelineContext().tsdb().getRegistry().getObjectPool(GroupByNumericPTSPool.TYPE).claim().object();
+        pts = (GBTypedPTS) ((GroupByFactory) gb.factory()).getIterator(series.getType());
         this.series.put(series.getType(), pts);
       } else {
         pts.addSeries(series);

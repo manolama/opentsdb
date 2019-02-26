@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
@@ -31,6 +32,7 @@ import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.query.QueryIteratorFactory;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
@@ -39,6 +41,9 @@ import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.TimeSeriesQuery;
 import net.opentsdb.query.plan.QueryPlanner;
 import net.opentsdb.query.processor.BaseQueryNodeFactory;
+import net.opentsdb.query.processor.groupby.GroupBy.GBTypedPTS;
+import net.opentsdb.query.processor.groupby.GroupByNumericPTS.GroupByNumericIteratorPool;
+import net.opentsdb.query.processor.groupby.GroupByNumericPTS.GroupByNumericPTSPool;
 
 /**
  * Factory for creating GroupBy iterators, aggregating multiple time series into
@@ -49,6 +54,8 @@ import net.opentsdb.query.processor.BaseQueryNodeFactory;
 public class GroupByFactory extends BaseQueryNodeFactory {
   
   public static final String TYPE = "GroupBy";
+  
+  Map<TypeToken<? extends TimeSeriesDataType>, ObjectPool> iterator_pools = Maps.newHashMap();
   
   /**
    * Default ctor. Registers the numeric iterator.
@@ -71,6 +78,13 @@ public class GroupByFactory extends BaseQueryNodeFactory {
   @Override
   public Deferred<Object> initialize(final TSDB tsdb, final String id) {
     this.id = Strings.isNullOrEmpty(id) ? TYPE : id;
+    
+    ObjectPool pool = tsdb.getRegistry().getObjectPool(GroupByNumericPTSPool.TYPE);
+    if (pool == null) {
+      throw new IllegalArgumentException("WTF? No pool??? GroupByNumericPTSPool");
+    }
+    iterator_pools.put(NumericType.TYPE, pool);
+    
     return Deferred.fromResult(null);
   }
   
@@ -100,6 +114,11 @@ public class GroupByFactory extends BaseQueryNodeFactory {
                          final QueryNodeConfig config, 
                          final QueryPlanner plan) {
     // TODO Auto-generated method stub
+  }
+  
+  GBTypedPTS getIterator(final TypeToken<? extends TimeSeriesDataType> type) {
+    ObjectPool pool = iterator_pools.get(type);
+    return (GBTypedPTS) pool.claim().object();
   }
   
   /**

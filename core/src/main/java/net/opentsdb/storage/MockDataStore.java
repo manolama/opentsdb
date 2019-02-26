@@ -882,6 +882,11 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     public TypeToken<? extends TimeSeriesDataType> getType() {
       return NumericType.TYPE;
     }
+
+    @Override
+    public void setPoolable(Poolable poolable) {
+      this.poolable = poolable;
+    }
     
   }
   
@@ -1286,6 +1291,12 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
 
       @Override
       public void close() throws Exception {
+        // TODO Auto-generated method stub
+        
+      }
+
+      @Override
+      public void setPoolable(Poolable poolable) {
         // TODO Auto-generated method stub
         
       }
