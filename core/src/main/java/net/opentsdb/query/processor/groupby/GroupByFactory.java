@@ -42,7 +42,6 @@ import net.opentsdb.query.TimeSeriesQuery;
 import net.opentsdb.query.plan.QueryPlanner;
 import net.opentsdb.query.processor.BaseQueryNodeFactory;
 import net.opentsdb.query.processor.groupby.GroupBy.GBTypedPTS;
-import net.opentsdb.query.processor.groupby.GroupByNumericPTS.GroupByNumericIteratorPool;
 import net.opentsdb.query.processor.groupby.GroupByNumericPTS.GroupByNumericPTSPool;
 
 /**

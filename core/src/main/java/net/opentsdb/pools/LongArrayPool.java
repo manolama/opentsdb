@@ -7,7 +7,7 @@ import com.stumbleupon.async.Deferred;
 import net.opentsdb.core.TSDB;
 
 public class LongArrayPool implements Allocator {
-  private static final String TYPE = "LongArrayPool";
+  public static final String TYPE = "LongArrayPool";
   private static final TypeToken<?> TYPE_TOKEN = TypeToken.of(long[].class);
   private int length;
   private String id;

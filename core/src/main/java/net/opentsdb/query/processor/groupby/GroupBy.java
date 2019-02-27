@@ -34,6 +34,7 @@ import gnu.trove.map.hash.TLongObjectHashMap;
 import net.openhft.hashing.LongHashFunction;
 import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.MergedTimeSeriesId;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.ResultShard;
 import net.opentsdb.data.TimeSeries;
@@ -62,7 +63,6 @@ import net.opentsdb.query.interpolation.types.numeric.PartialNumericInterpolator
 import net.opentsdb.query.interpolation.types.numeric.PartialNumericInterpolatorContainer;
 import net.opentsdb.query.interpolation.types.numeric.PartialNumericInterpolatorContainerPool;
 import net.opentsdb.query.processor.groupby.GroupByConfig;
-import net.opentsdb.query.processor.groupby.GroupByNumericPTS.GroupByNumericPTSPool;
 import net.opentsdb.utils.Pair;
 
 /**
@@ -187,10 +187,12 @@ public class GroupBy extends AbstractQueryNode {
   class GBShard implements ResultShard {
 
     TLongObjectMap<GBNContainer> groups;
+    TLongObjectMap<MergedTimeSeriesId.Builder> ids;
     ResultShard shard;
     GBShard(ResultShard shard) {
       groups = new TLongObjectHashMap<GBNContainer>();
       this.shard = shard;
+      ids = new TLongObjectHashMap<MergedTimeSeriesId.Builder>();
     }
     
     @Override
@@ -221,7 +223,7 @@ public class GroupBy extends AbstractQueryNode {
     @Override
     public TimeSeriesId id(long hash) {
       // TODO Auto-generated method stub
-      return null;
+      return ids.get(hash).build();
     }
 
     @Override
@@ -270,13 +272,21 @@ public class GroupBy extends AbstractQueryNode {
           final long hash = LongHashFunction.xx_r39().hashChars(buf.toString());
           GBNContainer container = groups.get(hash);
           if (container == null) {
-            container = new GBNContainer();
+            container = new GBNContainer(hash);
             container.gb = GroupBy.this;
             groups.put(hash, container);
           }
           container.addSeries(series);
+          
+          MergedTimeSeriesId.Builder merging_id = ids.get(hash);
+          if (merging_id == null) {
+            merging_id = MergedTimeSeriesId.newBuilder();
+            ids.put(hash, merging_id);
+          }
+          merging_id.addSeries(id);
         }
       }
+      // TODO - byte arrays
     }
 
     void completed(ResultShard shard) {
@@ -284,69 +294,89 @@ public class GroupBy extends AbstractQueryNode {
         container.completed(shard);
       }
     }
+    
+    class GBNContainer implements CloseablePoolable {
+      TLongObjectMap<GBNumericTs> series;
+      TLongObjectMap<TLongObjectMap<PartialNumericInterpolatorContainer>> interpolators;
+      GroupBy gb;
+      Poolable poolable;
+      long hash;
+      
+      GBNContainer(long hash) {
+        series = new TLongObjectHashMap<GBNumericTs>();
+        interpolators = new TLongObjectHashMap<TLongObjectMap<PartialNumericInterpolatorContainer>>();
+        this.hash = hash;
+      }
+      
+      void completed(ResultShard shard) {
+        // This shard is done so we can run through and group the series for it.
+        gb.sendUpstream(series.get(shard.start().msEpoch()));
+        gb.completeUpstream(GBShard.this);
+      }
+      
+      void addSeries(final PartialTimeSeries series) {
+        // TODO - nanos
+        GBNumericTs gb_ts = this.series.get(series.shard().start().msEpoch());
+        PartialNumericInterpolatorContainer interpolator = null;
+        if (gb_ts == null) {
+          // claim
+          gb_ts = (GBNumericTs) gb.pipelineContext().tsdb().getRegistry().getObjectPool(TSPool.TYPE).claim().object();
+          gb_ts.reset(gb, GBShard.this, hash);
+          //System.out.println("******* RESET THE NDOE");
+          this.series.put(series.shard().start().msEpoch(), gb_ts);
+          
+          interpolator = (PartialNumericInterpolatorContainer)
+              gb.pipelineContext().tsdb().getRegistry().getObjectPool(
+                  PartialNumericInterpolatorContainerPool.TYPE).claim().object();
+          TLongObjectMap<PartialNumericInterpolatorContainer> interps = new TLongObjectHashMap<PartialNumericInterpolatorContainer>();
+          interpolators.put(series.shard().start().msEpoch(), interps);
+          interps.put(series.idHash(), interpolator);
+        } else {
+          TLongObjectMap<PartialNumericInterpolatorContainer> interps = interpolators.get(series.shard().start().msEpoch());
+          interpolator = interps.get(series.idHash());
+          if (interpolator == null) {
+            interpolator = (PartialNumericInterpolatorContainer)
+                gb.pipelineContext().tsdb().getRegistry().getObjectPool(
+                    PartialNumericInterpolatorContainerPool.TYPE).claim().object();
+            interps.put(series.idHash(), interpolator);
+          }
+          interpolator.newPartial(series);
+        }
+        gb_ts.addSeries(series);
+      }
+      
+      @Override
+      public void close() throws Exception {
+        TLongObjectIterator<GBNumericTs> series_it = series.iterator();
+        while (series_it.hasNext()) {
+          series_it.value().close();
+          series_it.advance();
+        }
+        series.clear();
+        
+        TLongObjectIterator<TLongObjectMap<PartialNumericInterpolatorContainer>> out_it = interpolators.iterator();
+        while (out_it.hasNext()) {
+          TLongObjectIterator<PartialNumericInterpolatorContainer> in_it = out_it.value().iterator();
+          while (in_it.hasNext()) {
+            in_it.value().close();
+            in_it.advance();
+          }
+          out_it.advance();
+        }
+      }
+
+      @Override
+      public void setPoolable(Poolable poolable) {
+        this.poolable = poolable;
+      }
+    }
   }
   
-  static class GBNContainer implements CloseablePoolable {
-    TLongObjectMap<GBNumericTs> series;
-    TLongObjectMap<PartialNumericInterpolatorContainer> interpolators;
-    GroupBy gb;
-    Poolable poolable;
-    
-    GBNContainer() {
-      series = new TLongObjectHashMap<GBNumericTs>();
-      interpolators = new TLongObjectHashMap<PartialNumericInterpolatorContainer>();
-    }
-    
-    void completed(ResultShard shard) {
-      // This shard is done so we can run through and group the series for it.
-      gb.sendUpstream(series.get(shard.start().msEpoch()));
-    }
-    
-    void addSeries(final PartialTimeSeries series) {
-      // TODO - nanos
-      GBNumericTs gb_ts = this.series.get(series.shard().start().msEpoch());
-      PartialNumericInterpolatorContainer interpolator = null;
-      if (gb_ts == null) {
-        // claim
-        gb_ts = (GBNumericTs) gb.pipelineContext().tsdb().getRegistry().getObjectPool(TSPool.TYPE).claim().object();
-        gb_ts.reset(gb, series.shard());
-        this.series.put(series.shard().start().msEpoch(), gb_ts);
-        
-        interpolator = (PartialNumericInterpolatorContainer)
-            gb.pipelineContext().tsdb().getRegistry().getObjectPool(
-                PartialNumericInterpolatorContainerPool.TYPE).claim().object();
-        interpolators.put(series.idHash(), interpolator);
-      } else {
-        interpolator = interpolators.get(series.idHash());
-        interpolator.newPartial(series);
-      }
-      gb_ts.addSeries(series);
-    }
-    
-    @Override
-    public void close() throws Exception {
-      TLongObjectIterator<GBNumericTs> series_it = series.iterator();
-      while (series_it.hasNext()) {
-        series_it.value().close();
-        series_it.advance();
-      }
-      series.clear();
-      
-      TLongObjectIterator<PartialNumericInterpolatorContainer> it = interpolators.iterator();
-      while (it.hasNext()) {
-        it.value().close();
-        it.advance();
-      }
-    }
-
-    @Override
-    public void setPoolable(Poolable poolable) {
-      this.poolable = poolable;
-    }
-  }
+  
   
   static interface GBTypedPTS extends PartialTimeSeries, CloseablePoolable {
     void addSeries(final PartialTimeSeries series);
+    void setSomething(final GBNumericTs node);
   }
   
   // handles one segment
@@ -356,24 +386,37 @@ public class GroupBy extends AbstractQueryNode {
     ResultShard shard;
     GroupBy gb;
     Poolable poolable;
+    GBTypedPTS pts;
+    long hash;
     
     GBNumericTs() {
       series = Maps.newHashMap();
     }
     
-    void reset(final GroupBy gb, ResultShard shard) {
+    void reset(final GroupBy gb, ResultShard shard, long hash) {
       this.gb = gb;
       this.shard = shard;
+      pts = null;
+      this.hash = hash;
     }
     
     void addSeries(final PartialTimeSeries series) {
-      GBTypedPTS pts = this.series.get(series.getType());
+      if (pts == null) {
+        pts = this.series.get(series.getType());
+      }
       if (pts == null) {
         pts = (GBTypedPTS) ((GroupByFactory) gb.factory()).getIterator(series.getType());
+        pts.setSomething(this);
         this.series.put(series.getType(), pts);
       } else {
         pts.addSeries(series);
       }
+      try {
+        series.close();
+      } catch (Exception e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      } 
     }
     
     @Override
@@ -384,8 +427,7 @@ public class GroupBy extends AbstractQueryNode {
 
     @Override
     public long idHash() {
-      // TODO Auto-generated method stub
-      return 0;
+      return hash;
     }
 
     @Override
@@ -400,8 +442,7 @@ public class GroupBy extends AbstractQueryNode {
 
     @Override
     public TypedTimeSeriesIterator iterator() {
-      // TODO Auto-generated method stub
-      return null;
+      return pts.iterator();
     }
 
     @Override

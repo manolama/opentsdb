@@ -41,6 +41,7 @@ import net.opentsdb.data.types.numeric.aggregators.NumericAggregatorFactory;
 import net.opentsdb.pools.Allocator;
 import net.opentsdb.pools.CloseablePoolable;
 import net.opentsdb.pools.DefaultObjectPoolConfig;
+import net.opentsdb.pools.LongArrayPool;
 import net.opentsdb.pools.MutableNumericValuePool;
 import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.pools.ObjectPoolConfig;
@@ -103,6 +104,20 @@ public class GroupByNumericPTS implements GBTypedPTS {
   double[] double_vals;
   List<MutableNumericValue> values; // FFS This is bad!
   
+  public void setSomething(final GBNumericTs node) {
+    this.ts = node;
+    
+    if (poolable != null) {
+      poolable.release();
+    }
+    double_vals = null;
+    poolable = node.node().pipelineContext().tsdb().getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
+    long_vals = (long[]) poolable.object();
+    
+    aggregator = node.node().pipelineContext().tsdb().getRegistry().getPlugin(NumericAggregatorFactory.class, ((GroupByConfig) node.node().config()).getAggregator()).newAggregator(false);
+    //System.out.println("          AGG: " + aggregator);
+  }
+  
   /**
    * Default ctor.
    * @param node The non-null node this iterator belongs to.
@@ -114,50 +129,6 @@ public class GroupByNumericPTS implements GBTypedPTS {
   public GroupByNumericPTS() {
     dp = new MutableNumericValue();//(MutableNumericValue) node.pipelineContext().tsdb().getRegistry().getObjectPool("MutableNumericValuePool").claim().object();
     values = Lists.newArrayList();
-//    next_ts.setMax();
-//    dp.resetNull(next_ts);
-//    NumericAggregatorFactory agg_factory = node.pipelineContext().tsdb()
-//        .getRegistry().getPlugin(NumericAggregatorFactory.class, 
-//            ((GroupByConfig) node.config()).getAggregator());
-//    if (agg_factory == null) {
-//      throw new IllegalArgumentException("No aggregator found for type: " 
-//          + ((GroupByConfig) node.config()).getAggregator());
-//    }
-//    aggregator = agg_factory.newAggregator(
-//        ((GroupByConfig) node.config()).getInfectiousNan());
-//    infectious_nan = ((GroupByConfig) node.config()).getInfectiousNan();
-//    interpolators = new QueryInterpolator[series.size()];
-//    
-//    QueryInterpolatorConfig interpolator_config = ((GroupByConfig) node.config()).interpolatorConfig(NumericType.TYPE);
-//    if (interpolator_config == null) {
-//      throw new IllegalArgumentException("No interpolator config found for type");
-//    }
-//    
-//    QueryInterpolatorFactory factory = node.pipelineContext().tsdb()
-//        .getRegistry().getPlugin(QueryInterpolatorFactory.class, 
-//            interpolator_config.getType());
-//    if (factory == null) {
-//      throw new IllegalArgumentException("No interpolator factory found for: " + 
-//          interpolator_config.getType() == null ? "Default" : 
-//            interpolator_config.getType());
-//    }
-//    
-//    for (final PartialTimeSeries source : series) {
-//      if (source == null) {
-//        throw new IllegalArgumentException("Null time series are not "
-//            + "allowed in the sources.");
-//      }
-//      interpolators[iterator_max] = (QueryInterpolator<NumericType>) 
-//          factory.newInterpolator(NumericType.TYPE, source, interpolator_config);
-//      if (interpolators[iterator_max].hasNext()) {
-//        has_next = true;
-//        if (interpolators[iterator_max].nextReal().compare(Op.LT, next_ts)) {
-//          next_ts.update(interpolators[iterator_max].nextReal());
-//        }
-//      }
-//      iterator_max++;
-//    }
-//    long_values = new long[sources.size()];
   }
 
 //  @Override
@@ -301,7 +272,14 @@ public class GroupByNumericPTS implements GBTypedPTS {
     if (values.isEmpty()) {
       // first one!
       while (iterator.hasNext()) {
-        MutableNumericValue new_value = (MutableNumericValue) ts.node().pipelineContext().tsdb().getRegistry().getObjectPool(MutableNumericValuePool.TYPE).claim().object();
+        MutableNumericValue new_value = (MutableNumericValue) ts
+            .node()
+            .pipelineContext()
+            .tsdb()
+            .getRegistry()
+            .getObjectPool(MutableNumericValuePool.TYPE)
+            .claim()
+            .object();
         new_value.reset((TimeSeriesValue<NumericType>) iterator.next());
         values.add(new_value);
       }
@@ -315,12 +293,15 @@ public class GroupByNumericPTS implements GBTypedPTS {
             // AGG!
             if (extant.value() == null && pts_value.value() != null) {
               extant.reset(pts_value);
+            } else if (extant.value() == null && pts_value.value() == null) {
+              // no-op
             } else if (pts_value.value() != null) {
               if (extant.value().isInteger() && pts_value.value().isInteger()) {
                 long_vals[0] = extant.value().longValue();
                 long_vals[1] = pts_value.value().longValue();
                 aggregator.run(long_vals, 0, 2, extant);
               } else {
+                
                 double_vals[0] = extant.value().toDouble();
                 double_vals[1] = extant.value().toDouble();
                 aggregator.run(double_vals, 0, 2, ((GroupByConfig) ts.gb.config()).getInfectiousNan(), extant);

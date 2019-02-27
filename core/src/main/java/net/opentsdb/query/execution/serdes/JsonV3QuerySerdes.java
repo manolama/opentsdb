@@ -578,7 +578,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
 
   @Override
   public Deferred<Object> serialize(PartialTimeSeries series, Span span) {
-    System.out.println("OBJ " + series);
+    System.out.println("[JSON] OBJ " + series);
     // TODO - break out
     ByteArrayOutputStream stream = new ByteArrayOutputStream();
     int count = 0;
@@ -648,7 +648,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       ShardWrapper shard = source_shards.get((int) series.shard().start().epoch());
       if (shard == null) {
         shard = new ShardWrapper();
-        //shard.shard = series.shard();
+        //shard.shard = series.shard(); // WTF? Without this commented out it won't serialize properly. hmm.
         source_shards.put((int) series.shard().start().epoch(), shard);
       }
       shard.series.put(series.idHash(), stream.toByteArray());
@@ -661,18 +661,24 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
         e.printStackTrace();
       }
       
-      if (shard.shard == null || shard.series.size() != shard.shard.timeSeriesCount()) {
+      if (shard.shard == null) {
+        System.out.println("[JSON] *********** WTF? null shard?? ");
+        return Deferred.fromResult(null);
+      } else if (shard.series.size() != shard.shard.timeSeriesCount()) {
+        System.out.println("[JSON] *********** WTF? Series NOT the right size so skipping?? " 
+            + shard.series.size() + " => " + shard.shard.timeSeriesCount() + "  CLASS: " + shard.shard.getClass());
         return Deferred.fromResult(null);
       }
+      System.out.println("[JSON] ******** WOOT! Shard series and series size matched so serializing. " + shard.series.size() + " => " + shard.shard.timeSeriesCount() + "  CLASS: " + shard.shard.getClass());
     }
-    
+    return Deferred.fromResult(null);
     // might be done with data (SINGLE MODE FOR NOW) so see if we can serialize it.
-    return serializeShard(series.shard());
+    //return serializeShard(series.shard());
   }
 
   @Override
   public Deferred<Object> complete(ResultShard shard) {
-    System.out.println(" [[[[[[[ SHARD: " + shard.start().epoch());
+    System.out.println("[JSON]  SHARD: " + shard.start().epoch() + "  TYPE: " + shard.getClass());
     synchronized (this) {
       TIntObjectMap<ShardWrapper> source_shards = shards.get(shard.sourceId());
       if (source_shards == null) {
@@ -689,9 +695,9 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
         wrapper.shard = shard;
       }
       
-      System.out.println("------ size: " + source_shards.size() + " => " + shard.totalShards());
+      System.out.println("[JSON] ------ Received shards count: " + source_shards.size() + " => expected total shard count " + shard.totalShards());
       if (source_shards.size() != shard.totalShards()) {
-        System.out.println("      not ready yet.");
+        System.out.println("[JSON]       not ready yet.");
         return Deferred.fromResult(null);
       }
       
@@ -699,8 +705,10 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       for (final TIntObjectMap<ShardWrapper> entry : shards.values()) {
         for (final ShardWrapper w : entry.valueCollection()) {
           if (wrapper.shard == null) {
+            System.out.println("[JSON]      - wrapper was null");
             return Deferred.fromResult(null);
           }
+          System.out.println("[JSON]      - wrapper series size: " + wrapper.series.size() + "  shard total series count: " + w.shard.timeSeriesCount());
           if (wrapper.series.size() != w.shard.timeSeriesCount()) {
             return Deferred.fromResult(null);
           }
@@ -708,13 +716,13 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       }
     }
     
-    System.out.println("      serdes from complete");
+    System.out.println("[JSON]       serdes from complete");
     serializePush();
     return Deferred.fromResult(true);
   }
 
   Deferred<Object> serializeShard(ResultShard shard) {
-    synchronized (this) {      
+    synchronized (this) {
       // TODO don't loop every time, maintain counter outside
       for (final TIntObjectMap<ShardWrapper> entry : shards.values()) {
         for (final ShardWrapper w : entry.valueCollection()) {
@@ -724,7 +732,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
         }
       }
     }
-    System.out.println("      serdes from shard......");
+    System.out.println("[JSON]       serdes from shard......");
     serializePush();
     return Deferred.fromResult(true);
   }
@@ -735,7 +743,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
   }
   
   void serializePush() {
-    System.out.println("********** SERDES!!!!");
+    System.out.println("[JSON] ********** SERDES!!!!");
     final JsonV2QuerySerdesOptions opts = (JsonV2QuerySerdesOptions) options;
    
     try {
@@ -745,7 +753,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       for (final Entry<String, TIntObjectMap<ShardWrapper>> entry : shards.entrySet()) {
         int[] keys = entry.getValue().keys();
         Arrays.sort(keys);
-        System.out.println("     KEYS: " + keys.length);
+        System.out.println("[JSON]      KEYS: " + keys.length);
         
         final ShardWrapper shard = entry.getValue().get(keys[0]);
         
@@ -780,6 +788,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           TimeSeriesId raw_id = shard.shard.id(id_hash);
           if (raw_id == null) {
             // MISSING! Fill
+            System.out.println("[JSON] WTF!!!!!!!!!! NO ID!!!");
             continue;
           }
           TimeSeriesStringId id = (TimeSeriesStringId) raw_id;

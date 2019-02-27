@@ -460,7 +460,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     }
     
     void pushIt() {
-      System.out.println("****** PUSHING!!!!");
+      System.out.println("[MDS] ****** PUSHING!!!!");
       final TimeStamp st = context.query().startTime().getCopy();
       st.snapToPreviousInterval(3600, ChronoUnit.SECONDS);
       TimeStamp e = context.query().endTime().getCopy();
@@ -541,7 +541,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
           
         };
         
-        System.out.println("      NEW shard: " + shard.start());
+        System.out.println("[MDS]      NEW shard: " + shard.start());
         
         for (final Entry<TimeSeriesDatumStringId, MockSpan> entry : database.entrySet()) {
           // TODO - handle filter types
@@ -569,10 +569,10 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
               
               cntr.incrementAndGet();
               
-              System.out.println("               sending up: " + id_hash);
+              System.out.println("[MDS]               sending up: " + id_hash);
               Poolable pable = ((MockDataStoreFactory) factory).objpool.claim();
               if (pable == null) {
-                throw new RuntimeException("AHWHWHWHWHWHW");
+                throw new RuntimeException("[MDS]AHWHWHWHWHWHW");
               }
               PooledPartialTimeSeries ppts = (PooledPartialTimeSeries) pable.object();
               ppts.id = id_hash;
@@ -636,13 +636,13 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
           }
           
         }
-        System.out.println("    &&&&& Sending shard: " + shard.start().epoch());
+        System.out.println("[MDS] ***** Sending shard complete: " + shard.start().epoch());
         completeUpstream(shard);
-        System.out.println(" ***** Sent shard complete: " + shard.start().epoch());
+        System.out.println("[MDS] ***** Sent shard complete: " + shard.start().epoch());
         st.add(Duration.ofSeconds(3600));
       }
       
-      System.out.println("********* Done with mock data");
+      System.out.println("[MDS] ********* Done with mock data");
     }
     
     Collection<QueryNode> upstream() {
@@ -763,7 +763,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     @Override
     public void close() throws Exception {
       poolable.release();
-      System.out.println("--------------- RELEASED!");
+      System.out.println("[MDS] --------------- RELEASED!");
     }
     
     @Override

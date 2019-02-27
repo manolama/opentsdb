@@ -7,7 +7,7 @@ import com.stumbleupon.async.Deferred;
 import net.opentsdb.core.TSDB;
 
 public class DoubleArrayPool implements Allocator {
-  private static final String TYPE = "DoubleArrayAllocator";
+  public static final String TYPE = "DoubleArrayAllocator";
   private static final TypeToken<?> TYPE_TOKEN = TypeToken.of(double[].class);
   private int length;
   private String id;
