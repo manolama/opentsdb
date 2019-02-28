@@ -59,6 +59,8 @@ import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
+import net.opentsdb.query.interpolation.PartialQueryInterpolator;
+import net.opentsdb.query.interpolation.types.numeric.NumericInterpolator;
 import net.opentsdb.query.interpolation.types.numeric.PartialNumericInterpolator;
 import net.opentsdb.query.interpolation.types.numeric.PartialNumericInterpolatorContainer;
 import net.opentsdb.query.interpolation.types.numeric.PartialNumericInterpolatorContainerPool;
@@ -340,9 +342,8 @@ public class GroupBy extends AbstractQueryNode {
                     PartialNumericInterpolatorContainerPool.TYPE).claim().object();
             interps.put(series.idHash(), interpolator);
           }
-          interpolator.newPartial(series);
         }
-        gb_ts.addSeries(series);
+        gb_ts.addSeries(series, interpolator.newPartial(series));
       }
       
       @Override
@@ -375,7 +376,7 @@ public class GroupBy extends AbstractQueryNode {
   
   
   static interface GBTypedPTS extends PartialTimeSeries, CloseablePoolable {
-    void addSeries(final PartialTimeSeries series);
+    void addSeries(final PartialTimeSeries series, PartialQueryInterpolator<NumericType> interp);
     void setSomething(final GBNumericTs node);
   }
   
@@ -400,7 +401,7 @@ public class GroupBy extends AbstractQueryNode {
       this.hash = hash;
     }
     
-    void addSeries(final PartialTimeSeries series) {
+    void addSeries(final PartialTimeSeries series, PartialQueryInterpolator<NumericType> interp) {
       if (pts == null) {
         pts = this.series.get(series.getType());
       }
@@ -409,7 +410,7 @@ public class GroupBy extends AbstractQueryNode {
         pts.setSomething(this);
         this.series.put(series.getType(), pts);
       } else {
-        pts.addSeries(series);
+        pts.addSeries(series, interp);
       }
       try {
         series.close();

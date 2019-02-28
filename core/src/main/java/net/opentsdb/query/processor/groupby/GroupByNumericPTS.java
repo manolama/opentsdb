@@ -53,6 +53,7 @@ import net.opentsdb.query.interpolation.types.numeric.PartialNumericInterpolator
 import net.opentsdb.query.interpolation.types.numeric.PartialNumericInterpolatorContainer;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
+import net.opentsdb.query.interpolation.PartialQueryInterpolator;
 import net.opentsdb.query.interpolation.QueryInterpolator;
 import net.opentsdb.query.interpolation.QueryInterpolatorConfig;
 import net.opentsdb.query.processor.groupby.GroupBy.GBNumericTs;
@@ -130,112 +131,12 @@ public class GroupByNumericPTS implements GBTypedPTS {
     dp = new MutableNumericValue();//(MutableNumericValue) node.pipelineContext().tsdb().getRegistry().getObjectPool("MutableNumericValuePool").claim().object();
     values = Lists.newArrayList();
   }
-
-//  @Override
-//  public TimeStamp timestamp() {
-//    return dp.timestamp();
-//  }
-//
-//  @Override
-//  public NumericType value() {
-//    return dp.value();
-//  }
-//
-//  @Override
-//  public TypeToken<NumericType> type() {
-//    return NumericType.TYPE;
-//  }
-//
-//  @Override
-//  public boolean hasNext() {
-//    return has_next;
-//  }
-//  
-//  @Override
-//  public TimeSeriesValue<?> next() {
-//    has_next = false;
-//    next_next_ts.setMax();
-//    value_idx = 0;
-//    boolean longs = true;
-//    boolean had_nan = false;
-//    for (int i = 0; i < iterator_max; i++) {
-//      final TimeSeriesValue<NumericType> v = interpolators[i].next(next_ts);
-//      if (v == null || v.value() == null) {
-//        // skip it
-//      } else if (!v.value().isInteger() && Double.isNaN(v.value().doubleValue())) {
-//        if (infectious_nan) {
-//          if (longs) {
-//            longs = false;
-//            shiftToDouble();
-//          }
-//          double_values[value_idx++] = Double.NaN;
-//        }
-//        had_nan = true;
-//      } else {
-//        if (v.value().isInteger() && longs) {
-//          long_values[value_idx++] = v.value().longValue();
-//        } else {
-//          if (longs) {
-//            longs = false;
-//            shiftToDouble();
-//          }
-//          double_values[value_idx++] = v.value().toDouble();
-//        }
-//      }
-//      
-//      if (interpolators[i].hasNext()) {
-//        has_next = true;
-//        if (interpolators[i].nextReal().compare(Op.LT, next_next_ts)) {
-//          next_next_ts.update(interpolators[i].nextReal());
-//        }
-//      }
-//    }
-//    
-//    // sum it
-//    if (value_idx < 1) {
-//      if (had_nan) {
-//        dp.reset(next_ts, Double.NaN);
-//      } else 
-//      if (interpolators[0].fillPolicy().fill() == null) {
-//        dp.resetNull(next_ts);
-//      } else {
-//        dp.reset(next_ts, interpolators[0].fillPolicy().fill());
-//      }
-//    } else {
-//      if (longs) {
-//        dp.resetTimestamp(next_ts);
-//        aggregator.run(long_values, 0, value_idx, dp);
-//      } else {
-//        dp.resetTimestamp(next_ts);
-//        aggregator.run(double_values, 0, value_idx, infectious_nan, dp);
-//      }
-//    }
-//
-//    next_ts.update(next_next_ts);
-//
-//    return this;
-//  }
-//  
+  
   @Override
   public TypeToken<? extends TimeSeriesDataType> getType() {
     return NumericType.TYPE;
   }
   
-  /**
-   * Helper that moves all of the longs to the doubles array.
-   */
-//  private void shiftToDouble() {
-//    if (double_values == null) {
-//      double_values = new double[interpolators.length];
-//    }
-//    if (value_idx == 0) {
-//      return;
-//    }
-//    for (int i = 0; i < value_idx; i++) {
-//      double_values[i] = (double) long_values[i];
-//    }
-//  }
-
   @Override
   public void close() throws Exception {
     dp.close();
@@ -267,7 +168,7 @@ public class GroupByNumericPTS implements GBTypedPTS {
   }
 
   @Override
-  public void addSeries(PartialTimeSeries series) {
+  public void addSeries(PartialTimeSeries series, PartialQueryInterpolator<NumericType> interp) {
     final TypedTimeSeriesIterator iterator = series.iterator();
     if (values.isEmpty()) {
       // first one!
