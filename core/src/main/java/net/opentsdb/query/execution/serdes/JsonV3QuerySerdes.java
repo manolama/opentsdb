@@ -24,6 +24,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.TreeMap;
 
 import net.opentsdb.query.processor.summarizer.Summarizer;
 import org.slf4j.Logger;
@@ -37,9 +38,12 @@ import com.stumbleupon.async.Deferred;
 import com.stumbleupon.async.DeferredGroupException;
 
 import gnu.trove.iterator.TLongIterator;
+import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.map.TIntObjectMap;
+import gnu.trove.map.TLongIntMap;
 import gnu.trove.map.TLongObjectMap;
 import gnu.trove.map.hash.TIntObjectHashMap;
+import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.TLongSet;
 import gnu.trove.set.hash.TLongHashSet;
@@ -56,6 +60,7 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.types.numeric.NumericArrayType;
+import net.opentsdb.data.types.numeric.NumericLongArrayType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.exceptions.QueryExecutionException;
@@ -91,8 +96,8 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
   private boolean initialized;
   
   /** TEMP */
-  private Map<String, TIntObjectMap<SetWrapper>> partials = Maps.newHashMap();
-  private Map<String, TLongSet> ids = Maps.newHashMap();
+  // <set ID, <ts hash, ts wrapper>>
+  private Map<String, TLongObjectMap<SeriesWrapper>> partials = Maps.newHashMap();
   
   /**
    * Default ctor.
@@ -278,6 +283,10 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
   @Override
   public void serializeComplete(final Span span) {
     try {
+      if (partials.size() > 0) {
+        serializePush();
+      }
+      
       // TODO - other bits like the query and trace data
       json.writeEndArray();
       
@@ -297,12 +306,58 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
   }
   
   @Override
-  public Deferred<Object> serialize(final PartialTimeSeries series, 
+  public Deferred<Void> serialize(final PartialTimeSeries series, 
                                     final Span span) {
     // TODO - break out
     ByteArrayOutputStream stream = new ByteArrayOutputStream();
     int count = 0;
     try {
+      if (true) {
+        long[] values = (long[]) series.data();
+        int idx = 0;
+        
+        while (true) {
+          if ((values[idx] & NumericLongArrayType.TERIMNAL_FLAG) != 0) {
+            // terminal
+            break;
+          }
+          
+          long ts = 0;
+          if((values[idx] & NumericLongArrayType.MILLISECOND_FLAG) != 0) {
+            ts = (values[idx] & NumericLongArrayType.TIMESTAMP_MASK) / 1000;
+          } else {
+            ts = values[idx] & NumericLongArrayType.TIMESTAMP_MASK;
+          }
+          if (ts < context.query().startTime().epoch()) {
+            idx += 2;
+            continue;
+          }
+          if (ts > context.query().endTime().epoch()) {
+            break;
+          }
+          
+          if (count > 0) {
+            stream.write(',');
+          }
+          stream.write('"');
+          stream.write(Long.toString(ts).getBytes());
+          
+          stream.write('"');
+          stream.write(':');
+          if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
+            double d = Double.longBitsToDouble(values[idx + 1]);
+            if (Double.isNaN(d)) {
+              stream.write("NaN".getBytes());
+            } else {
+              stream.write(Double.toString(d).getBytes());
+            }
+          } else {
+            stream.write(Long.toString(values[idx + 1]).getBytes());
+          }
+          idx += 2;
+          count++;
+        }
+      } else {
       // simple serdes for a json fragment.
       final TypedTimeSeriesIterator iterator = series.iterator();
       while (iterator.hasNext()) {
@@ -333,34 +388,52 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
 //        // TODO Auto-generated catch block
 //        e.printStackTrace();
 //      }
+      }
     } catch (IOException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
+    }
+    System.out.println("SERDESING " + series.idHash() + "  " + series.set().start().epoch() + "  Count: " + count);
+    if (count < 1) {
+      return Deferred.fromResult(null);
     }
     
     synchronized (this) {
       final String set_id = series.set().node().config().getId() + ":" 
           + series.set().dataSource();
-      TLongSet group_ids = ids.get(set_id);
-      if (group_ids == null) {
-        group_ids = new TLongHashSet();
-        ids.put(set_id, group_ids);
-      }
-      group_ids.add(series.idHash());
+//      TLongSet group_ids = ids.get(set_id);
+//      if (group_ids == null) {
+//        group_ids = new TLongHashSet();
+//        ids.put(set_id, group_ids);
+//      }
+//      group_ids.add(series.idHash());
       
-      TIntObjectMap<SetWrapper> source_shards = partials.get(set_id);
+      TLongObjectMap<SeriesWrapper> source_shards = partials.get(set_id);
       if (source_shards == null) {
-        source_shards = new TIntObjectHashMap<SetWrapper>();
+        source_shards = new TLongObjectHashMap<SeriesWrapper>();
         partials.put(set_id, source_shards);
       }
       
-      SetWrapper set = source_shards.get((int) series.set().start().epoch());
+      SeriesWrapper set = source_shards.get(series.idHash());
       if (set == null) {
-        set = new SetWrapper();
-        source_shards.put((int) series.set().start().epoch(), set);
+        set = new SeriesWrapper();
+        set.id_hash = series.idHash();
+        set.set = series.set();
+        source_shards.put(series.idHash(), set);
       }
-      set.series.put(series.idHash(), stream.toByteArray());
+      //set.series.put(series.idHash(), stream.toByteArray());
+      set.series.put(series.set().start().epoch(), stream.toByteArray());
 
+      
+//      SetWrapper w = counts.get(set_id);
+//      if (w == null) {
+//        w = new SetWrapper();
+//        w.set = series.set();
+//        counts.put(set_id, w);
+//      }
+//      int c = w.counts.get(series.set().start().epoch());
+//      w.counts.put(series.set().start().epoch(), c + 1);
+//      
       try {
         series.close();
       } catch (Exception e) {
@@ -370,51 +443,15 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       
       if (set.set == null) {
         return Deferred.fromResult(null);
-      } else if (set.series.size() != set.set.timeSeriesCount()) {
-        return Deferred.fromResult(null);
-      }    }
+      }   
+    }
     return Deferred.fromResult(null);
   }
   
   @Override
-  public Deferred<Object> complete(final PartialTimeSeriesSet set, 
-                                   final Span span) {
-    final String set_id = set.node().config().getId() + ":" + set.dataSource();
-    synchronized (this) {
-      TIntObjectMap<SetWrapper> source_shards = partials.get(set_id);
-      if (source_shards == null) {
-        source_shards = new TIntObjectHashMap<SetWrapper>();
-        partials.put(set_id, source_shards);
-      }
-      
-      SetWrapper wrapper = source_shards.get((int) set.start().epoch());
-      if (wrapper == null) {
-        wrapper = new SetWrapper();
-        wrapper.set = set;
-        source_shards.put((int) set.start().epoch(), wrapper);
-      } else {
-        wrapper.set = set;
-      }
-      
-      if (source_shards.size() != set.totalSets()) {
-        return Deferred.fromResult(null);
-      }
-      
-      // TODO don't loop every time, maintain counter outside
-      for (final TIntObjectMap<SetWrapper> entry : partials.values()) {
-        for (final SetWrapper w : entry.valueCollection()) {
-          if (wrapper.set == null) {
-            return Deferred.fromResult(null);
-          }
-           if (wrapper.series.size() != w.set.timeSeriesCount()) {
-            return Deferred.fromResult(null);
-          }
-        }
-      }
-    }
-    
-    serializePush();
-    return Deferred.fromResult(true);
+  public Deferred<Void> complete(final PartialTimeSeriesSet set, 
+                                 final Span span) {
+    return Deferred.fromResult(null);
   }
   
   @Override
@@ -878,27 +915,49 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
   /**
    * Scratch class used to collect the serialized time series.
    */
+  class SeriesWrapper {
+    public PartialTimeSeriesSet set;
+    public long id_hash;
+    public TreeMap<Long, byte[]> series = new TreeMap<Long, byte[]>();
+    //public byte[] data;
+  }
+  
   class SetWrapper {
     public PartialTimeSeriesSet set;
-    public TLongObjectMap<byte[]> series = new TLongObjectHashMap<byte[]>();
+    public boolean closed;
+    public TLongIntMap counts = new TLongIntHashMap();
   }
   
   void serializePush() {
     final JsonV2QuerySerdesOptions opts = (JsonV2QuerySerdesOptions) options;
-   
+   System.out.println("------------------ PUSH-----------------");
     try {
       json.writeStartObject();
       json.writeArrayFieldStart("results");
       
-      for (final Entry<String, TIntObjectMap<SetWrapper>> entry : partials.entrySet()) {
-        int[] keys = entry.getValue().keys();
-        Arrays.sort(keys);
-        
-        final SetWrapper shard = entry.getValue().get(keys[0]);
-        
-        json.writeStartObject();
-        json.writeStringField("source", shard.set.node().config().getId() + ":" 
-            + shard.set.dataSource());
+      String src_id = null;
+      for (final Entry<String, TLongObjectMap<SeriesWrapper>> entry : partials.entrySet()) {
+        TLongObjectIterator<SeriesWrapper> sit = entry.getValue().iterator();
+        while (sit.hasNext()) {
+          sit.advance();
+          SeriesWrapper shard = sit.value();
+          
+          final String source_id = shard.set.node().config().getId() + ":" 
+              + shard.set.dataSource();
+          if (src_id == null) {
+            src_id = source_id;
+            json.writeStartObject();
+            json.writeStringField("source", src_id);
+            json.writeArrayFieldStart("data");
+          } else if (!(src_id.equals(source_id))) {
+            src_id = source_id;
+            json.writeEndArray();
+            json.writeEndObject();
+            json.writeStartObject();
+            json.writeStringField("source", src_id);
+            json.writeArrayFieldStart("data");
+          }
+          
         // TODO - array of data sources
         
         // serdes time spec if present
@@ -917,15 +976,15 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
 //          json.writeEndObject();
 //        }
         
-        json.writeArrayFieldStart("data");
 
-        TLongSet group_ids = ids.get(entry.getKey());
-        final TLongIterator iterator = group_ids.iterator();
-        while (iterator.hasNext()) {
-          final long id_hash = iterator.next();
+
+//        TLongSet group_ids = ids.get(entry.getKey());
+//        final TLongIterator iterator = group_ids.iterator();
+//        while (iterator.hasNext()) {
+//          final long id_hash = iterator.next();
           // serialize the ID
           json.writeStartObject();
-          TimeSeriesId raw_id = shard.set.id(id_hash);
+          TimeSeriesId raw_id = shard.set.id(shard.id_hash);
           if (raw_id == null) {
             // MISSING! Fill
             continue;
@@ -945,21 +1004,21 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           
           json.writeObjectFieldStart("NumericType");
           int count = 0;
-          for (final int idx : keys) {
-            final SetWrapper w = entry.getValue().get(idx);
-            byte[] s = w.series.get(id_hash);
-            if (s == null) {
+          for (Entry<Long, byte[]> e : shard.series.entrySet()) {
+            //byte[] s = w.series.get(id_hash);
+            if (e.getValue() == null) {
               // TODO - fill!!
             } else {
               if (count++ > 0) {
                 json.writeRaw(",");
               }
-              json.writeRaw(new String(s));
+              json.writeRaw(new String(e.getValue()));
             }
           }
           json.writeEndObject();
           json.writeEndObject();
         }
+        
         json.writeEndArray();
         json.writeEndObject();
       }

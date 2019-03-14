@@ -35,4 +35,12 @@ public interface PartialTimeSeries extends AutoCloseable {
   /** @return The iterator to use for accessing data in this series. */
   public TypedTimeSeriesIterator iterator();
   
+  /** @return The raw data. May be null. Used for efficiency. 
+   * TODO - more info.
+   * The idea here is that the {@link #getType()} will tell us what this data
+   * is then we can decode it properly. This could be an array of timestamps and
+   * values or just an array of values if the set has a time spec for downsampling.
+   * Or it could be a collection of annotations, etc. */
+  public Object data();
+  
 }

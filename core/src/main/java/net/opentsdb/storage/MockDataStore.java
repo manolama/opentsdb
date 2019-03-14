@@ -50,6 +50,7 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
+import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesSharedTagsAndTimeData;
 import net.opentsdb.data.TimeSeriesDataSource;
@@ -66,11 +67,14 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.iterators.SlicedTimeSeries;
 import net.opentsdb.data.types.numeric.MutableNumericValue;
+import net.opentsdb.data.types.numeric.NumericLongArrayType;
 import net.opentsdb.data.types.numeric.NumericMillisecondShard;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.pools.BaseObjectPoolAllocator;
 import net.opentsdb.pools.CloseablePooledObject;
 import net.opentsdb.pools.DefaultObjectPoolConfig;
+import net.opentsdb.pools.LongArrayPool;
+import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.pools.ObjectPoolConfig;
 import net.opentsdb.pools.PooledObject;
 import net.opentsdb.query.AbstractQueryNode;
@@ -389,6 +393,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     private AtomicBoolean completed = new AtomicBoolean();
     private BaseTimeSeriesDataSourceConfig config;
     private final net.opentsdb.stats.Span trace_span;
+    private final ObjectPool pool;
     
     public LocalNode(final QueryPipelineContext context,
                      final BaseTimeSeriesDataSourceConfig config) {
@@ -402,6 +407,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       } else {
         trace_span = null;
       }
+      pool = tsdb.getRegistry().getObjectPool(PooledMockPTSPool.TYPE);
     }
     
     @Override
@@ -498,108 +504,144 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       }
       
       Map<Long, TimeSeriesId> ids = Maps.newHashMap();
+      Map<Long, PTSSet> sets = Maps.newHashMap();
       
-      while (st.compare(Op.LT, context.query().endTime())) {
-        AtomicInteger cntr = new AtomicInteger();
-        final PartialTimeSeriesSet set = new PartialTimeSeriesSet() {
-          final TimeStamp start = st.getCopy();
-          TimeStamp end;
-          
-          @Override
-          public QueryNode node() {
-            return LocalNode.this;
-          }
-
-          @Override
-          public TimeStamp start() {
-            return start;
-          }
-
-          @Override
-          public TimeStamp end() {
-            if (end == null) {
-              synchronized(this) {
-                if (end == null) {
-                  end = start.getCopy();
-                  end.add(Duration.ofSeconds(3600));
-                }
-              }
-            }
-            return end;
-          }
-
-          @Override
-          public TimeSeriesId id(final long hash) {
-            return ids.get(hash);
-          }
-
-          @Override
-          public int totalSets() {
-            return total;
-          }
-
-          @Override
-          public String dataSource() {
-            return config.getId();
-          }
-
-          @Override
-          public int timeSeriesCount() {
-            return cntr.get();
-          }
-          
-          @Override
-          public void close() {
-            // TODO Auto-generated method stub
-            
-          }
-          
-          @Override
-          public TimeSpecification timeSpecification() {
-            // TODO Auto-generated method stub
-            return null;
-          }
-          
-        };
+      for (final Entry<TimeSeriesDatumStringId, MockSpan> entry : database.entrySet()) {
+        // TODO - handle filter types
+        if (!config.getMetric().matches(entry.getKey().metric())) {
+          continue;
+        }
         
-        for (final Entry<TimeSeriesDatumStringId, MockSpan> entry : database.entrySet()) {
-          // TODO - handle filter types
-          if (!config.getMetric().matches(entry.getKey().metric())) {
+        if (filter != null) {
+          if (!FilterUtils.matchesTags(filter, entry.getKey().tags(), Sets.newHashSet())) {
             continue;
           }
-          
-          if (filter != null) {
-            if (!FilterUtils.matchesTags(filter, entry.getKey().tags(), Sets.newHashSet())) {
-              continue;
-            }
-          }
-          final long epoch = st.msEpoch();
-          
-          // matched the filters
-          for (final MockRow row : entry.getValue().rows) {
-            if (row.base_timestamp == epoch) {
-              final long id_hash = row.id().buildHashCode();
-              ids.putIfAbsent(id_hash, row.id());
-              
-              cntr.incrementAndGet();
-              
-              PooledMockPTS ppts = (PooledMockPTS) tsdb.getRegistry()
-                  .getObjectPool(PooledMockPTSPool.TYPE).claim().object();
-              ppts.id_hash = id_hash;
-              ppts.set = set;
-              ppts.row = row;
-              
-              sendUpstream(ppts);
-            }
-          }
-          
         }
-        completeUpstream(set);
-        st.add(Duration.ofSeconds(3600));
+        //final long epoch = st.msEpoch();
+        System.out.println(" Matched.................");
+        // matched the filters
+        for (final MockRow row : entry.getValue().rows) {
+          if (row.base_timestamp < st.msEpoch()) {
+            continue;
+          }
+          if (row.base_timestamp >= e.msEpoch()) {
+            break;
+          }
+        
+          // matched!
+          PTSSet set = sets.get(row.base_timestamp);
+          if (set == null) {
+            set = new PTSSet(total, row.base_timestamp, ids);
+            sets.put(row.base_timestamp, set);
+          }
+          set.count++;
+          
+          final long id_hash = row.id().buildHashCode();
+          ids.putIfAbsent(id_hash, row.id());
+          
+          PooledMockPTS ppts = (PooledMockPTS) pool.claim().object();
+          ppts.id_hash = id_hash;
+          ppts.set = set;
+          ppts.row = row;
+          ppts.long_array_pool = tsdb.getRegistry().getObjectPool(
+              LongArrayPool.TYPE);
+          if (thread_pool != null) {
+            thread_pool.submit(new Runnable() {
+              @Override
+              public void run() {
+                System.out.println("SEND UP....");
+                sendUpstream(ppts);
+              }
+            });
+          } else {
+            sendUpstream(ppts);
+          }
+        }
+      }
+        
+      for (final PTSSet set : sets.values()) {
+        if (thread_pool != null) {
+          thread_pool.submit(new Runnable() {
+            @Override
+            public void run() {
+              completeUpstream(set);
+            }
+          });
+        } else {
+          completeUpstream(set);
+        }
+      }
+    }
+    
+    class PTSSet implements PartialTimeSeriesSet {
+      int count = 0;
+      final TimeStamp start;
+      TimeStamp end;
+      Map<Long, TimeSeriesId> ids;
+      final int total;
+      
+      PTSSet(final int total, final long start, final Map<Long, TimeSeriesId> ids) {
+        this.total = total;
+        this.start = new SecondTimeStamp(start);
+        this.ids = ids;
+      }
+      
+      @Override
+      public void close() throws Exception {
+        // TODO Auto-generated method stub
+        
+      }
+
+      @Override
+      public int totalSets() {
+        return total;
+      }
+
+      @Override
+      public QueryNode node() {
+        return LocalNode.this;
+      }
+
+      @Override
+      public String dataSource() {
+        return config.getId();
+      }
+
+      @Override
+      public TimeStamp start() {
+        return start;
+      }
+
+      @Override
+      public TimeStamp end() {
+        if (end == null) {
+          synchronized(this) {
+            if (end == null) {
+              end = start.getCopy();
+              end.add(Duration.ofSeconds(3600));
+            }
+          }
+        }
+        return end;
+      }
+
+      @Override
+      public TimeSeriesId id(long hash) {
+        return ids.get(hash);
+      }
+
+      @Override
+      public int timeSeriesCount() {
+        return count;
+      }
+
+      @Override
+      public TimeSpecification timeSpecification() {
+        // TODO Auto-generated method stub
+        return null;
       }
       
     }
-    
   }
   
   class LocalResult implements QueryResult, Runnable {
@@ -1015,6 +1057,13 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     long id_hash;
     PartialTimeSeriesSet set;
     MockRow row;
+    AtomicInteger counter;
+    PooledObject pooled_array;
+    ObjectPool long_array_pool;
+    
+    public PooledMockPTS() {
+      counter = new AtomicInteger();
+    }
     
     @Override
     public void close() throws Exception {
@@ -1028,8 +1077,14 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
 
     @Override
     public void release() {
-      if (pooled_object != null) {
-        pooled_object.release();
+      if (counter.decrementAndGet() == 0) {
+        if (pooled_array != null) {
+          pooled_array.release();
+          pooled_array = null;
+        }
+        if (pooled_object != null) {
+          pooled_object.release();
+        }
       }
     }
 
@@ -1056,6 +1111,55 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     @Override
     public TypedTimeSeriesIterator iterator() {
       return row.iterator(NumericType.TYPE).get();
+    }
+    
+    @Override
+    public Object data() {
+      counter.incrementAndGet();
+      if (pooled_array == null) {
+        synchronized (this) {
+          if (pooled_array == null) {
+            // TODO - store values in this format
+            pooled_array = long_array_pool.claim();
+            long[] array = (long[]) pooled_array.object();
+            int idx = 0;
+            int values = 0;
+            Iterator<TimeSeriesValue<?>> it = row.iterator(NumericType.TYPE).get();
+            while (it.hasNext()) {
+              TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+              if (v.value() == null) {
+                continue;
+              }
+              
+              // TODO length check
+              if (idx + 2 >= array.length) {
+                LOG.error("TODO - need to grow these!");
+                throw new UnsupportedOperationException("TODO - mock data "
+                    + "store needs to be able to grow the arrays.");
+              }
+              array[idx] = v.timestamp().msEpoch();
+              // TODO - maybe a check here to make sure the header isn't set!
+              array[idx] |= NumericLongArrayType.MILLISECOND_FLAG;
+              if (v.value().isInteger()) {
+                idx++;
+                array[idx++] = v.value().longValue();
+              } else {
+                array[idx++] |= NumericLongArrayType.FLOAT_FLAG;
+                array[idx++] = Double.doubleToRawLongBits(v.value().doubleValue());
+              }
+              values++;
+            }
+            
+            if (idx + 1 >= array.length) {
+              LOG.error("TODO - need to grow these!");
+              throw new UnsupportedOperationException("TODO - mock data "
+                  + "store needs to be able to grow the arrays.");
+            }
+            array[idx] = NumericLongArrayType.TERIMNAL_FLAG;
+          }
+        }
+      }
+      return pooled_array.object();
     }
     
   }

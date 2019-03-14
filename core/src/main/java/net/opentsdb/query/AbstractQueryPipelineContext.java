@@ -31,6 +31,9 @@ import com.google.common.graph.Traverser;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
+import gnu.trove.map.TLongByteMap;
+import gnu.trove.map.TLongObjectMap;
+import gnu.trove.map.hash.TLongObjectHashMap;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
@@ -79,6 +82,10 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   /** Used to iterate over sources when in a client streaming mode. */
   protected int source_idx = 0;
   
+  // TODO - nest per sink... :(
+  Map<String, TLongObjectMap<Foo>> pts;
+  AtomicInteger all_done;
+  
   /**
    * Default ctor.
    * @param context The user's query context.
@@ -92,6 +99,8 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     plan = new DefaultQueryPlanner(this, (QueryNode) this);
     sinks = Lists.newArrayListWithExpectedSize(1);
     countdowns = Maps.newHashMap();
+    pts = Maps.newConcurrentMap();
+    all_done = new AtomicInteger();
   }
   
   @Override
@@ -324,7 +333,39 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   public void onComplete(final PartialTimeSeriesSet set) {
     for (final QuerySink sink : sinks) {
       try {
-        sink.onComplete(set);
+        sink.onComplete(set).addCallback(new Callback<Void, Void>() {
+
+          @Override
+          public Void call(Void arg) throws Exception {
+            final String set_id = set.node().config().getId() + ":" 
+                + set.dataSource();
+            
+            TLongObjectMap<Foo> sets = pts.get(set_id);
+            if (sets == null) {
+              sets = new TLongObjectHashMap<Foo>();
+              TLongObjectMap<Foo> extant = pts.putIfAbsent(set_id, sets);
+              if (extant != null) {
+                sets = extant;
+              }
+            }
+            
+            Foo foo = sets.get(set.start().epoch());
+            if (foo == null) {
+              foo = new Foo();
+              Foo extant = sets.putIfAbsent(set.start().epoch(), foo);
+              if (extant != null) {
+                foo = extant;
+              }
+            }
+            
+            synchronized (foo) {
+              foo.expected = set.timeSeriesCount();
+            }
+            checkComplete(set, sets, foo);
+            return null;
+          }
+          
+        });
       } catch (Throwable e) {
         LOG.error("Exception thrown passing results to sink: " + sink, e);
         // TODO - should we kill the query here?
@@ -349,7 +390,36 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   public void onNext(final PartialTimeSeries series) {
     for (final QuerySink sink : sinks) {
       try {
-        sink.onNext(series);
+        sink.onNext(series).addCallback(new Callback<Void, Void>() {
+
+          @Override
+          public Void call(final Void arg) throws Exception {
+            final String set_id = series.set().node().config().getId() + ":" 
+                + series.set().dataSource();
+            TLongObjectMap<Foo> sets = pts.get(set_id);
+            if (sets == null) {
+              sets = new TLongObjectHashMap<Foo>();
+              TLongObjectMap<Foo> extant = pts.putIfAbsent(set_id, sets);
+              if (extant != null) {
+                sets = extant;
+              }
+            }
+            
+            Foo foo = sets.get(series.set().start().epoch());
+            if (foo == null) {
+              foo = new Foo();
+              Foo extant = sets.putIfAbsent(series.set().start().epoch(), foo);
+              if (extant != null) {
+                foo = extant;
+              }
+            }
+            
+            foo.incrementCount();
+            checkComplete(series.set(), sets, foo);
+            return null;
+          }
+          
+        });
       } catch (Throwable e) {
         LOG.error("Exception thrown passing results to sink: " + sink, e);
         // TODO - should we kill the query here?
@@ -487,4 +557,58 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     }
   }
   
+  class Foo {
+    AtomicInteger expected = new AtomicInteger(-1);
+    AtomicInteger count = new AtomicInteger();
+    
+    void incrementCount(final PartialTimeSeriesSet pts) {
+      int cnt = count.incrementAndGet();
+      if (expected > 0 && expected == cnt) {
+        checkComplete(pts, null, this);
+      }
+    }
+    
+    void markComplete(final PartialTimeSeriesSet pts) {
+      expected = pts.timeSeriesCount();
+      if (expected == count.get()) {
+        checkComplete(pts, null, this);
+      }
+    }
+  }
+  
+  // TODO - soooooo much optimization to do. Stupid to run through every entry each time even
+  // with lots of short circuits.
+  void checkComplete(final PartialTimeSeriesSet pts, TLongObjectMap<Foo> sets, final Foo foo) {
+//    synchronized (foo) {
+//      if (foo.expected < 0) {
+//        System.out.println("*** Not expected.");
+//        return;
+//      }
+//      
+//      if (foo.count != pts.timeSeriesCount()) {
+//        System.out.println("*** Undercount.");
+//        return;
+//      }
+//    }
+    
+    // this set is done so check all the sets for this source
+    synchronized (this) {
+      if (sets.size() != pts.totalSets()) {
+        System.out.println("*** Missing sets.");
+        return;
+      }
+    }
+    
+    // all sets for this source are done. Now check the other sources
+    if (all_done.incrementAndGet() != plan.serializationSources().size()) {
+      System.out.println("*** Not all done.");
+      // Nope.
+      return;
+    }
+    
+    // all done!!!
+    for (final QuerySink sink : sinks) {
+      sink.onComplete();
+    }
+  }
 }

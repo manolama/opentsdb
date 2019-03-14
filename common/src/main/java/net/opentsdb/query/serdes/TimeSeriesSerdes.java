@@ -48,8 +48,8 @@ public interface TimeSeriesSerdes {
    * @return A non-null deferred resolving to a null on successful
    * serialization or an exception if there was a failure.
    */
-  public Deferred<Object> serialize(final PartialTimeSeries series, 
-                                    final Span span);
+  public Deferred<Void> serialize(final PartialTimeSeries series, 
+                                  final Span span);
   
   /**
    * Called when the set has finished fetching data and the total number of
@@ -60,8 +60,8 @@ public interface TimeSeriesSerdes {
    * @return A non-null deferred resolving to a null on successful
    * serialization or an exception if there was a failure.
    */
-  public Deferred<Object> complete(final PartialTimeSeriesSet set, 
-                                   final Span span);
+  public Deferred<Void> complete(final PartialTimeSeriesSet set, 
+                                 final Span span);
   
   /**
    * Called when serialization is complete so the implementation can 

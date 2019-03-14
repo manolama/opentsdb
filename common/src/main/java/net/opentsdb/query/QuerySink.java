@@ -14,6 +14,8 @@
 // limitations under the License.
 package net.opentsdb.query;
 
+import com.stumbleupon.async.Deferred;
+
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
 
@@ -60,8 +62,9 @@ public interface QuerySink {
    * may still be in-flight up the pipeline.
    * 
    * @param set A non-null set marking that all data has been found.
+   * @return A non-null deferred that resolves when the sink is finished.
    */
-  public void onComplete(final PartialTimeSeriesSet set);
+  public Deferred<Void> onComplete(final PartialTimeSeriesSet set);
   
   /**
    * Called by the pipeline when a new query result is available. The result is
@@ -77,8 +80,10 @@ public interface QuerySink {
    * Called by the downstream nodes when a new partial time series result is
    * ready.
    * @param next A non-null result (that may be empty).
+   * @return A non-null deferred that resolves when the sink is finished with 
+   * the series.
    */
-  public void onNext(final PartialTimeSeries next);
+  public Deferred<Void> onNext(final PartialTimeSeries next);
   
   /**
    * Called by the pipeline when an exception occurred at any point in processing.
