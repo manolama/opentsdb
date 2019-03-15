@@ -389,7 +389,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
                 sets = extant;
               }
             }
-            System.out.println("                 MAP: " + System.identityHashCode(sets));
+            //System.out.println("                 MAP: " + System.identityHashCode(sets));
             
             AtomicInteger foo = sets.get(series.set().start().epoch());
             if (foo == null) {
@@ -400,7 +400,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
                 foo = extant;
               }
             }
-            System.out.println("                 FOO: " + System.identityHashCode(foo));
+            //System.out.println("                 FOO: " + System.identityHashCode(foo));
             
             int cnt = foo.incrementAndGet();
             System.out.println("[[[[[[[[ ABSTRACT ]]]]]]]  CMPL: " + series.set().complete() + "   CNT: " + cnt + "  EXP: " + series.set().timeSeriesCount() + "  TS: " + series.set().start().epoch());

@@ -567,10 +567,11 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
           
           if (row.base_timestamp == ts) {
             PooledMockPTS ppts = (PooledMockPTS) pool.claim().object();
-            ppts.id_hash = its.getKey();
-            ppts.set = set;
+            System.out.println("   ppts: " + System.identityHashCode(ppts));
+//            ppts.id_hash = its.getKey();
+//            ppts.set = set;
             //ppts.row = row;
-            ppts.setData(row, array_pool);
+            ppts.setData(row, array_pool, its.getKey(), set);
             
             //set.count.incrementAndGet();
             
@@ -1120,12 +1121,11 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
 
   public static class PooledMockPTS implements PartialTimeSeries, 
       CloseablePooledObject {
-    PooledObject pooled_object;
-    long id_hash;
-    PartialTimeSeriesSet set;
-    //MockRow row;
-    AtomicInteger counter;
-    PooledObject pooled_array;
+    private PooledObject pooled_object;
+    private long id_hash;
+    private PartialTimeSeriesSet set;
+    private AtomicInteger counter;
+    private PooledObject pooled_array;
     
     public PooledMockPTS() {
       counter = new AtomicInteger();
@@ -1143,26 +1143,33 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
 
     @Override
     public void release() {
-      if (counter.decrementAndGet() == 0) {
-        System.out.println(" ---------- RELEASING.......");
-        if (pooled_array != null) {
-          pooled_array.release();
-          pooled_array = null;
+      try {
+        if (counter.decrementAndGet() == 0) {
+          System.out.println(" ---------- RELEASING....... ppts: " + System.identityHashCode(this));
+          if (pooled_array != null) {
+            pooled_array.release();
+            pooled_array = null;
+          }
+          if (pooled_object != null) {
+            pooled_object.release();
+            pooled_object = null;
+          }
+        } else {
+          System.out.println("@@@@@@@@@@@@@@ NOT READY FOR RELASE!");
         }
-        if (pooled_object != null) {
-          pooled_object.release();
-          pooled_object = null;
-        }
+      } catch (Throwable t) {
+        t.printStackTrace();
       }
     }
     
-    void setData(final MockRow row, final ObjectPool long_array_pool) {
+    void setData(final MockRow row, final ObjectPool long_array_pool, long id_hash, PartialTimeSeriesSet set) {
       if (pooled_array != null) {
         System.out.println("&&&&&& WTF???  The array wasn't nulled out!?!?");
         throw new IllegalStateException("WTF!!!!!!!!!!!!!!!!");
         //pooled_array.release();
       }
-      
+      this.id_hash = id_hash;
+      this.set = set;
       // TODO - store values in this format
       pooled_array = long_array_pool.claim();
       if (pooled_array == null) {
@@ -1206,7 +1213,14 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
 
     @Override
     public void setPooledObject(final PooledObject pooled_object) {
+      if (this.pooled_object != null) {
+        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! HASN'T BEEN REST!");
+      }
+      if (this.pooled_array != null) {
+        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! HASN'T BEEN REST  array!!!!");
+      }
       this.pooled_object = pooled_object;
+      System.out.println("                   new ppts allocation from pool");
     }
 
     @Override
