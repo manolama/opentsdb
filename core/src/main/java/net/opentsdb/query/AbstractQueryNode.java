@@ -22,7 +22,6 @@ import org.slf4j.LoggerFactory;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.data.PartialTimeSeries;
-import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.exceptions.QueryUpstreamException;
 import net.opentsdb.stats.Span;
@@ -113,11 +112,6 @@ public abstract class AbstractQueryNode implements QueryNode {
   }
   
   @Override
-  public void onComplete(final QueryNode node) {
-    throw new IllegalStateException("The node has not implemented this yet");
-  }
-  
-  @Override
   public void onNext(final PartialTimeSeries next) {
     throw new IllegalStateException("The node has not implemented this yet");
   }
@@ -181,7 +175,6 @@ public abstract class AbstractQueryNode implements QueryNode {
   protected void sendUpstream(final PartialTimeSeries series) 
       throws QueryUpstreamException {
     if (series == null) {
-      System.out.println("WTF????????????????????????????????????????????????????????????????????????????????");
       throw new QueryUpstreamException("Series cannot be null.");
     }
     
@@ -189,7 +182,6 @@ public abstract class AbstractQueryNode implements QueryNode {
       try {
         node.onNext(series);
       } catch (Throwable t) {
-        t.printStackTrace();
         throw new QueryUpstreamException("Failed to send series "
             + "upstream to node: " + node, t);
       }
@@ -231,21 +223,6 @@ public abstract class AbstractQueryNode implements QueryNode {
     for (final QueryNode node : upstream) {
       try {
         node.onComplete(this, final_sequence, total_sequences);
-      } catch (Exception e) {
-        LOG.warn("Failed to mark upstream node complete: " + node, e);
-      }
-    }
-  }
-  
-  
-  protected void completeUpstream(final QueryNode qn) {
-    if (qn == null) {
-      throw new QueryUpstreamException("Node cannot be null.");
-    }
-    
-    for (final QueryNode node : upstream) {
-      try {
-        node.onComplete(qn);
       } catch (Exception e) {
         LOG.warn("Failed to mark upstream node complete: " + node, e);
       }

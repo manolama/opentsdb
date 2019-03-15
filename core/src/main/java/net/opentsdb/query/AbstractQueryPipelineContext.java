@@ -335,20 +335,6 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   }
   
   @Override
-  public void onComplete(final QueryNode downstream) {
-//    finished_nodes++;
-//    System.out.println("[[[[[[[[ ABSTRACT ]]]]]]] FN: " + finished_nodes + "  TF: " + total_finished);
-//    if (finished_nodes == total_finished) {
-//      if (total_finished == plan.serializationSources().size()) {
-//        System.out.println("[[[[[[[[ ABSTRACT ]]]]]]] Finished!");
-//        for (final QuerySink sink : sinks) {
-//          sink.onComplete();
-//        }
-//      }
-//    }
-  }
-  
-  @Override
   public void onNext(final QueryResult next) {
     final ResultWrapper wrapped = new ResultWrapper(next);
     for (final QuerySink sink : sinks) {

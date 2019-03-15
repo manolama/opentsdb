@@ -17,7 +17,6 @@ package net.opentsdb.query;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.data.PartialTimeSeries;
-import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.stats.Span;
 
 /**
@@ -66,12 +65,6 @@ public interface QueryNode {
   public void onComplete(final QueryNode downstream, 
                          final long final_sequence,
                          final long total_sequences);
-  
-  /**
-   * Called by downstream nodes when the downstream node has finished it's query.
-   * @param downstream The non-null downstream node calling in.
-   */
-  public void onComplete(final QueryNode node);
   
   /**
    * Called by the downstream nodes when a new result is ready.
