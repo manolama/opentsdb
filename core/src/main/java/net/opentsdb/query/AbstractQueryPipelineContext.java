@@ -84,8 +84,8 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   protected int source_idx = 0;
   
   // TODO - nest per sink... :(
-  Map<String, TLongObjectMap<Foo>> pts;
-  Map<String, Integer> finished_sources;
+  Map<String, TLongObjectMap<AtomicInteger>> pts;
+  Map<String, AtomicInteger> finished_sources;
   AtomicInteger total_finished;
   //volatile int finished_nodes;
   
@@ -103,7 +103,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     sinks = Lists.newArrayListWithExpectedSize(1);
     countdowns = Maps.newHashMap();
     pts = Maps.newConcurrentMap();
-    finished_sources = Maps.newHashMap();
+    finished_sources = Maps.newConcurrentMap();
     total_finished = new AtomicInteger();
     //finished_nodes = 0;
   }
@@ -380,56 +380,53 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
             final String set_id = series.set().node().config().getId() + ":" 
                 + series.set().dataSource();
             
-            TLongObjectMap<Foo> sets = pts.get(set_id);
+            TLongObjectMap<AtomicInteger> sets = pts.get(set_id);
             if (sets == null) {
-              sets = new TLongObjectHashMap<Foo>();
-              TLongObjectMap<Foo> extant = pts.putIfAbsent(set_id, sets);
+              sets = new TLongObjectHashMap<AtomicInteger>();
+              TLongObjectMap<AtomicInteger> extant = pts.putIfAbsent(set_id, sets);
               if (extant != null) {
                 System.out.println("                      LOST race on foo map");
                 sets = extant;
               }
             }
-            //System.out.println("                 MAP: " + System.identityHashCode(sets));
+            System.out.println("                 MAP: " + System.identityHashCode(sets));
             
-            Foo foo = sets.get(series.set().start().epoch());
+            AtomicInteger foo = sets.get(series.set().start().epoch());
             if (foo == null) {
-              foo = new Foo();
-              Foo extant = sets.putIfAbsent(series.set().start().epoch(), foo);
+              foo = new AtomicInteger();
+              AtomicInteger extant = sets.putIfAbsent(series.set().start().epoch(), foo);
               if (extant != null) {
                 System.out.println("                      LOST race on foo entry");
                 foo = extant;
               }
             }
-            //System.out.println("                 FOO: " + System.identityHashCode(foo));
+            System.out.println("                 FOO: " + System.identityHashCode(foo));
             
-            int cnt = foo.count.incrementAndGet();
+            int cnt = foo.incrementAndGet();
             System.out.println("[[[[[[[[ ABSTRACT ]]]]]]]  CMPL: " + series.set().complete() + "   CNT: " + cnt + "  EXP: " + series.set().timeSeriesCount() + "  TS: " + series.set().start().epoch());
             if (series.set().complete() && series.set().timeSeriesCount() == cnt) {
               System.out.println("[[[[[[[[ ABSTRACT ]]]]]]]  SET is finished: " + series.set().start().epoch() + "  TS: " + series.set().start().epoch());
-              synchronized (finished_sources) {
-                Integer finished = finished_sources.get(set_id);
-                int f = 0;
-                if (finished == null) {
-                  finished = 1;
-                  f = 1;
-                  finished_sources.put(set_id, finished);
-                } else {
-                  finished++;
-                  f = finished;
-                  finished_sources.put(set_id, finished);
-                }
-                
-                System.out.println("           TOTAL SETS: " + series.set().totalSets() + "  FINISHED: " + f + "  TS: " + series.set().start().epoch());
-                if (series.set().totalSets() == f) {
-                 total_finished.incrementAndGet();
+              
+              AtomicInteger ctr = finished_sources.get(set_id);
+              if (ctr == null) {
+                ctr = new AtomicInteger();
+                AtomicInteger extant = finished_sources.putIfAbsent(set_id, ctr);
+                if (extant != null) {
+                  ctr = extant;
                 }
               }
               
-              System.out.println("[[[[[[[[ ABSTRACT ]]]]]]]  TF: " + total_finished + "  EXP: " + plan.serializationSources().size() + "  TS: " + series.set().start().epoch());
-              if (total_finished.get() == plan.serializationSources().size()) {
-                System.out.println("[[[[[[[[ ABSTRACT ]]]]]]] Finished!" + "  TS: " + series.set().start().epoch());
-                for (final QuerySink sink : sinks) {
-                  sink.onComplete();
+              final int f = ctr.incrementAndGet();
+              System.out.println("           TOTAL SETS: " + series.set().totalSets() + "  FINISHED: " + f + "  TS: " + series.set().start().epoch());
+              
+              if (series.set().totalSets() == f) {
+                final int tf = total_finished.incrementAndGet();
+                System.out.println("[[[[[[[[ ABSTRACT ]]]]]]]  TF: " + total_finished + "  EXP: " + plan.serializationSources().size() + "  TS: " + series.set().start().epoch());
+                if (tf == plan.serializationSources().size()) {
+                  System.out.println("[[[[[[[[ ABSTRACT ]]]]]]] Finished!" + "  TS: " + series.set().start().epoch());
+                  for (final QuerySink sink : sinks) {
+                    sink.onComplete();
+                  }
                 }
               }
             }
@@ -576,12 +573,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
       }
     }
   }
-  
-  class Foo {
-    //volatile int expected = -1;
-    AtomicInteger count = new AtomicInteger();
-  }
-  
+
   // TODO - soooooo much optimization to do. Stupid to run through every entry each time even
   // with lots of short circuits.
 //  void checkComplete(final PartialTimeSeriesSet pts, TLongObjectMap<Foo> sets, final Foo foo) {
