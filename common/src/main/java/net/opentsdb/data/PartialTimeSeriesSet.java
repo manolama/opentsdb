@@ -61,4 +61,6 @@ public interface PartialTimeSeriesSet extends AutoCloseable {
   /** @return An optional time spec. */
   public TimeSpecification timeSpecification();
   
+  public boolean complete();
+  
 }

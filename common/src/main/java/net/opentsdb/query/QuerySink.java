@@ -55,18 +55,6 @@ public interface QuerySink {
   public void onComplete();
   
   /**
-   * Called by the downstream nodes when the partial time series set has found
-   * all of it's data and has the final count of time series. Note that as this
-   * may be asynchronous, this node should make sure it's received the right
-   * number of partial time series matching the number in this set. Some series
-   * may still be in-flight up the pipeline.
-   * 
-   * @param set A non-null set marking that all data has been found.
-   * @return A non-null deferred that resolves when the sink is finished.
-   */
-  public Deferred<Void> onComplete(final PartialTimeSeriesSet set);
-  
-  /**
    * Called by the pipeline when a new query result is available. The result is
    * always non-null but may have an empty result set. 
    * <b>NOTE:</b> Always call {@link QueryResult#close()} when finished with

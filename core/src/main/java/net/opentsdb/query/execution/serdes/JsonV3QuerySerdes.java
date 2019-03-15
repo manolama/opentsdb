@@ -393,7 +393,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       // TODO Auto-generated catch block
       e.printStackTrace();
     }
-    System.out.println("SERDESING " + series.idHash() + "  " + series.set().start().epoch() + "  Count: " + count);
+    //System.out.println("SERDESING " + series.idHash() + "  " + series.set().start().epoch() + "  Count: " + count);
     if (count < 1) {
       return Deferred.fromResult(null);
     }
@@ -445,12 +445,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
         return Deferred.fromResult(null);
       }   
     }
-    return Deferred.fromResult(null);
-  }
-  
-  @Override
-  public Deferred<Void> complete(final PartialTimeSeriesSet set, 
-                                 final Span span) {
     return Deferred.fromResult(null);
   }
   
@@ -930,7 +924,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
   
   void serializePush() {
     final JsonV2QuerySerdesOptions opts = (JsonV2QuerySerdesOptions) options;
-   System.out.println("------------------ PUSH-----------------");
+   System.out.println("------------------ FINAL SERDES PUSH -----------------");
     try {
       json.writeStartObject();
       json.writeArrayFieldStart("results");

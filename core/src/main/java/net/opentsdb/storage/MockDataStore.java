@@ -487,12 +487,15 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     }
     
     void runPartials() {
+      try {
       final TimeStamp st = context.query().startTime().getCopy();
       st.snapToPreviousInterval(3600, ChronoUnit.SECONDS);
       TimeStamp e = context.query().endTime().getCopy();
       e.snapToPreviousInterval(3600, ChronoUnit.SECONDS);
       e.add(Duration.ofSeconds(3600));
       final int total = (int) (e.epoch() - st.epoch()) / 3600;
+      
+      final ObjectPool array_pool = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE);
       
       QueryFilter filter = config.getFilter();
       if (filter == null && !Strings.isNullOrEmpty(config.getFilterId())) {
@@ -504,7 +507,8 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       }
       
       Map<Long, TimeSeriesId> ids = Maps.newHashMap();
-      Map<Long, PTSSet> sets = Maps.newHashMap();
+      Map<Long, Iterator<MockRow>> iterators = Maps.newHashMap();
+      Map<Long, MockRow> rows = Maps.newHashMap();
       
       for (final Entry<TimeSeriesDatumStringId, MockSpan> entry : database.entrySet()) {
         // TODO - handle filter types
@@ -517,64 +521,116 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
             continue;
           }
         }
-        //final long epoch = st.msEpoch();
-        System.out.println(" Matched.................");
+        
         // matched the filters
-        for (final MockRow row : entry.getValue().rows) {
-          if (row.base_timestamp < st.msEpoch()) {
-            continue;
-          }
-          if (row.base_timestamp >= e.msEpoch()) {
+        MockRow row = null;
+        Iterator<MockRow> iterator = entry.getValue().rows.iterator();
+        while (iterator.hasNext()) {
+          row = iterator.next();
+          if (row.base_timestamp >= st.msEpoch()) {
             break;
           }
+        }
+        if (row == null) {
+          continue;
+        }
         
-          // matched!
-          PTSSet set = sets.get(row.base_timestamp);
-          if (set == null) {
-            set = new PTSSet(total, row.base_timestamp, ids);
-            sets.put(row.base_timestamp, set);
+        if (row.base_timestamp > e.msEpoch()) {
+          continue;
+        }
+        
+        final long id_hash = row.id().buildHashCode();
+        ids.putIfAbsent(id_hash, row.id());
+        
+        iterators.put(id_hash, iterator);
+        rows.put(id_hash, row);
+      }
+      
+      // one hour at a time. Gross huh? That's what happens in a store allocated
+      // by time series instead of time.
+      int idx = 0;
+      long ts = st.msEpoch();
+      while (ts < e.msEpoch()) {
+        @SuppressWarnings("resource") // don't want to close it here.
+        PTSSet set = new PTSSet(total, idx++, ids);
+        Iterator<Entry<Long, Iterator<MockRow>>> iterator = iterators.entrySet().iterator();
+        final PooledMockPTS[] last_ppts = new PooledMockPTS[1];
+        
+        while (iterator.hasNext()) {
+          Entry<Long, Iterator<MockRow>> its = iterator.next();
+          
+          MockRow row = rows.get(its.getKey());
+          if (row == null) {
+            // done
+            continue;
           }
-          set.count++;
           
-          final long id_hash = row.id().buildHashCode();
-          ids.putIfAbsent(id_hash, row.id());
+          if (row.base_timestamp == ts) {
+            PooledMockPTS ppts = (PooledMockPTS) pool.claim().object();
+            ppts.id_hash = its.getKey();
+            ppts.set = set;
+            //ppts.row = row;
+            ppts.setData(row, array_pool);
+            
+            //set.count.incrementAndGet();
+            
+            if (last_ppts[0] != null) {
+              if (thread_pool != null) {
+                set.increment(false);
+                final PooledMockPTS pmpts = last_ppts[0];
+                thread_pool.submit(new Runnable() {
+                  @Override
+                  public void run() {
+                    System.out.println("SEND UP .... " + pmpts.set().start().epoch());
+                    sendUpstream(pmpts);
+                  }
+                });
+              } else {
+                set.increment(false);
+                System.out.println("SEND UP....");
+                sendUpstream(last_ppts[0]);
+              }
+            }
+            last_ppts[0] = ppts;
+          }
           
-          PooledMockPTS ppts = (PooledMockPTS) pool.claim().object();
-          ppts.id_hash = id_hash;
-          ppts.set = set;
-          ppts.row = row;
-          ppts.long_array_pool = tsdb.getRegistry().getObjectPool(
-              LongArrayPool.TYPE);
+          if (its.getValue().hasNext()) {
+            rows.put(its.getKey(), its.getValue().next());
+          }
+        }
+        
+        if (last_ppts[0] != null) {
+          // SUPER IMPORTANT we set it as finished here.
+          set.increment(true);
+          
           if (thread_pool != null) {
+            final PooledMockPTS pmpts = last_ppts[0];
             thread_pool.submit(new Runnable() {
               @Override
               public void run() {
-                System.out.println("SEND UP....");
-                sendUpstream(ppts);
+                System.out.println("SEND UP FINAL .... " + pmpts.set().start().epoch());
+                sendUpstream(pmpts);
               }
             });
           } else {
-            sendUpstream(ppts);
+            System.out.println("SEND UP FINAL .... " + ts);
+            sendUpstream(last_ppts[0]);
           }
         }
-      }
         
-      for (final PTSSet set : sets.values()) {
-        if (thread_pool != null) {
-          thread_pool.submit(new Runnable() {
-            @Override
-            public void run() {
-              completeUpstream(set);
-            }
-          });
-        } else {
-          completeUpstream(set);
-        }
+        ts += 3600_000;
+        System.out.println("@@@@@@@@@@@@@ MOCK NEXT @@@@@@@@@@@@@@@@");
+      }
+      System.out.println("@@@@@@@@@@@@@ MOCK DONE!!!!!!! @@@@@@@@@@@@@@@@");
+      } catch (Throwable t) {
+        t.printStackTrace();
       }
     }
     
     class PTSSet implements PartialTimeSeriesSet {
-      int count = 0;
+      volatile int count;
+      volatile boolean complete;
+      
       final TimeStamp start;
       TimeStamp end;
       Map<Long, TimeSeriesId> ids;
@@ -631,7 +687,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       }
 
       @Override
-      public int timeSeriesCount() {
+      public synchronized int timeSeriesCount() {
         return count;
       }
 
@@ -641,6 +697,17 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
         return null;
       }
       
+      @Override
+      public synchronized boolean complete() {
+        return complete;
+      }
+      
+      synchronized void increment(final boolean complete) {
+        count++;
+        if (complete) {
+          this.complete = true;
+        }
+      }
     }
   }
   
@@ -1056,10 +1123,9 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     PooledObject pooled_object;
     long id_hash;
     PartialTimeSeriesSet set;
-    MockRow row;
+    //MockRow row;
     AtomicInteger counter;
     PooledObject pooled_array;
-    ObjectPool long_array_pool;
     
     public PooledMockPTS() {
       counter = new AtomicInteger();
@@ -1078,14 +1144,64 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     @Override
     public void release() {
       if (counter.decrementAndGet() == 0) {
+        System.out.println(" ---------- RELEASING.......");
         if (pooled_array != null) {
           pooled_array.release();
           pooled_array = null;
         }
         if (pooled_object != null) {
           pooled_object.release();
+          pooled_object = null;
         }
       }
+    }
+    
+    void setData(final MockRow row, final ObjectPool long_array_pool) {
+      if (pooled_array != null) {
+        System.out.println("&&&&&& WTF???  The array wasn't nulled out!?!?");
+        throw new IllegalStateException("WTF!!!!!!!!!!!!!!!!");
+        //pooled_array.release();
+      }
+      
+      // TODO - store values in this format
+      pooled_array = long_array_pool.claim();
+      if (pooled_array == null) {
+        System.out.println("WTF?!?!?! Pool gave us a null object!");
+        throw new IllegalStateException("WTF!!!!!!!!!!!!!!!!");
+      }
+      long[] array = (long[]) pooled_array.object();
+      int idx = 0;
+      Iterator<TimeSeriesValue<?>> it = row.iterator(NumericType.TYPE).get();
+      while (it.hasNext()) {
+        TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+        if (v.value() == null) {
+          continue;
+        }
+        
+        // TODO length check
+        if (idx + 2 >= array.length) {
+          LOG.error("TODO - need to grow these!");
+          throw new UnsupportedOperationException("TODO - mock data "
+              + "store needs to be able to grow the arrays.");
+        }
+        array[idx] = v.timestamp().msEpoch();
+        // TODO - maybe a check here to make sure the header isn't set!
+        array[idx] |= NumericLongArrayType.MILLISECOND_FLAG;
+        if (v.value().isInteger()) {
+          idx++;
+          array[idx++] = v.value().longValue();
+        } else {
+          array[idx++] |= NumericLongArrayType.FLOAT_FLAG;
+          array[idx++] = Double.doubleToRawLongBits(v.value().doubleValue());
+        }
+      }
+      
+      if (idx + 1 >= array.length) {
+        LOG.error("TODO - need to grow these!");
+        throw new UnsupportedOperationException("TODO - mock data "
+            + "store needs to be able to grow the arrays.");
+      }
+      array[idx] = NumericLongArrayType.TERIMNAL_FLAG;
     }
 
     @Override
@@ -1110,55 +1226,12 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
 
     @Override
     public TypedTimeSeriesIterator iterator() {
-      return row.iterator(NumericType.TYPE).get();
+      return null;
     }
     
     @Override
     public Object data() {
       counter.incrementAndGet();
-      if (pooled_array == null) {
-        synchronized (this) {
-          if (pooled_array == null) {
-            // TODO - store values in this format
-            pooled_array = long_array_pool.claim();
-            long[] array = (long[]) pooled_array.object();
-            int idx = 0;
-            int values = 0;
-            Iterator<TimeSeriesValue<?>> it = row.iterator(NumericType.TYPE).get();
-            while (it.hasNext()) {
-              TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
-              if (v.value() == null) {
-                continue;
-              }
-              
-              // TODO length check
-              if (idx + 2 >= array.length) {
-                LOG.error("TODO - need to grow these!");
-                throw new UnsupportedOperationException("TODO - mock data "
-                    + "store needs to be able to grow the arrays.");
-              }
-              array[idx] = v.timestamp().msEpoch();
-              // TODO - maybe a check here to make sure the header isn't set!
-              array[idx] |= NumericLongArrayType.MILLISECOND_FLAG;
-              if (v.value().isInteger()) {
-                idx++;
-                array[idx++] = v.value().longValue();
-              } else {
-                array[idx++] |= NumericLongArrayType.FLOAT_FLAG;
-                array[idx++] = Double.doubleToRawLongBits(v.value().doubleValue());
-              }
-              values++;
-            }
-            
-            if (idx + 1 >= array.length) {
-              LOG.error("TODO - need to grow these!");
-              throw new UnsupportedOperationException("TODO - mock data "
-                  + "store needs to be able to grow the arrays.");
-            }
-            array[idx] = NumericLongArrayType.TERIMNAL_FLAG;
-          }
-        }
-      }
       return pooled_array.object();
     }
     

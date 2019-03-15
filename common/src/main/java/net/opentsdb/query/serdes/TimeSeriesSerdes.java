@@ -52,18 +52,6 @@ public interface TimeSeriesSerdes {
                                   final Span span);
   
   /**
-   * Called when the set has finished fetching data and the total number of
-   * {@link PartialTimeSeries} is known.
-   * TODO - may change the response here a bit.
-   * @param set The non-null set that is done.
-   * @param span An optional tracing span.
-   * @return A non-null deferred resolving to a null on successful
-   * serialization or an exception if there was a failure.
-   */
-  public Deferred<Void> complete(final PartialTimeSeriesSet set, 
-                                 final Span span);
-  
-  /**
    * Called when serialization is complete so the implementation can 
    * release resources.
    * @param span An optional tracer span.

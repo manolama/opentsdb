@@ -113,7 +113,7 @@ public abstract class AbstractQueryNode implements QueryNode {
   }
   
   @Override
-  public void onComplete(final PartialTimeSeriesSet set) {
+  public void onComplete(final QueryNode node) {
     throw new IllegalStateException("The node has not implemented this yet");
   }
   
@@ -181,15 +181,17 @@ public abstract class AbstractQueryNode implements QueryNode {
   protected void sendUpstream(final PartialTimeSeries series) 
       throws QueryUpstreamException {
     if (series == null) {
+      System.out.println("WTF????????????????????????????????????????????????????????????????????????????????");
       throw new QueryUpstreamException("Series cannot be null.");
     }
     
     for (final QueryNode node : upstream) {
       try {
         node.onNext(series);
-      } catch (Exception e) {
+      } catch (Throwable t) {
+        t.printStackTrace();
         throw new QueryUpstreamException("Failed to send series "
-            + "upstream to node: " + node, e);
+            + "upstream to node: " + node, t);
       }
     }
   }
@@ -235,20 +237,15 @@ public abstract class AbstractQueryNode implements QueryNode {
     }
   }
   
-  /**
-   * Passes the set upstream to all of the linked nodes. If one or more
-   * upstream consumers throws an exception, it's caught and logged as a warning.
-   * 
-   * @param set The non-null set to pass.
-   */
-  protected void completeUpstream(final PartialTimeSeriesSet set) {
-    if (set == null) {
-      throw new QueryUpstreamException("Set cannot be null.");
+  
+  protected void completeUpstream(final QueryNode qn) {
+    if (qn == null) {
+      throw new QueryUpstreamException("Node cannot be null.");
     }
     
     for (final QueryNode node : upstream) {
       try {
-        node.onComplete(set);
+        node.onComplete(qn);
       } catch (Exception e) {
         LOG.warn("Failed to mark upstream node complete: " + node, e);
       }

@@ -26,7 +26,6 @@ import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.data.PartialTimeSeries;
-import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.exceptions.QueryExecutionException;
 import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.QueryMode;
@@ -89,25 +88,6 @@ public class ServletSink implements QuerySink {
       throw new IllegalArgumentException("Factory returned a null "
           + "instance for the type: " + config.serdesOptions().getType());
     }
-  }
-  
-  @Override
-  public Deferred<Void> onComplete(final PartialTimeSeriesSet set) {
-    return serdes.complete(set, null /** TODO */);
-//        .addBoth(
-//        new Callback<Object, Object>() {
-//
-//          @Override
-//          public Object call(final Object arg) throws Exception {
-//            if (arg != null && 
-//                !(arg instanceof Throwable) && 
-//                (boolean) arg == true) {
-//              onComplete();
-//            }
-//            return null;
-//          }
-//      
-//    });
   }
   
   @Override
@@ -219,20 +199,6 @@ public class ServletSink implements QuerySink {
   @Override
   public Deferred<Void> onNext(final PartialTimeSeries next) {
     return serdes.serialize(next, null /** TODO */);
-//    .addBoth(
-//        new Callback<Object, Object>() {
-//
-//          @Override
-//          public Object call(final Object arg) throws Exception {
-//            if (arg != null && 
-//                !(arg instanceof Throwable) && 
-//                (boolean) arg == true) {
-//              onComplete();
-//            }
-//            return null;
-//          }
-//      
-//    });
   }
   
   @Override

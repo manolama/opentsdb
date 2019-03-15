@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -84,7 +85,9 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   
   // TODO - nest per sink... :(
   Map<String, TLongObjectMap<Foo>> pts;
-  AtomicInteger all_done;
+  Map<String, Integer> finished_sources;
+  AtomicInteger total_finished;
+  //volatile int finished_nodes;
   
   /**
    * Default ctor.
@@ -100,7 +103,9 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
     sinks = Lists.newArrayListWithExpectedSize(1);
     countdowns = Maps.newHashMap();
     pts = Maps.newConcurrentMap();
-    all_done = new AtomicInteger();
+    finished_sources = Maps.newHashMap();
+    total_finished = new AtomicInteger();
+    //finished_nodes = 0;
   }
   
   @Override
@@ -330,47 +335,17 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   }
   
   @Override
-  public void onComplete(final PartialTimeSeriesSet set) {
-    for (final QuerySink sink : sinks) {
-      try {
-        sink.onComplete(set).addCallback(new Callback<Void, Void>() {
-
-          @Override
-          public Void call(Void arg) throws Exception {
-            final String set_id = set.node().config().getId() + ":" 
-                + set.dataSource();
-            
-            TLongObjectMap<Foo> sets = pts.get(set_id);
-            if (sets == null) {
-              sets = new TLongObjectHashMap<Foo>();
-              TLongObjectMap<Foo> extant = pts.putIfAbsent(set_id, sets);
-              if (extant != null) {
-                sets = extant;
-              }
-            }
-            
-            Foo foo = sets.get(set.start().epoch());
-            if (foo == null) {
-              foo = new Foo();
-              Foo extant = sets.putIfAbsent(set.start().epoch(), foo);
-              if (extant != null) {
-                foo = extant;
-              }
-            }
-            
-            synchronized (foo) {
-              foo.expected = set.timeSeriesCount();
-            }
-            checkComplete(set, sets, foo);
-            return null;
-          }
-          
-        });
-      } catch (Throwable e) {
-        LOG.error("Exception thrown passing results to sink: " + sink, e);
-        // TODO - should we kill the query here?
-      }
-    }
+  public void onComplete(final QueryNode downstream) {
+//    finished_nodes++;
+//    System.out.println("[[[[[[[[ ABSTRACT ]]]]]]] FN: " + finished_nodes + "  TF: " + total_finished);
+//    if (finished_nodes == total_finished) {
+//      if (total_finished == plan.serializationSources().size()) {
+//        System.out.println("[[[[[[[[ ABSTRACT ]]]]]]] Finished!");
+//        for (final QuerySink sink : sinks) {
+//          sink.onComplete();
+//        }
+//      }
+//    }
   }
   
   @Override
@@ -388,43 +363,88 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   
   @Override
   public void onNext(final PartialTimeSeries series) {
+    List<Deferred<Void>> deferreds = Lists.newArrayList();
     for (final QuerySink sink : sinks) {
       try {
-        sink.onNext(series).addCallback(new Callback<Void, Void>() {
+        deferreds.add(sink.onNext(series));
+      } catch (Throwable t) {
+        t.printStackTrace();
+      }
+    }
+    try {
+    Deferred.group(deferreds).addCallback(new Callback<Void, ArrayList<Void>>() {
 
           @Override
-          public Void call(final Void arg) throws Exception {
+          public Void call(final ArrayList<Void> arg) throws Exception {
+            try {
             final String set_id = series.set().node().config().getId() + ":" 
                 + series.set().dataSource();
+            
             TLongObjectMap<Foo> sets = pts.get(set_id);
             if (sets == null) {
               sets = new TLongObjectHashMap<Foo>();
               TLongObjectMap<Foo> extant = pts.putIfAbsent(set_id, sets);
               if (extant != null) {
+                System.out.println("                      LOST race on foo map");
                 sets = extant;
               }
             }
+            //System.out.println("                 MAP: " + System.identityHashCode(sets));
             
             Foo foo = sets.get(series.set().start().epoch());
             if (foo == null) {
               foo = new Foo();
               Foo extant = sets.putIfAbsent(series.set().start().epoch(), foo);
               if (extant != null) {
+                System.out.println("                      LOST race on foo entry");
                 foo = extant;
               }
             }
+            //System.out.println("                 FOO: " + System.identityHashCode(foo));
             
-            foo.incrementCount();
-            checkComplete(series.set(), sets, foo);
+            int cnt = foo.count.incrementAndGet();
+            System.out.println("[[[[[[[[ ABSTRACT ]]]]]]]  CMPL: " + series.set().complete() + "   CNT: " + cnt + "  EXP: " + series.set().timeSeriesCount() + "  TS: " + series.set().start().epoch());
+            if (series.set().complete() && series.set().timeSeriesCount() == cnt) {
+              System.out.println("[[[[[[[[ ABSTRACT ]]]]]]]  SET is finished: " + series.set().start().epoch() + "  TS: " + series.set().start().epoch());
+              synchronized (finished_sources) {
+                Integer finished = finished_sources.get(set_id);
+                int f = 0;
+                if (finished == null) {
+                  finished = 1;
+                  f = 1;
+                  finished_sources.put(set_id, finished);
+                } else {
+                  finished++;
+                  f = finished;
+                  finished_sources.put(set_id, finished);
+                }
+                
+                System.out.println("           TOTAL SETS: " + series.set().totalSets() + "  FINISHED: " + f + "  TS: " + series.set().start().epoch());
+                if (series.set().totalSets() == f) {
+                 total_finished.incrementAndGet();
+                }
+              }
+              
+              System.out.println("[[[[[[[[ ABSTRACT ]]]]]]]  TF: " + total_finished + "  EXP: " + plan.serializationSources().size() + "  TS: " + series.set().start().epoch());
+              if (total_finished.get() == plan.serializationSources().size()) {
+                System.out.println("[[[[[[[[ ABSTRACT ]]]]]]] Finished!" + "  TS: " + series.set().start().epoch());
+                for (final QuerySink sink : sinks) {
+                  sink.onComplete();
+                }
+              }
+            }
+            
+            } catch (Throwable t) {
+              t.printStackTrace();
+            }
             return null;
           }
           
         });
       } catch (Throwable e) {
-        LOG.error("Exception thrown passing results to sink: " + sink, e);
+        LOG.error("Exception thrown passing results to sink: ", e);
         // TODO - should we kill the query here?
       }
-    }
   }
   
   @Override
@@ -558,57 +578,43 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   }
   
   class Foo {
-    AtomicInteger expected = new AtomicInteger(-1);
+    //volatile int expected = -1;
     AtomicInteger count = new AtomicInteger();
-    
-    void incrementCount(final PartialTimeSeriesSet pts) {
-      int cnt = count.incrementAndGet();
-      if (expected > 0 && expected == cnt) {
-        checkComplete(pts, null, this);
-      }
-    }
-    
-    void markComplete(final PartialTimeSeriesSet pts) {
-      expected = pts.timeSeriesCount();
-      if (expected == count.get()) {
-        checkComplete(pts, null, this);
-      }
-    }
   }
   
   // TODO - soooooo much optimization to do. Stupid to run through every entry each time even
   // with lots of short circuits.
-  void checkComplete(final PartialTimeSeriesSet pts, TLongObjectMap<Foo> sets, final Foo foo) {
-//    synchronized (foo) {
-//      if (foo.expected < 0) {
-//        System.out.println("*** Not expected.");
-//        return;
-//      }
-//      
-//      if (foo.count != pts.timeSeriesCount()) {
-//        System.out.println("*** Undercount.");
+//  void checkComplete(final PartialTimeSeriesSet pts, TLongObjectMap<Foo> sets, final Foo foo) {
+////    synchronized (foo) {
+////      if (foo.expected < 0) {
+////        System.out.println("*** Not expected.");
+////        return;
+////      }
+////      
+////      if (foo.count != pts.timeSeriesCount()) {
+////        System.out.println("*** Undercount.");
+////        return;
+////      }
+////    }
+//    
+//    // this set is done so check all the sets for this source
+//    synchronized (this) {
+//      if (sets.size() != pts.totalSets()) {
+//        System.out.println("*** Missing sets.");
 //        return;
 //      }
 //    }
-    
-    // this set is done so check all the sets for this source
-    synchronized (this) {
-      if (sets.size() != pts.totalSets()) {
-        System.out.println("*** Missing sets.");
-        return;
-      }
-    }
-    
-    // all sets for this source are done. Now check the other sources
-    if (all_done.incrementAndGet() != plan.serializationSources().size()) {
-      System.out.println("*** Not all done.");
-      // Nope.
-      return;
-    }
-    
-    // all done!!!
-    for (final QuerySink sink : sinks) {
-      sink.onComplete();
-    }
-  }
+//    
+//    // all sets for this source are done. Now check the other sources
+//    if (finished_sources.incrementAndGet() != plan.serializationSources().size()) {
+//      System.out.println("*** Not all done.");
+//      // Nope.
+//      return;
+//    }
+//    
+//    // all done!!!
+//    for (final QuerySink sink : sinks) {
+//      sink.onComplete();
+//    }
+//  }
 }

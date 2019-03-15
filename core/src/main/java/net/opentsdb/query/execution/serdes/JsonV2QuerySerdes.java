@@ -34,7 +34,6 @@ import com.stumbleupon.async.DeferredGroupException;
 
 import net.opentsdb.common.Const;
 import net.opentsdb.data.PartialTimeSeries;
-import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataType;
@@ -315,15 +314,8 @@ public class JsonV2QuerySerdes implements TimeSeriesSerdes {
   }
 
   @Override
-  public Deferred<Object> serialize(final PartialTimeSeries series, 
+  public Deferred<Void> serialize(final PartialTimeSeries series, 
                                     final Span span) {
-    return Deferred.fromError(new UnsupportedOperationException(
-        "Not implemented yet."));
-  }
-  
-  @Override
-  public Deferred<Object> complete(final PartialTimeSeriesSet set, 
-                                   final Span span) {
     return Deferred.fromError(new UnsupportedOperationException(
         "Not implemented yet."));
   }
