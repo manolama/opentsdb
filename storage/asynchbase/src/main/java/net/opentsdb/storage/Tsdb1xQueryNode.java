@@ -16,35 +16,51 @@ package net.opentsdb.storage;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 import com.stumbleupon.async.DeferredGroupException;
 
 import net.opentsdb.common.Const;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.data.PartialTimeSeries;
+import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataSource;
+import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSeriesStringId;
+import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
+import net.opentsdb.data.types.numeric.NumericLongArrayType;
+import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.exceptions.IllegalDataException;
 import net.opentsdb.exceptions.QueryDownstreamException;
 import net.opentsdb.exceptions.QueryUpstreamException;
 import net.opentsdb.meta.MetaDataStorageResult;
+import net.opentsdb.pools.BaseObjectPoolAllocator;
+import net.opentsdb.pools.CloseablePooledObject;
+import net.opentsdb.pools.DefaultObjectPoolConfig;
+import net.opentsdb.pools.ObjectPool;
+import net.opentsdb.pools.ObjectPoolConfig;
+import net.opentsdb.pools.PooledObject;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
@@ -54,7 +70,10 @@ import net.opentsdb.rollup.RollupInterval;
 import net.opentsdb.rollup.RollupUtils.RollupUsage;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.HBaseExecutor.State;
+import net.opentsdb.storage.MockDataStore.MockRow;
+import net.opentsdb.storage.MockDataStore.PooledMockPTS;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
+import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xPartialTimeSeries;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueIdType;
 import net.opentsdb.utils.Bytes;
@@ -324,7 +343,7 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
    * @throws QueryUpstreamException if the upstream 
    * {@link #onNext(QueryResult)} handler throws an exception. I hate
    * checked exceptions but each node needs to be able to handle this
-   * ideally by cancelling the query.
+   * ideally by canceling the query.
    * @throws IllegalArgumentException if the result was null.
    */
   protected void sendUpstream(final QueryResult result) 
@@ -336,6 +355,32 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
     for (final QueryNode node : upstream) {
       try {
         node.onNext(result);
+      } catch (Exception e) {
+        throw new QueryUpstreamException("Failed to send results "
+            + "upstream to node: " + node, e);
+      }
+    }
+  }
+  
+  /**
+   * Sends the result to each of the upstream subscribers.
+   * 
+   * @param pts A non-null result.
+   * @throws QueryUpstreamException if the upstream 
+   * {@link #onNext(QueryResult)} handler throws an exception. I hate
+   * checked exceptions but each node needs to be able to handle this
+   * ideally by canceling the query.
+   * @throws IllegalArgumentException if the result was null.
+   */
+  protected void sendUpstream(final Tsdb1xPartialTimeSeries pts) 
+      throws QueryUpstreamException {
+    if (pts == null) {
+      throw new IllegalArgumentException("Result cannot be null.");
+    }
+    
+    for (final QueryNode node : upstream) {
+      try {
+        node.onNext(pts);
       } catch (Exception e) {
         throw new QueryUpstreamException("Failed to send results "
             + "upstream to node: " + node, e);
@@ -426,12 +471,19 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
   @VisibleForTesting
   void setup(final Span span) {
     if (parent.schema().metaSchema() != null) {
+      // TODO - push
       parent.schema().metaSchema().runQuery(context, config, span)
           .addCallback(new MetaCB(span))
           .addErrback(new MetaErrorCB(span));
     } else {
       synchronized (this) {
-        executor = new Tsdb1xScanners(Tsdb1xQueryNode.this, config);
+        if (parent.enable_push) {
+          System.out.println("******** PUSHING! ********");
+          executor = new Tsdb1xScanners2(Tsdb1xQueryNode.this, config);
+        } else {
+          executor = new Tsdb1xScanners(Tsdb1xQueryNode.this, config);
+        }
+        
         if (initialized.compareAndSet(false, true)) {
           executor.fetchNext(new Tsdb1xQueryResult(
               sequence_id.incrementAndGet(), 
@@ -828,5 +880,163 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
             .addCallbacks(new TagCB(true), new ErrorCB()));
       Deferred.group(deferreds).addCallbacks(new GroupCB(), new ErrorCB());
     }
+  }
+
+  public static class PooledHBasePTS implements PartialTimeSeries, 
+    CloseablePooledObject {
+    private PooledObject pooled_object;
+    private long id_hash;
+    private PartialTimeSeriesSet set;
+    private AtomicInteger counter;
+    private PooledObject pooled_array;
+    
+    public PooledHBasePTS() {
+      counter = new AtomicInteger();
+    }
+    
+    @Override
+    public void close() throws Exception {
+      release();
+    }
+    
+    @Override
+    public Object object() {
+      return this;
+    }
+    
+    @Override
+    public void release() {
+      if (counter.decrementAndGet() == 0) {
+        if (pooled_array != null) {
+          pooled_array.release();
+          pooled_array = null;
+        }
+        if (pooled_object != null) {
+          pooled_object.release();
+          //pooled_object = null;
+        }
+      }
+    }
+    
+    void setData(final MockRow row, 
+                 final ObjectPool long_array_pool, 
+                 final long id_hash, 
+                 final PartialTimeSeriesSet set) {
+      this.id_hash = id_hash;
+      this.set = set;
+      if (row == null) {
+        return;
+      }
+      
+      // TODO - store values in this format
+      pooled_array = long_array_pool.claim();
+      if (pooled_array == null) {
+        throw new IllegalStateException("The pooled array was null!");
+      }
+      long[] array = (long[]) pooled_array.object();
+      int idx = 0;
+      Iterator<TimeSeriesValue<?>> it = row.iterator(NumericType.TYPE).get();
+      while (it.hasNext()) {
+        TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+        if (v.value() == null) {
+          continue;
+        }
+        
+        // TODO length check
+        if (idx + 2 >= array.length) {
+          LOG.error("TODO - need to grow these!");
+          throw new UnsupportedOperationException("TODO - mock data "
+              + "store needs to be able to grow the arrays.");
+        }
+        array[idx] = v.timestamp().msEpoch();
+        // TODO - maybe a check here to make sure the header isn't set!
+        array[idx] |= NumericLongArrayType.MILLISECOND_FLAG;
+        if (v.value().isInteger()) {
+          idx++;
+          array[idx++] = v.value().longValue();
+        } else {
+          array[idx++] |= NumericLongArrayType.FLOAT_FLAG;
+          array[idx++] = Double.doubleToRawLongBits(v.value().doubleValue());
+        }
+      }
+      
+      if (idx + 1 >= array.length) {
+        LOG.error("TODO - need to grow these!");
+        throw new UnsupportedOperationException("TODO - mock data "
+            + "store needs to be able to grow the arrays.");
+      }
+      array[idx] = NumericLongArrayType.TERIMNAL_FLAG;
+    }
+    
+    @Override
+    public void setPooledObject(final PooledObject pooled_object) {
+      this.pooled_object = pooled_object;
+    }
+    
+    @Override
+    public long idHash() {
+      return id_hash;
+    }
+    
+    @Override
+    public PartialTimeSeriesSet set() {
+      return set;
+    }
+    
+    @Override
+    public TypeToken<? extends TimeSeriesDataType> getType() {
+      return NumericType.TYPE;
+    }
+    
+    @Override
+    public Object data() {
+      if (pooled_array != null) {
+        counter.incrementAndGet();
+        return pooled_array.object();
+      } else {
+        return null;
+      }
+    }
+    
+  }
+  
+  public static class PooledHBasePTSPool extends BaseObjectPoolAllocator {
+    public static final String TYPE = "PooledHBasePTS";
+    @Override
+    public Object allocate() {
+      return new PooledHBasePTS();
+    }
+
+    @Override
+    public TypeToken<?> dataType() {
+      return TypeToken.of(PooledHBasePTS.class);
+    }
+
+    @Override
+    public String type() {
+      return TYPE;
+    }
+
+    @Override
+    public Deferred<Object> initialize(final TSDB tsdb, final String id) {
+      if (Strings.isNullOrEmpty(id)) {
+        this.id = TYPE;
+      } else {
+        this.id = id;
+      }
+      final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
+          .setAllocator(this)
+          .setInitialCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, TYPE)))
+          .setMaxCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, TYPE)))
+          .setId(this.id)
+          .build();
+      try {
+        createAndRegisterPool(tsdb, config, TYPE);
+        return Deferred.fromResult(null);
+      } catch (Exception e) {
+        return Deferred.fromError(e);
+      }
+    }
+    
   }
 }

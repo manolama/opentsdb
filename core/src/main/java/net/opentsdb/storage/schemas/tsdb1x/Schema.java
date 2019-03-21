@@ -46,6 +46,9 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.meta.MetaDataStorageSchema;
+import net.opentsdb.pools.BaseObjectPoolAllocator;
+import net.opentsdb.pools.LongArrayPool;
+import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.query.filter.QueryFilter;
 import net.opentsdb.rollup.DefaultRollupConfig;
 import net.opentsdb.rollup.RollupInterval;
@@ -116,6 +119,8 @@ public class Schema implements WritableTimeSeriesDataStore {
   protected final boolean old_salting;
   
   protected Map<TypeToken<?>, Codec> codecs;
+  
+  protected Map<TypeToken<? extends TimeSeriesDataType>, ObjectPool> pools;
   
   protected MetaDataStorageSchema meta_schema;
   
@@ -247,6 +252,7 @@ public class Schema implements WritableTimeSeriesDataStore {
     
     id_validator = tsdb.getRegistry().getDefaultPlugin(
         DatumIdValidator.class);
+    pools = Maps.newConcurrentMap();
   }
   
   @Override
@@ -1179,6 +1185,35 @@ public class Schema implements WritableTimeSeriesDataStore {
     } catch (Exception e) {
       return Deferred.fromError(e);
     }
+  }
+  
+  public ObjectPool arrayPool() {
+    return tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE);
+  }
+  
+  /**
+   * Helper to fetch a new object of the required PTS. Caches the pool if we have
+   * one.
+   * @param type The non-null data type we want a PTS of.
+   * @return Null if no type was registered, or an instance if successful.
+   */
+  public Tsdb1xPartialTimeSeries newSeries(
+      final TypeToken<? extends TimeSeriesDataType> type) {
+    ObjectPool pool = pools.get(type);
+    if (pool == null) {
+      if (pools.containsKey(type)) {
+        return null;
+      }
+      
+      // see if we can grab it from the registry
+      pool = tsdb.getRegistry().getObjectPool(Tsdb1xNumericPartialTimeSeriesPool.TYPE);
+      if (pool == null) {
+        return null;
+      }
+      // race but no biggie.
+      pools.putIfAbsent(type, pool);
+    }
+    return (Tsdb1xPartialTimeSeries) pool.claim().object();
   }
   
 }

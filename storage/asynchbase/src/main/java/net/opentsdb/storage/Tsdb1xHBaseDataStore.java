@@ -87,6 +87,7 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
   public static final String MAX_MG_CARDINALITY_KEY = "tsd.query.multiget.max_cardinality";
   public static final String ENABLE_APPENDS_KEY = "tsd.storage.enable_appends";
   public static final String ENABLE_COPROC_APPENDS_KEY = "tsd.storage.enable_appends_coproc";
+  public static final String ENABLE_PUSH_KEY = "tsd.storage.push.enable";
   
   public static final byte[] DATA_FAMILY = 
       "t".getBytes(Const.ISO_8859_CHARSET);
@@ -115,6 +116,7 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
   
   private final boolean enable_appends;
   private final boolean enable_appends_coproc;
+  public final boolean enable_push;
   
   public Tsdb1xHBaseDataStore(final Tsdb1xHBaseFactory factory,
                               final String id,
@@ -253,6 +255,10 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
         config.register(ENABLE_COPROC_APPENDS_KEY, false, false,
             "TODO");
       }
+      if (!config.hasProperty(ENABLE_PUSH_KEY)) {
+        config.register(ENABLE_PUSH_KEY, false, false,
+            "TODO");
+      }
     }
     
     async_config.overrideConfig("hbase.zookeeper.quorum", 
@@ -274,6 +280,8 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
     
     enable_appends = config.getBoolean(ENABLE_APPENDS_KEY);
     enable_appends_coproc = config.getBoolean(ENABLE_COPROC_APPENDS_KEY);
+    enable_push = config.getBoolean(ENABLE_PUSH_KEY);
+    System.out.println("****** ENABLE PUSH: " + enable_push);
     
 //    Map<String, ConfigurationEntryWrapper> cfg = tsdb.getConfig().getView().getEntries();
 //    for (final Entry<String, ConfigurationEntryWrapper> entry : cfg.entrySet()) {
