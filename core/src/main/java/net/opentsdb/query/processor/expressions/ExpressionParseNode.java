@@ -67,7 +67,7 @@ public class ExpressionParseNode extends BaseQueryNodeConfig {
     DIVIDE(new String[] { "/" }),
     MOD(new String[] { "%" });
     
-    private final String[] symbols;
+    protected final String[] symbols;
       
     /**
      * Default ctor.
@@ -102,35 +102,35 @@ public class ExpressionParseNode extends BaseQueryNodeConfig {
   }
   
   /** The output metric name. Defaults to the ID. */
-  private String as;
+  protected String as;
   
   /** The left operand. */
-  private Object left;
+  protected Object left;
   
   /** The type of the left operand. */
-  private final OperandType left_type;
+  protected final OperandType left_type;
   
   /** The right operand. */
-  private Object right;
+  protected Object right;
   
   /** The type of the right operand. */
-  private final OperandType right_type;
+  protected final OperandType right_type;
   
   /** The expression operator. */
-  private final ExpressionOp op;
+  protected final ExpressionOp op;
   
   /** Whether or not we're negating the output. */
-  private boolean negate;
+  protected boolean negate;
   
   /** Whether or not we're "not"ting the output. */
-  private boolean not;
+  protected boolean not;
   
   /** A link to the original expression config. */
-  private final ExpressionConfig expression_config;
+  protected final ExpressionConfig expression_config;
   
   /** Node IDs for linking results. */
-  private String left_id;
-  private String right_id;
+  protected String left_id;
+  protected String right_id;
   
   /**
    * Protected ctor.
@@ -256,6 +256,10 @@ public class ExpressionParseNode extends BaseQueryNodeConfig {
   }
   
   public String toString() {
+    return stringBuilder().toString();
+  }
+  
+  protected StringBuilder stringBuilder() {
     return new StringBuilder()
         .append("{id=")
         .append(id)
@@ -279,8 +283,7 @@ public class ExpressionParseNode extends BaseQueryNodeConfig {
         .append(negate)
         .append(", not=")
         .append(not)
-        .append("}")
-        .toString();
+        .append("}");
   }
   
   public Builder toBuilder() {
@@ -306,27 +309,27 @@ public class ExpressionParseNode extends BaseQueryNodeConfig {
   
   static class Builder extends BaseQueryNodeConfig.Builder {
     @JsonProperty
-    private Object left;
+    protected Object left;
     @JsonProperty
-    private OperandType leftType;
+    protected OperandType leftType;
     @JsonProperty
-    private Object right;
+    protected Object right;
     @JsonProperty
-    private OperandType rightType;
+    protected OperandType rightType;
     @JsonProperty
-    private ExpressionOp op;
+    protected ExpressionOp op;
     @JsonProperty
-    private boolean negate;
+    protected boolean negate;
     @JsonProperty
-    private boolean not;
+    protected boolean not;
     @JsonProperty
-    private ExpressionConfig expressionConfig;
+    protected ExpressionConfig expressionConfig;
     @JsonProperty
-    private String as;
+    protected String as;
     @JsonProperty
-    private String leftId;
+    protected String leftId;
     @JsonProperty
-    private String rightId;
+    protected String rightId;
     
     Builder() {
       setType(BinaryExpressionNodeFactory.TYPE);

@@ -32,7 +32,7 @@ import net.opentsdb.utils.Pair;
  * @since 3.0
  */
 public abstract class BaseJoin implements 
-    Iterator<Pair<TimeSeries, TimeSeries>> {
+    Iterator<TimeSeries[]> {
   
   /** The join set to pull from. */
   protected final BaseHashedJoinSet join;
@@ -60,12 +60,12 @@ public abstract class BaseJoin implements
   protected TLongSet completed;
   
   /** The value to be populated and returned in the {@link #next()} call. */
-  protected Pair<TimeSeries, TimeSeries> pair;
+  protected TimeSeries[] current;
   
   /** A value to be populated in the {@link #advance()} implementation
    * and used by {@link #hasNext()} to determine if more data is available
    * or not. If null, no more data available. */
-  protected Pair<TimeSeries, TimeSeries> next;
+  protected TimeSeries[] next;
   
   /**
    * Default ctor.
@@ -77,6 +77,8 @@ public abstract class BaseJoin implements
       throw new IllegalArgumentException("Hashed join set cannot be null.");
     }
     this.join = join;
+    current = new TimeSeries[join.is_ternary ? 3 : 2];
+    next = new TimeSeries[join.is_ternary ? 3 : 2];
   }
   
   @Override
@@ -85,11 +87,11 @@ public abstract class BaseJoin implements
   }
 
   @Override
-  public Pair<TimeSeries, TimeSeries> next() {
-    pair.setKey(next.getKey());
-    pair.setValue(next.getValue());
+  public TimeSeries[] next() {
+    current[0] = next[0];
+    current[1] = next[1];
     advance();
-    return pair;
+    return current;
   }
   
   /**

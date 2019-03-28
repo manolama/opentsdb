@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2018  The OpenTSDB Authors.
+// Copyright (C) 2018-2020  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import java.util.List;
 import gnu.trove.map.TLongObjectMap;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
-import net.opentsdb.utils.Pair;
 
 /**
  * The base class for binary joins with a left and a right map of lists
@@ -28,8 +27,7 @@ import net.opentsdb.utils.Pair;
  * 
  * @since 3.0
  */
-public abstract class BaseHashedJoinSet implements 
-    Iterable<Pair<TimeSeries, TimeSeries>> {
+public abstract class BaseHashedJoinSet implements Iterable<TimeSeries[]> {
 
   /** The type of join. */
   protected final JoinType type;
@@ -40,16 +38,21 @@ public abstract class BaseHashedJoinSet implements
   /** The right join map. May be null. */
   protected TLongObjectMap<List<TimeSeries>> right_map;
   
+  protected TLongObjectMap<List<TimeSeries>> condition_map;
+  
+  protected boolean is_ternary;
+  
   /**
    * Default ctor.
    * @param type A non-null type.
    */
-  public BaseHashedJoinSet(final JoinType type) {
+  public BaseHashedJoinSet(final JoinType type, final boolean is_ternary) {
     this.type = type;
+    this.is_ternary = is_ternary;
   }
   
   @Override
-  public Iterator<Pair<TimeSeries, TimeSeries>> iterator() {
+  public Iterator<TimeSeries[]> iterator() {
     switch (type) {
     case INNER:
     case NATURAL:

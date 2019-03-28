@@ -76,6 +76,7 @@ import net.opentsdb.expressions.parser.MetricExpressionParser.TernaryOperandsCon
 import net.opentsdb.expressions.parser.MetricExpressionVisitor;
 import net.opentsdb.query.processor.expressions.ExpressionParseNode.ExpressionOp;
 import net.opentsdb.query.processor.expressions.ExpressionParseNode.OperandType;
+import net.opentsdb.query.processor.expressions.TernaryExpressionParseNode.Builder;
 
 /**
  * An Antlr4 visitor to build the expression sub-graph from the parsed
@@ -100,6 +101,8 @@ public class ExpressionParser extends DefaultErrorStrategy
   
   /** The set of variables extracted when parsing the expression. */
   private final Set<String> variables;
+  
+  //private boolean in_ternary = false;
   
   /**
    * Default ctor.
@@ -139,7 +142,8 @@ public class ExpressionParser extends DefaultErrorStrategy
     final MetricExpressionParser parser = new MetricExpressionParser(tokens);
     parser.removeErrorListeners(); // suppress logging to stderr.
     parser.setErrorHandler(this);
-    parser.prog().accept(this);
+    Object obj = parser.prog().accept(this);
+    System.out.println("***** FINAL OBJ: " + obj);
     
     if (nodes.size() < 1) {
       throw new ParseCancellationException("Unable to extract an "
@@ -148,7 +152,9 @@ public class ExpressionParser extends DefaultErrorStrategy
     
     final List<ExpressionParseNode> final_nodes = 
         Lists.newArrayListWithExpectedSize(nodes.size());
+    System.out.println("        final nodes size: " + nodes.size());
     for (int i = 0; i < nodes.size() - 1; i++) {
+      System.out.println("           BUILDERS: " + nodes.get(i));
       final_nodes.add((ExpressionParseNode) nodes.get(i).build());
     }
     int last = nodes.size() - 1;
@@ -346,9 +352,49 @@ public class ExpressionParser extends DefaultErrorStrategy
     builder.setId(id);
     builder.setAs(id);
     nodes.add(builder);
+    System.out.println("    [[[[[[ ADDED " + id  + " to nodes builder => " + nodes.size());
     return builder;
   }
   
+  @VisibleForTesting
+  Object newTernary(final Object condition,
+                    final Object left, 
+                    final Object right) {
+    // if we're only parsing the variables, don't worry about instantiating
+    // a node. For the condition, it should be a binary so the newBinary() call
+    // will populate variables for that.
+    if (config == null) {
+      if (left instanceof String) {
+        variables.add((String) left);
+      }
+      if (right instanceof String) {
+        variables.add((String) right);
+      }
+      return null;
+    }
+    
+    // shrug.
+    if (left instanceof Null && right instanceof Null) {
+      return left;
+    }
+    
+    final TernaryExpressionParseNode.Builder builder = 
+        (Builder) TernaryExpressionParseNode.newBuilder()
+          .setExpressionConfig(config);
+    if (condition instanceof ExpressionParseNode.Builder) {
+      builder.setCondition(((ExpressionParseNode.Builder) condition).id())
+             .setConditionType(OperandType.SUB_EXP)
+             .setConditionId(((ExpressionParseNode.Builder) condition).id());
+    }
+    setBranch(builder, left, true);
+    setBranch(builder, right, false);
+    final String id = config.getId() + "_TernaryExp#" + cntr++;
+    builder.setId(id);
+    builder.setAs(id);
+    nodes.add(builder);
+    System.out.println("    [[[[[[ ADDED " + id  + " to nodes builder: " + nodes.size());
+    return builder;
+  }
   /**
    * Helper to build the binary expression.
    * @param builder A non-null builder.
@@ -414,6 +460,7 @@ public class ExpressionParser extends DefaultErrorStrategy
   public Object visitTerminal(TerminalNode node) {
     // this is a variable or operand (or parens).
     final String text = node.getText();
+    System.out.println("              TERMINAL: " + text);
     // TODO - break this into a numeric literal to avoid having to parse
     // here.
     if ((text.charAt(0) >= '0' &&
@@ -447,17 +494,21 @@ public class ExpressionParser extends DefaultErrorStrategy
 
   @Override
   public Object visitProg(ProgContext ctx) {
+    System.out.println("      PROG(1) " + ctx.getChildCount() + ": " + ctx.getText());
     return ctx.getChild(0).accept(this);
   }
 
   @Override
   public Object visitArithmetic(ArithmeticContext ctx) {
+    System.out.println("      arithmetic(1) " + ctx.getChildCount() + ": " + ctx.getText());
     return ctx.getChild(0).accept(this);
   }
 
   @Override
   public Object visitLogical(LogicalContext ctx) {
+    System.out.println("      logical(3+) " + ctx.getChildCount() + ": " + ctx.getText());
     Object left = ctx.getChild(0).accept(this);
+    System.out.println("             LEFT: " + ((ExpressionParseNode.Builder)left).id());
     for (int i = 2; i < ctx.getChildCount(); i += 2) {
       Object right = ctx.getChild(i).accept(this);
       Object op = ctx.getChild(i - 1).accept(this);
@@ -468,11 +519,13 @@ public class ExpressionParser extends DefaultErrorStrategy
 
   @Override
   public Object visitRelational(RelationalContext ctx) {
+    System.out.println("      relational(1) " + ctx.getChildCount() + ": " + ctx.getText());
     return ctx.getChild(0).accept(this);
   }
 
   @Override
   public Object visitParen_logical_rule(Paren_logical_ruleContext ctx) {
+    System.out.println("      logicalRule(3) " + ctx.getChildCount() + ": " + ctx.getText());
     // catch exceptions
     ctx.getChild(0).accept(this);
     ctx.getChild(2).accept(this);
@@ -481,11 +534,13 @@ public class ExpressionParser extends DefaultErrorStrategy
 
   @Override
   public Object visitLogical_operands_rule(Logical_operands_ruleContext ctx) {
+    System.out.println("      operandsRule(1) " + ctx.getChildCount() + ": " + ctx.getText());
     return ctx.getChild(0).accept(this);
   }
 
   @Override
   public Object visitLogical_expr_and_rule(Logical_expr_and_ruleContext ctx) {
+    System.out.println("      logicalExprAndRule(3+) " + ctx.getChildCount() + ": " + ctx.getText());
     Object left = ctx.getChild(0).accept(this);
     for (int i = 2; i < ctx.getChildCount(); i += 2) {
       Object right = ctx.getChild(i).accept(this);
@@ -520,16 +575,19 @@ public class ExpressionParser extends DefaultErrorStrategy
 
   @Override
   public Object visitLogicalOperands(LogicalOperandsContext ctx) {
+    System.out.println("      logicalOperands(1) " + ctx.getChildCount() + ": " + ctx.getText());
     return ctx.getChild(0).accept(this);
   }
 
   @Override
   public Object visitArith_operands_rule(Arith_operands_ruleContext ctx) {
+    System.out.println("      arithOperandsRule(1) " + ctx.getChildCount() + ": " + ctx.getText());
     return ctx.getChild(0).accept(this);
   }
 
   @Override
   public Object visitParen_arith_rule(Paren_arith_ruleContext ctx) {
+    System.out.println("      arithParensRule(3) " + ctx.getChildCount() + ": " + ctx.getText());
     // catch errors
     ctx.getChild(0).accept(this);
     ctx.getChild(2).accept(this);
@@ -584,11 +642,13 @@ public class ExpressionParser extends DefaultErrorStrategy
   @Override
   public Object visitArithmetic_operands_rule(
       Arithmetic_operands_ruleContext ctx) {
+    System.out.println("      operands(1) " + ctx.getChildCount() + ": " + ctx.getText());
     return ctx.getChild(0).accept(this);
   }
 
   @Override
   public Object visitParen_relational_rule(Paren_relational_ruleContext ctx) {
+    System.out.println("      parenRelationalRule(3) " + ctx.getChildCount() + ": " + ctx.getText());
     // catch exceptions
     ctx.getChild(0).accept(this);
     ctx.getChild(2).accept(this);
@@ -597,6 +657,7 @@ public class ExpressionParser extends DefaultErrorStrategy
 
   @Override
   public Object visitMain_relational_rule(Main_relational_ruleContext ctx) {
+    System.out.println("      relationalRule(3+) " + ctx.getChildCount() + ": " + ctx.getText());
     Object left = ctx.getChild(0).accept(this);
     for (int i = 2; i < ctx.getChildCount(); i += 2) {
       Object right = ctx.getChild(i).accept(this);
@@ -609,21 +670,25 @@ public class ExpressionParser extends DefaultErrorStrategy
   @Override
   public Object visitRelational_operands_rule(
       Relational_operands_ruleContext ctx) {
+    System.out.println("      relationalOperandsRule(1) " + ctx.getChildCount() + ": " + ctx.getText());
     return ctx.getChild(0).accept(this);
   }
 
   @Override
   public Object visitLogicop(LogicopContext ctx) {
+    System.out.println("      logicalOp(1) " + ctx.getChildCount() + ": " + ctx.getText());
     return ctx.getChild(0).accept(this);
   }
 
   @Override
   public Object visitRelationalop(RelationalopContext ctx) {
+    System.out.println("      relationalOp(1) " + ctx.getChildCount() + ": " + ctx.getText());
     return ctx.getChild(0).accept(this);
   }
 
   @Override
   public Object visitAnd(AndContext ctx) {
+    System.out.println("      and(1) " + ctx.getChildCount() + ": " + ctx.getText());
     return ctx.getChild(0).accept(this);
   }
 
@@ -644,31 +709,53 @@ public class ExpressionParser extends DefaultErrorStrategy
 
   @Override
   public Object visitMetric(MetricContext ctx) {
+    System.out.println("      metric(1) " + ctx.getChildCount() + ": " + ctx.getText());
     return ctx.getChild(0).accept(this);
   }
 
   @Override
   public Object visitTernary(TernaryContext ctx) {
-    // TODO Auto-generated method stub
-    return null;
+    System.out.println("VISITING TERNARY: " + ctx.getText());
+    System.out.println("KIDS: " + ctx.getChildCount() + ": " + ctx.getText());
+    //in_ternary = true;
+    final Object obj = ctx.getChild(0).accept(this);
+    //in_ternary = false;
+    return obj;
   }
 
   @Override
   public Object visitParen_ternary_rule(Paren_ternary_ruleContext ctx) {
     // TODO Auto-generated method stub
+    System.out.println("PAREN TERN: " + ctx.getText() + "  Kids: " + ctx.getChildCount() + ": " + ctx.getText());
     return null;
   }
 
   @Override
   public Object visitMain_ternary_rule(Main_ternary_ruleContext ctx) {
     // TODO Auto-generated method stub
-    return null;
+    System.out.println("MAIN TERN: " + ctx.getText() + "  Kids: " + ctx.getChildCount() + ": " + ctx.getText());
+    // woah, 5 kids!!
+    // 0 == condition
+    // 1 == ?
+    // 2 == true expression
+    // 3 == :
+    // 4 == false expression
+    Object condition = ctx.getChild(0).accept(this);
+    Object left = ctx.getChild(2).accept(this);
+    Object right = ctx.getChild(4).accept(this);
+//    for (int i = 2; i < ctx.getChildCount(); i += 2) {
+//      System.out.println("  VISIT: " + i + " : " + ctx.getChild(i).accept(this));
+//      Object left = ctx.getChild(i).accept(this);
+//      newTernary(condition, left, right);
+//    }
+    return newTernary(condition, left, right);
   }
 
   @Override
   public Object visitTernaryOperands(TernaryOperandsContext ctx) {
     // TODO Auto-generated method stub
-    return null;
+    System.out.println("OPERANDS TERN: " + ctx.getText() + "  Kids: " + ctx.getChildCount() + ": " + ctx.getText());
+    return ctx.getChild(0).accept(this);
   }
   
   @Override

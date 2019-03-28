@@ -18,6 +18,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -34,6 +37,7 @@ import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.joins.Joiner;
+import net.opentsdb.query.processor.expressions.BinaryExpressionNode.FailedQueryResult;
 import net.opentsdb.query.processor.expressions.ExpressionParseNode.OperandType;
 import net.opentsdb.utils.Bytes.ByteMap;
 
@@ -55,6 +59,9 @@ import net.opentsdb.utils.Bytes.ByteMap;
  * @since 3.0
  */
 public class BinaryExpressionNode extends AbstractQueryNode {
+  private static final Logger LOG = LoggerFactory.getLogger(
+      BinaryExpressionNode.class);
+      
   /** The original expression config */
   protected final ExpressionConfig config;
   
@@ -74,7 +81,7 @@ public class BinaryExpressionNode extends AbstractQueryNode {
   /** Used to filtering when we're working on encoded IDs. */
   protected byte[] left_metric;
   protected byte[] right_metric;
-  protected boolean resolved_metrics;
+  protected volatile boolean resolved_metrics;
   
   /**
    * Default ctor.
@@ -133,31 +140,47 @@ public class BinaryExpressionNode extends AbstractQueryNode {
       synchronized (this) {
         results.put(next.dataSource(), next);
       }
-    } else if (results.containsKey(next.source().config().getId()) || 
-        next.exception() != null) {
-      if (!Strings.isNullOrEmpty(next.error())) {
-        sendUpstream(new FailedQueryResult(next));
-        return;
-      }
-      synchronized (this) {
-        results.put(next.source().config().getId(), next);
-      }
     } else {
+      LOG.warn("Unexpected result at binary node " + expression_config.getId() 
+        + ": " + next.dataSource());
       return;
     }
     
-    // NOTE: There is a race condition here where two results may resolve
-    // the IDs. That's ok though.
-    class ErrorCB implements Callback<Object, Exception> {
-      @Override
-      public Object call(final Exception ex) throws Exception {
-        sendUpstream(ex);
-        return null;
+    if (resolveMetrics(next)) {
+      // resolving, don't progress yet.
+      return;
+    }
+    
+    if (resolveJoinStrings(next)) {
+      // resolving, don't progress yet.
+      return;
+    }
+    
+    // see if all the results are in.
+    int received = 0;
+    synchronized (this) {
+      for (final QueryResult result : results.values()) {
+        if (result != null) {
+          received++;
+        }
       }
     }
     
-    // Try to resolve the variable names as metrics. This should return
-    // and empty
+    if (received == results.size()) {
+      for (final QueryResult r : results.values()) {
+        result.add(r);
+      }
+      
+      result.join();
+      try {
+        sendUpstream(result);
+      } catch (Exception e) {
+        sendUpstream(e);
+      }
+    }
+  }
+  
+  protected boolean resolveMetrics(final QueryResult next) {
     if (next.idType() == Const.TS_BYTE_ID &&
         (expression_config.getLeftType() == OperandType.VARIABLE || 
          expression_config.getRightType() == OperandType.VARIABLE) && 
@@ -188,7 +211,7 @@ public class BinaryExpressionNode extends AbstractQueryNode {
           }
           
           resolved_metrics = true;
-          // fall through to the next step
+          // call back into onNext() to progress to the next step.
           onNext(next);
           return null;
         }
@@ -198,9 +221,12 @@ public class BinaryExpressionNode extends AbstractQueryNode {
         .dataStore().encodeJoinMetrics(metrics, null /* TODO */)
         .addCallback(new ResolveCB())
         .addErrback(new ErrorCB());
-      return;
+      return true;
     }
-    
+    return false;
+  }
+  
+  protected boolean resolveJoinStrings(final QueryResult next) {
     if (next.idType() == Const.TS_BYTE_ID && 
         joiner.encodedJoins() == null && 
         !config.getJoin().getJoins().isEmpty()) {
@@ -234,7 +260,7 @@ public class BinaryExpressionNode extends AbstractQueryNode {
             encoded_joins.put(left, right);
           }
           joiner.setEncodedJoins(encoded_joins);
-          // fall through to the next step
+          // call onNext() again so that we trigger the count of results.
           onNext(next);
           return null;
         }
@@ -244,30 +270,18 @@ public class BinaryExpressionNode extends AbstractQueryNode {
         .dataStore().encodeJoinKeys(tagks, null /* TODO */)
         .addCallback(new ResolveCB())
         .addErrback(new ErrorCB());
-      return;
+      return true;
     }
-    
-    // see if all the results are in.
-    int received = 0;
-    synchronized (this) {
-      for (final QueryResult result : results.values()) {
-        if (result != null) {
-          received++;
-        }
-      }
-    }
-    
-    if (received == results.size()) {
-      for (final QueryResult r : results.values()) {
-        result.add(r);
-      }
-      
-      result.join();
-      try {
-        sendUpstream(result);
-      } catch (Exception e) {
-        sendUpstream(e);
-      }
+    return false;
+  }
+  
+  // NOTE: There is a race condition here where two results may resolve
+  // the IDs. That's ok though.
+  class ErrorCB implements Callback<Object, Exception> {
+    @Override
+    public Object call(final Exception ex) throws Exception {
+      sendUpstream(ex);
+      return null;
     }
   }
   

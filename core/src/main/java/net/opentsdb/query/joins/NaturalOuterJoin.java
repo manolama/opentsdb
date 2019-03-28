@@ -46,11 +46,9 @@ public class NaturalOuterJoin extends BaseJoin {
     right_iterator = join.right_map == null ? null : join.right_map.iterator();
     completed = new TLongHashSet();
     if (left_iterator != null || right_iterator != null) {
-      pair = new Pair<TimeSeries, TimeSeries>(null, null);  
-      next = new Pair<TimeSeries, TimeSeries>(null, null);
       advance();
     } else {
-      pair = null;
+      current = null;
       next = null;
     }
   }
@@ -66,15 +64,15 @@ public class NaturalOuterJoin extends BaseJoin {
         if (right_series != null && 
             right_idx + 1 < right_series.size()) {
           right_idx++;
-          next.setKey(left_series.get(left_idx));
-          next.setValue(right_series.get(right_idx));
+          next[0] = left_series.get(left_idx);
+          next[1] = right_series.get(right_idx);
           return;
         } else if (left_series != null && 
                    left_idx + 1 < left_series.size() &&
                    right_series == null) {
           left_idx++;
-          next.setKey(left_series.get(left_idx));
-          next.setValue(null);
+          next[0] = left_series.get(left_idx);
+          next[1] = null;
           return;
         }
         
@@ -105,8 +103,8 @@ public class NaturalOuterJoin extends BaseJoin {
           right_idx = -1;
           if (right_series == null) {
             // no match from left to right, return a null
-            next.setKey(left_series.get(left_idx));
-            next.setValue(null);
+            next[0] = left_series.get(left_idx);
+            next[1] = null;
             return;
           }
         }
@@ -132,8 +130,8 @@ public class NaturalOuterJoin extends BaseJoin {
 //          continue;
 //        } else {
           right_idx++;
-          next.setKey(left_series.get(left_idx));
-          next.setValue(right_series.get(right_idx));
+          next[0] = left_series.get(left_idx);
+          next[1] = right_series.get(right_idx);
 //        }
         
         // clear out the series if we've reached the end of the arrays.
@@ -162,14 +160,14 @@ public class NaturalOuterJoin extends BaseJoin {
         if (left_series != null && 
             left_idx + 1 < left_series.size()) {
           left_idx++;
-          next.setKey(left_series.get(left_idx));
-          next.setValue(right_series.get(right_idx));
+          next[0] = left_series.get(left_idx);
+          next[1] = right_series.get(right_idx);
           return;
         } else if (right_series != null && 
                    right_idx + 1 < right_series.size()) {
           right_idx++;
-          next.setKey(null);
-          next.setValue(right_series.get(right_idx));
+          next[0] = null;
+          next[1] = right_series.get(right_idx);
           return;
         }
         
@@ -202,8 +200,8 @@ public class NaturalOuterJoin extends BaseJoin {
           left_idx = -1;
           if (left_series == null) {
             // no match from right to left so return a null;
-            next.setKey(null);
-            next.setValue(right_series.get(right_idx));
+            next[0] = null;
+            next[1] = right_series.get(right_idx);
             return;
           }
         }
@@ -228,8 +226,8 @@ public class NaturalOuterJoin extends BaseJoin {
 //          continue;
 //        } else {
           left_idx++;
-          next.setKey(left_series.get(left_idx));
-          next.setValue(right_series.get(right_idx));
+          next[0] = left_series.get(left_idx);
+          next[1] = right_series.get(right_idx);
 //        }
         
         if (left_idx + 1 >= left_series.size() && 

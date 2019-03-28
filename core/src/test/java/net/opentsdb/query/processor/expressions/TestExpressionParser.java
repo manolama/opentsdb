@@ -595,6 +595,26 @@ public class TestExpressionParser {
     
   }
   
+  @Test
+  public void ternary() throws Exception {
+    ExpressionParser parser = new ExpressionParser(config("a > b ? c : d"));
+    //ExpressionParser parser = new ExpressionParser(config("(a > b && b > 1) ? C : D"));
+    //ExpressionParser parser = new ExpressionParser(config("(a > b && (b > 1 || b < 3)) ? C : D"));
+    //ExpressionParser parser = new ExpressionParser(config("a + 1 > b ? C : D"));
+    //ExpressionParser parser = new ExpressionParser(config("a + 1 * c"));
+    // TODO - test metric only? E.g. "a ? a : b"
+    // TODO - allow "1 > a : b"?
+    List<ExpressionParseNode> nodes = parser.parse();
+    for (ExpressionParseNode n : nodes) {
+      System.out.println(n);
+    }
+    
+//    
+//    System.out.println("--------------------------");
+//    parser = new ExpressionParser(config("a * b"));
+//    nodes = parser.parse();
+  }
+  
   ExpressionConfig config(final String exp) {
     return (ExpressionConfig) ExpressionConfig.newBuilder()
       .setExpression(exp)

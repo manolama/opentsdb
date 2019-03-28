@@ -40,8 +40,12 @@ public class ExpressionResult implements QueryResult {
   /** The parent node. */
   protected final BinaryExpressionNode node;
   
-  /** The list of 1 or 2 results. For now. */
+  /** The list of 1 or 2 results. 3 if ternary with the condition as 0, 
+   * then left if present and/or right. */
   protected final List<QueryResult> results;
+  
+  /** Whether or not we're a tenary result. */
+  protected final boolean is_ternary;
   
   /** The list of joined time series. */
   protected List<TimeSeries> time_series;
@@ -52,7 +56,8 @@ public class ExpressionResult implements QueryResult {
    */
   ExpressionResult(final BinaryExpressionNode node) {
     this.node = node;
-    results = Lists.newArrayListWithExpectedSize(2);
+    is_ternary = node instanceof TernaryExpressionNode;
+    results = Lists.newArrayListWithExpectedSize(is_ternary ? 3 : 2);
   }
   
   /**
@@ -69,7 +74,7 @@ public class ExpressionResult implements QueryResult {
    * results it needs for the expression.
    */
   void join() {
-    final Iterable<Pair<TimeSeries, TimeSeries>> joins;
+    final Iterable<TimeSeries[]> joins;
     final ExpressionParseNode config = (ExpressionParseNode) node.config();
     
     if ((config.getLeftType() == OperandType.SUB_EXP || 
@@ -84,7 +89,8 @@ public class ExpressionResult implements QueryResult {
             ((String) config.getLeft()).getBytes(Const.UTF8_CHARSET), 
           node.rightMetric() != null ? node.rightMetric() : 
             ((String) config.getRight()).getBytes(Const.UTF8_CHARSET),
-          use_alias);
+          use_alias,
+          is_ternary);
     } else if (config.getLeftType() == OperandType.SUB_EXP || 
         config.getLeftType() == OperandType.VARIABLE) {
       final boolean use_alias = 
@@ -109,8 +115,9 @@ public class ExpressionResult implements QueryResult {
     }
     
     time_series = Lists.newArrayList();
-    for (final Pair<TimeSeries, TimeSeries> pair : joins) {
-      time_series.add(new ExpressionTimeSeries(node, this, pair.getKey(), pair.getValue()));
+    for (final TimeSeries[] pair : joins) {
+      // TODO TERNARY
+      time_series.add(new ExpressionTimeSeries(node, this, pair[0], pair[1]));
     }
   }
   
