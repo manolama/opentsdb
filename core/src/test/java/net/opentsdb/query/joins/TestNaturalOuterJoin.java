@@ -48,24 +48,24 @@ public class TestNaturalOuterJoin extends BaseJoinTest {
     
     int matched = 0;
     while (join.hasNext()) {
-      Pair<TimeSeries, TimeSeries> next = join.next();
+      TimeSeries[] next = join.next();
       matched++;
-      if (next.getKey() == L_1) {
-        assertSame(R_1, next.getValue());
-      } else if (next.getKey() == L_2) {
-        assertNull(next.getValue());
-      } else if (next.getKey() == L_4) {
-        assertTrue(next.getValue() == R_4A || next.getValue() == R_4B);
-      } else if (next.getKey() == L_5A) {
-        assertSame(R_5, next.getValue());
-      } else if (next.getKey() == L_5B) {
-        assertSame(R_5, next.getValue());
-      } else if (next.getKey() == L_6A) {
-        assertTrue(next.getValue() == R_6A || next.getValue() == R_6B);
-      } else if (next.getKey() == L_6B) {
-        assertTrue(next.getValue() == R_6A || next.getValue() == R_6B);
-      } else if (next.getKey() == null) {
-        assertSame(R_3, next.getValue());
+      if (next[0] == L_1) {
+        assertSame(R_1, next[1]);
+      } else if (next[0] == L_2) {
+        assertNull(next[1]);
+      } else if (next[0] == L_4) {
+        assertTrue(next[1] == R_4A || next[1] == R_4B);
+      } else if (next[0] == L_5A) {
+        assertSame(R_5, next[1]);
+      } else if (next[0] == L_5B) {
+        assertSame(R_5, next[1]);
+      } else if (next[0] == L_6A) {
+        assertTrue(next[1] == R_6A || next[1] == R_6B);
+      } else if (next[0] == L_6B) {
+        assertTrue(next[1] == R_6A || next[1] == R_6B);
+      } else if (next[0] == null) {
+        assertSame(R_3, next[1]);
       }
     }
     assertEquals(11, matched);

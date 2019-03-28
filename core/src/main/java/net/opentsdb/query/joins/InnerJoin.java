@@ -38,11 +38,9 @@ public class InnerJoin extends BaseJoin {
     super(join);
     left_iterator = join.left_map == null ? null : join.left_map.iterator();
     if (left_iterator != null && join.right_map != null) {
-      pair = new Pair<TimeSeries, TimeSeries>(null, null);  
-      next = new Pair<TimeSeries, TimeSeries>(null, null);
       advance();
     } else {
-      pair = null;
+      current = null;
       next = null;
     }
   }
@@ -57,8 +55,8 @@ public class InnerJoin extends BaseJoin {
           right_series != null && 
           right_idx + 1 < right_series.size()) {
         right_idx++;
-        next.setKey(left_series.get(left_idx));
-        next.setValue(right_series.get(right_idx));
+        next[0] = left_series.get(left_idx);
+        next[1] = right_series.get(right_idx);
         return;
       }
       
@@ -104,8 +102,8 @@ public class InnerJoin extends BaseJoin {
       
       // matched!
       right_idx++;
-      next.setKey(left_series.get(left_idx));
-      next.setValue(right_series.get(right_idx));
+      next[0] = left_series.get(left_idx);
+      next[1] = right_series.get(right_idx);
       
       if (left_idx + 1 >= left_series.size() && 
           right_idx + 1 >= right_series.size()) {

@@ -68,7 +68,7 @@ public class ExpressionParseNode extends BaseQueryNodeConfig<ExpressionParseNode
     DIVIDE(new String[] { "/" }),
     MOD(new String[] { "%" });
     
-    private final String[] symbols;
+    protected final String[] symbols;
       
     /**
      * Default ctor.
@@ -103,35 +103,35 @@ public class ExpressionParseNode extends BaseQueryNodeConfig<ExpressionParseNode
   }
   
   /** The output metric name. Defaults to the ID. */
-  private String as;
+  protected String as;
   
   /** The left operand. */
-  private Object left;
+  protected Object left;
   
   /** The type of the left operand. */
-  private final OperandType left_type;
+  protected final OperandType left_type;
   
   /** The right operand. */
-  private Object right;
+  protected Object right;
   
   /** The type of the right operand. */
-  private final OperandType right_type;
+  protected final OperandType right_type;
   
   /** The expression operator. */
-  private final ExpressionOp op;
+  protected final ExpressionOp op;
   
   /** Whether or not we're negating the output. */
-  private boolean negate;
+  protected boolean negate;
   
   /** Whether or not we're "not"ting the output. */
-  private boolean not;
+  protected boolean not;
   
   /** A link to the original expression config. */
-  private final ExpressionConfig expression_config;
+  protected final ExpressionConfig expression_config;
   
   /** Node IDs for linking results. */
-  private QueryResultId left_id;
-  private QueryResultId right_id;
+  protected String left_id;
+  protected String right_id;
   
   /**
    * Protected ctor.
@@ -259,6 +259,10 @@ public class ExpressionParseNode extends BaseQueryNodeConfig<ExpressionParseNode
   }
   
   public String toString() {
+    return stringBuilder().toString();
+  }
+  
+  protected StringBuilder stringBuilder() {
     return new StringBuilder()
         .append("{id=")
         .append(id)
@@ -282,8 +286,7 @@ public class ExpressionParseNode extends BaseQueryNodeConfig<ExpressionParseNode
         .append(negate)
         .append(", not=")
         .append(not)
-        .append("}")
-        .toString();
+        .append("}");
   }
 
   @Override
@@ -328,9 +331,9 @@ public class ExpressionParseNode extends BaseQueryNodeConfig<ExpressionParseNode
     @JsonProperty
     protected String as;
     @JsonProperty
-    protected QueryResultId leftId;
+    protected String leftId;
     @JsonProperty
-    protected QueryResultId rightId;
+    protected String rightId;
     
     Builder() {
       setType(BinaryExpressionNodeFactory.TYPE);

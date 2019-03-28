@@ -67,6 +67,12 @@ import net.opentsdb.utils.Bytes.ByteMap;
 public class Joiner {
   private static final Logger LOG = LoggerFactory.getLogger(Joiner.class);
   
+  public static enum Operand {
+    LEFT,
+    RIGHT,
+    CONDITION
+  }
+  
   /** A non-null config to pull join information from. */
   protected final JoinConfig config;
   
@@ -113,12 +119,11 @@ public class Joiner {
    * were rejected.
    * @throws IllegalArgumentException if any args were null or invalid.
    */
-  public Iterable<Pair<TimeSeries, TimeSeries>> join(
-      final Pair<QueryResult, QueryResult> results, 
-      final byte[] left_key, 
-      final byte[] right_key,
-      final boolean use_alias) {
-    if (results == null || (results.getKey() == null && results.getValue() == null)) {
+  public Iterable<TimeSeries[]> join(final List<QueryResult> results, 
+                                     final byte[] left_key, 
+                                     final byte[] right_key,
+                                     final boolean use_alias,
+                                     final boolean is_ternary) {
       throw new IllegalArgumentException("Results can't be null.");
     }
     if (left_key == null || left_key.length < 1) {
@@ -141,8 +146,8 @@ public class Joiner {
           + "IDs but the local encoded tags map was null.");
     }
     
-    final KeyedHashedJoinSet join_set = 
-        new KeyedHashedJoinSet(config.getJoinType());
+    final KeyedHashedJoinSet join_set = is_ternary ?
+        new TernaryKeyedHashedJoinSet(config.type, left_key, right_key) :
     
     // calculate the hash for every series and let the hasher kick out
     // inapplicable series.
@@ -151,7 +156,6 @@ public class Joiner {
       if (result == null) {
         continue;
       }
-      
       for (final TimeSeries ts : result.timeSeries()) {
         if (ts.id().type() == Const.TS_BYTE_ID) {
           final TimeSeriesByteId id = (TimeSeriesByteId) ts.id();
@@ -186,13 +190,16 @@ public class Joiner {
             }
           }
           
-          if (Bytes.memcmpMaybeNull(key, left_key) != 0 && 
-              Bytes.memcmpMaybeNull(key, right_key) != 0) {
+          if (Bytes.memcmp(key, left_key) == 0) {
+            hashByteId(Operand.LEFT, ts, join_set);
+          } else if (Bytes.memcmp(key, right_key) == 0) {
+            hashByteId(Operand.RIGHT, ts, join_set);
+          } else {
             // TODO - log ejection
             continue;
           }
           
-          hashByteId(key, ts, join_set, i == 0);
+          //hashByteId(key, ts, join_set);
         } else {
           final TimeSeriesStringId id = (TimeSeriesStringId) ts.id();
           final String key;
@@ -217,12 +224,15 @@ public class Joiner {
                   id.namespace() + id.metric();
           }
           final byte[] key_in_bytes = key.getBytes(Const.UTF8_CHARSET);
-          if (Bytes.memcmp(key_in_bytes, left_key) != 0 && 
-              Bytes.memcmp(key_in_bytes, right_key) != 0) {
+          if (Bytes.memcmp(key_in_bytes, left_key) == 0) {
+            hashStringId(Operand.LEFT, ts, join_set);
+          } else if (Bytes.memcmp(key_in_bytes, right_key) == 0) {
+            hashStringId(Operand.RIGHT, ts, join_set);
+          } else {
             // TODO - log ejection
             continue;
           }
-          hashStringId(key_in_bytes, ts, join_set, i == 0);
+          //hashStringId(key_in_bytes, ts, join_set);
         }
       }
     }
@@ -244,7 +254,7 @@ public class Joiner {
    * were rejected.
    * @throws IllegalArgumentException if any args were null or invalid.
    */
-  public Iterable<Pair<TimeSeries, TimeSeries>> join(
+  public Iterable<TimeSeries[]> join(
       final Pair<QueryResult, QueryResult> results,
       final byte[] filter,
       final boolean left,
@@ -265,7 +275,7 @@ public class Joiner {
           + "IDs but the local encoded tags map was null.");
     }
     
-    final List<Pair<TimeSeries, TimeSeries>> join_set = Lists.newArrayList();
+    final List<TimeSeries[]> join_set = Lists.newArrayList();
     
     // calculate the hashes for every time series and joins.
     for (int i = 0; i < 2; i++) {
@@ -328,8 +338,8 @@ public class Joiner {
             }
             
             if (satisfied_joins) {
-              join_set.add(new Pair<TimeSeries, TimeSeries>(
-                  left ? ts : null, left ? null : ts));
+              join_set.add(new TimeSeries[] {
+                  left ? ts : null, left ? null : ts });
             }
           }
           // TODO - log ejection
@@ -374,8 +384,8 @@ public class Joiner {
             }
             
             if (satisfied_joins) {
-              join_set.add(new Pair<TimeSeries, TimeSeries>(
-                  left ? ts : null, left ? null : ts));
+              join_set.add(new TimeSeries[] {
+                  left ? ts : null, left ? null : ts });
             }
           }
         }
@@ -657,7 +667,7 @@ public class Joiner {
    * @param join_set The non-null set to populate.
    */
   @VisibleForTesting
-  void hashStringId(final byte[] key,
+  void hashStringId(final Operand operand,
                     final TimeSeries ts,
                     final KeyedHashedJoinSet join_set,
                     boolean is_left) {
@@ -705,15 +715,17 @@ public class Joiner {
     default:
       // handles the other joins where we have to pull from the join config
       if (config.joins != null) {
+        //boolean is_left = join_set.left_key.equals(key);
         boolean matched = true;
         for (final Entry<String, String> pair : config.joins.entrySet()) {
-          final String value = id.tags().get(is_left ? pair.getKey() : pair.getValue());
+          final String value = id.tags().get(pair.getKey());
           if (Strings.isNullOrEmpty(value)) {
-            if (LOG.isTraceEnabled()) {
-              LOG.trace("Ejecting a series that didn't match: " + Bytes.pretty(key));
+            if (Strings.isNullOrEmpty(id.tags().get(pair.getValue()))) {
+              // TODO - log the ejection
             }
-            matched = false;
-            break;
+              matched = false;
+              break;
+            }
           }
           buf.append(value);
         }
@@ -733,7 +745,7 @@ public class Joiner {
       }
     }
     
-    join_set.add(key, LongHashFunction.xx().hashChars(buf.toString()), ts, is_left);
+    join_set.add(operand, LongHashFunction.xx_r39().hashChars(buf.toString()), ts);
   }
   
   /**
@@ -744,7 +756,7 @@ public class Joiner {
    * @param join_set The non-null set to populate.
    */
   @VisibleForTesting
-  void hashByteId(final byte[] key,
+  void hashByteId(final Operand operand,
                   final TimeSeries ts,
                   final KeyedHashedJoinSet join_set,
                   boolean is_left) {
@@ -786,13 +798,17 @@ public class Joiner {
         // filter on the tags.
       default:
         if (config.joins != null) {
+          //boolean is_left = join_set.left_key.equals(key);
           boolean matched = true;
           for (final Entry<byte[], byte[]> pair : encoded_joins) {
-            byte[] value = id.tags().get(is_left ? pair.getKey() : pair.getValue());
+            byte[] value = id.tags().get(pair.getKey());
             if (value == null || value.length < 1) {
-              // TODO - log the ejection
-              matched = false;
-              break;
+              value = id.tags().get(pair.getValue());
+              if (value == null || value.length < 1) {
+                // TODO - log the ejection
+                matched = false;
+                break;
+              }
             }
             buf.write(value);
           }
@@ -808,7 +824,7 @@ public class Joiner {
         }
       }
       
-      join_set.add(key, LongHashFunction.xx().hashBytes(buf.toByteArray()), ts, is_left);
+      join_set.add(operand, LongHashFunction.xx_r39().hashBytes(buf.toByteArray()), ts);
     } catch (IOException e) {
       throw new QueryExecutionException("Unexpected exception joining results", 0, e);
     }

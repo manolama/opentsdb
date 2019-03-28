@@ -653,7 +653,7 @@ public class BaseJoinTest {
   static class UTBaseHashedJoinSet extends BaseHashedJoinSet {
 
     public UTBaseHashedJoinSet(final JoinType type) {
-      super(type);
+      super(type, false);
     }
     
   }
