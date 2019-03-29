@@ -39,7 +39,6 @@ import gnu.trove.set.TLongSet;
 import gnu.trove.set.hash.TLongHashSet;
 import net.openhft.hashing.LongHashFunction;
 import net.opentsdb.data.MillisecondTimeStamp;
-import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesStringId;
@@ -54,6 +53,7 @@ import net.opentsdb.query.filter.QueryFilter;
 import net.opentsdb.rollup.RollupInterval;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.HBaseExecutor.State;
+import net.opentsdb.storage.schemas.tsdb1x.PooledPSTRunnable;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
 import net.opentsdb.storage.schemas.tsdb1x.TSUID;
 import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xPartialTimeSeries;
@@ -400,8 +400,6 @@ public class Tsdb1xScanner2 {
    * that processes the rows returned.
    */
   final class ScannerCB implements Callback<Object, ArrayList<ArrayList<KeyValue>>> {
-    /** The results. */
-   // private final Tsdb1xQueryResult result;
     
     /** A tracing span. */
     private final Span span;
@@ -427,6 +425,7 @@ public class Tsdb1xScanner2 {
     public Object call(final ArrayList<ArrayList<KeyValue>> rows) throws Exception {
       if (rows == null) {
         complete(null, 0);
+        System.out.println("here.................");
         return null;
       }
       
@@ -523,59 +522,14 @@ public class Tsdb1xScanner2 {
             }
             
             processRow(row);
-            
-//            if ((owner.node().sequenceEnd() != null && 
-//                base_ts.compare(
-//                    (scanner.isReversed() ? Op.LT : Op.GT), 
-//                        owner.node().sequenceEnd()))) {
-//              
-//              // end of sequence encountered in the buffer. Push on up
-//              if (LOG.isDebugEnabled()) {
-//                LOG.debug("Hit next sequence end in the scanner. "
-//                    + "Buffering results and returning.");
-//              }
-//              buffer(i, rows, true);
-//              return null;
-//            }
-            /* else if (result.isFull()) {
-              if (owner.node().pipelineContext().queryContext().mode() == 
-                  QueryMode.SINGLE) {
-                throw new QueryExecutionException(
-                    result.resultIsFullErrorMessage(),
-                    HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
-              }
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Owner is full. Buffering results and returning.");
-              }
-              buffer(i, rows, true);
-              return null;
-            }*/
-            
-            //result.decode(row, rollup_interval);
+            // TODO size of query
           }
         }
-        
-//        if (!result.isFull()) {
-//          // keep going!
-//          if (child != null) {
-//            child.setSuccessTags()
-//                 .setTag("rows", rows.size())
-//                 .setTag("buffered", row_buffer == null ? 0 : row_buffer.size())
-//                 .finish();
-//          }
-//          return scanner.nextRows().addCallbacks(this, new ErrorCB(span));
-//        } else if (owner.node().pipelineContext().queryContext().mode() == 
-//              QueryMode.SINGLE) {
-//          throw new QueryExecutionException(
-//              result.resultIsFullErrorMessage(),
-//              HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
-//        }
         
         if (owner.hasException()) {
           complete(child, rows.size());
         } else {
-          // is full
-          owner.scannerDone();
+          return scanner.nextRows().addCallbacks(this, new ErrorCB(span));
         }
       } catch (Exception e) {
         LOG.error("Unexpected exception", e);
@@ -602,6 +556,10 @@ public class Tsdb1xScanner2 {
      * @param rows The number of rows found in this result set.
      */
     void complete(final Exception e, final Span child, final int rows) {
+      System.out.println("--------- COMPLETING ------------");
+      // this will let the flush complete the last set.
+      base_ts.updateEpoch(0L);
+      
       if (e != null) {
         if (child != null) {
           child.setErrorTags(e)
@@ -631,6 +589,7 @@ public class Tsdb1xScanner2 {
       }
       scanner.close(); // TODO - attach a callback for logging in case
       // something goes pear shaped.
+      flushPartials();
       clear();
     }
     
@@ -671,8 +630,9 @@ public class Tsdb1xScanner2 {
   private void processRow(final ArrayList<KeyValue> row) {
     final long hash = LongHashFunction.xx_r39().hashBytes(
         owner.node().schema().getTSUID(row.get(0).key()));
+    
+    Tsdb1xPartialTimeSeries pts = last_pts.get(NumericLongArrayType.TYPE);
     for (final KeyValue column : row) {
-      System.out.println("[[[[[[[[[[[[ RUP: " + rollup_interval + "   LEN: " + column.qualifier().length + "   AND: " + (column.qualifier().length & 1));
       if (rollup_interval == null && (column.qualifier().length & 1) == 0) {
         // it's a NumericDataType
         if (!owner.node().fetchDataType(NUMERIC_TYPE)) {
@@ -680,10 +640,16 @@ public class Tsdb1xScanner2 {
           // TODO - dropped counters
           continue;
         }
-        Tsdb1xPartialTimeSeries pts = last_pts.get(NumericLongArrayType.TYPE);
+        
         if (pts == null) {
           pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
           last_pts.put(NumericLongArrayType.TYPE, pts);
+        } else if (pts.getType() != NumericLongArrayType.TYPE) {
+          pts = last_pts.get(NumericLongArrayType.TYPE);
+          if (pts == null) {
+            pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
+            last_pts.put(NumericLongArrayType.TYPE, pts);
+          }
         } else if (pts.idHash() != hash) {
           flushPartials();
           pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
@@ -697,19 +663,23 @@ public class Tsdb1xScanner2 {
                       owner.node().schema().arrayPool(),
                       hash,
                       owner.getSet(base_ts));
-        
       } else if (rollup_interval == null) {
         final byte prefix = column.qualifier()[0];
-        System.out.println("           PREFIX: " + prefix);
+        
         if (prefix == Schema.APPENDS_PREFIX) {
           if (!owner.node().fetchDataType((byte) 1)) {
             // filter doesn't want #'s
             continue;
           } else {
-            Tsdb1xPartialTimeSeries pts = last_pts.get(NumericLongArrayType.TYPE);
             if (pts == null) {
               pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
               last_pts.put(NumericLongArrayType.TYPE, pts);
+            } else if (pts.getType() != NumericLongArrayType.TYPE) {
+              pts = last_pts.get(NumericLongArrayType.TYPE);
+              if (pts == null) {
+                pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
+                last_pts.put(NumericLongArrayType.TYPE, pts);
+              }
             } else if (pts.idHash() != hash) {
               flushPartials();
               pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
@@ -824,19 +794,27 @@ public class Tsdb1xScanner2 {
   }
 
   void flushPartials() {
+    try {
     Iterator<Tsdb1xPartialTimeSeries> iterator = last_pts.values().iterator();
-    final Tsdb1xPartialTimeSeriesSet set = owner.getSet(base_ts);
     while (iterator.hasNext()) {
       Tsdb1xPartialTimeSeries series = iterator.next();
-      if (!iterator.hasNext()) {
-        set.increment(true);
+      if (!iterator.hasNext() && series.set().start().compare(Op.NE, base_ts)) {
+        ((Tsdb1xPartialTimeSeriesSet) series.set()).increment(true);
       } else {
-        set.increment(false);
+        ((Tsdb1xPartialTimeSeriesSet) series.set()).increment(false);
       }
       iterator.remove();
       
       // TODO - thread pool per user here!
-      owner.node().sendUpstream(series);
+      PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
+      runnable.reset(series, owner.node());
+      owner.node().pipelineContext()
+        .tsdb()
+        .getQueryThreadPool()
+        .submit(runnable);
+    }
+    } catch (Throwable t) {
+      t.printStackTrace();
     }
   }
   

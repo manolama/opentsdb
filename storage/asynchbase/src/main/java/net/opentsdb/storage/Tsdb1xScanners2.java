@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.storage;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -40,9 +41,11 @@ import gnu.trove.map.TLongObjectMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import net.opentsdb.configuration.Configuration;
 import net.opentsdb.core.Const;
+import net.opentsdb.data.NoDataPartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeStamp;
+import net.opentsdb.pools.NoDataPTSPool;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.TimeSeriesDataSourceConfig;
@@ -58,6 +61,7 @@ import net.opentsdb.rollup.RollupInterval;
 import net.opentsdb.rollup.RollupUtils;
 import net.opentsdb.rollup.RollupUtils.RollupUsage;
 import net.opentsdb.stats.Span;
+import net.opentsdb.storage.schemas.tsdb1x.PooledPSTRunnable;
 import net.opentsdb.storage.schemas.tsdb1x.ResolvedChainFilter;
 import net.opentsdb.storage.schemas.tsdb1x.ResolvedPassThroughFilter;
 import net.opentsdb.storage.schemas.tsdb1x.ResolvedQueryFilter;
@@ -141,6 +145,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
    * working up to the raw table if fallback was configured. 
    */
   protected List<Tsdb1xScanner2[]> scanners;
+  protected List<Integer> total_sets_per_scanners;
   
   /** The current index used for fetching data within the 
    * {@link #scanners} list. */
@@ -154,14 +159,11 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
    * calls. <b>WARNING</b> Must be synchronized!. */
   protected volatile int scanners_done;
   
-  /** The current result set by {@link #fetchNext(Tsdb1xQueryResult, Span)}. */
-  protected Tsdb1xQueryResult current_result;
-  
   /** Tag key and values to use in the row key filter, all pre-sorted */
   protected ByteMap<List<byte[]>> row_key_literals;
   
   protected TLongObjectMap<TimeSeriesId> ts_ids;
-  protected TLongObjectMap<Tsdb1xPartialTimeSeries> sets;
+  protected TLongObjectMap<Tsdb1xPartialTimeSeriesSet> sets;
   
   /** Whether or not the scanner set is in a failed state and children 
    * should close. */
@@ -186,7 +188,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     this.source_config = source_config;
     
     ts_ids = new TLongObjectHashMap<TimeSeriesId>();
-    sets = new TLongObjectHashMap<Tsdb1xPartialTimeSeries>();
+    sets = new TLongObjectHashMap<Tsdb1xPartialTimeSeriesSet>();
     
     final Configuration config = node.parent()
         .tsdb().getConfig();
@@ -261,13 +263,6 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       throw new IllegalArgumentException("Result must be initialized");
     }
     
-    synchronized (this) {
-      if (current_result != null) {
-        throw new IllegalStateException("Query result must have been null "
-            + "to start another query!");
-      }
-      current_result = result;
-    }
     // just extra safe locking. Shouldn't ever happen.
     if (!initialized) {
       synchronized (this) {
@@ -297,29 +292,15 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     synchronized (this) {
       scanners_done++;
       if (scanners_done >= scanners.get(scanner_index).length) {
-        if (current_result == null) {
-          throw new IllegalStateException("Current result was null but "
-              + "all scanners were finished.");
-        }
         send_upstream = true;
       }
     }
     
     if (send_upstream) {
       try {
-        scanners_done = 0;
-        if (scanners.size() == 1 || scanner_index + 1 >= scanners.size()) {
-          // swap and null
-          final Tsdb1xQueryResult result;
-          synchronized (this) {
-            result = current_result;
-            current_result = null;
-          }
-          node.onNext(result);
-        } else {
-          if ((current_result.timeSeries() == null || 
-              current_result.timeSeries().isEmpty()) && 
-              scanner_index + 1 < scanners.size()) {
+        if (sets.isEmpty()) {
+          if (scanner_index + 1 < scanners.size()) {
+            // fall back!
             if (LOG.isDebugEnabled()) {
               LOG.debug("Scanner index at [" + scanner_index 
                   + "] returned an empty set, falling back.");
@@ -328,14 +309,11 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
             scanner_index++;
             scanners_done = 0;
             scanNext(null /** TODO - span */);
-          } else {
-            final Tsdb1xQueryResult result;
-            synchronized (this) {
-              result = current_result;
-              current_result = null;
-            }
-            node.onNext(result);
+            return;
           }
+          
+          // crap, no data so we need to send empty sets upstream.
+          sendNoResults();
         }
       } catch (Exception e) {
         LOG.error("Unexpected exception handling scanner complete", e);
@@ -379,10 +357,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       LOG.debug("Exception from downstream", t);
     }
     
-    current_result.setException(t);
-    final QueryResult result = current_result;
-    current_result = null;
-    node.onNext(result);
+    node.onError(t);
   }
 
   @Override
@@ -429,7 +404,8 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
    */
   byte[] setStartKey(final byte[] metric, 
                      final RollupInterval rollup_interval,
-                     final byte[] fuzzy_key) {
+                     final byte[] fuzzy_key,
+                     final int scanners_index) {
     long start = node.pipelineContext().query().startTime().epoch();
     
     final Collection<QueryNode> rates = 
@@ -462,6 +438,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     
     // Don't return negative numbers.
     start = start > 0L ? start : 0L;
+    total_sets_per_scanners.set(scanners_index, (int) start);
     
     final byte[] start_key;
     if (fuzzy_key != null) {
@@ -483,7 +460,9 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
    * @param rollup_interval An optional rollup interval.
    * @return A non-null and non-empty byte array.
    */
-  byte[] setStopKey(final byte[] metric, final RollupInterval rollup_interval) {
+  byte[] setStopKey(final byte[] metric, 
+                    final RollupInterval rollup_interval,
+                    final int scanners_index) {
     long end = node.pipelineContext().query().endTime().epoch();
     
     if (rollup_interval != null) {
@@ -491,6 +470,9 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       end = RollupUtils.getRollupBasetime(end + 
           (rollup_interval.getIntervalSeconds() * rollup_interval.getIntervals()), 
             rollup_interval);
+      int start = total_sets_per_scanners.get(scanners_index);
+      total_sets_per_scanners.set(scanners_index, 
+          (((int) end) - start) / rollup_interval.getIntervalSeconds());
     } else {
       long interval = 0;
       if (!Strings.isNullOrEmpty(source_config.getPostPadding())) {
@@ -534,6 +516,9 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
         final long timespan_offset = end % Schema.MAX_RAW_TIMESPAN;
         end += (Schema.MAX_RAW_TIMESPAN - timespan_offset);
       }
+      
+      int start = total_sets_per_scanners.get(scanners_index);
+      total_sets_per_scanners.set(scanners_index, (((int) end) - start) / 3600);
     }
     
     final byte[] end_key = new byte[node.schema().saltWidth() + 
@@ -649,6 +634,8 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       int size = node.rollupIntervals() == null ? 
           1 : node.rollupIntervals().size() + 1;
       scanners = Lists.newArrayListWithCapacity(size);
+
+      total_sets_per_scanners = Lists.newArrayList();
       final byte[] fuzzy_key;
       final byte[] fuzzy_mask;
       final String regex;
@@ -717,12 +704,13 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
           node.rollupUsage() != RollupUsage.ROLLUP_RAW) {
         
         for (int i = 0; i < node.rollupIntervals().size(); i++) {
+          total_sets_per_scanners.add(0);
           final RollupInterval interval = node.rollupIntervals().get(idx);
           final Tsdb1xScanner2[] array = new Tsdb1xScanner2[node.schema().saltWidth() > 0 ? 
               node.schema().saltBuckets() : 1];
           scanners.add(array);
-          final byte[] start_key = setStartKey(metric, interval, fuzzy_key);
-          final byte[] stop_key = setStopKey(metric, interval);
+          final byte[] start_key = setStartKey(metric, interval, fuzzy_key, idx);
+          final byte[] stop_key = setStopKey(metric, interval, idx);
           
           for (int x = 0; x < array.length; x++) {
             final Scanner scanner = node.parent()
@@ -767,13 +755,13 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       if (node.rollupIntervals() == null || 
           node.rollupIntervals().isEmpty() || 
           node.rollupUsage() != RollupUsage.ROLLUP_NOFALLBACK) {
-        
+        total_sets_per_scanners.add(0);
         final Tsdb1xScanner2[] array = new Tsdb1xScanner2[node.schema().saltWidth() > 0 ? 
             node.schema().saltBuckets() : 1];
         scanners.add(array);
         
-        final byte[] start_key = setStartKey(metric, null, fuzzy_key);
-        final byte[] stop_key = setStopKey(metric, null);
+        final byte[] start_key = setStartKey(metric, null, fuzzy_key, idx);
+        final byte[] stop_key = setStopKey(metric, null, idx);
         
         for (int i = 0; i < array.length; i++) {
           final Scanner scanner = node.parent()
@@ -823,6 +811,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       LOG.debug("Configured " + scanners.size() + " scanner sets with " 
           + scanners.get(0).length + " scanners per set.");
     }
+    System.out.println("0000000000 SPANS: " + total_sets_per_scanners);
     scanNext(span);
   }
   
@@ -885,7 +874,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       System.out.println("SCANNER: " + scanner);
       if (scanner.state() == State.CONTINUE) {
         try {
-          scanner.fetchNext(current_result, span);
+          scanner.fetchNext(null, span);
         } catch (Exception e) {
           LOG.error("Failed to execute query on scanner: " + scanner, e);
           exception(e);
@@ -1133,7 +1122,40 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     return node;
   }
 
-  Tsdb1xPartialTimeSeriesSet getSet(final TimeStamp timestamp) {
-    return null;
+  Tsdb1xPartialTimeSeriesSet getSet(final TimeStamp start) {
+    synchronized (sets) {
+      Tsdb1xPartialTimeSeriesSet set = sets.get(start.epoch());
+      if (set != null) {
+        return set;
+      }
+      set = new Tsdb1xPartialTimeSeriesSet();
+      TimeStamp end = start.getCopy();
+      if (node.rollupIntervals() == null || scanner_index >= node.rollupIntervals().size()) {
+        end.add(Duration.ofSeconds(3600));
+      } else {
+        end.add(Duration.ofSeconds(node.rollupIntervals().get(scanner_index).getIntervalSeconds()));
+      }
+      set.reset(node, start, end, scanners.get(scanner_index).length, total_sets_per_scanners.get(scanner_index), ts_ids);
+      sets.put(start.epoch(), set);
+      return set;
+    }
   }
+  
+  void sendNoResults() {
+    Tsdb1xPartialTimeSeriesSet set = new Tsdb1xPartialTimeSeriesSet();
+    NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
+        node.pipelineContext().tsdb().getRegistry().getObjectPool(
+            NoDataPTSPool.TYPE).claim().object();
+    pts.reset(set);
+    set.reset(node, node.pipelineContext().query().startTime(), 
+        node.pipelineContext().query().endTime(), 1, 1, null);
+    set.setCompleteAndEmpty();
+    PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
+    runnable.reset(pts, node);
+    node.pipelineContext()
+      .tsdb()
+      .getQueryThreadPool()
+      .submit(runnable);
+  }
+  
 }

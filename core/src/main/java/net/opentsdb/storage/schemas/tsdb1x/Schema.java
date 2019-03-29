@@ -1207,6 +1207,7 @@ public class Schema implements WritableTimeSeriesDataStore {
       
       // see if we can grab it from the registry
       pool = tsdb.getRegistry().getObjectPool(Tsdb1xNumericPartialTimeSeriesPool.TYPE);
+      System.out.println("POOL FOR TYPE: " + type + "  = " + pool);
       if (pool == null) {
         return null;
       }
