@@ -162,6 +162,7 @@ public class Tsdb1xScanners implements HBaseExecutor {
   protected volatile boolean has_failed;
   
   public AtomicLong bytes = new AtomicLong();
+  long query_start;
   
   /**
    * Default ctor.
@@ -253,7 +254,7 @@ public class Tsdb1xScanners implements HBaseExecutor {
     if (result == null) {
       throw new IllegalArgumentException("Result must be initialized");
     }
-    
+    query_start = DateTime.nanoTime();
     synchronized (this) {
       if (current_result != null) {
         throw new IllegalStateException("Query result must have been null "
@@ -299,7 +300,8 @@ public class Tsdb1xScanners implements HBaseExecutor {
     }
     
     if (send_upstream) {
-      LOG.info("SIZE FROM HBASE (roughly): " + bytes.get()); 
+      double end = DateTime.msFromNanoDiff(DateTime.nanoTime(), query_start);
+      LOG.info("SIZE FROM HBASE (roughly): " + bytes.get() + "   in " + end + "ms"); 
       
       try {
         scanners_done = 0;
