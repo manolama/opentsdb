@@ -413,141 +413,153 @@ public class Tsdb1xScanner {
         return null;
       }
       
-      if (owner.hasException()) {
-        // bail out!
-        complete(null, rows.size());
-        return null;
-      }
-      
-      final Span child;
-      if (span != null) {
-        child = span.newChild(getClass().getName() + "call_" + idx)
-            .start();
-      } else {
-        child = null;
-      }
-      
-      try {
-        rows_scanned += rows.size();
-        if (owner.filterDuringScan()) {
-          final List<Deferred<Object>> deferreds = 
-              Lists.newArrayListWithCapacity(rows.size());
-          boolean keep_going = true;
-          for (int i = 0; i < rows.size(); i++) {
-            final ArrayList<KeyValue> row = rows.get(i);
-            if (row.isEmpty()) {
-              // should never happen
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Received an empty row from result set: " + rows);
-              }
-              continue;
-            }
-            
-            owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
-            if (owner.node().sequenceEnd() != null && 
-                base_ts.compare(
-                    (scanner.isReversed() ? Op.LT : Op.GT), 
-                        owner.node().sequenceEnd())) {
-              // end of sequence encountered in the buffer. Push on up
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Hit next sequence end in the scanner. "
-                    + "Buffering results and returning.");
-              }
-              buffer(i, rows, false);
-              keep_going = false;
-              break;
-            } else if (result.isFull()) {
-              if (owner.node().pipelineContext().queryContext().mode() == 
-                  QueryMode.SINGLE) {
-                throw new QueryExecutionException(
-                    result.resultIsFullErrorMessage(),
-                    HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
-              }
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Owner is full while in the scanner cache.");
-              }
-              buffer(i, rows, false);
-              keep_going = false;
-              break;
-            }
-            
-            final byte[] tsuid = owner.node().schema().getTSUID(row.get(0).key());
-            deferreds.add(resolveAndFilter(tsuid, row, result, child));
-          }
-          
-          return Deferred.group(deferreds)
-              .addCallbacks(new GroupResolutionCB(keep_going, child), new ErrorCB(child));
-        } else {
-          // load all
-          for (int i = 0; i < rows.size(); i++) {
-            final ArrayList<KeyValue> row = rows.get(i);
-            if (row.isEmpty()) {
-              // should never happen
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Received an empty row from result set: " + rows);
-              }
-              continue;
-            }
-            
-            owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
-            if ((owner.node().sequenceEnd() != null && 
-                base_ts.compare(
-                    (scanner.isReversed() ? Op.LT : Op.GT), 
-                        owner.node().sequenceEnd()))) {
-              
-              // end of sequence encountered in the buffer. Push on up
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Hit next sequence end in the scanner. "
-                    + "Buffering results and returning.");
-              }
-              buffer(i, rows, true);
-              return null;
-            } else if (result.isFull()) {
-              if (owner.node().pipelineContext().queryContext().mode() == 
-                  QueryMode.SINGLE) {
-                throw new QueryExecutionException(
-                    result.resultIsFullErrorMessage(),
-                    HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
-              }
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Owner is full. Buffering results and returning.");
-              }
-              buffer(i, rows, true);
-              return null;
-            }
-            
-            result.decode(row, rollup_interval);
-          }
+      // this is where we have more overhead. We can tweak asynchbase to be lower
+      // level if we need to
+      for (final ArrayList<KeyValue> row : rows) {
+        for (final KeyValue kv : row) {
+          // and note lock time here
+          owner.bytes.addAndGet(8); // kv.timestamp() <= HBase timestamp
+          owner.bytes.addAndGet(kv.key().length);
+          owner.bytes.addAndGet(kv.qualifier().length); 
+          owner.bytes.addAndGet(kv.value().length);
         }
-        
-        if (!result.isFull()) {
-          // keep going!
-          if (child != null) {
-            child.setSuccessTags()
-                 .setTag("rows", rows.size())
-                 .setTag("buffered", row_buffer == null ? 0 : row_buffer.size())
-                 .finish();
-          }
+      }
+      
+//      if (owner.hasException()) {
+//        // bail out!
+//        complete(null, rows.size());
+//        return null;
+//      }
+//      
+//      final Span child;
+//      if (span != null) {
+//        child = span.newChild(getClass().getName() + "call_" + idx)
+//            .start();
+//      } else {
+//        child = null;
+//      }
+//      
+//      try {
+//        rows_scanned += rows.size();
+//        if (owner.filterDuringScan()) {
+//          final List<Deferred<Object>> deferreds = 
+//              Lists.newArrayListWithCapacity(rows.size());
+//          boolean keep_going = true;
+//          for (int i = 0; i < rows.size(); i++) {
+//            final ArrayList<KeyValue> row = rows.get(i);
+//            if (row.isEmpty()) {
+//              // should never happen
+//              if (LOG.isDebugEnabled()) {
+//                LOG.debug("Received an empty row from result set: " + rows);
+//              }
+//              continue;
+//            }
+//            
+//            owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
+//            if (owner.node().sequenceEnd() != null && 
+//                base_ts.compare(
+//                    (scanner.isReversed() ? Op.LT : Op.GT), 
+//                        owner.node().sequenceEnd())) {
+//              // end of sequence encountered in the buffer. Push on up
+//              if (LOG.isDebugEnabled()) {
+//                LOG.debug("Hit next sequence end in the scanner. "
+//                    + "Buffering results and returning.");
+//              }
+//              buffer(i, rows, false);
+//              keep_going = false;
+//              break;
+//            } else if (result.isFull()) {
+//              if (owner.node().pipelineContext().queryContext().mode() == 
+//                  QueryMode.SINGLE) {
+//                throw new QueryExecutionException(
+//                    result.resultIsFullErrorMessage(),
+//                    HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
+//              }
+//              if (LOG.isDebugEnabled()) {
+//                LOG.debug("Owner is full while in the scanner cache.");
+//              }
+//              buffer(i, rows, false);
+//              keep_going = false;
+//              break;
+//            }
+//            
+//            final byte[] tsuid = owner.node().schema().getTSUID(row.get(0).key());
+//            deferreds.add(resolveAndFilter(tsuid, row, result, child));
+//          }
+//          
+//          return Deferred.group(deferreds)
+//              .addCallbacks(new GroupResolutionCB(keep_going, child), new ErrorCB(child));
+//        } else {
+//          // load all
+//          for (int i = 0; i < rows.size(); i++) {
+//            final ArrayList<KeyValue> row = rows.get(i);
+//            if (row.isEmpty()) {
+//              // should never happen
+//              if (LOG.isDebugEnabled()) {
+//                LOG.debug("Received an empty row from result set: " + rows);
+//              }
+//              continue;
+//            }
+//            
+//            owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
+//            if ((owner.node().sequenceEnd() != null && 
+//                base_ts.compare(
+//                    (scanner.isReversed() ? Op.LT : Op.GT), 
+//                        owner.node().sequenceEnd()))) {
+//              
+//              // end of sequence encountered in the buffer. Push on up
+//              if (LOG.isDebugEnabled()) {
+//                LOG.debug("Hit next sequence end in the scanner. "
+//                    + "Buffering results and returning.");
+//              }
+//              buffer(i, rows, true);
+//              return null;
+//            } else if (result.isFull()) {
+//              if (owner.node().pipelineContext().queryContext().mode() == 
+//                  QueryMode.SINGLE) {
+//                throw new QueryExecutionException(
+//                    result.resultIsFullErrorMessage(),
+//                    HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
+//              }
+//              if (LOG.isDebugEnabled()) {
+//                LOG.debug("Owner is full. Buffering results and returning.");
+//              }
+//              buffer(i, rows, true);
+//              return null;
+//            }
+//            
+//            result.decode(row, rollup_interval);
+//          }
+//        }
+//        
+//        if (!result.isFull()) {
+//          // keep going!
+//          if (child != null) {
+//            child.setSuccessTags()
+//                 .setTag("rows", rows.size())
+//                 .setTag("buffered", row_buffer == null ? 0 : row_buffer.size())
+//                 .finish();
+//          }
           return scanner.nextRows().addCallbacks(this, new ErrorCB(span));
-        } else if (owner.node().pipelineContext().queryContext().mode() == 
-              QueryMode.SINGLE) {
-          throw new QueryExecutionException(
-              result.resultIsFullErrorMessage(),
-              HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
-        }
-        
-        if (owner.hasException()) {
-          complete(child, rows.size());
-        } else {
-          // is full
-          owner.scannerDone();
-        }
-      } catch (Exception e) {
-        LOG.error("Unexpected exception", e);
-        complete(e, child, rows.size());
-      }
-      
-      return null;
+//        } else if (owner.node().pipelineContext().queryContext().mode() == 
+//              QueryMode.SINGLE) {
+//          throw new QueryExecutionException(
+//              result.resultIsFullErrorMessage(),
+//              HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
+//        }
+//        
+//        if (owner.hasException()) {
+//          complete(child, rows.size());
+//        } else {
+//          // is full
+//          owner.scannerDone();
+//        }
+//      } catch (Exception e) {
+//        LOG.error("Unexpected exception", e);
+//        complete(e, child, rows.size());
+//      }
+//      
+//      return null;
     }
     
     /**

@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.hbase.async.Bytes.ByteMap;
 import org.hbase.async.FilterList.Operator;
@@ -160,6 +161,8 @@ public class Tsdb1xScanners implements HBaseExecutor {
    * should close. */
   protected volatile boolean has_failed;
   
+  public AtomicLong bytes = new AtomicLong();
+  
   /**
    * Default ctor.
    * @param node A non-null parent node.
@@ -296,6 +299,8 @@ public class Tsdb1xScanners implements HBaseExecutor {
     }
     
     if (send_upstream) {
+      LOG.info("SIZE FROM HBASE (roughly): " + bytes.get()); 
+      
       try {
         scanners_done = 0;
         if (scanners.size() == 1 || scanner_index + 1 >= scanners.size()) {
