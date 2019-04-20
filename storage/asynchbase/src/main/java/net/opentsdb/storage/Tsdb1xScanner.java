@@ -416,12 +416,17 @@ public class Tsdb1xScanner {
       // this is where we have more overhead. We can tweak asynchbase to be lower
       // level if we need to
       for (final ArrayList<KeyValue> row : rows) {
+        owner.rows.addAndGet(1);
+        owner.columns.addAndGet(row.size());
         for (final KeyValue kv : row) {
           // and note lock time here
           owner.bytes.addAndGet(8); // kv.timestamp() <= HBase timestamp
+          owner.bytes.addAndGet(kv.family().length);
           owner.bytes.addAndGet(kv.key().length);
           owner.bytes.addAndGet(kv.qualifier().length); 
           owner.bytes.addAndGet(kv.value().length);
+          
+          owner.unique_rows.add(owner.node().schema().getTSUID(kv.key()));
         }
       }
       

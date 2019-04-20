@@ -162,6 +162,9 @@ public class Tsdb1xScanners implements HBaseExecutor {
   protected volatile boolean has_failed;
   
   public AtomicLong bytes = new AtomicLong();
+  public AtomicLong rows = new AtomicLong();
+  public AtomicLong columns = new AtomicLong();
+  public ByteSet unique_rows = new ByteSet();
   long query_start;
   
   /**
@@ -301,7 +304,7 @@ public class Tsdb1xScanners implements HBaseExecutor {
     
     if (send_upstream) {
       double end = DateTime.msFromNanoDiff(DateTime.nanoTime(), query_start);
-      LOG.info("SIZE FROM HBASE (roughly): " + bytes.get() + "   in " + end + "ms"); 
+      LOG.info("SIZE FROM HBASE (roughly): " + bytes.get() + "   in " + end + "ms  R: " + rows.get() + "  C: " + columns.get()  + "  UR: " + unique_rows.size()); 
       
       try {
         scanners_done = 0;
