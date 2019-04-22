@@ -459,12 +459,11 @@ public class JsonV2QuerySerdes implements TimeSeriesSerdes {
       final Iterator<TimeSeriesValue<?>> iterator, 
       final JsonGenerator json,
       final QueryResult result) throws IOException {
-    
     if (value.value().end() < 1) {
       // no data
+      LOG.info("GRRRRRRRRRRRRRRRRRRRRRRRRR : " + value.value().end());
       return;
     }
-    
     final TimeStamp timestamp = 
         result.timeSpecification().start().getCopy();
     for (int i = value.value().offset(); i < value.value().end(); i++) {

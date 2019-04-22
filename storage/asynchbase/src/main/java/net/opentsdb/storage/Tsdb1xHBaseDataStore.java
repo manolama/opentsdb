@@ -23,6 +23,8 @@ import org.hbase.async.HBaseClient;
 import org.hbase.async.PleaseThrottleException;
 import org.hbase.async.PutRequest;
 import org.hbase.async.RecoverableException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Strings;
 import com.stumbleupon.async.Callback;
@@ -38,6 +40,7 @@ import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
+import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.TimeSeriesDataSourceConfig;
 import net.opentsdb.query.BaseTimeSeriesDataSourceConfig;
 import net.opentsdb.stats.Span;
@@ -116,12 +119,16 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
   private final boolean enable_appends;
   private final boolean enable_appends_coproc;
   
+  public QueryResult result;
+  
   public Tsdb1xHBaseDataStore(final Tsdb1xHBaseFactory factory,
                               final String id,
                               final Schema schema) {
     this.tsdb = factory.tsdb();
     this.id = id;
     this.schema = schema;
+    Logger LOG = LoggerFactory.getLogger(this.getClass());
+    LOG.info("-------------- INIT! ---------------");
     
     // TODO - flatten the config and pass it down to the client lib.
     final org.hbase.async.Config async_config = new org.hbase.async.Config();

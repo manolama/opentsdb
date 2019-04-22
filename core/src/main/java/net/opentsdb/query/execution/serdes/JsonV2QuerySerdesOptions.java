@@ -83,7 +83,7 @@ public class JsonV2QuerySerdesOptions extends BaseSerdesOptions {
   }
   
   public int getParallelThreshold() {
-    return parallel_threshold;
+    return 1;
   }
   
   public static Builder newBuilder() {

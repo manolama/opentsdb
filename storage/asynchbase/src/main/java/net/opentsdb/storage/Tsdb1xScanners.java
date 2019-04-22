@@ -14,11 +14,15 @@
 // limitations under the License.
 package net.opentsdb.storage;
 
+import java.io.BufferedWriter;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.time.temporal.TemporalAmount;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.hbase.async.Bytes.ByteMap;
@@ -40,7 +44,13 @@ import com.stumbleupon.async.Callback;
 
 import net.opentsdb.configuration.Configuration;
 import net.opentsdb.core.Const;
+import net.opentsdb.data.TimeSeries;
+import net.opentsdb.data.TimeSeriesByteId;
+import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
+import net.opentsdb.data.TypedTimeSeriesIterator;
+import net.opentsdb.data.types.numeric.NumericSummaryType;
+import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.TimeSeriesDataSourceConfig;
@@ -314,6 +324,41 @@ public class Tsdb1xScanners implements HBaseExecutor {
           synchronized (this) {
             result = current_result;
             current_result = null;
+            
+            // SERDES TO FILE
+//            final byte[] delimiter = new byte[4];
+//            try (FileOutputStream fstream = new FileOutputStream("/home/y/logs/opentsdb/n3.txt", false)) {
+//              for (final TimeSeries ts : result.timeSeries()) {
+//                // TS ID 
+//                TimeSeriesByteId id = (TimeSeriesByteId) ts.id();
+//                fstream.write(id.metric());
+//                for (final Entry<byte[], byte[]> pair : id.tags()) {
+//                  fstream.write(pair.getKey());
+//                  fstream.write(pair.getValue());
+//                }
+//                fstream.write(delimiter);
+//                
+//                TypedTimeSeriesIterator it = ts.iterator(NumericSummaryType.TYPE).get();
+//                while (it.hasNext()) {
+//                  TimeSeriesValue<NumericSummaryType> v = (TimeSeriesValue<NumericSummaryType>) it.next();
+//                  fstream.write(Bytes.fromInt((int) v.timestamp().epoch()));
+//                  int s = v.value().summariesAvailable().size();
+//                  fstream.write((byte) s);
+//                  NumericType n =  v.value().value(0);
+//                  if (n != null) {
+//                    fstream.write((byte) 0);
+//                    fstream.write(Bytes.fromLong(Double.doubleToRawLongBits(n.toDouble())));
+//                  }
+//                  n = v.value().value(1);
+//                  if (n != null) {
+//                    fstream.write((byte) 1);
+//                    fstream.write(Bytes.fromLong(Double.doubleToRawLongBits(n.toDouble())));
+//                  }
+//                }
+//                fstream.write(delimiter);
+//              }
+//            }
+            LOG.info("SENT UP HREE");
           }
           node.onNext(result);
         } else {
@@ -334,6 +379,7 @@ public class Tsdb1xScanners implements HBaseExecutor {
               result = current_result;
               current_result = null;
             }
+            LOG.info("SENDING UP NEXT");
             node.onNext(result);
           }
         }
