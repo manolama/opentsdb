@@ -30,6 +30,7 @@ import static org.mockito.Mockito.when;
 import java.time.temporal.TemporalAmount;
 import java.util.Map;
 
+import net.opentsdb.query.filter.QueryFilter;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.StatusLine;
@@ -50,6 +51,7 @@ import com.google.common.collect.Maps;
 import net.opentsdb.auth.AuthState;
 import net.opentsdb.common.Const;
 import net.opentsdb.configuration.Configuration;
+import net.opentsdb.core.MockTSDB;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.query.DefaultTimeSeriesDataSourceConfig;
@@ -68,7 +70,9 @@ import net.opentsdb.query.filter.TagValueLiteralOrFilter;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.pojo.FillPolicy;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
+import net.opentsdb.query.processor.downsample.DownsampleFactory;
 import net.opentsdb.query.processor.groupby.GroupByConfig;
+import net.opentsdb.stats.BlackholeStatsCollector;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.Pair;
 import net.opentsdb.utils.UnitTestException;
@@ -98,6 +102,8 @@ public class TestHttpQueryV3Source {
     TSDB tsdb = mock(TSDB.class);
     when(tsdb.getConfig()).thenReturn(mock(Configuration.class));
     when(ctx.tsdb()).thenReturn(tsdb);
+    BlackholeStatsCollector stats = new BlackholeStatsCollector();
+    when(tsdb.getStatsCollector()).thenReturn(stats);
     
     when(ctx.queryContext()).thenReturn(context);
     when(ctx.upstream(any(QueryNode.class)))
@@ -184,6 +190,67 @@ public class TestHttpQueryV3Source {
     assertTrue(json.contains("\"id\":\"ds\""));
     assertTrue(json.contains("\"sources\":[\"m1\"]"));
   }
+  
+  @Test
+  public void requestPushDownsAutoInterval() throws Exception {
+    NumericInterpolatorConfig numeric_config = (NumericInterpolatorConfig) 
+        NumericInterpolatorConfig.newBuilder()
+        .setFillPolicy(FillPolicy.NONE)
+        .setRealFillPolicy(FillWithRealPolicy.NONE)
+        .setDataType(NumericArrayType.TYPE.toString())
+        .build();
+    
+    DownsampleFactory f = new DownsampleFactory();
+    MockTSDB tsdb = new MockTSDB();
+    f.initialize(tsdb, null).join(250);
+    
+    TimeSeriesDataSourceConfig config = (TimeSeriesDataSourceConfig) 
+        DefaultTimeSeriesDataSourceConfig.newBuilder()
+        .setMetric(MetricLiteralFilter.newBuilder()
+            .setMetric("system.cpu.user")
+            .build())
+        .addPushDownNode(DownsampleConfig.newBuilder()
+            .setAggregator("sum")
+            .setInterval("auto")
+            .setIntervals(f.intervals())
+            .addInterpolatorConfig(numeric_config)
+            .setId("ds")
+            .addSource("m1")
+            .build())
+        .addPushDownNode(GroupByConfig.newBuilder()
+            .setAggregator("sum")
+            .addInterpolatorConfig(numeric_config)
+            .setId("gb")
+            .addSource("ds")
+            .build())
+        .setId("m1")
+        .build();
+    
+    SemanticQuery query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
+        .setStart("24h-ago")
+        .addExecutionGraphNode(config)
+        .build();
+    
+    when(ctx.query()).thenReturn(query);
+    HttpQueryV3Source src = new HttpQueryV3Source(factory, ctx, config, client, host, endpoint);
+    src.fetchNext(null);
+    
+    verify(client, times(1)).execute(any(HttpUriRequest.class), any(FutureCallback.class));
+    assertEquals("application/json", request.getFirstHeader("Content-Type").getValue());
+    assertNull(request.getFirstHeader("Cookie"));
+    String json = EntityUtils.toString(((HttpPost) request).getEntity());
+    assertTrue(json.contains("\"start\":\"24h-ago\""));
+    assertTrue(json.contains("\"mode\":\"SINGLE\""));
+    assertTrue(json.contains("\"id\":\"m1\""));
+    assertTrue(json.contains("\"interval\":\"15m\""));
+    assertTrue(json.contains("\"metric\":\"system.cpu.user\""));
+    assertFalse(json.contains("pushDownNodes"));
+    assertTrue(json.contains("\"id\":\"gb\""));
+    assertTrue(json.contains("\"sources\":[\"ds\"]"));
+    assertTrue(json.contains("\"id\":\"ds\""));
+    assertTrue(json.contains("\"sources\":[\"m1\"]"));
+  }
 
   @Test
   public void requestFilter() throws Exception {
@@ -248,6 +315,47 @@ public class TestHttpQueryV3Source {
     assertTrue(json.contains("\"sources\":[\"m1\"]"));
     assertTrue(json.contains("\"filters\":["));
     assertTrue(json.contains("\"id\":\"f1\""));
+    assertTrue(json.contains("\"type\":\"TagValueLiteralOr\""));
+    assertTrue(json.contains("\"filter\":\"web01\""));
+  }
+
+  @Test
+  public void requestFilterNoOrNullFilterId() throws Exception {
+
+    QueryFilter filter = TagValueLiteralOrFilter.newBuilder()
+        .setFilter("web01")
+        .setTagKey("host")
+        .build();
+
+    TimeSeriesDataSourceConfig config = (TimeSeriesDataSourceConfig)
+        DefaultTimeSeriesDataSourceConfig.newBuilder()
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric("system.cpu.user")
+                .build())
+            .setQueryFilter(filter)
+            .setFilterId(null)
+            .setId("m1")
+            .build();
+
+    SemanticQuery query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
+        .setStart("1h-ago")
+        .addExecutionGraphNode(config)
+        .build();
+
+    when(ctx.query()).thenReturn(query);
+    HttpQueryV3Source src = new HttpQueryV3Source(factory, ctx, config, client, host, endpoint);
+    src.fetchNext(null);
+
+    verify(client, times(1)).execute(any(HttpUriRequest.class), any(FutureCallback.class));
+    assertEquals("application/json", request.getFirstHeader("Content-Type").getValue());
+    assertNull(request.getFirstHeader("Cookie"));
+    String json = EntityUtils.toString(((HttpPost) request).getEntity());
+    assertTrue(json.contains("\"start\":\"1h-ago\""));
+    assertTrue(json.contains("\"mode\":\"SINGLE\""));
+    assertTrue(json.contains("\"id\":\"m1\""));
+    assertTrue(json.contains("\"metric\":\"system.cpu.user\""));
+    assertTrue(json.contains("\"filters\":["));
     assertTrue(json.contains("\"type\":\"TagValueLiteralOr\""));
     assertTrue(json.contains("\"filter\":\"web01\""));
   }
@@ -323,6 +431,8 @@ public class TestHttpQueryV3Source {
     Configuration cfg = mock(Configuration.class);
     when(tsdb.getConfig()).thenReturn(cfg);
     when(ctx.tsdb()).thenReturn(tsdb);
+    BlackholeStatsCollector stats = new BlackholeStatsCollector();
+    when(tsdb.getStatsCollector()).thenReturn(stats);
     when(cfg.getString(anyString())).thenReturn("X-OpenTSDB-User");
     when(auth.getTokenType()).thenReturn("Cookie");
     when(auth.getToken()).thenReturn("MyCookie".getBytes(Const.UTF8_CHARSET));

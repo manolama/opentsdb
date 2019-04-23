@@ -32,12 +32,14 @@ import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.hash.HashCode;
+import com.google.common.hash.Hasher;
 
 import net.opentsdb.configuration.Configuration;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
+import net.opentsdb.query.processor.downsample.DownsampleConfig.Builder;
 import net.opentsdb.query.processor.rate.RateFactory;
 import net.opentsdb.utils.DateTime;
 
@@ -180,14 +182,22 @@ public class RateOptions extends Validatable implements QueryNodeConfig {
   
   @Override
   public Builder toBuilder() {
-    // TODO Auto-generated method stub
-    return null;
+    return (Builder) new Builder()
+        .setInterval(interval)
+        .setSources(sources)
+        .setType(type)
+        .setInterval(interval)
+        .setDropResets(drop_resets)
+        .setCounter(counter)
+        .setCounterMax(counter_max)
+        .setOverrides(overrides)
+        .setResetValue(reset_value)
+        .setId(id);
   }
   
   @Override
   public boolean pushDown() {
-    // TODO Auto-generated method stub
-    return false;
+    return true;
   }
   
   @Override
@@ -334,7 +344,8 @@ public class RateOptions extends Validatable implements QueryNodeConfig {
        && Objects.equal(drop_resets, options.drop_resets)
        && Objects.equal(counter_max, options.counter_max)
        && Objects.equal(reset_value, options.reset_value)
-       && Objects.equal(interval, options.interval);
+       && Objects.equal(interval, options.interval)
+       && Objects.equal(id, options.id);
   }
   
   @Override
@@ -344,13 +355,17 @@ public class RateOptions extends Validatable implements QueryNodeConfig {
   
   /** @return A HashCode object for deterministic, non-secure hashing */
   public HashCode buildHashCode() {
-    return Const.HASH_FUNCTION().newHasher()
-        .putBoolean(counter)
-        .putBoolean(drop_resets)
-        .putLong(counter_max)
-        .putLong(reset_value)
-        .putString(interval, Const.UTF8_CHARSET)
-        .hash();
+    Hasher hasher = Const.HASH_FUNCTION().newHasher();
+    hasher.putBoolean(counter)
+    .putBoolean(drop_resets)
+    .putLong(counter_max)
+    .putLong(reset_value)
+    .putString(interval, Const.UTF8_CHARSET);
+    
+    if (id !=null) {
+      hasher.putString(id, Const.UTF8_CHARSET);
+    }
+    return hasher.hash();
   }
   
   @Override

@@ -33,7 +33,6 @@ import net.opentsdb.query.filter.TagValueLiteralOrFilter;
 import net.opentsdb.query.filter.TagValueRegexFilter;
 import net.opentsdb.query.filter.TagValueWildcardFilter;
 import net.opentsdb.utils.DateTime;
-import org.elasticsearch.action.search.SearchRequestBuilder;
 import org.elasticsearch.index.query.BoolFilterBuilder;
 import org.elasticsearch.index.query.FilterBuilder;
 import org.elasticsearch.index.query.FilterBuilders;
@@ -42,8 +41,7 @@ import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.bucket.terms.Terms.Order;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -84,7 +82,7 @@ public class NamespacedAggregatedDocumentQueryBuilder {
   private int num_tags;
 
   private NamespacedAggregatedDocumentQueryBuilder(final BatchMetaQuery query) {
-    this.search_source_builders = new HashMap<>();
+    this.search_source_builders = new LinkedHashMap<>();
     this.query = query;
   }
 
@@ -139,9 +137,11 @@ public class NamespacedAggregatedDocumentQueryBuilder {
 
   FilterBuilder getMetricFilter(final MetricFilter filter, final boolean nested) {
     if (filter instanceof MetricLiteralFilter) {
+      String metric = filter.getMetric().toLowerCase();
+      String[] metric_literals = metric.split("\\|");
       FilterBuilder builder =  FilterBuilders.boolFilter().must(
-              FilterBuilders.termFilter(QUERY_METRIC,
-                      filter.getMetric().toLowerCase()));
+              FilterBuilders.termsFilter(QUERY_METRIC,
+                  metric_literals));
       if (nested) {
         return FilterBuilders.nestedFilter(METRIC_PATH, builder);
       }
@@ -207,10 +207,11 @@ public class NamespacedAggregatedDocumentQueryBuilder {
   FilterBuilder getTagKeyFilter(final TagKeyFilter filter, final boolean nested) {
     final FilterBuilder builder = FilterBuilders.boolFilter();
     if (filter instanceof TagKeyLiteralOrFilter) {
+      String filter_str = filter.filter().toLowerCase();
+      String[] filter_literals = filter_str.split("\\|");
       ((BoolFilterBuilder) builder).must(FilterBuilders.regexpFilter
               (QUERY_TAG_VALUE_KEY, ".*"))
-              .must(FilterBuilders.termFilter(QUERY_TAG_KEY_KEY, filter
-                .filter().toLowerCase()));
+              .must(FilterBuilders.termsFilter(QUERY_TAG_KEY_KEY, filter_literals));
 
     } else if (filter instanceof TagKeyRegexFilter) {
       ((BoolFilterBuilder) builder).must(FilterBuilders.regexpFilter(QUERY_TAG_VALUE_KEY, ".*"))
