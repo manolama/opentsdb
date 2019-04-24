@@ -21,6 +21,7 @@ public class Tsdb1xPartialTimeSeriesSet implements PartialTimeSeriesSet {
   
   public Tsdb1xPartialTimeSeriesSet() {
     start = new SecondTimeStamp(0);
+    end = new SecondTimeStamp(0);
   }
   
   public void reset(final QueryNode node, final TimeStamp start, final TimeStamp end, final int salts, final int total_sets, final TLongObjectMap<TimeSeriesId> ids) {

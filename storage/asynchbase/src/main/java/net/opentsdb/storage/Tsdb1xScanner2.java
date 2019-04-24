@@ -166,7 +166,7 @@ public class Tsdb1xScanner2 {
    * @param result A non-null result set to decode the columns we find.
    * @param span An optional tracing span.
    */
-  public void fetchNext(final Tsdb1xQueryResult result, final Span span) {
+  public void fetchNext(final Tsdb1xQueryResult ignored, final Span span) {
     if (owner.hasException()) {
       scanner.close();
       if (LOG.isDebugEnabled()) {
@@ -177,27 +177,27 @@ public class Tsdb1xScanner2 {
       return;
     }
     
-    if (result.isFull()) {
-      if (owner.node().pipelineContext().queryContext().mode() == 
-          QueryMode.SINGLE) {
-        state = State.EXCEPTION;
-        owner.exception(new QueryExecutionException(
-            result.resultIsFullErrorMessage(),
-            HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode()));
-        return;
-      }
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Pausing scanner as upstream is full.");
-      }
-      owner.scannerDone();
-      return;
-    }
+//    if (result.isFull()) {
+//      if (owner.node().pipelineContext().queryContext().mode() == 
+//          QueryMode.SINGLE) {
+//        state = State.EXCEPTION;
+//        owner.exception(new QueryExecutionException(
+//            result.resultIsFullErrorMessage(),
+//            HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode()));
+//        return;
+//      }
+//      if (LOG.isDebugEnabled()) {
+//        LOG.debug("Pausing scanner as upstream is full.");
+//      }
+//      owner.scannerDone();
+//      return;
+//    }
     
     if (row_buffer != null) {
       if (owner.filterDuringScan()) {
-        processBufferWithFilter(result, span);
+        processBufferWithFilter(ignored, span);
       } else {
-        processBuffer(result, span);
+        processBuffer(ignored, span);
       }
     } else {
       // try for some data from HBase

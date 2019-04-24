@@ -23,6 +23,8 @@ import org.hbase.async.HBaseClient;
 import org.hbase.async.PleaseThrottleException;
 import org.hbase.async.PutRequest;
 import org.hbase.async.RecoverableException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Strings;
 import com.stumbleupon.async.Callback;
@@ -53,7 +55,8 @@ import net.opentsdb.utils.Pair;
  * @since 3.0
  */
 public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
-
+  private static final Logger LOG = LoggerFactory.getLogger(Tsdb1xHBaseDataStore.class);
+  
   /** Config keys */
   public static final String CONFIG_PREFIX = "tsd.storage.";
   public static final String DATA_TABLE_KEY = "data_table";
@@ -281,7 +284,7 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore {
     enable_appends = config.getBoolean(ENABLE_APPENDS_KEY);
     enable_appends_coproc = config.getBoolean(ENABLE_COPROC_APPENDS_KEY);
     enable_push = config.getBoolean(ENABLE_PUSH_KEY);
-    System.out.println("****** ENABLE PUSH: " + enable_push);
+    LOG.info("****** ENABLE PUSH: " + enable_push);
     
 //    Map<String, ConfigurationEntryWrapper> cfg = tsdb.getConfig().getView().getEntries();
 //    for (final Entry<String, ConfigurationEntryWrapper> entry : cfg.entrySet()) {

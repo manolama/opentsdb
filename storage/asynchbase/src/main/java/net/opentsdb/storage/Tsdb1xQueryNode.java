@@ -1041,6 +1041,9 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
       } else {
         this.id = id;
       }
+      
+      registerConfigs(tsdb.getConfig(), TYPE);
+      
       final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
           .setAllocator(this)
           .setInitialCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, TYPE)))
