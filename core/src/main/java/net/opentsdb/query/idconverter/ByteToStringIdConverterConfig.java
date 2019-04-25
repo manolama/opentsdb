@@ -14,12 +14,16 @@
 // limitations under the License.
 package net.opentsdb.query.idconverter;
 
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.google.common.collect.Maps;
 import com.google.common.hash.HashCode;
 
 import net.opentsdb.core.Const;
+import net.opentsdb.data.TimeSeriesDataSourceFactory;
 import net.opentsdb.query.BaseQueryNodeConfig;
 import net.opentsdb.query.QueryNodeConfig;
 
@@ -31,11 +35,13 @@ import net.opentsdb.query.QueryNodeConfig;
 @JsonInclude(Include.NON_NULL)
 @JsonDeserialize(builder = ByteToStringIdConverterConfig.Builder.class)
 public class ByteToStringIdConverterConfig extends BaseQueryNodeConfig {
+  protected Map<String, TimeSeriesDataSourceFactory> data_sources;
   
   protected ByteToStringIdConverterConfig(final Builder builder) {
     super(builder);
+    data_sources = builder.data_sources;
   }
-
+  
   @Override
   public HashCode buildHashCode() {
     // TODO Auto-generated method stub
@@ -92,9 +98,23 @@ public class ByteToStringIdConverterConfig extends BaseQueryNodeConfig {
   }
   
   public static class Builder extends BaseQueryNodeConfig.Builder {
-
+    protected Map<String, TimeSeriesDataSourceFactory> data_sources;
+    
     Builder() {
       setType(ByteToStringIdConverterFactory.TYPE);
+    }
+    
+    public Builder setDataSources(final Map<String, TimeSeriesDataSourceFactory> data_sources) {
+      this.data_sources = data_sources;
+      return this;
+    }
+    
+    public Builder addDataSource(final String source, final TimeSeriesDataSourceFactory factory) {
+      if (data_sources == null) {
+        data_sources = Maps.newHashMap();
+      }
+      data_sources.put(source, factory);
+      return this;
     }
     
     @Override

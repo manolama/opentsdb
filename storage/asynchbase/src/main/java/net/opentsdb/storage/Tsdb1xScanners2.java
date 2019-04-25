@@ -43,6 +43,7 @@ import net.opentsdb.configuration.Configuration;
 import net.opentsdb.core.Const;
 import net.opentsdb.data.NoDataPartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
+import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.pools.NoDataPTSPool;
@@ -297,6 +298,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     }
     
     if (send_upstream) {
+      System.out.println("--------- ALL SCANNERS DONE");
       try {
         if (sets.isEmpty()) {
           if (scanner_index + 1 < scanners.size()) {
@@ -314,6 +316,53 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
           
           // crap, no data so we need to send empty sets upstream.
           sendNoResults();
+        } else {
+          // we had at least one set with good data. To close the query we need
+          // to make sure we've filled any missing periods of time with empty
+          // sets.
+          if (sets.size() == total_sets_per_scanners.get(scanner_index)) {
+            // no-op! all done.
+            System.out.println("****** ALL SETS SENT!! *****");
+          } else {
+            // send empty sets by iterating and figuring out what was missing.
+            // TODO - for rollups
+            // TODO - doesn't account for calendaring, etc.
+            long start = node.pipelineContext().query().startTime().epoch();
+            if (!Strings.isNullOrEmpty(source_config.getPrePadding())) {
+              final long interval = DateTime.parseDuration(
+                  source_config.getPrePadding());
+              if (interval > 0) {
+                final long interval_offset = (1000L * start) % interval;
+                start -= interval_offset / 1000L;
+              }
+            }
+            
+            // Then snap that timestamp back to its representative value for the
+            // timespan in which it appears.
+            final long timespan_offset = start % Schema.MAX_RAW_TIMESPAN;
+            start -= timespan_offset;
+            int total_sets = total_sets_per_scanners.get(scanner_index);
+            System.out.println("------------- FILLING!");
+            for (int i = 0; i < total_sets; i++) {
+              if (!sets.containsKey(start)) {
+                Tsdb1xPartialTimeSeriesSet set = new Tsdb1xPartialTimeSeriesSet();
+                NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
+                    node.pipelineContext().tsdb().getRegistry().getObjectPool(
+                        NoDataPTSPool.TYPE).claim().object();
+                pts.reset(set);
+                set.reset(node, new SecondTimeStamp(start), 
+                    new SecondTimeStamp(start + 3600), 1, total_sets, null);
+                set.setCompleteAndEmpty();
+                PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
+                runnable.reset(pts, node);
+                node.pipelineContext()
+                  .tsdb()
+                  .getQueryThreadPool()
+                  .submit(runnable);
+              }
+              start += 3600; // just for raw!
+            }
+          }
         }
       } catch (Exception e) {
         LOG.error("Unexpected exception handling scanner complete", e);

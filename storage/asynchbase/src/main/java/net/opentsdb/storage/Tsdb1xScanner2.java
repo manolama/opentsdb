@@ -560,6 +560,9 @@ public class Tsdb1xScanner2 {
       // this will let the flush complete the last set.
       base_ts.updateEpoch(0L);
       
+      // something goes pear shaped.
+      flushPartials();
+      
       if (e != null) {
         if (child != null) {
           child.setErrorTags(e)
@@ -588,8 +591,6 @@ public class Tsdb1xScanner2 {
         owner.scannerDone();
       }
       scanner.close(); // TODO - attach a callback for logging in case
-      // something goes pear shaped.
-      flushPartials();
       clear();
     }
     
@@ -630,6 +631,13 @@ public class Tsdb1xScanner2 {
   private void processRow(final ArrayList<KeyValue> row) {
     final long hash = LongHashFunction.xx_r39().hashBytes(
         owner.node().schema().getTSUID(row.get(0).key()));
+
+    // TODO - find a better spot
+    synchronized (owner.ts_ids) {
+      if (!owner.ts_ids.containsKey(hash)) {
+        owner.ts_ids.put(hash, new TSUID(owner.node().schema().getTSUID(row.get(0).key()), owner.node().schema()));
+      }
+    }
     
     Tsdb1xPartialTimeSeries pts = last_pts.get(NumericLongArrayType.TYPE);
     for (final KeyValue column : row) {
@@ -795,24 +803,26 @@ public class Tsdb1xScanner2 {
 
   void flushPartials() {
     try {
-    Iterator<Tsdb1xPartialTimeSeries> iterator = last_pts.values().iterator();
-    while (iterator.hasNext()) {
-      Tsdb1xPartialTimeSeries series = iterator.next();
-      if (!iterator.hasNext() && series.set().start().compare(Op.NE, base_ts)) {
-        ((Tsdb1xPartialTimeSeriesSet) series.set()).increment(true);
-      } else {
-        ((Tsdb1xPartialTimeSeriesSet) series.set()).increment(false);
+      System.out.println("----- FLUSH PARTIALS -----");
+      Iterator<Tsdb1xPartialTimeSeries> iterator = last_pts.values().iterator();
+      while (iterator.hasNext()) {
+        Tsdb1xPartialTimeSeries series = iterator.next();
+        if (!iterator.hasNext() && series.set().start().compare(Op.NE, base_ts)) {
+          ((Tsdb1xPartialTimeSeriesSet) series.set()).increment(true);
+        } else {
+          ((Tsdb1xPartialTimeSeriesSet) series.set()).increment(false);
+        }
+        iterator.remove();
+        System.out.println("       REMOVED: " + System.identityHashCode(series));
+        
+        // TODO - thread pool per user here!
+        PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
+        runnable.reset(series, owner.node());
+        owner.node().pipelineContext()
+          .tsdb()
+          .getQueryThreadPool()
+          .submit(runnable);
       }
-      iterator.remove();
-      
-      // TODO - thread pool per user here!
-      PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
-      runnable.reset(series, owner.node());
-      owner.node().pipelineContext()
-        .tsdb()
-        .getQueryThreadPool()
-        .submit(runnable);
-    }
     } catch (Throwable t) {
       t.printStackTrace();
     }

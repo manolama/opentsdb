@@ -279,7 +279,18 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
   
   @Override
   public void onNext(final PartialTimeSeries series) {
-    throw new IllegalArgumentException("Not implemented yet.");
+    if (series == null) {
+      throw new QueryUpstreamException("Series cannot be null.");
+    }
+    
+    for (final QueryNode node : upstream) {
+      try {
+        node.onNext(series);
+      } catch (Exception e) {
+        throw new QueryUpstreamException("Failed to send series "
+            + "upstream to node: " + node, e);
+      }
+    }
   }
 
   @Override
@@ -898,165 +909,167 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
       Deferred.group(deferreds).addCallbacks(new GroupCB(), new ErrorCB());
     }
   }
+//
+//  public static class PooledHBasePTS implements PartialTimeSeries, 
+//    CloseablePooledObject {
+//    private PooledObject pooled_object;
+//    private long id_hash;
+//    private PartialTimeSeriesSet set;
+//    private AtomicInteger counter;
+//    private PooledObject pooled_array;
+//    
+//    public PooledHBasePTS() {
+//      counter = new AtomicInteger();
+//    }
+//    
+//    @Override
+//    public void close() throws Exception {
+//      release();
+//    }
+//    
+//    @Override
+//    public Object object() {
+//      return this;
+//    }
+//    
+//    @Override
+//    public void release() {
+//      if (counter.decrementAndGet() == 0) {
+//        if (pooled_array != null) {
+//          pooled_array.release();
+//          pooled_array = null;
+//        }
+//        if (pooled_object != null) {
+//          pooled_object.release();
+//          //pooled_object = null;
+//        }
+//      }
+//    }
+//    
+//    void setData(final MockRow row, 
+//                 final ObjectPool long_array_pool, 
+//                 final long id_hash, 
+//                 final PartialTimeSeriesSet set) {
+//      this.id_hash = id_hash;
+//      this.set = set;
+//      if (row == null) {
+//        return;
+//      }
+//      
+//      // TODO - store values in this format
+//      pooled_array = long_array_pool.claim();
+//      if (pooled_array == null) {
+//        throw new IllegalStateException("The pooled array was null!");
+//      }
+//      long[] array = (long[]) pooled_array.object();
+//      int idx = 0;
+//      Iterator<TimeSeriesValue<?>> it = row.iterator(NumericType.TYPE).get();
+//      while (it.hasNext()) {
+//        TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
+//        if (v.value() == null) {
+//          continue;
+//        }
+//        
+//        // TODO length check
+//        if (idx + 2 >= array.length) {
+//          LOG.error("TODO - need to grow these!");
+//          throw new UnsupportedOperationException("TODO - mock data "
+//              + "store needs to be able to grow the arrays.");
+//        }
+//        array[idx] = v.timestamp().msEpoch();
+//        // TODO - maybe a check here to make sure the header isn't set!
+//        array[idx] |= NumericLongArrayType.MILLISECOND_FLAG;
+//        if (v.value().isInteger()) {
+//          idx++;
+//          array[idx++] = v.value().longValue();
+//        } else {
+//          array[idx++] |= NumericLongArrayType.FLOAT_FLAG;
+//          array[idx++] = Double.doubleToRawLongBits(v.value().doubleValue());
+//        }
+//      }
+//      
+//      if (idx + 1 >= array.length) {
+//        LOG.error("TODO - need to grow these!");
+//        throw new UnsupportedOperationException("TODO - mock data "
+//            + "store needs to be able to grow the arrays.");
+//      }
+//      array[idx] = NumericLongArrayType.TERIMNAL_FLAG;
+//    }
+//    
+//    @Override
+//    public void setPooledObject(final PooledObject pooled_object) {
+//      this.pooled_object = pooled_object;
+//    }
+//    
+//    @Override
+//    public long idHash() {
+//      return id_hash;
+//    }
+//    
+//    @Override
+//    public PartialTimeSeriesSet set() {
+//      System.out.println("-------- RETURNING SET: " + set);
+//      return set;
+//    }
+//    
+//    @Override
+//    public TypeToken<? extends TimeSeriesDataType> getType() {
+//      return NumericType.TYPE;
+//    }
+//    
+//    @Override
+//    public Object data() {
+//      if (pooled_array != null) {
+//        counter.incrementAndGet();
+//        return pooled_array.object();
+//      } else {
+//        return null;
+//      }
+//    }
+//    
+//  }
+//  
+//  public static class PooledHBasePTSPool extends BaseObjectPoolAllocator {
+//    public static final String TYPE = "PooledHBasePTS";
+//    @Override
+//    public Object allocate() {
+//      return new PooledHBasePTS();
+//    }
+//
+//    @Override
+//    public TypeToken<?> dataType() {
+//      return TypeToken.of(PooledHBasePTS.class);
+//    }
+//
+//    @Override
+//    public String type() {
+//      return TYPE;
+//    }
+//
+//    @Override
+//    public Deferred<Object> initialize(final TSDB tsdb, final String id) {
+//      if (Strings.isNullOrEmpty(id)) {
+//        this.id = TYPE;
+//      } else {
+//        this.id = id;
+//      }
+//      
+//      registerConfigs(tsdb.getConfig(), TYPE);
+//      
+//      final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
+//          .setAllocator(this)
+//          .setInitialCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, TYPE)))
+//          .setMaxCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, TYPE)))
+//          .setId(this.id)
+//          .build();
+//      try {
+//        createAndRegisterPool(tsdb, config, TYPE);
+//        return Deferred.fromResult(null);
+//      } catch (Exception e) {
+//        return Deferred.fromError(e);
+//      }
+//    }
+//    
+//  }
 
-  public static class PooledHBasePTS implements PartialTimeSeries, 
-    CloseablePooledObject {
-    private PooledObject pooled_object;
-    private long id_hash;
-    private PartialTimeSeriesSet set;
-    private AtomicInteger counter;
-    private PooledObject pooled_array;
-    
-    public PooledHBasePTS() {
-      counter = new AtomicInteger();
-    }
-    
-    @Override
-    public void close() throws Exception {
-      release();
-    }
-    
-    @Override
-    public Object object() {
-      return this;
-    }
-    
-    @Override
-    public void release() {
-      if (counter.decrementAndGet() == 0) {
-        if (pooled_array != null) {
-          pooled_array.release();
-          pooled_array = null;
-        }
-        if (pooled_object != null) {
-          pooled_object.release();
-          //pooled_object = null;
-        }
-      }
-    }
-    
-    void setData(final MockRow row, 
-                 final ObjectPool long_array_pool, 
-                 final long id_hash, 
-                 final PartialTimeSeriesSet set) {
-      this.id_hash = id_hash;
-      this.set = set;
-      if (row == null) {
-        return;
-      }
-      
-      // TODO - store values in this format
-      pooled_array = long_array_pool.claim();
-      if (pooled_array == null) {
-        throw new IllegalStateException("The pooled array was null!");
-      }
-      long[] array = (long[]) pooled_array.object();
-      int idx = 0;
-      Iterator<TimeSeriesValue<?>> it = row.iterator(NumericType.TYPE).get();
-      while (it.hasNext()) {
-        TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
-        if (v.value() == null) {
-          continue;
-        }
-        
-        // TODO length check
-        if (idx + 2 >= array.length) {
-          LOG.error("TODO - need to grow these!");
-          throw new UnsupportedOperationException("TODO - mock data "
-              + "store needs to be able to grow the arrays.");
-        }
-        array[idx] = v.timestamp().msEpoch();
-        // TODO - maybe a check here to make sure the header isn't set!
-        array[idx] |= NumericLongArrayType.MILLISECOND_FLAG;
-        if (v.value().isInteger()) {
-          idx++;
-          array[idx++] = v.value().longValue();
-        } else {
-          array[idx++] |= NumericLongArrayType.FLOAT_FLAG;
-          array[idx++] = Double.doubleToRawLongBits(v.value().doubleValue());
-        }
-      }
-      
-      if (idx + 1 >= array.length) {
-        LOG.error("TODO - need to grow these!");
-        throw new UnsupportedOperationException("TODO - mock data "
-            + "store needs to be able to grow the arrays.");
-      }
-      array[idx] = NumericLongArrayType.TERIMNAL_FLAG;
-    }
-    
-    @Override
-    public void setPooledObject(final PooledObject pooled_object) {
-      this.pooled_object = pooled_object;
-    }
-    
-    @Override
-    public long idHash() {
-      return id_hash;
-    }
-    
-    @Override
-    public PartialTimeSeriesSet set() {
-      return set;
-    }
-    
-    @Override
-    public TypeToken<? extends TimeSeriesDataType> getType() {
-      return NumericType.TYPE;
-    }
-    
-    @Override
-    public Object data() {
-      if (pooled_array != null) {
-        counter.incrementAndGet();
-        return pooled_array.object();
-      } else {
-        return null;
-      }
-    }
-    
-  }
-  
-  public static class PooledHBasePTSPool extends BaseObjectPoolAllocator {
-    public static final String TYPE = "PooledHBasePTS";
-    @Override
-    public Object allocate() {
-      return new PooledHBasePTS();
-    }
-
-    @Override
-    public TypeToken<?> dataType() {
-      return TypeToken.of(PooledHBasePTS.class);
-    }
-
-    @Override
-    public String type() {
-      return TYPE;
-    }
-
-    @Override
-    public Deferred<Object> initialize(final TSDB tsdb, final String id) {
-      if (Strings.isNullOrEmpty(id)) {
-        this.id = TYPE;
-      } else {
-        this.id = id;
-      }
-      
-      registerConfigs(tsdb.getConfig(), TYPE);
-      
-      final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
-          .setAllocator(this)
-          .setInitialCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, TYPE)))
-          .setMaxCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, TYPE)))
-          .setId(this.id)
-          .build();
-      try {
-        createAndRegisterPool(tsdb, config, TYPE);
-        return Deferred.fromResult(null);
-      } catch (Exception e) {
-        return Deferred.fromError(e);
-      }
-    }
-    
-  }
 }

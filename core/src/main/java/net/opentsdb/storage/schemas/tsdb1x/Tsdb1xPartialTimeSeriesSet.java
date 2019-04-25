@@ -20,6 +20,7 @@ public class Tsdb1xPartialTimeSeriesSet implements PartialTimeSeriesSet {
   TLongObjectMap<TimeSeriesId> ids;
   
   public Tsdb1xPartialTimeSeriesSet() {
+    series = 0;
     start = new SecondTimeStamp(0);
     end = new SecondTimeStamp(0);
   }
@@ -90,6 +91,7 @@ public class Tsdb1xPartialTimeSeriesSet implements PartialTimeSeriesSet {
   }
 
   public synchronized void setCompleteAndEmpty() {
+    series = 0;
     latch--;
     if (latch == 0) {
       complete = true;
@@ -97,6 +99,7 @@ public class Tsdb1xPartialTimeSeriesSet implements PartialTimeSeriesSet {
   }
   
   public synchronized void increment(final boolean complete) {
+    System.out.println("---------- incrementing...");
     series++;
     if (complete) {
       latch--;

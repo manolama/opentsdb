@@ -277,13 +277,13 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
 
   @Override
   public void serializeComplete(final Span span) {
-    if (!initialized /* Onlyl on QueryResult */ && partials.size() > 0) {
+    if (!initialized /* Only on QueryResult */ && partials.size() > 0) {
       serializePush();
     }
     
     try {
       // TODO - other bits like the query and trace data
-      if (!initialized /* Onlyl on QueryResult */ && partials.isEmpty()) {
+      if (!initialized /* Only on QueryResult */ && partials.isEmpty()) {
         json.writeStartObject();
         json.writeArrayFieldStart("results");
       }
@@ -310,8 +310,11 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
                         final Span span) {
     if (series.set().timeSeriesCount() < 1) {
       // no data
+      //System.out.println(" ------------- SKP DATA!!!");
       callback.onComplete(series);
       return;
+    } else {
+      System.out.println("---------- SERIES: " + series.set().timeSeriesCount());
     }
     
     // TODO - break out
@@ -395,12 +398,13 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       
       set.series.put(series.set().start().epoch(), stream.toByteArray());
 
-      try {
-        series.close();
-      } catch (Exception e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
-      }
+      // don't close here! Let the callback do it.
+//      try {
+//        series.close();
+//      } catch (Exception e) {
+//        // TODO Auto-generated catch block
+//        e.printStackTrace();
+//      }
       
 //      if (set.set == null) {
 //        return Deferred.fromResult(null);
@@ -888,12 +892,14 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       json.writeArrayFieldStart("results");
       
       String src_id = null;
+      System.out.println("        PARTIALS: " + partials.size());
       for (final Entry<String, TLongObjectMap<SeriesWrapper>> entry : partials.entrySet()) {
         TLongObjectIterator<SeriesWrapper> sit = entry.getValue().iterator();
         while (sit.hasNext()) {
           sit.advance();
           SeriesWrapper shard = sit.value();
           if (shard.series == null || shard.series.isEmpty()) {
+            System.out.println(" ------------- SKIPPING shard?!?!?!?!");
             continue;
           }
           
@@ -934,6 +940,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           TimeSeriesId raw_id = shard.set.id(shard.id_hash);
           if (raw_id == null) {
             // MISSING! Fill
+            System.out.println("     WTF? MISSING raw ID??? " + shard.id_hash);
             continue;
           }
           TimeSeriesStringId id = (TimeSeriesStringId) raw_id;

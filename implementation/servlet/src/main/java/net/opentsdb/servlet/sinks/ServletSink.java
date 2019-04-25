@@ -214,6 +214,7 @@ public class ServletSink implements QuerySink, SerdesCallback {
     
     if (this.callback != callback) {
       // TODO WTF?
+      throw new RuntimeException("Diff callbacks?!?!?!");
     }
     serdes.serialize(next, this, null /** TODO */);
   }

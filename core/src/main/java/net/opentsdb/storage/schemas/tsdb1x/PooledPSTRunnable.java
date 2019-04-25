@@ -15,7 +15,7 @@ public class PooledPSTRunnable implements Runnable {
   @Override
   public void run() {
     try {
-      System.out.println("SENDING UP: " + pts);
+      //System.out.println("SENDING UP: " + pts);
       if (pts != null && pts instanceof Tsdb1xPartialTimeSeries) {
         ((Tsdb1xPartialTimeSeries) pts).dedupe(false, false);
       }

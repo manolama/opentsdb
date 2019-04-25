@@ -385,7 +385,12 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   public void onComplete(final PartialTimeSeries series) {
     // TODO - need to track multiple sinks eventually.
     try {
-      final String set_id = series.set().node().config().getId() + ":" 
+      //System.out.println("********** SET? " + series.set());
+      final String set_id = series
+          .set()
+          .node()
+          .config()
+          .getId() + ":" 
           + series.set().dataSource();
       
       TLongObjectMap<PartialTimeSetWrapper> sets = pts.get(set_id);
@@ -437,6 +442,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
         }
         
         final int f = ctr.incrementAndGet();
+        //System.out.println("      TS: " + series.set().totalSets() + "  F: " + f);
         if (series.set().totalSets() == f) {
           final int tf = total_finished.incrementAndGet();
           if (tf == plan.serializationSources().size()) {
@@ -448,6 +454,13 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
       }
     } catch (Throwable t) {
       LOG.error("Unexpected exception processing PTS post Sink", t);
+    } finally {
+      try {
+        series.close();
+      } catch (Exception e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
     }
   }
   

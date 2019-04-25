@@ -101,6 +101,8 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
       write_idx = 0;
       needs_repair = false;
       last_offset = -1;
+      System.out.println("    RELEASE: " + System.identityHashCode(this));
+      //new RuntimeException().printStackTrace();
     }
   }
   
@@ -109,6 +111,9 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
                        final PartialTimeSeriesSet set) {
     this.id_hash = id_hash;
     this.set = set;
+    if (set == null) {
+      throw new RuntimeException("NULL SET FROM below...");
+    }
   }
   
   @Override
@@ -124,6 +129,9 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
     }
     if (value.length < 1) {
       throw new IllegalDataException("Value was too short.");
+    }
+    if (set == null) {
+      throw new RuntimeException("NULL SET FROM below...");
     }
     this.id_hash = id_hash;
     this.set = set;
@@ -309,6 +317,9 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
 
   @Override
   public PartialTimeSeriesSet set() {
+    System.out.println("      responding with SET: " + set 
+        + "  FROM: " + System.identityHashCode(this));
+    //new RuntimeException().printStackTrace();
     return set;
   }
 
