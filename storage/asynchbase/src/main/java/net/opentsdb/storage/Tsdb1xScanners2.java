@@ -165,6 +165,8 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
   
   protected TLongObjectMap<TimeSeriesId> ts_ids;
   protected TLongObjectMap<Tsdb1xPartialTimeSeriesSet> sets;
+  protected TimeStamp start_ts;
+  protected TimeStamp end_ts;
   
   /** Whether or not the scanner set is in a failed state and children 
    * should close. */
@@ -178,7 +180,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
    * @throws IllegalArgumentException if the node or query were null.
    */
   public Tsdb1xScanners2(final Tsdb1xQueryNode node, 
-                        final TimeSeriesDataSourceConfig source_config) {
+                         final TimeSeriesDataSourceConfig source_config) {
     if (node == null) {
       throw new IllegalArgumentException("Node cannot be null.");
     }
@@ -300,70 +302,78 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     if (send_upstream) {
       System.out.println("--------- ALL SCANNERS DONE");
       try {
-        if (sets.isEmpty()) {
-          if (scanner_index + 1 < scanners.size()) {
-            // fall back!
-            if (LOG.isDebugEnabled()) {
-              LOG.debug("Scanner index at [" + scanner_index 
-                  + "] returned an empty set, falling back.");
-            }
-            // fall back!
-            scanner_index++;
-            scanners_done = 0;
-            scanNext(null /** TODO - span */);
-            return;
+        for (final Tsdb1xPartialTimeSeriesSet set : sets.valueCollection()) {
+          if (!set.complete()) {
+            LOG.warn("!!!!!!!!!!!!! SET WASN'T DONE!: " + set.latch + "  TS: " + set.start().epoch());
           }
-          
-          // crap, no data so we need to send empty sets upstream.
-          sendNoResults();
-        } else {
+        }
           // we had at least one set with good data. To close the query we need
           // to make sure we've filled any missing periods of time with empty
           // sets.
-          if (sets.size() == total_sets_per_scanners.get(scanner_index)) {
-            // no-op! all done.
-            System.out.println("****** ALL SETS SENT!! *****");
-          } else {
-            // send empty sets by iterating and figuring out what was missing.
-            // TODO - for rollups
-            // TODO - doesn't account for calendaring, etc.
-            long start = node.pipelineContext().query().startTime().epoch();
-            if (!Strings.isNullOrEmpty(source_config.getPrePadding())) {
-              final long interval = DateTime.parseDuration(
-                  source_config.getPrePadding());
-              if (interval > 0) {
-                final long interval_offset = (1000L * start) % interval;
-                start -= interval_offset / 1000L;
-              }
-            }
-            
-            // Then snap that timestamp back to its representative value for the
-            // timespan in which it appears.
-            final long timespan_offset = start % Schema.MAX_RAW_TIMESPAN;
-            start -= timespan_offset;
-            int total_sets = total_sets_per_scanners.get(scanner_index);
-            System.out.println("------------- FILLING!");
-            for (int i = 0; i < total_sets; i++) {
-              if (!sets.containsKey(start)) {
-                Tsdb1xPartialTimeSeriesSet set = new Tsdb1xPartialTimeSeriesSet();
-                NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
-                    node.pipelineContext().tsdb().getRegistry().getObjectPool(
-                        NoDataPTSPool.TYPE).claim().object();
-                pts.reset(set);
-                set.reset(node, new SecondTimeStamp(start), 
-                    new SecondTimeStamp(start + 3600), 1, total_sets, null);
-                set.setCompleteAndEmpty();
-                PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
-                runnable.reset(pts, node);
-                node.pipelineContext()
-                  .tsdb()
-                  .getQueryThreadPool()
-                  .submit(runnable);
-              }
-              start += 3600; // just for raw!
-            }
-          }
-        }
+//          if (sets.size() == total_sets_per_scanners.get(scanner_index)) {
+//            // no-op! all done.
+//            System.out.println("****** ALL SETS SENT!! *****");
+//          } else {
+//            // send empty sets by iterating and figuring out what was missing.
+//            // TODO - for rollups
+//            // TODO - doesn't account for calendaring, etc.
+//            long start = node.pipelineContext().query().startTime().epoch();
+//            if (!Strings.isNullOrEmpty(source_config.getPrePadding())) {
+//              final long interval = DateTime.parseDuration(
+//                  source_config.getPrePadding());
+//              if (interval > 0) {
+//                final long interval_offset = (1000L * start) % interval;
+//                start -= interval_offset / 1000L;
+//              }
+//            }
+//            
+//            // Then snap that timestamp back to its representative value for the
+//            // timespan in which it appears.
+//            final long timespan_offset = start % Schema.MAX_RAW_TIMESPAN;
+//            start -= timespan_offset;
+//            int total_sets = total_sets_per_scanners.get(scanner_index);
+//            System.out.println("------------- FILLING!");
+//            for (int i = 0; i < total_sets; i++) {
+//              Tsdb1xPartialTimeSeriesSet set = sets.get(start);
+//              if (set == null) {
+//                set = new Tsdb1xPartialTimeSeriesSet();
+//                NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
+//                    node.pipelineContext().tsdb().getRegistry().getObjectPool(
+//                        NoDataPTSPool.TYPE).claim().object();
+//                pts.reset(set);
+//                set.reset(node, new SecondTimeStamp(start), 
+//                    new SecondTimeStamp(start + 3600), 1, total_sets, null);
+//                set.setCompleteAndEmpty();
+//                PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
+//                runnable.reset(pts, node);
+//                node.pipelineContext()
+//                  .tsdb()
+//                  .getQueryThreadPool()
+//                  .submit(runnable);
+//              } else {
+//                if (!set.complete()) {
+//                  // ooooo this is NOT good. I'd rather have each salt check in and
+//                  // send it on its way. BUT we don't easily know which salt was done
+//                  // with an entry unless we track the salt scanner per set.... *sigh*
+//                  while (!set.complete()) {
+//                    set.setCompleteAndEmpty();
+//                  }
+//                  // ?? 
+//                  NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
+//                      node.pipelineContext().tsdb().getRegistry().getObjectPool(
+//                          NoDataPTSPool.TYPE).claim().object();
+//                  pts.reset(set);
+//                  PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
+//                  runnable.reset(pts, node);
+//                  node.pipelineContext()
+//                    .tsdb()
+//                    .getQueryThreadPool()
+//                    .submit(runnable);
+//                }
+//              }
+//              start += 3600; // just for raw!
+//            }
+//          }
       } catch (Exception e) {
         LOG.error("Unexpected exception handling scanner complete", e);
         node.onError(e);
@@ -848,7 +858,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
         child.setErrorTags(e)
              .finish();
       }
-      e.printStackTrace();
+      LOG.error("WTF?", e);
       throw e;
     }
     
@@ -860,8 +870,95 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       LOG.debug("Configured " + scanners.size() + " scanner sets with " 
           + scanners.get(0).length + " scanners per set.");
     }
+
+    setupSets();
+    
     System.out.println("0000000000 SPANS: " + total_sets_per_scanners);
     scanNext(span);
+  }
+  
+  void setupSets() {
+    // TODO - rollups
+    long start = node.pipelineContext().query().startTime().epoch();
+    // First, we align the start timestamp to its representative value for the
+    // interval in which it appears, if downsampling.
+    
+    // TODO - doesn't account for calendaring, etc.
+    if (!Strings.isNullOrEmpty(source_config.getPrePadding())) {
+      final long interval = DateTime.parseDuration(
+          source_config.getPrePadding());
+      if (interval > 0) {
+        final long interval_offset = (1000L * start) % interval;
+        start -= interval_offset / 1000L;
+      }
+    }
+    
+    // Then snap that timestamp back to its representative value for the
+    // timespan in which it appears.
+    long timespan_offset = start % Schema.MAX_RAW_TIMESPAN;
+    start -= timespan_offset;
+    
+    // Don't return negative numbers.
+    start = start > 0L ? start : 0L;
+    
+    long end = node.pipelineContext().query().endTime().epoch();
+    long interval = 0;
+    if (!Strings.isNullOrEmpty(source_config.getPostPadding())) {
+      interval = DateTime.parseDuration(source_config.getPostPadding());
+    }
+
+    if (interval > 0) {
+      // Downsampling enabled.
+      //
+      // First, we align the end timestamp to its representative value for the
+      // interval FOLLOWING the one in which it appears.
+      //
+      // OpenTSDB's query bounds are inclusive, but HBase scan bounds are half-
+      // open. The user may have provided an end bound that is already
+      // interval-aligned (i.e., its interval offset is zero). If so, the user
+      // wishes for that interval to appear in the output. In that case, we
+      // skip forward an entire extra interval.
+      //
+      // This can be accomplished by simply not testing for zero offset.
+      final long interval_offset = (1000L * end) % interval;
+      final long interval_aligned_ts = end +
+        (interval - interval_offset) / 1000L;
+   
+      // Then, if we're now aligned on a timespan boundary, then we need no
+      // further adjustment: we are guaranteed to have always moved the end time
+      // forward, so the scan will find the data we need.
+      //
+      // Otherwise, we need to align to the NEXT timespan to ensure that we scan
+      // the needed data.
+      timespan_offset = interval_aligned_ts % Schema.MAX_RAW_TIMESPAN;
+      end = (0L == timespan_offset) ?
+        interval_aligned_ts :
+        interval_aligned_ts + (Schema.MAX_RAW_TIMESPAN - timespan_offset);
+    } else {
+      // Not downsampling.
+      //
+      // Regardless of the end timestamp's position within the current timespan,
+      // we must always align to the beginning of the next timespan. This is
+      // true even if it's already aligned on a timespan boundary. Again, the
+      // reason for this is OpenTSDB's closed interval vs. HBase's half-open.
+      timespan_offset = end % Schema.MAX_RAW_TIMESPAN;
+      end += (Schema.MAX_RAW_TIMESPAN - timespan_offset);
+    }
+    start_ts = new SecondTimeStamp(start);
+    end_ts = new SecondTimeStamp(end);
+    System.out.println(" [[[[[[ " + start_ts.epoch() + " => " + end_ts.epoch() + " ]]]]]]");
+    
+    TimeStamp st = new SecondTimeStamp(start);
+    TimeStamp e = new SecondTimeStamp(start + 3600);
+    while (start <= end) {
+      // TODO pool
+      Tsdb1xPartialTimeSeriesSet set = new Tsdb1xPartialTimeSeriesSet(node.pipelineContext().tsdb());
+      set.reset(node, st, e, scanners.get(scanner_index).length, total_sets_per_scanners.get(scanner_index), ts_ids);
+      sets.put(start, set);
+      start += 3600;
+      st.updateEpoch(start);
+      e.updateEpoch(start + 3600);
+    }
   }
   
   /**
@@ -1177,34 +1274,35 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       if (set != null) {
         return set;
       }
-      set = new Tsdb1xPartialTimeSeriesSet();
-      TimeStamp end = start.getCopy();
-      if (node.rollupIntervals() == null || scanner_index >= node.rollupIntervals().size()) {
-        end.add(Duration.ofSeconds(3600));
-      } else {
-        end.add(Duration.ofSeconds(node.rollupIntervals().get(scanner_index).getIntervalSeconds()));
-      }
-      set.reset(node, start, end, scanners.get(scanner_index).length, total_sets_per_scanners.get(scanner_index), ts_ids);
-      sets.put(start.epoch(), set);
-      return set;
+      throw new IllegalArgumentException("ARG!! No set??? @ " + start.epoch());
+//      set = new Tsdb1xPartialTimeSeriesSet();
+//      TimeStamp end = start.getCopy();
+//      if (node.rollupIntervals() == null || scanner_index >= node.rollupIntervals().size()) {
+//        end.add(Duration.ofSeconds(3600));
+//      } else {
+//        end.add(Duration.ofSeconds(node.rollupIntervals().get(scanner_index).getIntervalSeconds()));
+//      }
+//      set.reset(node, start, end, scanners.get(scanner_index).length, total_sets_per_scanners.get(scanner_index), ts_ids);
+//      sets.put(start.epoch(), set);
+//      return set;
     }
   }
   
-  void sendNoResults() {
-    Tsdb1xPartialTimeSeriesSet set = new Tsdb1xPartialTimeSeriesSet();
-    NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
-        node.pipelineContext().tsdb().getRegistry().getObjectPool(
-            NoDataPTSPool.TYPE).claim().object();
-    pts.reset(set);
-    set.reset(node, node.pipelineContext().query().startTime(), 
-        node.pipelineContext().query().endTime(), 1, 1, null);
-    set.setCompleteAndEmpty();
-    PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
-    runnable.reset(pts, node);
-    node.pipelineContext()
-      .tsdb()
-      .getQueryThreadPool()
-      .submit(runnable);
-  }
+//  void sendNoResults() {
+//    Tsdb1xPartialTimeSeriesSet set = new Tsdb1xPartialTimeSeriesSet();
+//    NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
+//        node.pipelineContext().tsdb().getRegistry().getObjectPool(
+//            NoDataPTSPool.TYPE).claim().object();
+//    pts.reset(set);
+//    set.reset(node, node.pipelineContext().query().startTime(), 
+//        node.pipelineContext().query().endTime(), 1, 1, null);
+//    set.setCompleteAndEmpty();
+//    PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
+//    runnable.reset(pts, node);
+//    node.pipelineContext()
+//      .tsdb()
+//      .getQueryThreadPool()
+//      .submit(runnable);
+//  }
   
 }

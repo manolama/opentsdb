@@ -314,14 +314,22 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       callback.onComplete(series);
       return;
     } else {
-      System.out.println("---------- SERIES: " + series.set().timeSeriesCount());
+      System.out.println("---------- SERIES: " + series.set().timeSeriesCount() + "  TYPE: " + series);
     }
     
     // TODO - break out
     ByteArrayOutputStream stream = new ByteArrayOutputStream();
     int count = 0;
     try {
+//      if (series.data() == null) {
+//        // Nothing ??
+//        System.out.println("  **************** WTF? Nothing for ID hash");
+//        callback.onComplete(series);
+//        return;
+//      }
+      
       long[] values = (long[]) series.data();
+      System.out.println("          len: " + values.length);
       int idx = 0;
       
       while (true) {
@@ -368,6 +376,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
     } catch (IOException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
+      LOG.error("WTF?", e);
     }
     
     if (count < 1) {

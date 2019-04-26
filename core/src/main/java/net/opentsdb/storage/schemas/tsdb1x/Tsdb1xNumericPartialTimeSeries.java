@@ -317,8 +317,8 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
 
   @Override
   public PartialTimeSeriesSet set() {
-    System.out.println("      responding with SET: " + set 
-        + "  FROM: " + System.identityHashCode(this));
+//    System.out.println("      responding with SET: " + set 
+//        + "  FROM: " + System.identityHashCode(this));
     //new RuntimeException().printStackTrace();
     return set;
   }

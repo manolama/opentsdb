@@ -161,11 +161,11 @@ public class ByteToStringIdConverter extends AbstractQueryNode {
       }
     }
     
-    System.out.println("        SERIES: " + next.set().timeSeriesCount());
     // now decode then pop upstream when ready
     TimeSeriesId id = next.set().id(next.idHash());
     if (id == null) {
-      sendUpstream(new RuntimeException("Ooops! no ID for: " + next.idHash()));
+      // TODO - could be a sentinel null entry.. hmm
+      return;
     }
     
     class CB implements Callback<Void, TimeSeriesStringId> {

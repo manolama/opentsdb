@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.storage;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -148,8 +149,8 @@ public class Tsdb1xScanner2 {
     this.idx = idx;
     this.rollup_interval = rollup_interval;
     state = State.CONTINUE;
-    base_ts = new SecondTimeStamp(0);
-    last_ts = new SecondTimeStamp(0);
+    base_ts = new SecondTimeStamp(-1);
+    last_ts = new SecondTimeStamp(-1);
     
     if (owner.filterDuringScan()) {
       keys_to_ids = new TLongObjectHashMap<ResolvingId>();
@@ -425,7 +426,6 @@ public class Tsdb1xScanner2 {
     public Object call(final ArrayList<ArrayList<KeyValue>> rows) throws Exception {
       if (rows == null) {
         complete(null, 0);
-        System.out.println("here.................");
         return null;
       }
       
@@ -445,55 +445,55 @@ public class Tsdb1xScanner2 {
       
       try {
         rows_scanned += rows.size();
-        if (owner.filterDuringScan()) {
-          final List<Deferred<Object>> deferreds = 
-              Lists.newArrayListWithCapacity(rows.size());
-          boolean keep_going = true;
-          for (int i = 0; i < rows.size(); i++) {
-            final ArrayList<KeyValue> row = rows.get(i);
-            if (row.isEmpty()) {
-              // should never happen
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Received an empty row from result set: " + rows);
-              }
-              continue;
-            }
-            
-            owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
-            if (owner.node().sequenceEnd() != null && 
-                base_ts.compare(
-                    (scanner.isReversed() ? Op.LT : Op.GT), 
-                        owner.node().sequenceEnd())) {
-              // end of sequence encountered in the buffer. Push on up
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Hit next sequence end in the scanner. "
-                    + "Buffering results and returning.");
-              }
-              buffer(i, rows, false);
-              keep_going = false;
-              break;
-            }/* else if (result.isFull()) {
-              if (owner.node().pipelineContext().queryContext().mode() == 
-                  QueryMode.SINGLE) {
-                throw new QueryExecutionException(
-                    result.resultIsFullErrorMessage(),
-                    HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
-              }
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Owner is full while in the scanner cache.");
-              }
-              buffer(i, rows, false);
-              keep_going = false;
-              break;
-            }*/
-            
-            final byte[] tsuid = owner.node().schema().getTSUID(row.get(0).key());
-            deferreds.add(resolveAndFilter(tsuid, row, null, child));
-          }
-          
-          return Deferred.group(deferreds)
-              .addCallbacks(new GroupResolutionCB(keep_going, child), new ErrorCB(child));
-        } else {
+//        if (owner.filterDuringScan()) {
+//          final List<Deferred<Object>> deferreds = 
+//              Lists.newArrayListWithCapacity(rows.size());
+//          boolean keep_going = true;
+//          for (int i = 0; i < rows.size(); i++) {
+//            final ArrayList<KeyValue> row = rows.get(i);
+//            if (row.isEmpty()) {
+//              // should never happen
+//              if (LOG.isDebugEnabled()) {
+//                LOG.debug("Received an empty row from result set: " + rows);
+//              }
+//              continue;
+//            }
+//            
+//            owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
+//            if (owner.node().sequenceEnd() != null && 
+//                base_ts.compare(
+//                    (scanner.isReversed() ? Op.LT : Op.GT), 
+//                        owner.node().sequenceEnd())) {
+//              // end of sequence encountered in the buffer. Push on up
+//              if (LOG.isDebugEnabled()) {
+//                LOG.debug("Hit next sequence end in the scanner. "
+//                    + "Buffering results and returning.");
+//              }
+//              buffer(i, rows, false);
+//              keep_going = false;
+//              break;
+//            }/* else if (result.isFull()) {
+//              if (owner.node().pipelineContext().queryContext().mode() == 
+//                  QueryMode.SINGLE) {
+//                throw new QueryExecutionException(
+//                    result.resultIsFullErrorMessage(),
+//                    HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
+//              }
+//              if (LOG.isDebugEnabled()) {
+//                LOG.debug("Owner is full while in the scanner cache.");
+//              }
+//              buffer(i, rows, false);
+//              keep_going = false;
+//              break;
+//            }*/
+//            
+//            final byte[] tsuid = owner.node().schema().getTSUID(row.get(0).key());
+//            deferreds.add(resolveAndFilter(tsuid, row, null, child));
+//          }
+//          
+//          return Deferred.group(deferreds)
+//              .addCallbacks(new GroupResolutionCB(keep_going, child), new ErrorCB(child));
+//        } else {
           // load all
           for (int i = 0; i < rows.size(); i++) {
             final ArrayList<KeyValue> row = rows.get(i);
@@ -507,6 +507,30 @@ public class Tsdb1xScanner2 {
             
             owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
             if (base_ts.compare(Op.NE, last_ts)) {
+              if (last_ts.epoch() == -1) {
+                // we found the first value. So if we don't match the first 
+                // set then we need to fill
+                if (base_ts.compare(Op.NE, owner.start_ts)) {
+                  TimeStamp ts = owner.start_ts.getCopy();
+                  while (ts.compare(Op.LT, base_ts)) {
+                    owner.getSet(ts).setCompleteAndEmpty();
+                    // TODO - rolluups
+                    ts.add(Duration.ofSeconds(3600));
+                  }
+                }
+              } else {
+                TimeStamp ts = last_ts.getCopy();
+                ts.add(Duration.ofSeconds(3600)); // TODO  -rollup
+                if (ts.compare(Op.NE, base_ts)) {
+                  // FILL
+                  System.out.println("       ^^^^^^^^^^ Filling middle");
+                  while (ts.compare(Op.LT, base_ts)) {
+                    owner.getSet(ts).setCompleteAndEmpty();
+                    ts.add(Duration.ofSeconds(3600));
+                  }
+                }
+              }
+              
               // flush em!
               flushPartials();
               
@@ -520,11 +544,12 @@ public class Tsdb1xScanner2 {
                 return null;
               }
             }
+            last_ts.update(base_ts);
             
             processRow(row);
             // TODO size of query
           }
-        }
+        //}
         
         if (owner.hasException()) {
           complete(child, rows.size());
@@ -556,12 +581,32 @@ public class Tsdb1xScanner2 {
      * @param rows The number of rows found in this result set.
      */
     void complete(final Exception e, final Span child, final int rows) {
+      try {
       System.out.println("--------- COMPLETING ------------");
       // this will let the flush complete the last set.
       base_ts.updateEpoch(0L);
       
-      // something goes pear shaped.
-      flushPartials();
+      if (last_pts.isEmpty()) {
+        // never had any data so for the parent, mark everything as complete 
+        // for this salt
+        System.out.println("          FILLING ALL as we didn't find anything.");
+        for (final Tsdb1xPartialTimeSeriesSet set : owner.sets.valueCollection()) {
+          set.setCompleteAndEmpty();
+        }
+      } else {
+        flushPartials();
+        
+        if (last_ts.compare(Op.NE, owner.end_ts)) {
+          System.out.println("FILLING ...................");
+          // We need to fill the end of the period
+          // rollups
+          last_ts.add(Duration.ofSeconds(3600));
+          while (last_ts.compare(Op.LT, owner.end_ts)) {
+            owner.getSet(last_ts).setCompleteAndEmpty();
+            last_ts.add(Duration.ofSeconds(3600));
+          }
+        }
+      }
       
       if (e != null) {
         if (child != null) {
@@ -592,6 +637,9 @@ public class Tsdb1xScanner2 {
       }
       scanner.close(); // TODO - attach a callback for logging in case
       clear();
+      } catch (Throwable t) {
+        LOG.error("WTF?", t);
+      }
     }
     
     /** Called when the filter resolution is complete. */
@@ -808,20 +856,20 @@ public class Tsdb1xScanner2 {
       while (iterator.hasNext()) {
         Tsdb1xPartialTimeSeries series = iterator.next();
         if (!iterator.hasNext() && series.set().start().compare(Op.NE, base_ts)) {
-          ((Tsdb1xPartialTimeSeriesSet) series.set()).increment(true);
+          ((Tsdb1xPartialTimeSeriesSet) series.set()).increment(series, true);
         } else {
-          ((Tsdb1xPartialTimeSeriesSet) series.set()).increment(false);
+          ((Tsdb1xPartialTimeSeriesSet) series.set()).increment(series, false);
         }
         iterator.remove();
         System.out.println("       REMOVED: " + System.identityHashCode(series));
         
-        // TODO - thread pool per user here!
-        PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
-        runnable.reset(series, owner.node());
-        owner.node().pipelineContext()
-          .tsdb()
-          .getQueryThreadPool()
-          .submit(runnable);
+//        // TODO - thread pool per user here!
+//        PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
+//        runnable.reset(series, owner.node());
+//        owner.node().pipelineContext()
+//          .tsdb()
+//          .getQueryThreadPool()
+//          .submit(runnable);
       }
     } catch (Throwable t) {
       t.printStackTrace();

@@ -385,7 +385,6 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
   public void onComplete(final PartialTimeSeries series) {
     // TODO - need to track multiple sinks eventually.
     try {
-      //System.out.println("********** SET? " + series.set());
       final String set_id = series
           .set()
           .node()
@@ -442,7 +441,7 @@ public abstract class AbstractQueryPipelineContext implements QueryPipelineConte
         }
         
         final int f = ctr.incrementAndGet();
-        //System.out.println("      TS: " + series.set().totalSets() + "  F: " + f);
+        System.out.println("    MAX: " + max + "  CNT: " + cnt + "  TSets: " + series.set().totalSets() + "  F: " + f + "  COM: " + series.set().complete() + "  TS: " + series.set().start().epoch());
         if (series.set().totalSets() == f) {
           final int tf = total_finished.incrementAndGet();
           if (tf == plan.serializationSources().size()) {
