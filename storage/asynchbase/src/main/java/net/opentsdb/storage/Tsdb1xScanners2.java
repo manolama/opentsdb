@@ -305,6 +305,8 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
         for (final Tsdb1xPartialTimeSeriesSet set : sets.valueCollection()) {
           if (!set.complete()) {
             LOG.warn("!!!!!!!!!!!!! SET WASN'T DONE!: " + set.latch + "  TS: " + set.start().epoch());
+          } else {
+            LOG.info("               SET WAS complete: " + set.start().epoch());
           }
         }
           // we had at least one set with good data. To close the query we need
@@ -950,7 +952,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     
     TimeStamp st = new SecondTimeStamp(start);
     TimeStamp e = new SecondTimeStamp(start + 3600);
-    while (start <= end) {
+    while (start < end) {
       // TODO pool
       Tsdb1xPartialTimeSeriesSet set = new Tsdb1xPartialTimeSeriesSet(node.pipelineContext().tsdb());
       set.reset(node, st, e, scanners.get(scanner_index).length, total_sets_per_scanners.get(scanner_index), ts_ids);
