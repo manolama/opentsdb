@@ -57,4 +57,6 @@ public interface Tsdb1xPartialTimeSeries extends PartialTimeSeries,
                         final ObjectPool long_array_pool, 
                         final long id_hash, 
                         final PartialTimeSeriesSet set);
+
+  public boolean sameHash(final long hash);
 }

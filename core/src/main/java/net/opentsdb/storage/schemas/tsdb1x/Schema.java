@@ -1202,14 +1202,16 @@ public class Schema implements WritableTimeSeriesDataStore {
     ObjectPool pool = pools.get(type);
     if (pool == null) {
       if (pools.containsKey(type)) {
-        return null;
+        System.out.println("WTF?????? No pool for type: " + type);
+        throw new RuntimeException("GRRR Need a pool for type: " + type);
       }
       
       // see if we can grab it from the registry
       pool = tsdb.getRegistry().getObjectPool(Tsdb1xNumericPartialTimeSeriesPool.TYPE);
       System.out.println("POOL FOR TYPE: " + type + "  = " + pool);
       if (pool == null) {
-        return null;
+        System.out.println("WTF?????? No pool for type: " + type);
+        throw new RuntimeException("GRRR Need a pool for type: " + type);
       }
       // race but no biggie.
       pools.putIfAbsent(type, pool);

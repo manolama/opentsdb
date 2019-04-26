@@ -133,6 +133,9 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
     if (set == null) {
       throw new RuntimeException("NULL SET FROM below...");
     }
+    if (write_idx > 0 && this.id_hash != id_hash) {
+      System.out.println("!!!!!!!!!!!!!!!!!!!!!!! DIFF HASH!!!!!!!!!!!!!!!!!");
+    }
     this.id_hash = id_hash;
     this.set = set;
     
@@ -460,6 +463,15 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
     System.arraycopy(new_array, 0, array, 0, idx);
     ((long[]) pooled_array.object())[write_idx] = NumericLongArrayType.TERIMNAL_FLAG;
     needs_repair = false;
+  }
+  
+  @Override
+  public boolean sameHash(final long hash) {
+    if (write_idx <= 0) {
+      return true;
+    }
+    
+    return id_hash == hash;
   }
   
   private void add(final long timestamp, final long nanos, final double value) {

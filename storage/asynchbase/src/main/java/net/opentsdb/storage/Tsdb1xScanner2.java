@@ -534,15 +534,15 @@ public class Tsdb1xScanner2 {
               // flush em!
               flushPartials();
               
-              if (owner.node().pipelineContext().queryContext().mode() == 
-                  QueryMode.BOUNDED_CLIENT_STREAM ||
-                  owner.node().pipelineContext().queryContext().mode() == 
-                  QueryMode.BOUNDED_SERVER_SYNC_STREAM) {
-                
-                // stop until we're told to fetch some more.
-                buffer(i, rows, true);
-                return null;
-              }
+//              if (owner.node().pipelineContext().queryContext().mode() == 
+//                  QueryMode.BOUNDED_CLIENT_STREAM ||
+//                  owner.node().pipelineContext().queryContext().mode() == 
+//                  QueryMode.BOUNDED_SERVER_SYNC_STREAM) {
+//                
+//                // stop until we're told to fetch some more.
+//                buffer(i, rows, true);
+//                return null;
+//              }
             }
             last_ts.update(base_ts);
             
@@ -706,12 +706,15 @@ public class Tsdb1xScanner2 {
             pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
             last_pts.put(NumericLongArrayType.TYPE, pts);
           }
-        } else if (pts.idHash() != hash) {
+        }
+        
+        if (!pts.sameHash(hash)) {
+          System.out.println("          gimme new hash!");
           flushPartials();
           pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
           last_pts.put(NumericLongArrayType.TYPE, pts);
         }
-        
+        System.out.println("          HASH: " + hash  + "  PTS: " + pts.idHash());
         pts.addColumn((byte) 0, 
                       base_ts,
                       column.qualifier(), 
@@ -736,12 +739,15 @@ public class Tsdb1xScanner2 {
                 pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
                 last_pts.put(NumericLongArrayType.TYPE, pts);
               }
-            } else if (pts.idHash() != hash) {
+            }
+
+            if (!pts.sameHash(hash)) {
+              System.out.println("          gimme new hash!");
               flushPartials();
               pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
               last_pts.put(NumericLongArrayType.TYPE, pts);
             }
-            
+            System.out.println("          HASH: " + hash  + "  PTS: " + pts.idHash());
             pts.addColumn(Schema.APPENDS_PREFIX, 
                           base_ts,
                           column.qualifier(), 
@@ -872,7 +878,7 @@ public class Tsdb1xScanner2 {
 //          .submit(runnable);
       }
     } catch (Throwable t) {
-      t.printStackTrace();
+      LOG.error("WTF?", t);
     }
   }
   
