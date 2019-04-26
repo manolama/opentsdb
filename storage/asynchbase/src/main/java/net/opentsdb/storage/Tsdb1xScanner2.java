@@ -258,7 +258,8 @@ public class Tsdb1xScanner2 {
         }
         
         it.remove();
-        result.decode(row, rollup_interval);
+        processRow(row, rollup_interval);
+        //result.decode(row, rollup_interval);
       }
       
     } catch (Exception e) {
@@ -445,55 +446,56 @@ public class Tsdb1xScanner2 {
       
       try {
         rows_scanned += rows.size();
-//        if (owner.filterDuringScan()) {
-//          final List<Deferred<Object>> deferreds = 
-//              Lists.newArrayListWithCapacity(rows.size());
-//          boolean keep_going = true;
-//          for (int i = 0; i < rows.size(); i++) {
-//            final ArrayList<KeyValue> row = rows.get(i);
-//            if (row.isEmpty()) {
-//              // should never happen
-//              if (LOG.isDebugEnabled()) {
-//                LOG.debug("Received an empty row from result set: " + rows);
-//              }
-//              continue;
-//            }
-//            
-//            owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
-//            if (owner.node().sequenceEnd() != null && 
-//                base_ts.compare(
-//                    (scanner.isReversed() ? Op.LT : Op.GT), 
-//                        owner.node().sequenceEnd())) {
-//              // end of sequence encountered in the buffer. Push on up
-//              if (LOG.isDebugEnabled()) {
-//                LOG.debug("Hit next sequence end in the scanner. "
-//                    + "Buffering results and returning.");
-//              }
-//              buffer(i, rows, false);
-//              keep_going = false;
-//              break;
-//            }/* else if (result.isFull()) {
-//              if (owner.node().pipelineContext().queryContext().mode() == 
-//                  QueryMode.SINGLE) {
-//                throw new QueryExecutionException(
-//                    result.resultIsFullErrorMessage(),
-//                    HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
-//              }
-//              if (LOG.isDebugEnabled()) {
-//                LOG.debug("Owner is full while in the scanner cache.");
-//              }
-//              buffer(i, rows, false);
-//              keep_going = false;
-//              break;
-//            }*/
-//            
-//            final byte[] tsuid = owner.node().schema().getTSUID(row.get(0).key());
-//            deferreds.add(resolveAndFilter(tsuid, row, null, child));
-//          }
-//          
-//          return Deferred.group(deferreds)
-//              .addCallbacks(new GroupResolutionCB(keep_going, child), new ErrorCB(child));
-//        } else {
+        if (owner.filterDuringScan()) {
+          final List<Deferred<Object>> deferreds = 
+              Lists.newArrayListWithCapacity(rows.size());
+          boolean keep_going = true;
+          for (int i = 0; i < rows.size(); i++) {
+            final ArrayList<KeyValue> row = rows.get(i);
+            if (row.isEmpty()) {
+              // should never happen
+              if (LOG.isDebugEnabled()) {
+                LOG.debug("Received an empty row from result set: " + rows);
+              }
+              continue;
+            }
+            
+            //owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
+            /* if (owner.node().sequenceEnd() != null && 
+                base_ts.compare(
+                    (scanner.isReversed() ? Op.LT : Op.GT), 
+                        owner.node().sequenceEnd())) {
+              // end of sequence encountered in the buffer. Push on up
+              if (LOG.isDebugEnabled()) {
+                LOG.debug("Hit next sequence end in the scanner. "
+                    + "Buffering results and returning.");
+              }
+              buffer(i, rows, false);
+              keep_going = false;
+              break;
+            } else if (result.isFull()) {
+              if (owner.node().pipelineContext().queryContext().mode() == 
+                  QueryMode.SINGLE) {
+                throw new QueryExecutionException(
+                    result.resultIsFullErrorMessage(),
+                    HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
+              }
+              if (LOG.isDebugEnabled()) {
+                LOG.debug("Owner is full while in the scanner cache.");
+              }
+              buffer(i, rows, false);
+              keep_going = false;
+              break;
+            }*/
+            
+            final byte[] tsuid = owner.node().schema().getTSUID(row.get(0).key());
+            deferreds.add(resolveAndFilter(tsuid, row, null, child));
+          }
+          
+          return Deferred.groupInOrder(deferreds)
+              .addCallbacks(new GroupResolutionCB(keep_going, child), 
+                  new ErrorCB(child));
+        } else {
           // load all
           for (int i = 0; i < rows.size(); i++) {
             final ArrayList<KeyValue> row = rows.get(i);
@@ -505,51 +507,10 @@ public class Tsdb1xScanner2 {
               continue;
             }
             
-            owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
-            if (base_ts.compare(Op.NE, last_ts)) {
-              if (last_ts.epoch() == -1) {
-                // we found the first value. So if we don't match the first 
-                // set then we need to fill
-                if (base_ts.compare(Op.NE, owner.start_ts)) {
-                  TimeStamp ts = owner.start_ts.getCopy();
-                  while (ts.compare(Op.LT, base_ts)) {
-                    owner.getSet(ts).setCompleteAndEmpty();
-                    // TODO - rolluups
-                    ts.add(Duration.ofSeconds(3600));
-                  }
-                }
-              } else {
-                TimeStamp ts = last_ts.getCopy();
-                ts.add(Duration.ofSeconds(3600)); // TODO  -rollup
-                if (ts.compare(Op.NE, base_ts)) {
-                  // FILL
-                  System.out.println("       ^^^^^^^^^^ Filling middle");
-                  while (ts.compare(Op.LT, base_ts)) {
-                    owner.getSet(ts).setCompleteAndEmpty();
-                    ts.add(Duration.ofSeconds(3600));
-                  }
-                }
-              }
-              
-              // flush em!
-              flushPartials();
-              
-//              if (owner.node().pipelineContext().queryContext().mode() == 
-//                  QueryMode.BOUNDED_CLIENT_STREAM ||
-//                  owner.node().pipelineContext().queryContext().mode() == 
-//                  QueryMode.BOUNDED_SERVER_SYNC_STREAM) {
-//                
-//                // stop until we're told to fetch some more.
-//                buffer(i, rows, true);
-//                return null;
-//              }
-            }
-            last_ts.update(base_ts);
-            
-            processRow(row);
+            processRow(row, null /* TODO */);
             // TODO size of query
           }
-        //}
+        }
         
         if (owner.hasException()) {
           complete(child, rows.size());
@@ -660,7 +621,7 @@ public class Tsdb1xScanner2 {
 //        if (owner.hasException()) {
 //          complete(child, 0);
 //        } else if (!result.isFull() && keep_going) {
-//          return scanner.nextRows().addCallbacks(ScannerCB.this, new ErrorCB(span));
+          return scanner.nextRows().addCallbacks(ScannerCB.this, new ErrorCB(span));
 //        } else if (result.isFull() && 
 //            owner.node().pipelineContext().queryContext().mode() == 
 //              QueryMode.SINGLE) {
@@ -671,12 +632,57 @@ public class Tsdb1xScanner2 {
 //          // told not to keep going.
 //          owner.scannerDone();
 //        }
-        return null;
+//        return null;
       }
     }
   }
   
-  private void processRow(final ArrayList<KeyValue> row) {
+  /**
+   * WARNING: Only call this single threaded!
+   * @param row
+   */
+  private void processRow(final ArrayList<KeyValue> row, final RollupInterval rollup_interval) {
+    owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
+    if (base_ts.compare(Op.NE, last_ts)) {
+      if (last_ts.epoch() == -1) {
+        // we found the first value. So if we don't match the first 
+        // set then we need to fill
+        if (base_ts.compare(Op.NE, owner.start_ts)) {
+          TimeStamp ts = owner.start_ts.getCopy();
+          while (ts.compare(Op.LT, base_ts)) {
+            owner.getSet(ts).setCompleteAndEmpty();
+            // TODO - rolluups
+            ts.add(Duration.ofSeconds(3600));
+          }
+        }
+      } else {
+        TimeStamp ts = last_ts.getCopy();
+        ts.add(Duration.ofSeconds(3600)); // TODO  -rollup
+        if (ts.compare(Op.NE, base_ts)) {
+          // FILL
+          System.out.println("       ^^^^^^^^^^ Filling middle");
+          while (ts.compare(Op.LT, base_ts)) {
+            owner.getSet(ts).setCompleteAndEmpty();
+            ts.add(Duration.ofSeconds(3600));
+          }
+        }
+      }
+      
+      // flush em!
+      flushPartials();
+      
+//      if (owner.node().pipelineContext().queryContext().mode() == 
+//          QueryMode.BOUNDED_CLIENT_STREAM ||
+//          owner.node().pipelineContext().queryContext().mode() == 
+//          QueryMode.BOUNDED_SERVER_SYNC_STREAM) {
+//        
+//        // stop until we're told to fetch some more.
+//        buffer(i, rows, true);
+//        return null;
+//      }
+    }
+    last_ts.update(base_ts);
+    
     final long hash = LongHashFunction.xx_r39().hashBytes(
         owner.node().schema().getTSUID(row.get(0).key()));
 
@@ -868,14 +874,6 @@ public class Tsdb1xScanner2 {
         }
         iterator.remove();
         System.out.println("       REMOVED: " + System.identityHashCode(series));
-        
-//        // TODO - thread pool per user here!
-//        PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
-//        runnable.reset(series, owner.node());
-//        owner.node().pipelineContext()
-//          .tsdb()
-//          .getQueryThreadPool()
-//          .submit(runnable);
       }
     } catch (Throwable t) {
       LOG.error("WTF?", t);
@@ -908,7 +906,8 @@ public class Tsdb1xScanner2 {
     
     synchronized (keepers) {
       if (keepers.contains(hash)) {
-        result.decode(row, rollup_interval);
+        processRow(row, rollup_interval);
+        //result.decode(row, rollup_interval);
         return Deferred.fromResult(null);
       }
     }
@@ -945,7 +944,15 @@ public class Tsdb1xScanner2 {
     @Override
     public Object call(final Boolean matched) throws Exception {
       if (matched != null && matched) {
-        result.decode(row, rollup_interval);
+        try {
+        synchronized (Tsdb1xScanner2.this) {
+          System.out.println("                WORKING: " + row + "  M: " + matched);
+          processRow(row, null /* TODO */);
+        }
+        //result.decode(row, rollup_interval);
+        }catch (Throwable t) {
+          LOG.error("WTF?", t);
+        }
       }
       return null;
     }
