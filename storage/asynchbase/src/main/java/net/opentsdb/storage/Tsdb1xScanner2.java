@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
@@ -375,6 +376,9 @@ public class Tsdb1xScanner2 {
       
       @Override
       public Object call(final ArrayList<Object> ignored) throws Exception {
+for (final Object obj : ignored) {
+  System.out.println("         OBJ: " + obj);
+}
         synchronized (keys_to_ids) {
           keys_to_ids.clear();
         }
@@ -617,7 +621,7 @@ public class Tsdb1xScanner2 {
       if (keepers.contains(hash)) {
         processRow(row, rollup_interval);
         //result.decode(row, rollup_interval);
-        return Deferred.fromResult(null);
+        return Deferred.fromResult(row);
       }
     }
     
@@ -632,16 +636,20 @@ public class Tsdb1xScanner2 {
               .addCallback(new ResolvedCB(row, result));
         } else {
           // add it
-          return extant.deferred.addCallback(new ResolvedCB(row, result));
+          Deferred<Object> d = new Deferred<Object>();
+          extant.deferred.chain(d);
+          return d.addCallback(new ResolvedCB(row, result));
         }
       } else {
-        return id.deferred.addCallback(new ResolvedCB(row, result));
+        Deferred<Object> d = new Deferred<Object>();
+        id.deferred.chain(d);
+        return d.addCallback(new ResolvedCB(row, result));
       }
     }
   }
   
   /** Simple class for rows waiting on resolution. */
-  class ResolvedCB implements Callback<Object, Boolean> {
+  class ResolvedCB implements Callback<Object, Object> {
     private final ArrayList<KeyValue> row;
     private final Tsdb1xQueryResult result;
     
@@ -651,8 +659,12 @@ public class Tsdb1xScanner2 {
     }
     
     @Override
-    public Object call(final Boolean matched) throws Exception {
-      if (matched != null && matched) {
+    public Object call(final Object matched) throws Exception {
+      System.out.println("********************* TYPE: " + matched + "  " + System.identityHashCode(this) + "  " + row);
+//      if (matched == null) {
+//        new RuntimeException().printStackTrace();
+//      }
+      if (matched != null && (Boolean) matched) {
         try {
         synchronized (Tsdb1xScanner2.this) {
           System.out.println("                WORKING: " + row + "  M: " + matched);
@@ -685,7 +697,7 @@ public class Tsdb1xScanner2 {
     private final long hash;
     
     /** The resolution deferred for others to wait on. */
-    private Deferred<Boolean> deferred;
+    private Deferred<Object> deferred;
     
     /** A child tracing span. */
     private Span child;
@@ -698,7 +710,7 @@ public class Tsdb1xScanner2 {
     public ResolvingId(final byte[] tsuid, final long hash) {
       super(tsuid, owner.node().schema());
       this.hash = hash;
-      deferred = new Deferred<Boolean>();
+      deferred = new Deferred<Object>();
     }
 
     /**
@@ -710,7 +722,7 @@ public class Tsdb1xScanner2 {
      * the scan filters, false if not. Or an exception if something went
      * pear shaped.
      */
-    Deferred<Boolean> decode(final Span span) {
+    Deferred<Object> decode(final Span span) {
       if (span != null && span.isDebug()) {
         child = span.newChild(getClass().getName() + "_" + idx)
             .start();
