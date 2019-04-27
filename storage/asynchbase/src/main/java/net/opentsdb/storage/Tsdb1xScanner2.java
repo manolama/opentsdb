@@ -114,12 +114,6 @@ public class Tsdb1xScanner2 {
    * set. */
   protected TLongSet keepers;
   
-  /** A buffer for storing data when we either reach a segment end or 
-   * have filled up the result set. Calls to 
-   * {@link #fetchNext(Tsdb1xQueryResult, Span)} will process this list
-   * before moving on to the scanner. */
-  protected List<ArrayList<KeyValue>> row_buffer;
-  
   /** A singleton base timestamp for this scanner. */
   protected TimeStamp last_ts;
   protected TimeStamp base_ts;
@@ -178,225 +172,19 @@ public class Tsdb1xScanner2 {
       return;
     }
     
-//    if (result.isFull()) {
-//      if (owner.node().pipelineContext().queryContext().mode() == 
-//          QueryMode.SINGLE) {
-//        state = State.EXCEPTION;
-//        owner.exception(new QueryExecutionException(
-//            result.resultIsFullErrorMessage(),
-//            HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode()));
-//        return;
-//      }
-//      if (LOG.isDebugEnabled()) {
-//        LOG.debug("Pausing scanner as upstream is full.");
-//      }
-//      owner.scannerDone();
-//      return;
-//    }
-    
-    if (row_buffer != null) {
-      if (owner.filterDuringScan()) {
-        processBufferWithFilter(ignored, span);
-      } else {
-        processBuffer(ignored, span);
-      }
-    } else {
-      // try for some data from HBase
-      final Span child;
-      if (span != null && span.isDebug()) {
-        child = span.newChild(getClass().getName() + ".fetchNext_" + idx)
-            .start();
-      } else {
-        child = span;
-      }
-      
-      scanner.nextRows()
-        .addCallbacks(new ScannerCB(child), new ErrorCB(child));
-    }
-  }
-  
-  /**
-   * Called by {@link #fetchNext(Tsdb1xQueryResult, Span)} to process a 
-   * non-null buffer without a scanner filter. Will continue scanning if
-   * we haven't hit a segment end.
-   * 
-   * @param result The non-null result set to decode the columns we find.
-   * @param span An optional tracing span.
-   */
-  private void processBuffer(final Tsdb1xQueryResult result, final Span span) {
+    // try for some data from HBase
     final Span child;
     if (span != null && span.isDebug()) {
-      child = span.newChild(getClass().getName() + ".processBuffer_" + idx)
+      child = span.newChild(getClass().getName() + ".fetchNext_" + idx)
           .start();
     } else {
       child = span;
     }
     
-    try {
-      // copy so we can delete and create a new one if necessary
-      final List<ArrayList<KeyValue>> row_buffer = this.row_buffer;
-      this.row_buffer = null;
-      final Iterator<ArrayList<KeyValue>> it = row_buffer.iterator();
-      while (it.hasNext()) {
-        final ArrayList<KeyValue> row = it.next();
-        owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
-        if (result.isFull() || owner.node().sequenceEnd() != null && 
-            base_ts.compare(
-                (scanner.isReversed() ? Op.LT : Op.GT), 
-                  owner.node().sequenceEnd())) {
-          // end of sequence encountered in the buffer. Push on up
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Hit next sequence end while in the scanner cache.");
-          }
-          this.row_buffer = row_buffer;
-          if (child != null) {
-            child.setSuccessTags()
-                 .finish();
-          }
-          owner.scannerDone();
-          return;
-        }
-        
-        it.remove();
-        processRow(row, rollup_interval);
-        //result.decode(row, rollup_interval);
-      }
-      
-    } catch (Exception e) {
-      if (child != null) {
-        child.setErrorTags()
-             .log("Exception", e)
-             .finish();
-      }
-      owner.exception(e);
-      state = State.EXCEPTION;
-      scanner.close();
-      return;
-    }
-    
-    if (child != null) {
-      child.setSuccessTags()
-           .finish();
-    }
-    // all good, keep going with the scanner now.
     scanner.nextRows()
-      .addCallbacks(new ScannerCB(span), new ErrorCB(span));
+      .addCallbacks(new ScannerCB(child), new ErrorCB(child));
   }
   
-  /**
-   * Called by {@link #fetchNext(Tsdb1xQueryResult, Span)} to process a 
-   * non-null buffer with a scanner filter. Will continue scanning if
-   * we haven't hit a segment end.
-   * 
-   * @param result The non-null result set to decode the columns we find.
-   * @param span An optional tracing span.
-   */
-  void processBufferWithFilter(final Tsdb1xQueryResult result, final Span span) {
-    final Span child;
-    if (span != null && span.isDebug()) {
-      child = span.newChild(getClass().getName() + 
-            ".processBufferWithFilter_" + idx)
-          .start();
-    } else {
-      child = span;
-    }
-    
-    try {
-      // copy so we can delete and create a new one if necessary
-      final List<ArrayList<KeyValue>> row_buffer = this.row_buffer;
-      this.row_buffer = null;
-      
-      final List<Deferred<Object>> deferreds = 
-          Lists.newArrayListWithCapacity(row_buffer.size());
-      final Iterator<ArrayList<KeyValue>> it = row_buffer.iterator();
-      
-      /** Executed after all of the resolutions are complete. */
-      class GroupResolutionCB implements Callback<Object, ArrayList<Object>> {
-        final boolean keep_going;
-        
-        GroupResolutionCB(final boolean keep_going) {
-          this.keep_going = keep_going;
-        }
-        
-        @Override
-        public Object call(final ArrayList<Object> ignored) throws Exception {
-          if (child != null) {
-            child.setSuccessTags()
-                 .finish();
-          }
-          
-          synchronized (keys_to_ids) {
-            keys_to_ids.clear();
-          }
-          if (owner.hasException()) {
-            owner.scannerDone();
-            scanner.clearFilter();
-            state = State.COMPLETE;
-          } else if (!result.isFull() && keep_going) {
-            return scanner.nextRows()
-                .addCallbacks(new ScannerCB(span), new ErrorCB(span));
-          } else {
-            // told not to keep going.
-            owner.scannerDone();
-          }
-          return null;
-        }
-      }
-      
-      boolean keep_going = true;
-      synchronized (this) {
-        while (it.hasNext()) {
-          final ArrayList<KeyValue> row = it.next();
-          
-          owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
-          if (owner.node().sequenceEnd() != null && 
-              base_ts.compare(
-                  (scanner.isReversed() ? Op.LT : Op.GT), 
-                      owner.node().sequenceEnd())) {
-            // end of sequence encountered in the buffer. Push on up
-            if (LOG.isDebugEnabled()) {
-              LOG.debug("Hit next sequence end while in the scanner cache.");
-            }
-            this.row_buffer = row_buffer;
-            keep_going = false;
-            break;
-          } else if (result.isFull()) {
-            if (owner.node().pipelineContext().queryContext().mode() == 
-                  QueryMode.SINGLE) {
-              throw new QueryExecutionException(
-                  result.resultIsFullErrorMessage(),
-                  HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
-            }
-            if (LOG.isDebugEnabled()) {
-              LOG.debug("Owner is full while in the scanner cache.");
-            }
-            this.row_buffer = row_buffer;
-            keep_going = false;
-            break;
-          }
-          
-          it.remove();
-          
-          final byte[] tsuid = owner.node().schema().getTSUID(row.get(0).key());
-          deferreds.add(resolveAndFilter(tsuid, row, result, child));
-        }
-      }
-      
-      Deferred.group(deferreds)
-        .addCallbacks(new GroupResolutionCB(keep_going), new ErrorCB(child));
-    } catch (Exception e) {
-      if (child != null) {
-        child.setErrorTags()
-             .log("Exception", e)
-             .finish();
-      }
-      owner.exception(e);
-      state = State.EXCEPTION;
-      scanner.close();
-      return;
-    }
-  }
-
   /**
    * A callback attached to the scanner's {@link Scanner#nextRows()} call
    * that processes the rows returned.
@@ -459,34 +247,6 @@ public class Tsdb1xScanner2 {
               }
               continue;
             }
-            
-            //owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
-            /* if (owner.node().sequenceEnd() != null && 
-                base_ts.compare(
-                    (scanner.isReversed() ? Op.LT : Op.GT), 
-                        owner.node().sequenceEnd())) {
-              // end of sequence encountered in the buffer. Push on up
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Hit next sequence end in the scanner. "
-                    + "Buffering results and returning.");
-              }
-              buffer(i, rows, false);
-              keep_going = false;
-              break;
-            } else if (result.isFull()) {
-              if (owner.node().pipelineContext().queryContext().mode() == 
-                  QueryMode.SINGLE) {
-                throw new QueryExecutionException(
-                    result.resultIsFullErrorMessage(),
-                    HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode());
-              }
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Owner is full while in the scanner cache.");
-              }
-              buffer(i, rows, false);
-              keep_going = false;
-              break;
-            }*/
             
             final byte[] tsuid = owner.node().schema().getTSUID(row.get(0).key());
             deferreds.add(resolveAndFilter(tsuid, row, null, child));
@@ -584,13 +344,13 @@ public class Tsdb1xScanner2 {
         if (child != null) {
           child.setSuccessTags()
                .setTag("rows", rows)
-               .setTag("buffered", row_buffer == null ? 0 : row_buffer.size())
+               .setTag("buffered", 0 /*row_buffer == null ? 0 : row_buffer.size()*/)
                .finish();
         }
         if (span != null) {
           span.setSuccessTags()
               .setTag("totalRows", rows_scanned)
-              .setTag("buffered", row_buffer == null ? 0 : row_buffer.size())
+              .setTag("buffered", 0 /*row_buffer == null ? 0 : row_buffer.size()*/)
               .finish();
         }
         state = State.COMPLETE;
@@ -618,21 +378,7 @@ public class Tsdb1xScanner2 {
         synchronized (keys_to_ids) {
           keys_to_ids.clear();
         }
-//        if (owner.hasException()) {
-//          complete(child, 0);
-//        } else if (!result.isFull() && keep_going) {
-          return scanner.nextRows().addCallbacks(ScannerCB.this, new ErrorCB(span));
-//        } else if (result.isFull() && 
-//            owner.node().pipelineContext().queryContext().mode() == 
-//              QueryMode.SINGLE) {
-//          complete(new QueryExecutionException(
-//              result.resultIsFullErrorMessage(),
-//              HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE.getCode()), child, 0);
-//        } else {
-//          // told not to keep going.
-//          owner.scannerDone();
-//        }
-//        return null;
+        return scanner.nextRows().addCallbacks(ScannerCB.this, new ErrorCB(span));
       }
     }
   }
@@ -670,16 +416,6 @@ public class Tsdb1xScanner2 {
       
       // flush em!
       flushPartials();
-      
-//      if (owner.node().pipelineContext().queryContext().mode() == 
-//          QueryMode.BOUNDED_CLIENT_STREAM ||
-//          owner.node().pipelineContext().queryContext().mode() == 
-//          QueryMode.BOUNDED_SERVER_SYNC_STREAM) {
-//        
-//        // stop until we're told to fetch some more.
-//        buffer(i, rows, true);
-//        return null;
-//      }
     }
     last_ts.update(base_ts);
     
@@ -776,28 +512,6 @@ public class Tsdb1xScanner2 {
     }
   }
   
-  /**
-   * Writes the remaining rows to the buffer.
-   * @param i A zero based offset in the rows array to buffer.
-   * @param rows The non-null rows list.
-   * @param mark_scanner_done Whether or not to call {@link Tsdb1xScanners#scannerDone()}.
-   */
-  private void buffer(int i, 
-                      final ArrayList<ArrayList<KeyValue>> rows, 
-                      final boolean mark_scanner_done) {
-    if (row_buffer == null) {
-      row_buffer = Lists.newArrayListWithCapacity(rows.size() - i);
-    }
-    for (; i < rows.size(); i++) {
-      row_buffer.add(rows.get(i));
-      TimeStamp t = new MillisecondTimeStamp(0);
-      owner.node().schema().baseTimestamp(rows.get(i).get(0).key(), t);
-    }
-    if (mark_scanner_done) {
-      owner.scannerDone();
-    }
-  }
-  
   /** @return The state of this scanner. */
   State state() {
     return state;
@@ -855,12 +569,7 @@ public class Tsdb1xScanner2 {
       return null;
     }
   }
-
-  @VisibleForTesting
-  List<ArrayList<KeyValue>> buffer() {
-    return row_buffer;
-  }
-
+  
   void flushPartials() {
     try {
       System.out.println("----- FLUSH PARTIALS -----");
