@@ -675,11 +675,12 @@ public class Tsdb1xScanner2 {
 //          processRow(row, null /* TODO */);
 //        }
         //result.decode(row, rollup_interval);
+          return row;
         }catch (Throwable t) {
           LOG.error("WTF?", t);
         }
       }
-      return row;
+      return null;
     }
     
   }
