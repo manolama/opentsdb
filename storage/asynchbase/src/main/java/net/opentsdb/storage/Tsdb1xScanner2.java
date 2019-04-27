@@ -20,6 +20,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
@@ -236,7 +237,7 @@ public class Tsdb1xScanner2 {
       try {
         rows_scanned += rows.size();
         if (owner.filterDuringScan()) {
-          final List<Deferred<Object>> deferreds = 
+          final List<Deferred<ArrayList<KeyValue>>> deferreds = 
               Lists.newArrayListWithCapacity(rows.size());
           boolean keep_going = true;
           for (int i = 0; i < rows.size(); i++) {
@@ -365,7 +366,7 @@ public class Tsdb1xScanner2 {
     }
     
     /** Called when the filter resolution is complete. */
-    class GroupResolutionCB implements Callback<Object, ArrayList<Object>> {
+    class GroupResolutionCB implements Callback<Object, ArrayList<ArrayList<KeyValue>>> {
       final boolean keep_going;
       final Span child;
       
@@ -375,10 +376,12 @@ public class Tsdb1xScanner2 {
       }
       
       @Override
-      public Object call(final ArrayList<Object> ignored) throws Exception {
-for (final Object obj : ignored) {
-  System.out.println("         OBJ: " + obj);
-}
+      public Object call(final ArrayList<ArrayList<KeyValue>> rows) throws Exception {
+        for (final ArrayList<KeyValue> row : rows) {
+          if (row != null) {
+            processRow(row, null);
+          }
+        }
         synchronized (keys_to_ids) {
           keys_to_ids.clear();
         }
@@ -604,10 +607,10 @@ for (final Object obj : ignored) {
    * @param span An optional tracing span.
    * @return A deferred to wait on before starting the next fetch.
    */
-  final Deferred<Object> resolveAndFilter(final byte[] tsuid, 
-                                          final ArrayList<KeyValue> row, 
-                                          final Tsdb1xQueryResult result, 
-                                          final Span span) {
+  final Deferred<ArrayList<KeyValue>> resolveAndFilter(final byte[] tsuid, 
+                                                       final ArrayList<KeyValue> row, 
+                                                       final Tsdb1xQueryResult result, 
+                                                       final Span span) {
     final long hash = LongHashFunction.xx_r39().hashBytes(tsuid);
     synchronized (skips) {
       if (skips.contains(hash)) {
@@ -627,29 +630,30 @@ for (final Object obj : ignored) {
     
     synchronized (keys_to_ids) {
       ResolvingId id = keys_to_ids.get(hash);
+      Deferred<Boolean> d = new Deferred<Boolean>();
       if (id == null) {
         ResolvingId new_id = new ResolvingId(tsuid, hash);
         final ResolvingId extant = keys_to_ids.putIfAbsent(hash, new_id);
         if (extant == null) {
           // start resolution of the tags to strings, then filter
-          return new_id.decode(span)
-              .addCallback(new ResolvedCB(row, result));
+          new_id.decode(span);
+          new_id.addCallback(d);
+          return d.addCallback(new ResolvedCB(row, result));
         } else {
           // add it
-          Deferred<Object> d = new Deferred<Object>();
-          extant.deferred.chain(d);
+          extant.addCallback(d);
           return d.addCallback(new ResolvedCB(row, result));
         }
       } else {
-        Deferred<Object> d = new Deferred<Object>();
-        id.deferred.chain(d);
+        System.out.println("           CHAIN and no race.");
+        id.addCallback(d);
         return d.addCallback(new ResolvedCB(row, result));
       }
     }
   }
   
   /** Simple class for rows waiting on resolution. */
-  class ResolvedCB implements Callback<Object, Object> {
+  class ResolvedCB implements Callback<ArrayList<KeyValue>, Boolean> {
     private final ArrayList<KeyValue> row;
     private final Tsdb1xQueryResult result;
     
@@ -659,23 +663,23 @@ for (final Object obj : ignored) {
     }
     
     @Override
-    public Object call(final Object matched) throws Exception {
+    public ArrayList<KeyValue> call(final Boolean matched) throws Exception {
       System.out.println("********************* TYPE: " + matched + "  " + System.identityHashCode(this) + "  " + row);
 //      if (matched == null) {
 //        new RuntimeException().printStackTrace();
 //      }
       if (matched != null && (Boolean) matched) {
         try {
-        synchronized (Tsdb1xScanner2.this) {
-          System.out.println("                WORKING: " + row + "  M: " + matched);
-          processRow(row, null /* TODO */);
-        }
+//        synchronized (Tsdb1xScanner2.this) {
+//          System.out.println("                WORKING: " + row + "  M: " + matched);
+//          processRow(row, null /* TODO */);
+//        }
         //result.decode(row, rollup_interval);
         }catch (Throwable t) {
           LOG.error("WTF?", t);
         }
       }
-      return null;
+      return row;
     }
     
   }
@@ -697,7 +701,10 @@ for (final Object obj : ignored) {
     private final long hash;
     
     /** The resolution deferred for others to wait on. */
-    private Deferred<Object> deferred;
+    //private Deferred<Object> deferred;
+    private boolean complete;
+    private Object result;
+    private List<Deferred<Boolean>> callbacks;
     
     /** A child tracing span. */
     private Span child;
@@ -710,9 +717,23 @@ for (final Object obj : ignored) {
     public ResolvingId(final byte[] tsuid, final long hash) {
       super(tsuid, owner.node().schema());
       this.hash = hash;
-      deferred = new Deferred<Object>();
+      //deferred = new Deferred<Object>();
+      callbacks = Lists.newArrayList();
     }
 
+    synchronized void addCallback(final Deferred<Boolean> cb) {
+      if (complete) {
+        try {
+          cb.callback(result);
+        } catch (Exception e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
+      } else {
+        callbacks.add(cb);
+      }
+    }
+    
     /**
      * Starts decoding the TSUID into a string and returns the deferred 
      * for other TSUIDs to wait on.
@@ -722,7 +743,7 @@ for (final Object obj : ignored) {
      * the scan filters, false if not. Or an exception if something went
      * pear shaped.
      */
-    Deferred<Object> decode(final Span span) {
+    void decode(final Span span) {
       if (span != null && span.isDebug()) {
         child = span.newChild(getClass().getName() + "_" + idx)
             .start();
@@ -732,7 +753,7 @@ for (final Object obj : ignored) {
       decode(false, child)
           .addCallback(this)
           .addErrback(new ErrorCB(null));
-      return deferred;
+      //return deferred;
     }
     
     @Override
@@ -758,7 +779,12 @@ for (final Object obj : ignored) {
           child.setErrorTags(ex)
                .finish();
         }
-        deferred.callback(ex);
+        synchronized (ResolvingId.this) {
+          result = ex;
+          complete = true;
+        }
+        flush();
+        return null;
       }
       
       if (FilterUtils.matchesTags(filter, id.tags(), null)) {
@@ -777,7 +803,12 @@ for (final Object obj : ignored) {
                .setTag("matched", "true")
                .finish();
         }
-        deferred.callback(true);
+        synchronized (ResolvingId.this) {
+          result = true;
+          complete = true;
+        }
+        flush();
+        return null;
       } else {
         synchronized (skips) {
           skips.add(hash);
@@ -794,9 +825,24 @@ for (final Object obj : ignored) {
                .setTag("matched", "false")
                .finish();
         }
-        deferred.callback(false);
+        synchronized (ResolvingId.this) {
+          result = false;
+          complete = true;
+        }
+        flush();
+        return null;
       }
-      return null;
+    }
+    
+    void flush() {
+      for (final Deferred<Boolean> cb : callbacks) {
+        try {
+          cb.callback(result);
+        } catch (Exception e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
+      }
     }
     
     class ErrorCB implements Callback<Void, Exception> {
@@ -826,7 +872,11 @@ for (final Object obj : ignored) {
                  .setTag("resolved", "false")
                  .finish();
           }
-          deferred.callback(false);
+          synchronized (ResolvingId.this) {
+            result = false;
+            complete = true;
+          }
+          flush();
           return null;
         }
         if (grand_child != null) {
@@ -839,7 +889,11 @@ for (final Object obj : ignored) {
                .setTag("resolved", "false")
                .finish();
         }
-        deferred.callback(ex);
+        synchronized (ResolvingId.this) {
+          result = ex;
+          complete = true;
+        }
+        flush();
         return null;
       }
     }
