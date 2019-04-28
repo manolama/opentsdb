@@ -290,7 +290,7 @@ public class Tsdb1xScanner2 {
       if (last_pts.isEmpty()) {
         // never had any data so for the parent, mark everything as complete 
         // for this salt
-        for (final Tsdb1xPartialTimeSeriesSet set : owner.sets.valueCollection()) {
+        for (final Tsdb1xPartialTimeSeriesSet set : owner.sets.get(owner.scanner_index).valueCollection()) {
           set.setCompleteAndEmpty();
         }
       } else {

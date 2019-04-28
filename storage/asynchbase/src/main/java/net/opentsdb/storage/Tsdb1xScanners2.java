@@ -147,6 +147,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
    */
   protected List<Tsdb1xScanner2[]> scanners;
   protected List<Integer> total_sets_per_scanners;
+  protected List<TLongObjectMap<Tsdb1xPartialTimeSeriesSet>> sets;
   
   /** The current index used for fetching data within the 
    * {@link #scanners} list. */
@@ -164,7 +165,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
   protected ByteMap<List<byte[]>> row_key_literals;
   
   protected TLongObjectMap<TimeSeriesId> ts_ids;
-  protected TLongObjectMap<Tsdb1xPartialTimeSeriesSet> sets;
+  
   protected TimeStamp start_ts;
   protected TimeStamp end_ts;
   
@@ -191,7 +192,6 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     this.source_config = source_config;
     
     ts_ids = new TLongObjectHashMap<TimeSeriesId>();
-    sets = new TLongObjectHashMap<Tsdb1xPartialTimeSeriesSet>();
     
     final Configuration config = node.parent()
         .tsdb().getConfig();
@@ -302,7 +302,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     if (send_upstream) {
       System.out.println("--------- ALL SCANNERS DONE");
       try {
-        for (final Tsdb1xPartialTimeSeriesSet set : sets.valueCollection()) {
+        for (final Tsdb1xPartialTimeSeriesSet set : sets.get(scanner_index).valueCollection()) {
           if (!set.complete()) {
             LOG.warn("!!!!!!!!!!!!! SET WASN'T DONE!: " + set.latch + "  TS: " + set.start().epoch());
           } else {
@@ -710,6 +710,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       int size = node.rollupIntervals() == null ? 
           1 : node.rollupIntervals().size() + 1;
       scanners = Lists.newArrayListWithCapacity(size);
+      sets = Lists.newArrayListWithCapacity(size);
 
       total_sets_per_scanners = Lists.newArrayList();
       final byte[] fuzzy_key;
@@ -785,6 +786,9 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
           final Tsdb1xScanner2[] array = new Tsdb1xScanner2[node.schema().saltWidth() > 0 ? 
               node.schema().saltBuckets() : 1];
           scanners.add(array);
+          sets.add(null);
+          setupSets(interval, idx);
+          
           final byte[] start_key = setStartKey(metric, interval, fuzzy_key, idx);
           final byte[] stop_key = setStopKey(metric, interval, idx);
           
@@ -835,6 +839,8 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
         final Tsdb1xScanner2[] array = new Tsdb1xScanner2[node.schema().saltWidth() > 0 ? 
             node.schema().saltBuckets() : 1];
         scanners.add(array);
+        sets.add(null);
+        setupSets(null, idx);
         
         final byte[] start_key = setStartKey(metric, null, fuzzy_key, idx);
         final byte[] stop_key = setStopKey(metric, null, idx);
@@ -895,10 +901,12 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
   }
   
   void setupSets(final RollupInterval interval, final int scanners_index) {
-    long start = computeStartTimestamp(null, scanner_index);
-    long end = computeStopTimestamp(null, scanner_index);
+    long start = computeStartTimestamp(interval, scanner_index);
+    long end = computeStopTimestamp(interval, scanner_index);
     start_ts = new SecondTimeStamp(start);
     end_ts = new SecondTimeStamp(end);
+    final TLongObjectMap<Tsdb1xPartialTimeSeriesSet> map = new TLongObjectHashMap<Tsdb1xPartialTimeSeriesSet>();
+    sets.set(scanners_index, map);
     System.out.println(" [[[[[[ " + start_ts.epoch() + " => " + end_ts.epoch() + " ]]]]]]");
     
     final Duration duration = interval == null ? Duration.ofSeconds(3600) : 
@@ -914,7 +922,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       // TODO pool
       Tsdb1xPartialTimeSeriesSet set = new Tsdb1xPartialTimeSeriesSet(node.pipelineContext().tsdb());
       set.reset(node, st, e, scanners.get(scanner_index).length, total_sets_per_scanners.get(scanner_index), ts_ids);
-      sets.put(st.epoch(), set);
+      map.put(st.epoch(), set);
       st.add(duration);
       e.add(duration);
     }
@@ -1229,7 +1237,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
 
   Tsdb1xPartialTimeSeriesSet getSet(final TimeStamp start) {
     synchronized (sets) {
-      Tsdb1xPartialTimeSeriesSet set = sets.get(start.epoch());
+      Tsdb1xPartialTimeSeriesSet set = sets.get(scanner_index).get(start.epoch());
       if (set != null) {
         return set;
       }
