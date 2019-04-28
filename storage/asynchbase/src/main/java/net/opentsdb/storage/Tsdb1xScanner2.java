@@ -296,11 +296,11 @@ public class Tsdb1xScanner2 {
       } else {
         flushPartials();
         
-        if (last_ts.compare(Op.NE, owner.end_ts)) {
+        if (last_ts.compare(Op.NE, owner.timestamps.get(owner.scanner_index).getValue())) {
           // We need to fill the end of the period
           // rollups
           last_ts.add(Duration.ofSeconds(3600));
-          while (last_ts.compare(Op.LT, owner.end_ts)) {
+          while (last_ts.compare(Op.LT, owner.timestamps.get(owner.scanner_index).getValue())) {
             owner.getSet(last_ts).setCompleteAndEmpty();
             last_ts.add(Duration.ofSeconds(3600));
           }
@@ -376,8 +376,8 @@ public class Tsdb1xScanner2 {
       if (last_ts.epoch() == -1) {
         // we found the first value. So if we don't match the first 
         // set then we need to fill
-        if (base_ts.compare(Op.NE, owner.start_ts)) {
-          TimeStamp ts = owner.start_ts.getCopy();
+        if (base_ts.compare(Op.NE, owner.timestamps.get(owner.scanner_index).getKey())) {
+          TimeStamp ts = owner.timestamps.get(owner.scanner_index).getKey().getCopy();
           while (ts.compare(Op.LT, base_ts)) {
             owner.getSet(ts).setCompleteAndEmpty();
             // TODO - rolluups
