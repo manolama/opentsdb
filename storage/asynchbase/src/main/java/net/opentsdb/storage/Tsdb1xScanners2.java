@@ -467,6 +467,25 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
                      final RollupInterval rollup_interval,
                      final byte[] fuzzy_key,
                      final int scanners_index) {
+    long start = computeStartTimestamp(rollup_interval, scanners_index);
+    total_sets_per_scanners.set(scanners_index, (int) start);
+    
+    final byte[] start_key;
+    if (fuzzy_key != null) {
+      start_key = Arrays.copyOf(fuzzy_key, fuzzy_key.length);
+    } else {
+      start_key = new byte[node.schema().saltWidth() + 
+                           node.schema().metricWidth() +
+                           Schema.TIMESTAMP_BYTES];
+    }
+    System.arraycopy(metric, 0, start_key, node.schema().saltWidth(), metric.length);
+    Bytes.setInt(start_key, (int) start, (node.schema().saltWidth() + 
+                                          node.schema().metricWidth()));
+    return start_key;
+  }
+
+  long computeStartTimestamp(final RollupInterval rollup_interval,
+                             final int scanners_index) {
     long start = node.pipelineContext().query().startTime().epoch();
     
     final Collection<QueryNode> rates = 
@@ -499,22 +518,9 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     
     // Don't return negative numbers.
     start = start > 0L ? start : 0L;
-    total_sets_per_scanners.set(scanners_index, (int) start);
-    
-    final byte[] start_key;
-    if (fuzzy_key != null) {
-      start_key = Arrays.copyOf(fuzzy_key, fuzzy_key.length);
-    } else {
-      start_key = new byte[node.schema().saltWidth() + 
-                           node.schema().metricWidth() +
-                           Schema.TIMESTAMP_BYTES];
-    }
-    System.arraycopy(metric, 0, start_key, node.schema().saltWidth(), metric.length);
-    Bytes.setInt(start_key, (int) start, (node.schema().saltWidth() + 
-                                          node.schema().metricWidth()));
-    return start_key;
+    return start;
   }
-
+  
   /**
    * Configures the stop row key for a scanner with room for salt.
    * @param metric A non-null and non-empty metric UID.
@@ -524,6 +530,28 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
   byte[] setStopKey(final byte[] metric, 
                     final RollupInterval rollup_interval,
                     final int scanners_index) {
+    long end = computeStopTimestamp(rollup_interval, scanners_index);
+    
+    if (rollup_interval != null) {
+      int start = total_sets_per_scanners.get(scanners_index);
+      total_sets_per_scanners.set(scanners_index, 
+          (((int) end) - start) / rollup_interval.getIntervalSeconds());
+    } else {
+      int start = total_sets_per_scanners.get(scanners_index);
+      total_sets_per_scanners.set(scanners_index, (((int) end) - start) / 3600);
+    }
+    
+    final byte[] end_key = new byte[node.schema().saltWidth() + 
+                                      node.schema().metricWidth() +
+                                      Schema.TIMESTAMP_BYTES];
+    System.arraycopy(metric, 0, end_key, node.schema().saltWidth(), metric.length);
+    Bytes.setInt(end_key, (int) end, (node.schema().saltWidth() + 
+                                      node.schema().metricWidth()));
+    return end_key;
+  }
+
+  long computeStopTimestamp(final RollupInterval rollup_interval,
+                            final int scanners_index) {
     long end = node.pipelineContext().query().endTime().epoch();
     
     if (rollup_interval != null) {
@@ -531,9 +559,6 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       end = RollupUtils.getRollupBasetime(end + 
           (rollup_interval.getIntervalSeconds() * rollup_interval.getIntervals()), 
             rollup_interval);
-      int start = total_sets_per_scanners.get(scanners_index);
-      total_sets_per_scanners.set(scanners_index, 
-          (((int) end) - start) / rollup_interval.getIntervalSeconds());
     } else {
       long interval = 0;
       if (!Strings.isNullOrEmpty(source_config.getPostPadding())) {
@@ -577,20 +602,10 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
         final long timespan_offset = end % Schema.MAX_RAW_TIMESPAN;
         end += (Schema.MAX_RAW_TIMESPAN - timespan_offset);
       }
-      
-      int start = total_sets_per_scanners.get(scanners_index);
-      total_sets_per_scanners.set(scanners_index, (((int) end) - start) / 3600);
     }
-    
-    final byte[] end_key = new byte[node.schema().saltWidth() + 
-                                      node.schema().metricWidth() +
-                                      Schema.TIMESTAMP_BYTES];
-    System.arraycopy(metric, 0, end_key, node.schema().saltWidth(), metric.length);
-    Bytes.setInt(end_key, (int) end, (node.schema().saltWidth() + 
-                                      node.schema().metricWidth()));
-    return end_key;
+    return end;
   }
-
+  
   /**
    * Initializes the scanners on the first call to 
    * {@link #fetchNext(Tsdb1xQueryResult, Span)}. Starts with resolving
@@ -1277,34 +1292,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
         return set;
       }
       throw new IllegalArgumentException("ARG!! No set??? @ " + start.epoch());
-//      set = new Tsdb1xPartialTimeSeriesSet();
-//      TimeStamp end = start.getCopy();
-//      if (node.rollupIntervals() == null || scanner_index >= node.rollupIntervals().size()) {
-//        end.add(Duration.ofSeconds(3600));
-//      } else {
-//        end.add(Duration.ofSeconds(node.rollupIntervals().get(scanner_index).getIntervalSeconds()));
-//      }
-//      set.reset(node, start, end, scanners.get(scanner_index).length, total_sets_per_scanners.get(scanner_index), ts_ids);
-//      sets.put(start.epoch(), set);
-//      return set;
     }
   }
-  
-//  void sendNoResults() {
-//    Tsdb1xPartialTimeSeriesSet set = new Tsdb1xPartialTimeSeriesSet();
-//    NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
-//        node.pipelineContext().tsdb().getRegistry().getObjectPool(
-//            NoDataPTSPool.TYPE).claim().object();
-//    pts.reset(set);
-//    set.reset(node, node.pipelineContext().query().startTime(), 
-//        node.pipelineContext().query().endTime(), 1, 1, null);
-//    set.setCompleteAndEmpty();
-//    PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
-//    runnable.reset(pts, node);
-//    node.pipelineContext()
-//      .tsdb()
-//      .getQueryThreadPool()
-//      .submit(runnable);
-//  }
   
 }
