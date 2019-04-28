@@ -150,6 +150,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
   protected List<Integer> total_sets_per_scanners;
   protected List<TLongObjectMap<Tsdb1xPartialTimeSeriesSet>> sets;
   protected List<Pair<TimeStamp, TimeStamp>> timestamps;
+  protected List<Duration> durations;
   
   /** The current index used for fetching data within the 
    * {@link #scanners} list. */
@@ -711,6 +712,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       scanners = Lists.newArrayListWithCapacity(size);
       timestamps = Lists.newArrayListWithCapacity(size);
       sets = Lists.newArrayListWithCapacity(size);
+      durations = Lists.newArrayListWithCapacity(size);
 
       total_sets_per_scanners = Lists.newArrayList();
       final byte[] fuzzy_key;
@@ -788,6 +790,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
           scanners.add(array);
           sets.add(null);
           timestamps.add(null);
+          durations.add(null);
           setupSets(interval, idx);
           
           final byte[] start_key = setStartKey(metric, interval, fuzzy_key, idx);
@@ -842,6 +845,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
         scanners.add(array);
         sets.add(null);
         timestamps.add(null);
+        durations.add(null);
         setupSets(null, idx);
         
         final byte[] start_key = setStartKey(metric, null, fuzzy_key, idx);
@@ -914,6 +918,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     
     final Duration duration = interval == null ? Duration.ofSeconds(3600) : 
         Duration.ofSeconds(interval.getIntervalSeconds());
+    durations.set(scanners_index, duration);
     TimeStamp st = new SecondTimeStamp(start);
     TimeStamp e = st.getCopy();
     if (interval == null) {

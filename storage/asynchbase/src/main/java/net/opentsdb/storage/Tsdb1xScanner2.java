@@ -14,7 +14,6 @@
 // limitations under the License.
 package net.opentsdb.storage;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -299,10 +298,10 @@ public class Tsdb1xScanner2 {
         if (last_ts.compare(Op.NE, owner.timestamps.get(owner.scanner_index).getValue())) {
           // We need to fill the end of the period
           // rollups
-          last_ts.add(Duration.ofSeconds(3600));
+          last_ts.add(owner.durations.get(owner.scanner_index));
           while (last_ts.compare(Op.LT, owner.timestamps.get(owner.scanner_index).getValue())) {
             owner.getSet(last_ts).setCompleteAndEmpty();
-            last_ts.add(Duration.ofSeconds(3600));
+            last_ts.add(owner.durations.get(owner.scanner_index));
           }
         }
       }
@@ -380,18 +379,17 @@ public class Tsdb1xScanner2 {
           TimeStamp ts = owner.timestamps.get(owner.scanner_index).getKey().getCopy();
           while (ts.compare(Op.LT, base_ts)) {
             owner.getSet(ts).setCompleteAndEmpty();
-            // TODO - rolluups
-            ts.add(Duration.ofSeconds(3600));
+            ts.add(owner.durations.get(owner.scanner_index));
           }
         }
       } else {
         TimeStamp ts = last_ts.getCopy();
-        ts.add(Duration.ofSeconds(3600)); // TODO  -rollup
+        ts.add(owner.durations.get(owner.scanner_index));
         if (ts.compare(Op.NE, base_ts)) {
           // FILL
           while (ts.compare(Op.LT, base_ts)) {
             owner.getSet(ts).setCompleteAndEmpty();
-            ts.add(Duration.ofSeconds(3600));
+            ts.add(owner.durations.get(owner.scanner_index));
           }
         }
       }
