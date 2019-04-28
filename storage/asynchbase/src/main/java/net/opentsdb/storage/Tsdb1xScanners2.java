@@ -888,93 +888,35 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
           + scanners.get(0).length + " scanners per set.");
     }
 
-    setupSets();
+    setupSets(null, 0);
     
     System.out.println("0000000000 SPANS: " + total_sets_per_scanners);
     scanNext(span);
   }
   
-  void setupSets() {
-    // TODO - rollups
-    long start = node.pipelineContext().query().startTime().epoch();
-    // First, we align the start timestamp to its representative value for the
-    // interval in which it appears, if downsampling.
-    
-    // TODO - doesn't account for calendaring, etc.
-    if (!Strings.isNullOrEmpty(source_config.getPrePadding())) {
-      final long interval = DateTime.parseDuration(
-          source_config.getPrePadding());
-      if (interval > 0) {
-        final long interval_offset = (1000L * start) % interval;
-        start -= interval_offset / 1000L;
-      }
-    }
-    
-    // Then snap that timestamp back to its representative value for the
-    // timespan in which it appears.
-    long timespan_offset = start % Schema.MAX_RAW_TIMESPAN;
-    start -= timespan_offset;
-    
-    // Don't return negative numbers.
-    start = start > 0L ? start : 0L;
-    
-    long end = node.pipelineContext().query().endTime().epoch();
-    long interval = 0;
-    if (!Strings.isNullOrEmpty(source_config.getPostPadding())) {
-      interval = DateTime.parseDuration(source_config.getPostPadding());
-    }
-
-    if (interval > 0) {
-      // Downsampling enabled.
-      //
-      // First, we align the end timestamp to its representative value for the
-      // interval FOLLOWING the one in which it appears.
-      //
-      // OpenTSDB's query bounds are inclusive, but HBase scan bounds are half-
-      // open. The user may have provided an end bound that is already
-      // interval-aligned (i.e., its interval offset is zero). If so, the user
-      // wishes for that interval to appear in the output. In that case, we
-      // skip forward an entire extra interval.
-      //
-      // This can be accomplished by simply not testing for zero offset.
-      final long interval_offset = (1000L * end) % interval;
-      final long interval_aligned_ts = end +
-        (interval - interval_offset) / 1000L;
-   
-      // Then, if we're now aligned on a timespan boundary, then we need no
-      // further adjustment: we are guaranteed to have always moved the end time
-      // forward, so the scan will find the data we need.
-      //
-      // Otherwise, we need to align to the NEXT timespan to ensure that we scan
-      // the needed data.
-      timespan_offset = interval_aligned_ts % Schema.MAX_RAW_TIMESPAN;
-      end = (0L == timespan_offset) ?
-        interval_aligned_ts :
-        interval_aligned_ts + (Schema.MAX_RAW_TIMESPAN - timespan_offset);
-    } else {
-      // Not downsampling.
-      //
-      // Regardless of the end timestamp's position within the current timespan,
-      // we must always align to the beginning of the next timespan. This is
-      // true even if it's already aligned on a timespan boundary. Again, the
-      // reason for this is OpenTSDB's closed interval vs. HBase's half-open.
-      timespan_offset = end % Schema.MAX_RAW_TIMESPAN;
-      end += (Schema.MAX_RAW_TIMESPAN - timespan_offset);
-    }
+  void setupSets(final RollupInterval interval, final int scanners_index) {
+    long start = computeStartTimestamp(null, scanner_index);
+    long end = computeStopTimestamp(null, scanner_index);
     start_ts = new SecondTimeStamp(start);
     end_ts = new SecondTimeStamp(end);
     System.out.println(" [[[[[[ " + start_ts.epoch() + " => " + end_ts.epoch() + " ]]]]]]");
     
+    final Duration duration = interval == null ? Duration.ofSeconds(3600) : 
+        Duration.ofSeconds(interval.getIntervalSeconds());
     TimeStamp st = new SecondTimeStamp(start);
-    TimeStamp e = new SecondTimeStamp(start + 3600);
-    while (start < end) {
+    TimeStamp e = st.getCopy();
+    if (interval == null) {
+      e.add(duration);
+    } else {
+      e.add(duration);
+    }
+    while (st.epoch() < end) {
       // TODO pool
       Tsdb1xPartialTimeSeriesSet set = new Tsdb1xPartialTimeSeriesSet(node.pipelineContext().tsdb());
       set.reset(node, st, e, scanners.get(scanner_index).length, total_sets_per_scanners.get(scanner_index), ts_ids);
-      sets.put(start, set);
-      start += 3600;
-      st.updateEpoch(start);
-      e.updateEpoch(start + 3600);
+      sets.put(st.epoch(), set);
+      st.add(duration);
+      e.add(duration);
     }
   }
   
