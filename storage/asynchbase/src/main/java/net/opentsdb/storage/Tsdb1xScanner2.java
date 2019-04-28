@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2018  The OpenTSDB Authors.
+// Copyright (C) 2018-2019  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,16 +19,12 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
@@ -41,22 +37,18 @@ import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.TLongSet;
 import gnu.trove.set.hash.TLongHashSet;
 import net.openhft.hashing.LongHashFunction;
-import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.types.numeric.NumericLongArrayType;
-import net.opentsdb.exceptions.QueryExecutionException;
-import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.TimeSeriesDataSourceConfig;
 import net.opentsdb.query.filter.FilterUtils;
 import net.opentsdb.query.filter.QueryFilter;
 import net.opentsdb.rollup.RollupInterval;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.HBaseExecutor.State;
-import net.opentsdb.storage.schemas.tsdb1x.PooledPSTRunnable;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
 import net.opentsdb.storage.schemas.tsdb1x.TSUID;
 import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xPartialTimeSeries;
@@ -66,21 +58,7 @@ import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.Exceptions;
 
 /**
- * A single scanner for a single metric within a single salt bucket 
- * (optionally). 
- * <p>
- * While the most efficient scanner is one with a fully configured
- * start and stop key and no {@link Tsdb1xScanners#scannerFilter()}, if 
- * filters are present, then it will resolve the UIDs of the rows into 
- * the string IDs, then filter them and cache the results in sets.
- * <p>
- * If {@link Tsdb1xScanners#sequenceEnd()} is reached or 
- * {@link Tsdb1xScanners#isFull()} is returned, then the scanner can stop
- * mid-result and buffer some data till {@link #fetchNext(Tsdb1xQueryResult, Span)}
- * is called again.
- * <p>
- * When resolving filters, it's possible to ignore UIDs that fail to
- * resolve to a name by setting the {@link #skip_nsui} flag.
+ * 
  * 
  * @since 3.0
  */
@@ -120,7 +98,8 @@ public class Tsdb1xScanner2 {
   protected TimeStamp last_ts;
   protected TimeStamp base_ts;
   
-  protected volatile Map<TypeToken<? extends TimeSeriesDataType>, Tsdb1xPartialTimeSeries> last_pts;
+  protected Map<TypeToken<? extends TimeSeriesDataType>, 
+    Tsdb1xPartialTimeSeries> last_pts;
   
   /**
    * Default ctor.
@@ -157,7 +136,7 @@ public class Tsdb1xScanner2 {
   }
   
   /**
-   * Called by the {@link Tsdb1xScanners} to initiate the next fetch of
+   * Called by the {@link Tsdb1xScanners2} to initiate the next fetch of
    * data from the buffer and/or scanner.
    * 
    * @param result A non-null result set to decode the columns we find.
@@ -269,7 +248,7 @@ public class Tsdb1xScanner2 {
               continue;
             }
             
-            processRow(row, null /* TODO */);
+            processRow(row);
             // TODO size of query
           }
         }
@@ -305,14 +284,12 @@ public class Tsdb1xScanner2 {
      */
     void complete(final Exception e, final Span child, final int rows) {
       try {
-      System.out.println("--------- COMPLETING ------------");
       // this will let the flush complete the last set.
       base_ts.updateEpoch(0L);
       
       if (last_pts.isEmpty()) {
         // never had any data so for the parent, mark everything as complete 
         // for this salt
-        System.out.println("          FILLING ALL as we didn't find anything.");
         for (final Tsdb1xPartialTimeSeriesSet set : owner.sets.valueCollection()) {
           set.setCompleteAndEmpty();
         }
@@ -320,7 +297,6 @@ public class Tsdb1xScanner2 {
         flushPartials();
         
         if (last_ts.compare(Op.NE, owner.end_ts)) {
-          System.out.println("FILLING ...................");
           // We need to fill the end of the period
           // rollups
           last_ts.add(Duration.ofSeconds(3600));
@@ -379,7 +355,7 @@ public class Tsdb1xScanner2 {
       public Object call(final ArrayList<ArrayList<KeyValue>> rows) throws Exception {
         for (final ArrayList<KeyValue> row : rows) {
           if (row != null) {
-            processRow(row, null);
+            processRow(row);
           }
         }
         synchronized (keys_to_ids) {
@@ -394,7 +370,7 @@ public class Tsdb1xScanner2 {
    * WARNING: Only call this single threaded!
    * @param row
    */
-  private void processRow(final ArrayList<KeyValue> row, final RollupInterval rollup_interval) {
+  private void processRow(final ArrayList<KeyValue> row) {
     owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
     if (base_ts.compare(Op.NE, last_ts)) {
       if (last_ts.epoch() == -1) {
@@ -413,7 +389,6 @@ public class Tsdb1xScanner2 {
         ts.add(Duration.ofSeconds(3600)); // TODO  -rollup
         if (ts.compare(Op.NE, base_ts)) {
           // FILL
-          System.out.println("       ^^^^^^^^^^ Filling middle");
           while (ts.compare(Op.LT, base_ts)) {
             owner.getSet(ts).setCompleteAndEmpty();
             ts.add(Duration.ofSeconds(3600));
@@ -426,13 +401,14 @@ public class Tsdb1xScanner2 {
     }
     last_ts.update(base_ts);
     
-    final long hash = LongHashFunction.xx_r39().hashBytes(
-        owner.node().schema().getTSUID(row.get(0).key()));
+    final byte[] tsuid = owner.node().schema().getTSUID(row.get(0).key());
+    final long hash = LongHashFunction.xx_r39().hashBytes(tsuid);
 
-    // TODO - find a better spot
+    // TODO - find a better spot. We may not pull any data from this row so we
+    // shouldn't bother putting it in the ids.
     synchronized (owner.ts_ids) {
       if (!owner.ts_ids.containsKey(hash)) {
-        owner.ts_ids.put(hash, new TSUID(owner.node().schema().getTSUID(row.get(0).key()), owner.node().schema()));
+        owner.ts_ids.put(hash, new TSUID(tsuid, owner.node().schema()));
       }
     }
     
@@ -458,12 +434,11 @@ public class Tsdb1xScanner2 {
         }
         
         if (!pts.sameHash(hash)) {
-          System.out.println("          gimme new hash!");
           flushPartials();
           pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
           last_pts.put(NumericLongArrayType.TYPE, pts);
         }
-        System.out.println("          HASH: " + hash  + "  PTS: " + pts.idHash());
+        
         pts.addColumn((byte) 0, 
                       base_ts,
                       column.qualifier(), 
@@ -491,12 +466,11 @@ public class Tsdb1xScanner2 {
             }
 
             if (!pts.sameHash(hash)) {
-              System.out.println("          gimme new hash!");
               flushPartials();
               pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
               last_pts.put(NumericLongArrayType.TYPE, pts);
             }
-            System.out.println("          HASH: " + hash  + "  PTS: " + pts.idHash());
+            
             pts.addColumn(Schema.APPENDS_PREFIX, 
                           base_ts,
                           column.qualifier(), 
@@ -579,7 +553,6 @@ public class Tsdb1xScanner2 {
   
   void flushPartials() {
     try {
-      System.out.println("----- FLUSH PARTIALS -----");
       Iterator<Tsdb1xPartialTimeSeries> iterator = last_pts.values().iterator();
       while (iterator.hasNext()) {
         Tsdb1xPartialTimeSeries series = iterator.next();
@@ -589,7 +562,6 @@ public class Tsdb1xScanner2 {
           ((Tsdb1xPartialTimeSeriesSet) series.set()).increment(series, false);
         }
         iterator.remove();
-        System.out.println("       REMOVED: " + System.identityHashCode(series));
       }
     } catch (Throwable t) {
       LOG.error("WTF?", t);
@@ -622,8 +594,7 @@ public class Tsdb1xScanner2 {
     
     synchronized (keepers) {
       if (keepers.contains(hash)) {
-        processRow(row, rollup_interval);
-        //result.decode(row, rollup_interval);
+        processRow(row);
         return Deferred.fromResult(row);
       }
     }
@@ -638,16 +609,15 @@ public class Tsdb1xScanner2 {
           // start resolution of the tags to strings, then filter
           new_id.decode(span);
           new_id.addCallback(d);
-          return d.addCallback(new ResolvedCB(row, result));
+          return d.addCallback(new ResolvedCB(row));
         } else {
           // add it
           extant.addCallback(d);
-          return d.addCallback(new ResolvedCB(row, result));
+          return d.addCallback(new ResolvedCB(row));
         }
       } else {
-        System.out.println("           CHAIN and no race.");
         id.addCallback(d);
-        return d.addCallback(new ResolvedCB(row, result));
+        return d.addCallback(new ResolvedCB(row));
       }
     }
   }
@@ -655,30 +625,15 @@ public class Tsdb1xScanner2 {
   /** Simple class for rows waiting on resolution. */
   class ResolvedCB implements Callback<ArrayList<KeyValue>, Boolean> {
     private final ArrayList<KeyValue> row;
-    private final Tsdb1xQueryResult result;
     
-    ResolvedCB(final ArrayList<KeyValue> row, final Tsdb1xQueryResult result) {
+    ResolvedCB(final ArrayList<KeyValue> row) {
       this.row = row;
-      this.result = result;
     }
     
     @Override
     public ArrayList<KeyValue> call(final Boolean matched) throws Exception {
-      System.out.println("********************* TYPE: " + matched + "  " + System.identityHashCode(this) + "  " + row);
-//      if (matched == null) {
-//        new RuntimeException().printStackTrace();
-//      }
       if (matched != null && (Boolean) matched) {
-        try {
-//        synchronized (Tsdb1xScanner2.this) {
-//          System.out.println("                WORKING: " + row + "  M: " + matched);
-//          processRow(row, null /* TODO */);
-//        }
-        //result.decode(row, rollup_interval);
-          return row;
-        }catch (Throwable t) {
-          LOG.error("WTF?", t);
-        }
+        return row;
       }
       return null;
     }
@@ -701,11 +656,9 @@ public class Tsdb1xScanner2 {
     /** The computed hash of the TSUID. */
     private final long hash;
     
-    /** The resolution deferred for others to wait on. */
-    //private Deferred<Object> deferred;
     private boolean complete;
     private Object result;
-    private List<Deferred<Boolean>> callbacks;
+    private List<Deferred<Boolean>> deferreds;
     
     /** A child tracing span. */
     private Span child;
@@ -718,8 +671,7 @@ public class Tsdb1xScanner2 {
     public ResolvingId(final byte[] tsuid, final long hash) {
       super(tsuid, owner.node().schema());
       this.hash = hash;
-      //deferred = new Deferred<Object>();
-      callbacks = Lists.newArrayList();
+      deferreds = Lists.newArrayList();
     }
 
     synchronized void addCallback(final Deferred<Boolean> cb) {
@@ -731,7 +683,7 @@ public class Tsdb1xScanner2 {
           e.printStackTrace();
         }
       } else {
-        callbacks.add(cb);
+        deferreds.add(cb);
       }
     }
     
@@ -754,7 +706,6 @@ public class Tsdb1xScanner2 {
       decode(false, child)
           .addCallback(this)
           .addErrback(new ErrorCB(null));
-      //return deferred;
     }
     
     @Override
@@ -836,7 +787,7 @@ public class Tsdb1xScanner2 {
     }
     
     void flush() {
-      for (final Deferred<Boolean> cb : callbacks) {
+      for (final Deferred<Boolean> cb : deferreds) {
         try {
           cb.callback(result);
         } catch (Exception e) {
