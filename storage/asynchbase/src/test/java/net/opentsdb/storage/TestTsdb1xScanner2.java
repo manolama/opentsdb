@@ -55,7 +55,7 @@ import net.opentsdb.uid.UniqueIdType;
 @PrepareForTest({ HBaseClient.class, Scanner.class })
 public class TestTsdb1xScanner2 extends UTBase {
   private Tsdb1xScanners2 owner;
-  private Tsdb1xQueryNode node;
+  private Tsdb1xHBaseQueryNode node;
   private Tsdb1xQueryResult results;
   private Schema schema; 
   private QueryContext context;
@@ -66,7 +66,7 @@ public class TestTsdb1xScanner2 extends UTBase {
   @Before
   public void before() throws Exception {
     results = mock(Tsdb1xQueryResult.class);
-    node = mock(Tsdb1xQueryNode.class);
+    node = mock(Tsdb1xHBaseQueryNode.class);
     owner = mock(Tsdb1xScanners2.class);
     schema = spy(new Schema(schema_factory, tsdb, null));
     config = mock(TimeSeriesDataSourceConfig.class);

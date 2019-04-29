@@ -30,7 +30,7 @@ import net.opentsdb.rollup.DefaultRollupConfig;
   Tsdb1xScanner.class })
 public class TestTsdb1xScanners2 extends UTBase {
 
-  private Tsdb1xQueryNode node;
+  private Tsdb1xHBaseQueryNode node;
   private TimeSeriesDataSourceConfig source_config;
   private DefaultRollupConfig rollup_config;
   private QueryPipelineContext context;
@@ -38,7 +38,7 @@ public class TestTsdb1xScanners2 extends UTBase {
   
   @Before
   public void before() throws Exception {
-    node = mock(Tsdb1xQueryNode.class);
+    node = mock(Tsdb1xHBaseQueryNode.class);
     when(node.schema()).thenReturn(schema);
     when(node.parent()).thenReturn(data_store);
     rollup_config = mock(DefaultRollupConfig.class);

@@ -72,6 +72,7 @@ import net.opentsdb.stats.Span;
 import net.opentsdb.storage.HBaseExecutor.State;
 import net.opentsdb.storage.MockDataStore.MockRow;
 import net.opentsdb.storage.MockDataStore.PooledMockPTS;
+import net.opentsdb.storage.schemas.tsdb1x.BaseTsdb1xQueryNode;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
 import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xPartialTimeSeries;
 import net.opentsdb.uid.NoSuchUniqueName;
@@ -88,9 +89,9 @@ import net.opentsdb.utils.Exceptions;
  * 
  * @since 3.0
  */
-public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
+public class Tsdb1xHBaseQueryNode extends BaseTsdb1xQueryNode {
   private static final Logger LOG = LoggerFactory.getLogger(
-      Tsdb1xQueryNode.class);
+      Tsdb1xHBaseQueryNode.class);
 
   private static final Deferred<Void> INITIALIZED = 
       Deferred.fromResult(null);
@@ -148,13 +149,15 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
   /** When we start fetching data. */
   protected long fetch_start;
   
+  protected AtomicBoolean sent_data;
+  
   /**
    * Default ctor.
    * @param factory The Tsdb1xHBaseDataStore that instantiated this node.
    * @param context A non-null query pipeline context.
    * @param config A non-null config.
    */
-  public Tsdb1xQueryNode(final Tsdb1xHBaseDataStore parent, 
+  public Tsdb1xHBaseQueryNode(final Tsdb1xHBaseDataStore parent, 
                          final QueryPipelineContext context,
                          final TimeSeriesDataSourceConfig config) {
     if (parent == null) {
@@ -177,6 +180,7 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
     sequence_id = new AtomicLong();
     initialized = new AtomicBoolean();
     initializing = new AtomicBoolean();
+    sent_data = new AtomicBoolean();
     
     if (config.hasKey(Tsdb1xHBaseDataStore.SKIP_NSUN_TAGK_KEY)) {
       skip_nsun_tagks = config.getBoolean(context.tsdb().getConfig(), 
@@ -243,7 +247,7 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
 
     executor.fetchNext(new Tsdb1xQueryResult(
           sequence_id.getAndIncrement(), 
-          Tsdb1xQueryNode.this, 
+          Tsdb1xHBaseQueryNode.this, 
           parent.schema()), 
     span);
 
@@ -483,13 +487,17 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
   }
 
   /** @return A list of applicable rollup intervals. May be null. */
-  List<RollupInterval> rollupIntervals() {
+  public List<RollupInterval> rollupIntervals() {
     return rollup_intervals;
   }
   
   /** @return The rollup usage mode. */
-  RollupUsage rollupUsage() {
+  public RollupUsage rollupUsage() {
     return rollup_usage;
+  }
+  
+  public void sentData() {
+    sent_data.set(true);
   }
   
   /**
@@ -507,15 +515,15 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
       synchronized (this) {
         if (parent.enable_push) {
           System.out.println("******** PUSHING! ********");
-          executor = new Tsdb1xScanners2(Tsdb1xQueryNode.this, config);
+          executor = new Tsdb1xScanners2(Tsdb1xHBaseQueryNode.this, config);
         } else {
-          executor = new Tsdb1xScanners(Tsdb1xQueryNode.this, config);
+          executor = new Tsdb1xScanners(Tsdb1xHBaseQueryNode.this, config);
         }
         
         if (initialized.compareAndSet(false, true)) {
           executor.fetchNext(new Tsdb1xQueryResult(
               sequence_id.incrementAndGet(), 
-              Tsdb1xQueryNode.this, 
+              Tsdb1xHBaseQueryNode.this, 
               parent.schema()), 
           span);
         } else {
@@ -580,7 +588,7 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
           LOG.debug("No data returned from meta store.");
         }
         initialized.compareAndSet(false, true);
-        sendUpstream(new Tsdb1xQueryResult(0, Tsdb1xQueryNode.this, 
+        sendUpstream(new Tsdb1xQueryResult(0, Tsdb1xHBaseQueryNode.this, 
             parent.schema()));
         completeUpstream(0, 0);
         return null;
@@ -609,12 +617,12 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
         return null;
       }
       
-      synchronized (Tsdb1xQueryNode.this) {
-        executor = new Tsdb1xScanners(Tsdb1xQueryNode.this, config);
+      synchronized (Tsdb1xHBaseQueryNode.this) {
+        executor = new Tsdb1xScanners(Tsdb1xHBaseQueryNode.this, config);
         if (initialized.compareAndSet(false, true)) {
           executor.fetchNext(new Tsdb1xQueryResult(
               sequence_id.incrementAndGet(), 
-              Tsdb1xQueryNode.this, 
+              Tsdb1xHBaseQueryNode.this, 
               parent.schema()), 
           span);
         } else {
@@ -677,7 +685,7 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
       }
       
       synchronized (this) {
-        executor = new Tsdb1xMultiGet(Tsdb1xQueryNode.this, config, tsuids);
+        executor = new Tsdb1xMultiGet(Tsdb1xHBaseQueryNode.this, config, tsuids);
         if (initialized.compareAndSet(false, true)) {
           if (child != null) {
             child.setSuccessTags()
@@ -685,7 +693,7 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
           }
           executor.fetchNext(new Tsdb1xQueryResult(
               sequence_id.incrementAndGet(), 
-              Tsdb1xQueryNode.this, 
+              Tsdb1xHBaseQueryNode.this, 
               parent.schema()), 
           span);
         } else {
@@ -874,7 +882,7 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
           // TODO - what happens if we didn't resolve anything???
           synchronized (this) {
             executor = new Tsdb1xMultiGet(
-                Tsdb1xQueryNode.this, 
+                Tsdb1xHBaseQueryNode.this, 
                 config, 
                 tsuids);
             if (initialized.compareAndSet(false, true)) {
@@ -884,7 +892,7 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
               }
               executor.fetchNext(new Tsdb1xQueryResult(
                   sequence_id.incrementAndGet(), 
-                  Tsdb1xQueryNode.this, 
+                  Tsdb1xHBaseQueryNode.this, 
                   parent.schema()), 
               span);
             } else {
@@ -909,167 +917,5 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
       Deferred.group(deferreds).addCallbacks(new GroupCB(), new ErrorCB());
     }
   }
-//
-//  public static class PooledHBasePTS implements PartialTimeSeries, 
-//    CloseablePooledObject {
-//    private PooledObject pooled_object;
-//    private long id_hash;
-//    private PartialTimeSeriesSet set;
-//    private AtomicInteger counter;
-//    private PooledObject pooled_array;
-//    
-//    public PooledHBasePTS() {
-//      counter = new AtomicInteger();
-//    }
-//    
-//    @Override
-//    public void close() throws Exception {
-//      release();
-//    }
-//    
-//    @Override
-//    public Object object() {
-//      return this;
-//    }
-//    
-//    @Override
-//    public void release() {
-//      if (counter.decrementAndGet() == 0) {
-//        if (pooled_array != null) {
-//          pooled_array.release();
-//          pooled_array = null;
-//        }
-//        if (pooled_object != null) {
-//          pooled_object.release();
-//          //pooled_object = null;
-//        }
-//      }
-//    }
-//    
-//    void setData(final MockRow row, 
-//                 final ObjectPool long_array_pool, 
-//                 final long id_hash, 
-//                 final PartialTimeSeriesSet set) {
-//      this.id_hash = id_hash;
-//      this.set = set;
-//      if (row == null) {
-//        return;
-//      }
-//      
-//      // TODO - store values in this format
-//      pooled_array = long_array_pool.claim();
-//      if (pooled_array == null) {
-//        throw new IllegalStateException("The pooled array was null!");
-//      }
-//      long[] array = (long[]) pooled_array.object();
-//      int idx = 0;
-//      Iterator<TimeSeriesValue<?>> it = row.iterator(NumericType.TYPE).get();
-//      while (it.hasNext()) {
-//        TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) it.next();
-//        if (v.value() == null) {
-//          continue;
-//        }
-//        
-//        // TODO length check
-//        if (idx + 2 >= array.length) {
-//          LOG.error("TODO - need to grow these!");
-//          throw new UnsupportedOperationException("TODO - mock data "
-//              + "store needs to be able to grow the arrays.");
-//        }
-//        array[idx] = v.timestamp().msEpoch();
-//        // TODO - maybe a check here to make sure the header isn't set!
-//        array[idx] |= NumericLongArrayType.MILLISECOND_FLAG;
-//        if (v.value().isInteger()) {
-//          idx++;
-//          array[idx++] = v.value().longValue();
-//        } else {
-//          array[idx++] |= NumericLongArrayType.FLOAT_FLAG;
-//          array[idx++] = Double.doubleToRawLongBits(v.value().doubleValue());
-//        }
-//      }
-//      
-//      if (idx + 1 >= array.length) {
-//        LOG.error("TODO - need to grow these!");
-//        throw new UnsupportedOperationException("TODO - mock data "
-//            + "store needs to be able to grow the arrays.");
-//      }
-//      array[idx] = NumericLongArrayType.TERIMNAL_FLAG;
-//    }
-//    
-//    @Override
-//    public void setPooledObject(final PooledObject pooled_object) {
-//      this.pooled_object = pooled_object;
-//    }
-//    
-//    @Override
-//    public long idHash() {
-//      return id_hash;
-//    }
-//    
-//    @Override
-//    public PartialTimeSeriesSet set() {
-//      System.out.println("-------- RETURNING SET: " + set);
-//      return set;
-//    }
-//    
-//    @Override
-//    public TypeToken<? extends TimeSeriesDataType> getType() {
-//      return NumericType.TYPE;
-//    }
-//    
-//    @Override
-//    public Object data() {
-//      if (pooled_array != null) {
-//        counter.incrementAndGet();
-//        return pooled_array.object();
-//      } else {
-//        return null;
-//      }
-//    }
-//    
-//  }
-//  
-//  public static class PooledHBasePTSPool extends BaseObjectPoolAllocator {
-//    public static final String TYPE = "PooledHBasePTS";
-//    @Override
-//    public Object allocate() {
-//      return new PooledHBasePTS();
-//    }
-//
-//    @Override
-//    public TypeToken<?> dataType() {
-//      return TypeToken.of(PooledHBasePTS.class);
-//    }
-//
-//    @Override
-//    public String type() {
-//      return TYPE;
-//    }
-//
-//    @Override
-//    public Deferred<Object> initialize(final TSDB tsdb, final String id) {
-//      if (Strings.isNullOrEmpty(id)) {
-//        this.id = TYPE;
-//      } else {
-//        this.id = id;
-//      }
-//      
-//      registerConfigs(tsdb.getConfig(), TYPE);
-//      
-//      final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
-//          .setAllocator(this)
-//          .setInitialCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, TYPE)))
-//          .setMaxCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, TYPE)))
-//          .setId(this.id)
-//          .build();
-//      try {
-//        createAndRegisterPool(tsdb, config, TYPE);
-//        return Deferred.fromResult(null);
-//      } catch (Exception e) {
-//        return Deferred.fromError(e);
-//      }
-//    }
-//    
-//  }
 
 }

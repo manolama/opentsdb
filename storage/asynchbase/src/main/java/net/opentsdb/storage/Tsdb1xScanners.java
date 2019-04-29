@@ -81,7 +81,7 @@ import net.opentsdb.utils.Pair;
  * will perform the initialization on the first call. 
  * <b>Note:</b> Subsequent calls to {@link #fetchNext(Tsdb1xQueryResult, Span)}
  * should only be made after this scanner has responded with a result. 
- * Only one {@link Tsdb1xQueryNode} can be filled at a time.
+ * Only one {@link Tsdb1xHBaseQueryNode} can be filled at a time.
  * <p>
  * The class also handles rollup queries with fallback when so configured.
  * Currently fallback is limited to trying the next higher resolution 
@@ -95,7 +95,7 @@ public class Tsdb1xScanners implements HBaseExecutor {
   private static final Logger LOG = LoggerFactory.getLogger(Tsdb1xScanners.class);
   
   /** The upstream query node that owns this scanner set. */
-  protected final Tsdb1xQueryNode node;
+  protected final Tsdb1xHBaseQueryNode node;
   
   /** The data source config. */
   protected final TimeSeriesDataSourceConfig source_config;
@@ -167,7 +167,7 @@ public class Tsdb1xScanners implements HBaseExecutor {
    * matching the metric.
    * @throws IllegalArgumentException if the node or query were null.
    */
-  public Tsdb1xScanners(final Tsdb1xQueryNode node, 
+  public Tsdb1xScanners(final Tsdb1xHBaseQueryNode node, 
                         final TimeSeriesDataSourceConfig source_config) {
     if (node == null) {
       throw new IllegalArgumentException("Node cannot be null.");
@@ -1150,7 +1150,7 @@ public class Tsdb1xScanners implements HBaseExecutor {
   }
   
   /** @return The parent node. */
-  Tsdb1xQueryNode node() {
+  Tsdb1xHBaseQueryNode node() {
     return node;
   }
 }

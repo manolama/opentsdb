@@ -12,11 +12,12 @@ import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.pools.NoDataPTSPool;
 import net.opentsdb.query.QueryNode;
+import net.opentsdb.rollup.RollupUtils.RollupUsage;
 
 public class Tsdb1xPartialTimeSeriesSet implements PartialTimeSeriesSet {
 
   final TSDB tsdb;
-  QueryNode node;
+  BaseTsdb1xQueryNode node;
   TimeStamp start;
   TimeStamp end;
   int series;
@@ -35,7 +36,7 @@ public class Tsdb1xPartialTimeSeriesSet implements PartialTimeSeriesSet {
     end = new SecondTimeStamp(0);
   }
   
-  public void reset(final QueryNode node, final TimeStamp start, final TimeStamp end, final int salts, final int total_sets, final TLongObjectMap<TimeSeriesId> ids) {
+  public void reset(final BaseTsdb1xQueryNode node, final TimeStamp start, final TimeStamp end, final int salts, final int total_sets, final TLongObjectMap<TimeSeriesId> ids) {
     this.node = node;
     this.start.update(start);
     this.end.update(end);
@@ -100,7 +101,7 @@ public class Tsdb1xPartialTimeSeriesSet implements PartialTimeSeriesSet {
     return null;
   }
 
-  public synchronized void setCompleteAndEmpty() {
+  public synchronized void setCompleteAndEmpty(final boolean is_final) {
     //System.out.println(" ######## Latch: " + latch);
     if (--latch == 0) {
       complete = true;
@@ -113,17 +114,19 @@ public class Tsdb1xPartialTimeSeriesSet implements PartialTimeSeriesSet {
         PooledPSTRunnable runnable = new PooledPSTRunnable();
         runnable.reset(extant, node);
         tsdb.getQueryThreadPool().submit(runnable);
+        node.sentData();
       } else {
-        //System.out.println(" ------------- push empty pts");
         // send up sentinel
-        NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
-            tsdb.getRegistry().getObjectPool(
-                NoDataPTSPool.TYPE).claim().object();
-        pts.reset(this);
-        // TODO - pool
-        PooledPSTRunnable runnable = new PooledPSTRunnable();
-        runnable.reset(pts, node);
-        tsdb.getQueryThreadPool().submit(runnable);
+        if (node.rollupUsage() == RollupUsage.ROLLUP_NOFALLBACK || is_final) {
+          NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
+              tsdb.getRegistry().getObjectPool(
+                  NoDataPTSPool.TYPE).claim().object();
+          pts.reset(this);
+          // TODO - pool
+          PooledPSTRunnable runnable = new PooledPSTRunnable();
+          runnable.reset(pts, node);
+          tsdb.getQueryThreadPool().submit(runnable);
+        }
       }
     }
   }
@@ -149,6 +152,7 @@ public class Tsdb1xPartialTimeSeriesSet implements PartialTimeSeriesSet {
       PooledPSTRunnable runnable = new PooledPSTRunnable();
       runnable.reset(extant, node);
       tsdb.getQueryThreadPool().submit(runnable);
+      node.sentData();
     }
     
     if (all_done) {
@@ -158,6 +162,18 @@ public class Tsdb1xPartialTimeSeriesSet implements PartialTimeSeriesSet {
       runnable.reset(pts, node);
       tsdb.getQueryThreadPool().submit(runnable);
       this.pts.set(null);
+      node.sentData();
     }
+  }
+
+  public void sendEmpty() {
+    NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
+        tsdb.getRegistry().getObjectPool(
+            NoDataPTSPool.TYPE).claim().object();
+    pts.reset(this);
+    // TODO - pool
+    PooledPSTRunnable runnable = new PooledPSTRunnable();
+    runnable.reset(pts, node);
+    tsdb.getQueryThreadPool().submit(runnable);
   }
 }

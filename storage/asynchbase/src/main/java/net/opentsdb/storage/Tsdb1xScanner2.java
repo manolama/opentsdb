@@ -290,7 +290,7 @@ public class Tsdb1xScanner2 {
         // never had any data so for the parent, mark everything as complete 
         // for this salt
         for (final Tsdb1xPartialTimeSeriesSet set : owner.sets.get(owner.scanner_index).valueCollection()) {
-          set.setCompleteAndEmpty();
+          set.setCompleteAndEmpty(owner.scanner_index + 1 == owner.scanners.size());
         }
       } else {
         flushPartials();
@@ -300,7 +300,7 @@ public class Tsdb1xScanner2 {
           // rollups
           last_ts.add(owner.durations.get(owner.scanner_index));
           while (last_ts.compare(Op.LT, owner.timestamps.get(owner.scanner_index).getValue())) {
-            owner.getSet(last_ts).setCompleteAndEmpty();
+            owner.getSet(last_ts).setCompleteAndEmpty(owner.scanner_index + 1 == owner.scanners.size());
             last_ts.add(owner.durations.get(owner.scanner_index));
           }
         }
@@ -378,7 +378,7 @@ public class Tsdb1xScanner2 {
         if (base_ts.compare(Op.NE, owner.timestamps.get(owner.scanner_index).getKey())) {
           TimeStamp ts = owner.timestamps.get(owner.scanner_index).getKey().getCopy();
           while (ts.compare(Op.LT, base_ts)) {
-            owner.getSet(ts).setCompleteAndEmpty();
+            owner.getSet(ts).setCompleteAndEmpty(owner.scanner_index + 1 == owner.scanners.size());
             ts.add(owner.durations.get(owner.scanner_index));
           }
         }
@@ -388,7 +388,7 @@ public class Tsdb1xScanner2 {
         if (ts.compare(Op.NE, base_ts)) {
           // FILL
           while (ts.compare(Op.LT, base_ts)) {
-            owner.getSet(ts).setCompleteAndEmpty();
+            owner.getSet(ts).setCompleteAndEmpty(owner.scanner_index + 1 == owner.scanners.size());
             ts.add(owner.durations.get(owner.scanner_index));
           }
         }

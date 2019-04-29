@@ -76,7 +76,7 @@ import net.opentsdb.utils.UnitTestException;
 
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({ HBaseClient.class, Scanner.class, 
-  Tsdb1xQueryNode.class })
+  Tsdb1xHBaseQueryNode.class })
 public class TestTsdb1xQueryNode extends UTBase {
   
   private QueryPipelineContext context;
@@ -134,7 +134,7 @@ public class TestTsdb1xQueryNode extends UTBase {
   
   @Test
   public void ctorDefault() throws Exception {
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     assertSame(source_config, node.config);
     assertEquals(0, node.sequence_id.get());
@@ -181,7 +181,7 @@ public class TestTsdb1xQueryNode extends UTBase {
         .setId("m1")
         .build();
     
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     assertSame(source_config, node.config);
     assertEquals(0, node.sequence_id.get());
@@ -232,7 +232,7 @@ public class TestTsdb1xQueryNode extends UTBase {
         .setPostPadding("1h")
         .setId("m1")
         .build();
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     assertSame(source_config, node.config);
     assertEquals(0, node.sequence_id.get());
@@ -258,24 +258,24 @@ public class TestTsdb1xQueryNode extends UTBase {
   @Test
   public void ctorExceptions() throws Exception {
     try {
-      new Tsdb1xQueryNode(null, context, source_config);
+      new Tsdb1xHBaseQueryNode(null, context, source_config);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
     try {
-      new Tsdb1xQueryNode(data_store, null, source_config);
+      new Tsdb1xHBaseQueryNode(data_store, null, source_config);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
     
     try {
-      new Tsdb1xQueryNode(data_store, context, null);
+      new Tsdb1xHBaseQueryNode(data_store, context, null);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
   }
 
   @Test
   public void fetchNextScanner() throws Exception {
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.fetchNext(null);
     
@@ -286,7 +286,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     assertTrue(node.initialized.get());
     assertTrue(node.initializing.get());
     PowerMockito.verifyNew(Tsdb1xQueryResult.class, times(1))
-      .withArguments(anyLong(), any(Tsdb1xQueryNode.class), any(Schema.class));
+      .withArguments(anyLong(), any(Tsdb1xHBaseQueryNode.class), any(Schema.class));
     
     // next call
     node.fetchNext(null);
@@ -298,7 +298,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     assertTrue(node.initialized.get());
     assertTrue(node.initializing.get());
     PowerMockito.verifyNew(Tsdb1xQueryResult.class, times(2))
-      .withArguments(anyLong(), any(Tsdb1xQueryNode.class), any(Schema.class));
+      .withArguments(anyLong(), any(Tsdb1xHBaseQueryNode.class), any(Schema.class));
     
     // next call
     node.fetchNext(null);
@@ -310,7 +310,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     assertTrue(node.initialized.get());
     assertTrue(node.initializing.get());
     PowerMockito.verifyNew(Tsdb1xQueryResult.class, times(3))
-      .withArguments(anyLong(), any(Tsdb1xQueryNode.class), any(Schema.class));
+      .withArguments(anyLong(), any(Tsdb1xHBaseQueryNode.class), any(Schema.class));
   }
   
   @Test
@@ -320,7 +320,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     when(data_store.schema()).thenReturn(schema);
     when(schema.metaSchema()).thenReturn(meta_schema);
     
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.fetchNext(null);
     
@@ -331,7 +331,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     assertFalse(node.initialized.get());
     assertTrue(node.initializing.get());
     PowerMockito.verifyNew(Tsdb1xQueryResult.class, never())
-      .withArguments(anyLong(), any(Tsdb1xQueryNode.class), any(Schema.class));
+      .withArguments(anyLong(), any(Tsdb1xHBaseQueryNode.class), any(Schema.class));
     verify(meta_schema, times(1)).runQuery(any(QueryPipelineContext.class), 
         any(TimeSeriesDataSourceConfig.class), any(Span.class));
     
@@ -343,7 +343,7 @@ public class TestTsdb1xQueryNode extends UTBase {
   
   @Test
   public void setupScanner() throws Exception {
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.setup(null);
     
@@ -353,7 +353,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     assertEquals(1, node.sequence_id.get());
     assertTrue(node.initialized.get());
     PowerMockito.verifyNew(Tsdb1xQueryResult.class, times(1))
-      .withArguments(anyLong(), any(Tsdb1xQueryNode.class), any(Schema.class));
+      .withArguments(anyLong(), any(Tsdb1xHBaseQueryNode.class), any(Schema.class));
   }
   
   @Test
@@ -363,7 +363,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     when(data_store.schema()).thenReturn(schema);
     when(schema.metaSchema()).thenReturn(meta_schema);
     
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.setup(null);
     
@@ -373,14 +373,14 @@ public class TestTsdb1xQueryNode extends UTBase {
     assertEquals(0, node.sequence_id.get());
     assertFalse(node.initialized.get());
     PowerMockito.verifyNew(Tsdb1xQueryResult.class, never())
-      .withArguments(anyLong(), any(Tsdb1xQueryNode.class), any(Schema.class));
+      .withArguments(anyLong(), any(Tsdb1xHBaseQueryNode.class), any(Schema.class));
     verify(meta_schema, times(1)).runQuery(any(QueryPipelineContext.class), 
         any(TimeSeriesDataSourceConfig.class), any(Span.class));
   }
 
   @Test
   public void onComplete() throws Exception {
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     
@@ -396,7 +396,7 @@ public class TestTsdb1xQueryNode extends UTBase {
   
   @Test
   public void onNextContinue() throws Exception {
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     node.executor = mock(HBaseExecutor.class);
@@ -418,7 +418,7 @@ public class TestTsdb1xQueryNode extends UTBase {
   
   @Test
   public void onNextComplete() throws Exception {
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     node.executor = mock(HBaseExecutor.class);
@@ -440,7 +440,7 @@ public class TestTsdb1xQueryNode extends UTBase {
   
   @Test
   public void onError() throws Exception {
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     UnitTestException ex = new UnitTestException();
@@ -457,9 +457,9 @@ public class TestTsdb1xQueryNode extends UTBase {
   
   @Test
   public void metaErrorCB() throws Exception {
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
-    net.opentsdb.storage.Tsdb1xQueryNode.MetaErrorCB cb = 
+    net.opentsdb.storage.Tsdb1xHBaseQueryNode.MetaErrorCB cb = 
         node.new MetaErrorCB(null);
     node.initialize(null);
     UnitTestException ex = new UnitTestException();
@@ -495,7 +495,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
     when(meta_result.timeSeries()).thenReturn(ids);
     when(meta_result.result()).thenReturn(MetaResult.DATA);
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     
@@ -520,7 +520,7 @@ public class TestTsdb1xQueryNode extends UTBase {
   public void metaCBNoData() throws Exception {
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
     when(meta_result.result()).thenReturn(MetaResult.NO_DATA);
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     
@@ -539,7 +539,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
     when(meta_result.result()).thenReturn(MetaResult.EXCEPTION);
     when(meta_result.exception()).thenReturn(new UnitTestException());
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     
@@ -555,7 +555,7 @@ public class TestTsdb1xQueryNode extends UTBase {
   public void metaCBNoDataFallback() throws Exception {
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
     when(meta_result.result()).thenReturn(MetaResult.NO_DATA_FALLBACK);
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     
     node.new MetaCB(null).call(meta_result);
@@ -566,7 +566,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     assertEquals(1, node.sequence_id.get());
     assertTrue(node.initialized.get());
     PowerMockito.verifyNew(Tsdb1xQueryResult.class, times(1))
-      .withArguments(anyLong(), any(Tsdb1xQueryNode.class), any(Schema.class));
+      .withArguments(anyLong(), any(Tsdb1xHBaseQueryNode.class), any(Schema.class));
   }
   
   @Test
@@ -574,7 +574,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
     when(meta_result.result()).thenReturn(MetaResult.EXCEPTION_FALLBACK);
     when(meta_result.exception()).thenReturn(new UnitTestException());
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     
     node.new MetaCB(null).call(meta_result);
@@ -585,7 +585,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     assertEquals(1, node.sequence_id.get());
     assertTrue(node.initialized.get());
     PowerMockito.verifyNew(Tsdb1xQueryResult.class, times(1))
-      .withArguments(anyLong(), any(Tsdb1xQueryNode.class), any(Schema.class));
+      .withArguments(anyLong(), any(Tsdb1xHBaseQueryNode.class), any(Schema.class));
     verify(upstream_a, never()).onError(any(UnitTestException.class));
     verify(upstream_b, never()).onError(any(UnitTestException.class));
   }
@@ -606,7 +606,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
     when(meta_result.timeSeries()).thenReturn(ids);
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     
@@ -643,7 +643,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
     when(meta_result.timeSeries()).thenReturn(ids);
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     
@@ -671,7 +671,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
     when(meta_result.timeSeries()).thenReturn(ids);
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     
@@ -714,7 +714,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
     when(meta_result.timeSeries()).thenReturn(ids);
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     
@@ -749,7 +749,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
     when(meta_result.timeSeries()).thenReturn(ids);
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     
@@ -792,7 +792,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
     when(meta_result.timeSeries()).thenReturn(ids);
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     
@@ -827,7 +827,7 @@ public class TestTsdb1xQueryNode extends UTBase {
     
     MetaDataStorageResult meta_result = mock(MetaDataStorageResult.class);
     when(meta_result.timeSeries()).thenReturn(ids);
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     
@@ -864,7 +864,7 @@ public class TestTsdb1xQueryNode extends UTBase {
         return Const.TS_BYTE_ID;
       }
     });
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     
@@ -907,7 +907,7 @@ public class TestTsdb1xQueryNode extends UTBase {
         return Const.TS_BYTE_ID;
       }
     });
-    Tsdb1xQueryNode node = new Tsdb1xQueryNode(
+    Tsdb1xHBaseQueryNode node = new Tsdb1xHBaseQueryNode(
         data_store, context, source_config);
     node.initialize(null);
     

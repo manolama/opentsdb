@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.hbase.async.Bytes.ByteMap;
 import org.hbase.async.FilterList.Operator;
@@ -91,7 +92,7 @@ import net.opentsdb.utils.Pair;
  * will perform the initialization on the first call. 
  * <b>Note:</b> Subsequent calls to {@link #fetchNext(Tsdb1xQueryResult, Span)}
  * should only be made after this scanner has responded with a result. 
- * Only one {@link Tsdb1xQueryNode} can be filled at a time.
+ * Only one {@link Tsdb1xHBaseQueryNode} can be filled at a time.
  * <p>
  * The class also handles rollup queries with fallback when so configured.
  * Currently fallback is limited to trying the next higher resolution 
@@ -105,7 +106,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
   private static final Logger LOG = LoggerFactory.getLogger(Tsdb1xScanners2.class);
   
   /** The upstream query node that owns this scanner set. */
-  protected final Tsdb1xQueryNode node;
+  protected final Tsdb1xHBaseQueryNode node;
   
   /** The data source config. */
   protected final TimeSeriesDataSourceConfig source_config;
@@ -152,6 +153,9 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
   protected List<Pair<TimeStamp, TimeStamp>> timestamps;
   protected List<Duration> durations;
   
+  /** Used for fallbacks. */
+  protected AtomicBoolean had_data;
+  
   /** The current index used for fetching data within the 
    * {@link #scanners} list. */
   protected int scanner_index;
@@ -180,7 +184,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
    * matching the metric.
    * @throws IllegalArgumentException if the node or query were null.
    */
-  public Tsdb1xScanners2(final Tsdb1xQueryNode node, 
+  public Tsdb1xScanners2(final Tsdb1xHBaseQueryNode node, 
                          final TimeSeriesDataSourceConfig source_config) {
     if (node == null) {
       throw new IllegalArgumentException("Node cannot be null.");
@@ -300,85 +304,41 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     }
     
     if (send_upstream) {
+      scanners_done = 0;
       System.out.println("--------- ALL SCANNERS DONE");
-      try {
-        for (final Tsdb1xPartialTimeSeriesSet set : sets.get(scanner_index).valueCollection()) {
-          if (!set.complete()) {
-            LOG.warn("!!!!!!!!!!!!! SET WASN'T DONE!: " + set.latch + "  TS: " + set.start().epoch());
-          } else {
-            LOG.info("               SET WAS complete: " + set.start().epoch());
+      if (node.sent_data.get() || 
+          node.rollup_usage == RollupUsage.ROLLUP_NOFALLBACK) {
+        // All done, make sure we've sent everything.
+        try {
+          for (final Tsdb1xPartialTimeSeriesSet set : sets.get(scanner_index).valueCollection()) {
+            if (!set.complete()) {
+              LOG.warn("!!!!!!!!!!!!! SET WASN'T DONE!: " + set.latch + "  TS: " + set.start().epoch());
+            } else {
+              LOG.info("               SET WAS complete: " + set.start().epoch());
+            }
           }
+        } catch (Exception e) {
+          LOG.error("Unexpected exception handling scanner complete", e);
+          node.onError(e);
         }
-          // we had at least one set with good data. To close the query we need
-          // to make sure we've filled any missing periods of time with empty
-          // sets.
-//          if (sets.size() == total_sets_per_scanners.get(scanner_index)) {
-//            // no-op! all done.
-//            System.out.println("****** ALL SETS SENT!! *****");
-//          } else {
-//            // send empty sets by iterating and figuring out what was missing.
-//            // TODO - for rollups
-//            // TODO - doesn't account for calendaring, etc.
-//            long start = node.pipelineContext().query().startTime().epoch();
-//            if (!Strings.isNullOrEmpty(source_config.getPrePadding())) {
-//              final long interval = DateTime.parseDuration(
-//                  source_config.getPrePadding());
-//              if (interval > 0) {
-//                final long interval_offset = (1000L * start) % interval;
-//                start -= interval_offset / 1000L;
-//              }
-//            }
-//            
-//            // Then snap that timestamp back to its representative value for the
-//            // timespan in which it appears.
-//            final long timespan_offset = start % Schema.MAX_RAW_TIMESPAN;
-//            start -= timespan_offset;
-//            int total_sets = total_sets_per_scanners.get(scanner_index);
-//            System.out.println("------------- FILLING!");
-//            for (int i = 0; i < total_sets; i++) {
-//              Tsdb1xPartialTimeSeriesSet set = sets.get(start);
-//              if (set == null) {
-//                set = new Tsdb1xPartialTimeSeriesSet();
-//                NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
-//                    node.pipelineContext().tsdb().getRegistry().getObjectPool(
-//                        NoDataPTSPool.TYPE).claim().object();
-//                pts.reset(set);
-//                set.reset(node, new SecondTimeStamp(start), 
-//                    new SecondTimeStamp(start + 3600), 1, total_sets, null);
-//                set.setCompleteAndEmpty();
-//                PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
-//                runnable.reset(pts, node);
-//                node.pipelineContext()
-//                  .tsdb()
-//                  .getQueryThreadPool()
-//                  .submit(runnable);
-//              } else {
-//                if (!set.complete()) {
-//                  // ooooo this is NOT good. I'd rather have each salt check in and
-//                  // send it on its way. BUT we don't easily know which salt was done
-//                  // with an entry unless we track the salt scanner per set.... *sigh*
-//                  while (!set.complete()) {
-//                    set.setCompleteAndEmpty();
-//                  }
-//                  // ?? 
-//                  NoDataPartialTimeSeries pts = (NoDataPartialTimeSeries) 
-//                      node.pipelineContext().tsdb().getRegistry().getObjectPool(
-//                          NoDataPTSPool.TYPE).claim().object();
-//                  pts.reset(set);
-//                  PooledPSTRunnable runnable = new PooledPSTRunnable(); // TODO - pool
-//                  runnable.reset(pts, node);
-//                  node.pipelineContext()
-//                    .tsdb()
-//                    .getQueryThreadPool()
-//                    .submit(runnable);
-//                }
-//              }
-//              start += 3600; // just for raw!
-//            }
-//          }
-      } catch (Exception e) {
-        LOG.error("Unexpected exception handling scanner complete", e);
-        node.onError(e);
+      } else if (scanner_index + 1 < scanners.size()) {
+        // start scanning the next set
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Scanner index at [" + scanner_index 
+              + "] returned an empty set, falling back.");
+        }
+        // fall back!
+        scanner_index++;
+        scanners_done = 0;
+        scanNext(null /** TODO - span */);
+      } else if (!node.sent_data.get()) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Final scan returned nothing. Filling with empty results.");
+        }
+        // we need to force sending data. Use the lowest resolution to save time.
+        for (final Tsdb1xPartialTimeSeriesSet set : sets.get(0).valueCollection()) {
+          set.sendEmpty();
+        }
       }
     }
   }
@@ -1239,7 +1199,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
   }
   
   /** @return The parent node. */
-  Tsdb1xQueryNode node() {
+  Tsdb1xHBaseQueryNode node() {
     return node;
   }
 
