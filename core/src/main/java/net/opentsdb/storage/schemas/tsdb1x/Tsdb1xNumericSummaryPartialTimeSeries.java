@@ -158,7 +158,7 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
     byte[] data = (byte[]) pooled_array.object();
     int value_length = NumericCodec.getValueLengthFromQualifier(qualifier, offset_start);
     if (value.length != value_length) {
-      if (write_idx + 4 + 1 + 2 + value.length >= data.length) {
+      if (write_idx + 8 + 1 + 2 + value.length >= data.length) {
         new ReAllocatedArray();
         data = (byte[]) pooled_array.object();
       }
@@ -171,8 +171,10 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
       data[write_idx++] = 1;
       
       last_type = (byte) type;
-      Bytes.setInt(data, offset);
-      write_idx += 4;
+      // TODO nanos and millis?
+      
+      Bytes.setLong(data, base_timestamp.epoch() + (offset * interval.getIntervalSeconds()), write_idx);
+      write_idx += 8;
       data[write_idx++] = (byte) type;
       
       if ((qualifier[offset_start] & NumericCodec.MS_BYTE_FLAG) == 
@@ -190,7 +192,7 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
       // TODO - how do we track order for diff types?
       for (int i = 0; i < value.length;) {
         value_length = NumericCodec.getValueLengthFromQualifier(value, i);
-        if (write_idx + 4 + 1 + 2 + value.length >= data.length) {
+        if (write_idx + 8 + 1 + 2 + value.length >= data.length) {
           new ReAllocatedArray();
           data = (byte[]) pooled_array.object();
         }
@@ -203,8 +205,8 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
         data[write_idx++] = 1;
         
         last_type = (byte) type;
-        Bytes.setInt(data, offset);
-        write_idx += 4;
+        Bytes.setLong(data, base_timestamp.epoch() + (offset * interval.getIntervalSeconds()), write_idx);
+        write_idx += 8;
         data[write_idx++] = (byte) type;
         
         if ((qualifier[offset_start] & NumericCodec.MS_BYTE_FLAG) == 
@@ -263,13 +265,14 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
     }
     
     // need space to write the terminal flag
-    if (write_idx + 1 >= ((byte[]) pooled_array.object()).length) {
+    if (write_idx + 8 >= ((byte[]) pooled_array.object()).length) {
       new ReAllocatedArray();
     }
     
     if (!needs_repair) {
       // TODO - reverse
-      ((byte[]) pooled_array.object())[write_idx] = 0; // terminal
+      Bytes.setInt((byte[]) pooled_array.object(), 0x80000000, write_idx);
+      //((byte[]) pooled_array.object())[write_idx] = 0; // terminal
       return;
     }
     
@@ -280,17 +283,17 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
     // nanos!). Though there probably is an algo for that with an extra temp var.
     // The long is the offset from the base time, the map keys are the types and
     // the int values are the offset in the array. Just make it cleaner.
-    TreeMap<Integer, TreeMap<Byte, Integer>> map = new TreeMap<Integer, TreeMap<Byte, Integer>>();
+    TreeMap<Long, TreeMap<Byte, Integer>> map = new TreeMap<Long, TreeMap<Byte, Integer>>();
     int idx = 0;
     byte[] data = (byte[]) pooled_array.object();
     while (idx < write_idx) {
-      int offset = Bytes.getInt(data, idx);
-      TreeMap<Byte, Integer> summaries = map.get(offset);
+      long ts = Bytes.getInt(data, idx);
+      TreeMap<Byte, Integer> summaries = map.get(ts);
       if (summaries == null) {
         summaries = Maps.newTreeMap();
-        map.put(offset, summaries);
+        map.put(ts, summaries);
       }
-      idx += 4;
+      idx += 8;
       
       byte num_values = data[idx++];
       for (byte i = 0; i < num_values; i++) {
@@ -306,7 +309,7 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
     
     // TODO - see if we can checkout another array
     byte[] new_array = new byte[write_idx + 1];
-    final Iterator<Entry<Integer, TreeMap<Byte, Integer>>> outer_iterator;
+    final Iterator<Entry<Long, TreeMap<Byte, Integer>>> outer_iterator;
     if (reverse) {
       outer_iterator = map.descendingMap().entrySet().iterator();
     } else {
@@ -315,9 +318,9 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
     
     idx = 0;
     while (outer_iterator.hasNext()) {
-      final Entry<Integer, TreeMap<Byte, Integer>> entry = outer_iterator.next();
-      Bytes.setInt(new_array, entry.getKey());
-      idx += 4;
+      final Entry<Long, TreeMap<Byte, Integer>> entry = outer_iterator.next();
+      Bytes.setLong(new_array, entry.getKey(), idx);
+      idx += 8;
       new_array[idx++] = (byte) entry.getValue().size();
       final Iterator<Entry<Byte, Integer>> inner_iterator = entry.getValue().entrySet().iterator();
       while (inner_iterator.hasNext()) {
@@ -333,7 +336,7 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
     // copy back
     write_idx = idx;
     System.arraycopy(new_array, 0, new_array, 0, idx);
-    ((byte[]) pooled_array.object())[write_idx] = 0;
+    Bytes.setLong((byte[]) pooled_array.object(), NumericLongArrayType.TERIMNAL_FLAG, write_idx);
     needs_repair = false;
   }
   

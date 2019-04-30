@@ -54,6 +54,7 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.types.numeric.NumericArrayType;
+import net.opentsdb.data.types.numeric.NumericByteArraySummaryType;
 import net.opentsdb.data.types.numeric.NumericLongArrayType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
@@ -66,6 +67,8 @@ import net.opentsdb.query.serdes.SerdesCallback;
 import net.opentsdb.query.serdes.SerdesOptions;
 import net.opentsdb.query.serdes.TimeSeriesSerdes;
 import net.opentsdb.stats.Span;
+import net.opentsdb.storage.schemas.tsdb1x.NumericCodec;
+import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.Exceptions;
 import net.opentsdb.utils.JSON;
 import net.opentsdb.utils.Pair;
@@ -321,57 +324,109 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
     ByteArrayOutputStream stream = new ByteArrayOutputStream();
     int count = 0;
     try {
-//      if (series.data() == null) {
-//        // Nothing ??
-//        System.out.println("  **************** WTF? Nothing for ID hash");
-//        callback.onComplete(series);
-//        return;
-//      }
-      
-      long[] values = (long[]) series.data();
-      System.out.println("          len: " + values.length);
-      int idx = 0;
-      
-      while (true) {
-        if ((values[idx] & NumericLongArrayType.TERIMNAL_FLAG) != 0) {
-          // terminal
-          break;
-        }
+      if (series.getType() == NumericLongArrayType.TYPE) {
+        long[] values = (long[]) series.data();
+        int idx = 0;
         
-        long ts = 0;
-        if((values[idx] & NumericLongArrayType.MILLISECOND_FLAG) != 0) {
-          ts = (values[idx] & NumericLongArrayType.TIMESTAMP_MASK) / 1000;
-        } else {
-          ts = values[idx] & NumericLongArrayType.TIMESTAMP_MASK;
-        }
-        if (ts < context.query().startTime().epoch()) {
-          idx += 2;
-          continue;
-        }
-        if (ts > context.query().endTime().epoch()) {
-          break;
-        }
-        
-        if (count > 0) {
-          stream.write(',');
-        }
-        stream.write('"');
-        stream.write(Long.toString(ts).getBytes());
-        
-        stream.write('"');
-        stream.write(':');
-        if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
-          double d = Double.longBitsToDouble(values[idx + 1]);
-          if (Double.isNaN(d)) {
-            stream.write("NaN".getBytes());
-          } else {
-            stream.write(Double.toString(d).getBytes());
+        while (true) {
+          if ((values[idx] & NumericLongArrayType.TERIMNAL_FLAG) != 0) {
+            // terminal
+            break;
           }
-        } else {
-          stream.write(Long.toString(values[idx + 1]).getBytes());
+          
+          long ts = 0;
+          if((values[idx] & NumericLongArrayType.MILLISECOND_FLAG) != 0) {
+            ts = (values[idx] & NumericLongArrayType.TIMESTAMP_MASK) / 1000;
+          } else {
+            ts = values[idx] & NumericLongArrayType.TIMESTAMP_MASK;
+          }
+          if (ts < context.query().startTime().epoch()) {
+            idx += 2;
+            continue;
+          }
+          if (ts > context.query().endTime().epoch()) {
+            break;
+          }
+          
+          if (count > 0) {
+            stream.write(',');
+          }
+          stream.write('"');
+          stream.write(Long.toString(ts).getBytes());
+          
+          stream.write('"');
+          stream.write(':');
+          if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
+            double d = Double.longBitsToDouble(values[idx + 1]);
+            if (Double.isNaN(d)) {
+              stream.write("NaN".getBytes());
+            } else {
+              stream.write(Double.toString(d).getBytes());
+            }
+          } else {
+            stream.write(Long.toString(values[idx + 1]).getBytes());
+          }
+          idx += 2;
+          count++;
         }
-        idx += 2;
-        count++;
+      } else if (series.getType() == NumericByteArraySummaryType.TYPE) {
+        byte[] data = (byte[]) series.data();
+        int idx = 0;
+        while (true) {
+          int offset = Bytes.getInt(data, idx);
+          if (offset == 0x80000000) {
+            // terminal!
+            break;
+          }
+          
+          // TODO millis and nanos
+          long ts = Bytes.getLong(data, idx);
+          if (ts < context.query().startTime().epoch()) {
+            idx += 8;
+            byte values = data[idx++];
+            for (int i = 0; i < values; i++) {
+              idx += NumericCodec.getValueLengthFromQualifier(data, idx + 1) + 2;
+            }
+            continue;
+          }
+          if (ts > context.query().endTime().epoch()) {
+            break;
+          }
+          
+          if (count > 0) {
+            stream.write(',');
+          }
+          stream.write('"');
+          stream.write(Long.toString(ts).getBytes());
+          
+          stream.write('"');
+          stream.write(':');
+          stream.write('{');
+           
+          byte values = data[idx++];
+          for (int i = 0; i < values; i++) {
+            if (i > 0) {
+              stream.write(',');
+            }
+            stream.write('"');
+            stream.write(Byte.toString(data[idx++]).getBytes());
+            stream.write('"');
+            stream.write(':');
+            
+            final int len = NumericCodec.getValueLengthFromQualifier(data, idx + 1);
+            byte flags = NumericCodec.getFlags(data, idx, (byte) NumericCodec.S_Q_WIDTH);
+            idx += 2;
+            if ((flags & NumericCodec.FLAG_FLOAT) != 0) {
+              stream.write(Double.toString(NumericCodec.extractFloatingPointValue(data, idx, flags)).getBytes());
+            } else {
+              stream.write(Long.toString(NumericCodec.extractIntegerValue(data, idx, flags)).getBytes());
+            }
+            idx += len;
+          }
+          
+          stream.write('}');
+          count++;
+        }
       }
     } catch (IOException e) {
       // TODO Auto-generated catch block
@@ -406,18 +461,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       }
       
       set.series.put(series.set().start().epoch(), stream.toByteArray());
-
-      // don't close here! Let the callback do it.
-//      try {
-//        series.close();
-//      } catch (Exception e) {
-//        // TODO Auto-generated catch block
-//        e.printStackTrace();
-//      }
-      
-//      if (set.set == null) {
-//        return Deferred.fromResult(null);
-//      }   
     }
     callback.onComplete(series);
   }

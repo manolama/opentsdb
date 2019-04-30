@@ -38,6 +38,7 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.query.filter.MetricFilter;
 import net.opentsdb.query.filter.QueryFilter;
 import net.opentsdb.query.filter.QueryFilterFactory;
+import net.opentsdb.rollup.RollupInterval;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.Pair;
 
@@ -226,11 +227,19 @@ public abstract class BaseTimeSeriesDataSourceConfig extends BaseQueryNodeConfig
   
   @Override
   public List<String> getSummaryAggregations() {
+    // ******** TEMP *******
+    if (true) {
+      return Lists.newArrayList("sum");
+    }
     return summary_aggregations;
   }
   
   @Override
   public List<String> getRollupIntervals() {
+    // ******** TEMP *******
+    if (true) {
+      return Lists.newArrayList("1h");
+    }
     return rollup_intervals;
   }
   

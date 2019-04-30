@@ -20,7 +20,7 @@ import net.opentsdb.data.TimeSeriesDataType;
 
 /**
  * For summaries we'll do:
- * <8B timestamp>[<8B nano>]<1B type w float/int flag (126 types)><8B value><1B type><8B value>
+ * <8B timestamp><1B num following values><1B type><1B flags><nB value>...[repeat]<8B terminal>
  * 
  * where the terminator is a 1 byte type with a value of 0. We'll shift types by one in storage 
  * so if "sum == 0" in our config, then in the type field it will be "1". That way we

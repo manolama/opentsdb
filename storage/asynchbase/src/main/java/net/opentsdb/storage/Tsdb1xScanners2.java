@@ -269,7 +269,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     if (result == null) {
       throw new IllegalArgumentException("Result must be initialized");
     }
-    
+    System.out.println("            SCANNING .............");
     // just extra safe locking. Shouldn't ever happen.
     if (!initialized) {
       synchronized (this) {
@@ -307,8 +307,8 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     if (send_upstream) {
       scanners_done = 0;
       System.out.println("--------- ALL SCANNERS DONE");
-      if (node.sent_data.get() || 
-          node.rollup_usage == RollupUsage.ROLLUP_NOFALLBACK) {
+      if (node.sent_data.get()) {
+        System.out.println("&&&&& SENT: " + node.sent_data.get() + "  USAGE: " + node.rollup_usage);
         // All done, make sure we've sent everything.
         try {
           for (final Tsdb1xPartialTimeSeriesSet set : sets.get(scanner_index).valueCollection()) {
@@ -322,7 +322,8 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
           LOG.error("Unexpected exception handling scanner complete", e);
           node.onError(e);
         }
-      } else if (scanner_index + 1 < scanners.size()) {
+      } else if (node.rollup_usage != RollupUsage.ROLLUP_NOFALLBACK && scanner_index + 1 < scanners.size()) {
+        System.out.println(" !!!!!!!!!!!!!!!!!!!!!!! SCANNING NEXT on fallback!!!!!");
         // start scanning the next set
         if (LOG.isDebugEnabled()) {
           LOG.debug("Scanner index at [" + scanner_index 
@@ -332,7 +333,8 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
         scanner_index++;
         scanners_done = 0;
         scanNext(null /** TODO - span */);
-      } else if (!node.sent_data.get()) {
+      } else {
+        System.out.println("          NOTHING SENT!!! So filling all");
         if (LOG.isDebugEnabled()) {
           LOG.debug("Final scan returned nothing. Filling with empty results.");
         }
@@ -496,7 +498,8 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     if (rollup_interval != null) {
       int start = total_sets_per_scanners.get(scanners_index);
       total_sets_per_scanners.set(scanners_index, 
-          (((int) end) - start) / rollup_interval.getIntervalSeconds());
+          (((int) end) - start) / 
+          (rollup_interval.getIntervals() * rollup_interval.getIntervalSeconds()));
     } else {
       int start = total_sets_per_scanners.get(scanners_index);
       total_sets_per_scanners.set(scanners_index, (((int) end) - start) / 3600);
@@ -878,7 +881,8 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
     System.out.println(" [[[[[[ " + start_ts.epoch() + " => " + end_ts.epoch() + " ]]]]]]");
     
     final Duration duration = interval == null ? Duration.ofSeconds(3600) : 
-        Duration.ofSeconds(interval.getIntervalSeconds());
+        Duration.ofSeconds(interval.getIntervals() * interval.getIntervalSeconds());
+    System.out.println("    DURATION: " + duration);
     durations.set(scanners_index, duration);
     TimeStamp st = new SecondTimeStamp(start);
     TimeStamp e = st.getCopy();
