@@ -35,6 +35,7 @@ import net.opentsdb.common.Const;
 import net.opentsdb.configuration.ConfigurationException;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.BaseTimeSeriesStringId;
+import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesDatum;
@@ -43,6 +44,8 @@ import net.opentsdb.data.TimeSeriesDatumStringId;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
+import net.opentsdb.data.types.numeric.NumericByteArraySummaryType;
+import net.opentsdb.data.types.numeric.NumericLongArrayType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.meta.MetaDataStorageSchema;
@@ -1198,16 +1201,21 @@ public class Schema implements WritableTimeSeriesDataStore {
    * @return Null if no type was registered, or an instance if successful.
    */
   public Tsdb1xPartialTimeSeries newSeries(
-      final TypeToken<? extends TimeSeriesDataType> type) {
+      final TypeToken<? extends TimeSeriesDataType> type,
+      final TimeStamp base_timestamp, 
+      final long id_hash, 
+      final ObjectPool long_array_pool,
+      final PartialTimeSeriesSet set,
+      final RollupInterval interval) {
     ObjectPool pool = pools.get(type);
     if (pool == null) {
-      if (pools.containsKey(type)) {
-        System.out.println("WTF?????? No pool for type: " + type);
-        throw new RuntimeException("GRRR Need a pool for type: " + type);
-      }
       
       // see if we can grab it from the registry
-      pool = tsdb.getRegistry().getObjectPool(Tsdb1xNumericPartialTimeSeriesPool.TYPE);
+      if (type == NumericLongArrayType.TYPE) {
+        pool = tsdb.getRegistry().getObjectPool(Tsdb1xNumericPartialTimeSeriesPool.TYPE);
+      } else if (type == NumericByteArraySummaryType.TYPE) {
+        pool = tsdb.getRegistry().getObjectPool(Tsdb1xNumericSummaryPartialTimeSeriesPool.TYPE);
+      }
       System.out.println("POOL FOR TYPE: " + type + "  = " + pool);
       if (pool == null) {
         System.out.println("WTF?????? No pool for type: " + type);
@@ -1216,7 +1224,9 @@ public class Schema implements WritableTimeSeriesDataStore {
       // race but no biggie.
       pools.putIfAbsent(type, pool);
     }
-    return (Tsdb1xPartialTimeSeries) pool.claim().object();
+    final Tsdb1xPartialTimeSeries series = (Tsdb1xPartialTimeSeries) pool.claim().object();
+    series.reset(base_timestamp, id_hash, long_array_pool, set, interval);
+    return series;
   }
   
 }

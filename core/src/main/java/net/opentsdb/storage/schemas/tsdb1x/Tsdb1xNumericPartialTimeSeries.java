@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.PartialTimeSeriesSet;
+import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.types.numeric.NumericLongArrayType;
@@ -32,6 +33,7 @@ import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.exceptions.IllegalDataException;
 import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.pools.PooledObject;
+import net.opentsdb.rollup.RollupInterval;
 
 /**
  * An implementation that converts the column from a 1x schema into the
@@ -69,12 +71,32 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
   
   /** The last offset, used to determine if we need a repair. */
   protected long last_offset = -1;
-    
+  
+  protected TimeStamp base_timestamp;
+  
+  protected ObjectPool long_array_pool;
+  
   /**
    * Default ctor.
    */
   public Tsdb1xNumericPartialTimeSeries() {
     reference_counter = new AtomicInteger();
+    base_timestamp = new SecondTimeStamp(0);
+  }
+  
+  public void reset(final TimeStamp base_timestamp, 
+                    final long id_hash, 
+                    final ObjectPool long_array_pool,
+                    final PartialTimeSeriesSet set,
+                    final RollupInterval interval) {
+    if (set == null) {
+      throw new RuntimeException("NULL SET FROM below...");
+    }
+
+    this.base_timestamp.update(base_timestamp);
+    this.id_hash = id_hash;
+    this.long_array_pool = long_array_pool;
+    this.set = set;
   }
   
   @Override
@@ -107,9 +129,7 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
   }
   
   @Override
-  public void setEmpty(final long id_hash, 
-                       final PartialTimeSeriesSet set) {
-    this.id_hash = id_hash;
+  public void setEmpty(final PartialTimeSeriesSet set) {
     this.set = set;
     if (set == null) {
       throw new RuntimeException("NULL SET FROM below...");
@@ -118,26 +138,14 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
   
   @Override
   public void addColumn(final byte prefix, 
-                        final TimeStamp base_timestamp,
                         final byte[] qualifier, 
-                        final byte[] value,
-                        final ObjectPool long_array_pool, 
-                        final long id_hash, 
-                        final PartialTimeSeriesSet set) {
+                        final byte[] value) {
     if (qualifier.length < 2) {
       throw new IllegalDataException("Qualifier was too short.");
     }
     if (value.length < 1) {
       throw new IllegalDataException("Value was too short.");
     }
-    if (set == null) {
-      throw new RuntimeException("NULL SET FROM below...");
-    }
-    if (write_idx > 0 && this.id_hash != id_hash) {
-      System.out.println("!!!!!!!!!!!!!!!!!!!!!!! DIFF HASH!!!!!!!!!!!!!!!!!");
-    }
-    this.id_hash = id_hash;
-    this.set = set;
     
     if (pooled_array == null) {
       pooled_array = long_array_pool.claim();
@@ -328,7 +336,7 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
 
   @Override
   public TypeToken<? extends TimeSeriesDataType> getType() {
-    return NumericType.TYPE;
+    return NumericLongArrayType.TYPE;
   }
   
   @Override
@@ -347,7 +355,7 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
       // no-op
       return;
     }
-    if (write_idx + 1 >= ((long[]) pooled_array.object()).length) {
+    if (write_idx + 8 >= ((long[]) pooled_array.object()).length) {
       new ReAllocatedArray();
     }
     
@@ -438,7 +446,7 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
     }
     
     // TODO - see if we can checkout another array
-    long[] new_array = new long[write_idx];
+    long[] new_array = new long[write_idx + 8];
     final Iterator<Entry<Long, Integer>> iterator;
     if (reverse) {
       iterator = map.descendingMap().entrySet().iterator();
@@ -491,7 +499,7 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
   }
   
   /**
-   * A simple class used when we exceede the size of the pooled array.
+   * A simple class used when we exceed the size of the pooled array.
    */
   class ReAllocatedArray implements PooledObject {
     

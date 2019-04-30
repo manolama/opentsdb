@@ -19,10 +19,17 @@ import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.pools.CloseablePooledObject;
 import net.opentsdb.pools.ObjectPool;
+import net.opentsdb.rollup.RollupInterval;
 
 public interface Tsdb1xPartialTimeSeries extends PartialTimeSeries, 
     CloseablePooledObject {
 
+  public void reset(final TimeStamp base_timestamp, 
+      final long id_hash, 
+      final ObjectPool long_array_pool,
+      final PartialTimeSeriesSet set,
+      final RollupInterval interval);
+  
   /**
    * Sorts, de-duplicates and optionally reverses the data in this series. Call
    * it only after adding all of the data.
@@ -31,32 +38,12 @@ public interface Tsdb1xPartialTimeSeries extends PartialTimeSeries,
    * @param reverse Whether or not to reverse the data.
    */
   public void dedupe(final boolean keep_earliest, final boolean reverse);
- 
-  /**
-   * Sets the ID hash and the set but leaves the array null.
-   * @param id_hash
-   * @param set
-   */
-  public void setEmpty(final long id_hash, final PartialTimeSeriesSet set);
   
-  /**
-   * Adds a column to the series.
-   * @param prefix The schema prefix so we know what kind of data we're dealing
-   * with.
-   * @param base_timestamp The base timestamp.
-   * @param qualifier The non-null qualifier.
-   * @param value The non-null value.
-   * @param long_array_pool The array pool to claim an array from.
-   * @param id_hash The hash for the time series Id.
-   * @param set The set this partial belongs to.
-   */
-  public void addColumn(final byte prefix, 
-                        final TimeStamp base_timestamp,
+  public void setEmpty(final PartialTimeSeriesSet set);
+  
+  public void addColumn(final byte prefix,
                         final byte[] qualifier, 
-                        final byte[] value,
-                        final ObjectPool long_array_pool, 
-                        final long id_hash, 
-                        final PartialTimeSeriesSet set);
+                        final byte[] value);
 
   public boolean sameHash(final long hash);
 }

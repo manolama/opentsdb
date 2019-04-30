@@ -41,6 +41,7 @@ import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
+import net.opentsdb.data.types.numeric.NumericByteArraySummaryType;
 import net.opentsdb.data.types.numeric.NumericLongArrayType;
 import net.opentsdb.query.TimeSeriesDataSourceConfig;
 import net.opentsdb.query.filter.FilterUtils;
@@ -370,6 +371,7 @@ public class Tsdb1xScanner2 {
    * @param row
    */
   private void processRow(final ArrayList<KeyValue> row) {
+    try {
     owner.node().schema().baseTimestamp(row.get(0).key(), base_ts);
     if (base_ts.compare(Op.NE, last_ts)) {
       if (last_ts.epoch() == -1) {
@@ -421,29 +423,25 @@ public class Tsdb1xScanner2 {
         }
         
         if (pts == null) {
-          pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
+          pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
           last_pts.put(NumericLongArrayType.TYPE, pts);
         } else if (pts.getType() != NumericLongArrayType.TYPE) {
           pts = last_pts.get(NumericLongArrayType.TYPE);
           if (pts == null) {
-            pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
+            pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
             last_pts.put(NumericLongArrayType.TYPE, pts);
           }
         }
         
         if (!pts.sameHash(hash)) {
           flushPartials();
-          pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
+          pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
           last_pts.put(NumericLongArrayType.TYPE, pts);
         }
         
-        pts.addColumn((byte) 0, 
-                      base_ts,
+        pts.addColumn((byte) 0,
                       column.qualifier(), 
-                      column.value(),
-                      owner.node().schema().arrayPool(),
-                      hash,
-                      owner.getSet(base_ts));
+                      column.value());
       } else if (rollup_interval == null) {
         final byte prefix = column.qualifier()[0];
         
@@ -453,29 +451,25 @@ public class Tsdb1xScanner2 {
             continue;
           } else {
             if (pts == null) {
-              pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
+              pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
               last_pts.put(NumericLongArrayType.TYPE, pts);
             } else if (pts.getType() != NumericLongArrayType.TYPE) {
               pts = last_pts.get(NumericLongArrayType.TYPE);
               if (pts == null) {
-                pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
+                pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
                 last_pts.put(NumericLongArrayType.TYPE, pts);
               }
             }
 
             if (!pts.sameHash(hash)) {
               flushPartials();
-              pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE);
+              pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
               last_pts.put(NumericLongArrayType.TYPE, pts);
             }
             
             pts.addColumn(Schema.APPENDS_PREFIX, 
-                          base_ts,
                           column.qualifier(), 
-                          column.value(),
-                          owner.node().schema().arrayPool(),
-                          hash,
-                          owner.getSet(base_ts));
+                          column.value());
           }
         } else if (owner.node().fetchDataType(prefix)) {
           // TODO - find the right type
@@ -483,11 +477,33 @@ public class Tsdb1xScanner2 {
           // TODO - log drop
         }
       } else {
-        // TODO - rollup
         // Only numerics are rolled up right now. And we shouldn't have
         // a rollup query if the user doesn't want rolled-up data.
-        //numerics.addColumn(NUMERIC_PREFIX, kv.qualifier(), kv.value());
+        pts = last_pts.get(NumericByteArraySummaryType.TYPE);
+        if (pts == null) {
+          pts = owner.node().schema().newSeries(NumericByteArraySummaryType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
+          last_pts.put(NumericByteArraySummaryType.TYPE, pts);
+        } else if (pts.getType() != NumericByteArraySummaryType.TYPE) {
+          pts = last_pts.get(NumericByteArraySummaryType.TYPE);
+          if (pts == null) {
+            pts = owner.node().schema().newSeries(NumericByteArraySummaryType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
+            last_pts.put(NumericByteArraySummaryType.TYPE, pts);
+          }
+        }
+
+        if (!pts.sameHash(hash)) {
+          flushPartials();
+          pts = owner.node().schema().newSeries(NumericByteArraySummaryType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
+          last_pts.put(NumericByteArraySummaryType.TYPE, pts);
+        }
+        
+        pts.addColumn(Schema.APPENDS_PREFIX, 
+                      column.qualifier(), 
+                      column.value());
       }
+    }
+    } catch (Throwable t) {
+      LOG.error("WTF?", t);
     }
   }
   

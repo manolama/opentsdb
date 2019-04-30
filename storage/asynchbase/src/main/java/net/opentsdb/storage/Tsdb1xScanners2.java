@@ -301,6 +301,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       if (scanners_done >= scanners.get(scanner_index).length) {
         send_upstream = true;
       }
+      System.out.println("          SCANNERS DONE " + scanners_done);
     }
     
     if (send_upstream) {
