@@ -2,10 +2,11 @@ package net.opentsdb.data;
 
 import com.google.common.reflect.TypeToken;
 
+import net.opentsdb.data.types.numeric.NumericLongArrayType;
 import net.opentsdb.pools.CloseablePooledObject;
 import net.opentsdb.pools.PooledObject;
 
-public class NoDataPartialTimeSeries implements PartialTimeSeries, CloseablePooledObject {
+public class NoDataPartialTimeSeries implements PartialTimeSeries<NumericLongArrayType>, CloseablePooledObject {
 
   private PooledObject pooled_object;
   
@@ -30,13 +31,13 @@ public class NoDataPartialTimeSeries implements PartialTimeSeries, CloseablePool
     return set;
   }
 
-  @Override
-  public TypeToken<? extends TimeSeriesDataType> getType() {
-    return NoDataType.TYPE;
-  }
+//  @Override
+//  public TypeToken<? extends TimeSeriesDataType> getType() {
+//    return NoDataType.TYPE;
+//  }
 
   @Override
-  public Object data() {
+  public NumericLongArrayType value() {
     return null;
   }
 

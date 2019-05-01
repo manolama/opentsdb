@@ -301,7 +301,6 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
       if (scanners_done >= scanners.get(scanner_index).length) {
         send_upstream = true;
       }
-      System.out.println("          SCANNERS DONE " + scanners_done);
     }
     
     if (send_upstream) {
@@ -315,14 +314,15 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
             if (!set.complete()) {
               LOG.warn("!!!!!!!!!!!!! SET WASN'T DONE!: " + set.latch + "  TS: " + set.start().epoch());
             } else {
-              LOG.info("               SET WAS complete: " + set.start().epoch());
+              //LOG.info("               SET WAS complete: " + set.start().epoch());
             }
           }
         } catch (Exception e) {
           LOG.error("Unexpected exception handling scanner complete", e);
           node.onError(e);
         }
-      } else if (node.rollup_usage != RollupUsage.ROLLUP_NOFALLBACK && scanner_index + 1 < scanners.size()) {
+      } else if (node.rollup_usage != RollupUsage.ROLLUP_NOFALLBACK && 
+                 scanner_index + 1 < scanners.size()) {
         System.out.println(" !!!!!!!!!!!!!!!!!!!!!!! SCANNING NEXT on fallback!!!!!");
         // start scanning the next set
         if (LOG.isDebugEnabled()) {
@@ -431,7 +431,7 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
                      final byte[] fuzzy_key,
                      final int scanners_index) {
     long start = computeStartTimestamp(rollup_interval, scanners_index);
-    total_sets_per_scanners.set(scanners_index, (int) start);
+    //total_sets_per_scanners.set(scanners_index, (int) start);
     
     final byte[] start_key;
     if (fuzzy_key != null) {
@@ -495,15 +495,22 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
                     final int scanners_index) {
     long end = computeStopTimestamp(rollup_interval, scanners_index);
     
-    if (rollup_interval != null) {
-      int start = total_sets_per_scanners.get(scanners_index);
-      total_sets_per_scanners.set(scanners_index, 
-          (((int) end) - start) / 
-          (rollup_interval.getIntervals() * rollup_interval.getIntervalSeconds()));
-    } else {
-      int start = total_sets_per_scanners.get(scanners_index);
-      total_sets_per_scanners.set(scanners_index, (((int) end) - start) / 3600);
-    }
+//    if (rollup_interval != null) {
+//      int start = total_sets_per_scanners.get(scanners_index);
+//      int sets = (((int) end) - start) / 
+//          (rollup_interval.getIntervals() * rollup_interval.getIntervalSeconds());
+//      if (sets <= 0) {
+//        sets = 1;
+//      }
+//      total_sets_per_scanners.set(scanners_index, sets);
+//    } else {
+//      int start = total_sets_per_scanners.get(scanners_index);
+//      int sets = (((int) end) - start) / 3600;
+//      if (sets <= 0) {
+//        sets = 1;
+//      }
+//      total_sets_per_scanners.set(scanners_index, sets);
+//    }
     
     final byte[] end_key = new byte[node.schema().saltWidth() + 
                                       node.schema().metricWidth() +
@@ -864,8 +871,6 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
           + scanners.get(0).length + " scanners per set.");
     }
 
-    setupSets(null, 0);
-    
     System.out.println("0000000000 SPANS: " + total_sets_per_scanners);
     scanNext(span);
   }
@@ -873,6 +878,22 @@ public class Tsdb1xScanners2 implements HBaseExecutor {
   void setupSets(final RollupInterval interval, final int scanners_index) {
     long start = computeStartTimestamp(interval, scanner_index);
     long end = computeStopTimestamp(interval, scanner_index);
+    
+    if (interval != null) {
+      int sets = (int) (end - start) / 
+          (interval.getIntervals() * interval.getIntervalSeconds());
+      if (sets <= 0) {
+        sets = 1;
+      }
+      total_sets_per_scanners.set(scanners_index, sets);
+    } else {
+      int sets = (int) (end - start) / 3600;
+      if (sets <= 0) {
+        sets = 1;
+      }
+      total_sets_per_scanners.set(scanners_index, sets);
+    }
+    
     TimeStamp start_ts = new SecondTimeStamp(start);
     TimeStamp end_ts = new SecondTimeStamp(end);
     timestamps.set(scanners_index, new Pair<TimeStamp, TimeStamp>(start_ts, end_ts));

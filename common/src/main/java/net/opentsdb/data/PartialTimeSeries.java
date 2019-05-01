@@ -21,7 +21,7 @@ import com.google.common.reflect.TypeToken;
  * 
  * @since 3.0
  */
-public interface PartialTimeSeries extends AutoCloseable {
+public interface PartialTimeSeries<T extends TimeSeriesDataType> extends AutoCloseable {
 
   /** @return A hash to the time series ID. */
   public long idHash();
@@ -30,9 +30,8 @@ public interface PartialTimeSeries extends AutoCloseable {
   public PartialTimeSeriesSet set();
   
   /** @return The type of data this series is returning. */
-  public TypeToken<? extends TimeSeriesDataType> getType();
+  //public TypeToken<? extends TimeSeriesDataType> getType();
   
-  /** @return The data for this timeseries. May be null. See {@link #getType()} 
-   * for decoding the data. */
-  public Object data();
+  public T value();
+  
 }

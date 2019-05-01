@@ -13,6 +13,7 @@ import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.PartialTimeSeriesSet;
+import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.types.numeric.NumericByteArraySummaryType;
@@ -26,7 +27,7 @@ import net.opentsdb.rollup.RollupUtils;
 import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xNumericPartialTimeSeries.ReAllocatedArray;
 import net.opentsdb.utils.Bytes;
 
-public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeSeries {
+public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeSeries<NumericByteArraySummaryType>, NumericByteArraySummaryType {
   private static final Logger LOG = LoggerFactory.getLogger(
       Tsdb1xNumericSummaryPartialTimeSeries.class);
   
@@ -65,13 +66,14 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
   
   public Tsdb1xNumericSummaryPartialTimeSeries() {
     reference_counter = new AtomicInteger();
+    base_timestamp = new SecondTimeStamp(0);
   }
   
   public void reset(final TimeStamp base_timestamp, 
-      final long id_hash, 
-      final ObjectPool byte_array_pool,
-      final PartialTimeSeriesSet set,
-      final RollupInterval interval) {
+                    final long id_hash, 
+                    final ObjectPool byte_array_pool,
+                    final PartialTimeSeriesSet set,
+                    final RollupInterval interval) {
     if (set == null) {
       throw new RuntimeException("NULL SET FROM below...");
     }
@@ -157,7 +159,8 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
     
     byte[] data = (byte[]) pooled_array.object();
     int value_length = NumericCodec.getValueLengthFromQualifier(qualifier, offset_start);
-    if (value.length != value_length) {
+    System.out.println("      EXP: " + value_length + "  GOT: " + value.length);
+    if (value.length == value_length) {
       if (write_idx + 8 + 1 + 2 + value.length >= data.length) {
         new ReAllocatedArray();
         data = (byte[]) pooled_array.object();
@@ -168,13 +171,15 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
           (offset == last_offset && last_type == (byte) type)) {
         needs_repair = true;
       }
-      data[write_idx++] = 1;
       
       last_type = (byte) type;
       // TODO nanos and millis?
       
-      Bytes.setLong(data, base_timestamp.epoch() + (offset * interval.getIntervalSeconds()), write_idx);
+      System.out.println("       %%% Offset: " + offset + "  TS: " + ((base_timestamp.msEpoch() + offset) / 1000));
+      
+      Bytes.setLong(data, (base_timestamp.msEpoch() + offset) / 1000, write_idx);
       write_idx += 8;
+      data[write_idx++] = 1;
       data[write_idx++] = (byte) type;
       
       if ((qualifier[offset_start] & NumericCodec.MS_BYTE_FLAG) == 
@@ -197,16 +202,16 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
           data = (byte[]) pooled_array.object();
         }
         
-        int offset = (int) RollupUtils.getOffsetFromRollupQualifier(value, i, interval);
+        int offset = (int) RollupUtils.getOffsetFromRollupQualifier(value, offset_start, interval);
         if (offset < last_offset || 
             (offset == last_offset && last_type == (byte) type)) {
           needs_repair = true;
         }
-        data[write_idx++] = 1;
         
         last_type = (byte) type;
         Bytes.setLong(data, base_timestamp.epoch() + (offset * interval.getIntervalSeconds()), write_idx);
         write_idx += 8;
+        data[write_idx++] = 1;
         data[write_idx++] = (byte) type;
         
         if ((qualifier[offset_start] & NumericCodec.MS_BYTE_FLAG) == 
@@ -222,6 +227,7 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
         i += value_length;
       }
     }
+    System.out.println(" (((( " + write_idx + " ))))");
   }
   
   @Override
@@ -241,20 +247,15 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
     //new RuntimeException().printStackTrace();
     return set;
   }
-
-  @Override
-  public TypeToken<? extends TimeSeriesDataType> getType() {
-    return NumericByteArraySummaryType.TYPE;
-  }
+//
+//  @Override
+//  public TypeToken<? extends TimeSeriesDataType> getType() {
+//    return NumericByteArraySummaryType.TYPE;
+//  }
   
   @Override
-  public Object data() {
-    if (pooled_array != null) {
-      reference_counter.incrementAndGet();
-      return pooled_array.object();
-    } else {
-      return null;
-    }
+  public NumericByteArraySummaryType value() {
+    return this;
   }
   
   @Override
@@ -264,18 +265,11 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
       return;
     }
     
-    // need space to write the terminal flag
-    if (write_idx + 8 >= ((byte[]) pooled_array.object()).length) {
-      new ReAllocatedArray();
-    }
-    
     if (!needs_repair) {
       // TODO - reverse
-      Bytes.setInt((byte[]) pooled_array.object(), 0x80000000, write_idx);
-      //((byte[]) pooled_array.object())[write_idx] = 0; // terminal
       return;
     }
-    
+    System.out.println("************* HAve to fix it......");
     // dedupe
     // TODO - any primitive tree maps out there? Or maybe there's just an
     // all around better way to do this. For now this should be fast enough. We
@@ -336,7 +330,6 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
     // copy back
     write_idx = idx;
     System.arraycopy(new_array, 0, new_array, 0, idx);
-    Bytes.setLong((byte[]) pooled_array.object(), NumericLongArrayType.TERIMNAL_FLAG, write_idx);
     needs_repair = false;
   }
   
@@ -381,5 +374,25 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
       // no-op
     }
     
+  }
+
+  @Override
+  public int offset() {
+    return 0;
+  }
+
+  @Override
+  public int end() {
+    return write_idx;
+  }
+
+  @Override
+  public byte[] data() {
+    if (pooled_array != null) {
+      reference_counter.incrementAndGet();
+      return (byte[]) pooled_array.object();
+    } else {
+      return null;
+    }
   }
 }

@@ -17,6 +17,7 @@ package net.opentsdb.query;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.data.PartialTimeSeries;
+import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.stats.Span;
 
 /**
@@ -77,7 +78,7 @@ public interface QueryNode {
    * ready.
    * @param next A non-null result (that may be empty).
    */
-  public void onNext(final PartialTimeSeries next);
+  public void onNext(final PartialTimeSeries<? extends TimeSeriesDataType> next);
   
   /**
    * Called by a downstream node when a non-recoverable error occurs. 

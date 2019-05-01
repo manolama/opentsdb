@@ -43,6 +43,7 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.types.numeric.NumericByteArraySummaryType;
 import net.opentsdb.data.types.numeric.NumericLongArrayType;
+import net.opentsdb.pools.ByteArrayPool;
 import net.opentsdb.query.TimeSeriesDataSourceConfig;
 import net.opentsdb.query.filter.FilterUtils;
 import net.opentsdb.query.filter.QueryFilter;
@@ -425,7 +426,7 @@ public class Tsdb1xScanner2 {
         if (pts == null) {
           pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
           last_pts.put(NumericLongArrayType.TYPE, pts);
-        } else if (pts.getType() != NumericLongArrayType.TYPE) {
+        } else if (pts.value().type() != NumericLongArrayType.TYPE) {
           pts = last_pts.get(NumericLongArrayType.TYPE);
           if (pts == null) {
             pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
@@ -453,7 +454,7 @@ public class Tsdb1xScanner2 {
             if (pts == null) {
               pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
               last_pts.put(NumericLongArrayType.TYPE, pts);
-            } else if (pts.getType() != NumericLongArrayType.TYPE) {
+            } else if (pts.value().type() != NumericLongArrayType.TYPE) {
               pts = last_pts.get(NumericLongArrayType.TYPE);
               if (pts == null) {
                 pts = owner.node().schema().newSeries(NumericLongArrayType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
@@ -481,19 +482,22 @@ public class Tsdb1xScanner2 {
         // a rollup query if the user doesn't want rolled-up data.
         pts = last_pts.get(NumericByteArraySummaryType.TYPE);
         if (pts == null) {
-          pts = owner.node().schema().newSeries(NumericByteArraySummaryType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
+          pts = owner.node().schema().newSeries(NumericByteArraySummaryType.TYPE, base_ts, hash, 
+              owner.node().pipelineContext().tsdb().getRegistry().getObjectPool(ByteArrayPool.TYPE), owner.getSet(base_ts), rollup_interval);
           last_pts.put(NumericByteArraySummaryType.TYPE, pts);
-        } else if (pts.getType() != NumericByteArraySummaryType.TYPE) {
+        } else if (pts.value().type() != NumericByteArraySummaryType.TYPE) {
           pts = last_pts.get(NumericByteArraySummaryType.TYPE);
           if (pts == null) {
-            pts = owner.node().schema().newSeries(NumericByteArraySummaryType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
+            pts = owner.node().schema().newSeries(NumericByteArraySummaryType.TYPE, base_ts, hash, 
+                owner.node().pipelineContext().tsdb().getRegistry().getObjectPool(ByteArrayPool.TYPE), owner.getSet(base_ts), rollup_interval);
             last_pts.put(NumericByteArraySummaryType.TYPE, pts);
           }
         }
 
         if (!pts.sameHash(hash)) {
           flushPartials();
-          pts = owner.node().schema().newSeries(NumericByteArraySummaryType.TYPE, base_ts, hash, owner.node().schema().arrayPool(), owner.getSet(base_ts), rollup_interval);
+          pts = owner.node().schema().newSeries(NumericByteArraySummaryType.TYPE, base_ts, hash, 
+              owner.node().pipelineContext().tsdb().getRegistry().getObjectPool(ByteArrayPool.TYPE), owner.getSet(base_ts), rollup_interval);
           last_pts.put(NumericByteArraySummaryType.TYPE, pts);
         }
         

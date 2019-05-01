@@ -18,6 +18,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -308,27 +309,28 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
   }
   
   @Override
-  public void serialize(final PartialTimeSeries series, 
+  public void serialize(final PartialTimeSeries<? extends TimeSeriesDataType> series, 
                         final SerdesCallback callback,
                         final Span span) {
-    if (series.set().timeSeriesCount() < 1) {
+    if (series.set().timeSeriesCount() < 1 ||
+        series.value() == null) {
       // no data
       //System.out.println(" ------------- SKP DATA!!!");
       callback.onComplete(series);
       return;
     } else {
-      System.out.println("---------- SERIES: " + series.set().timeSeriesCount() + "  TYPE: " + series);
+      System.out.println("---------- SERIES: " + series.set().timeSeriesCount() + "  TYPE: " + series.value().type());
     }
     
     // TODO - break out
     ByteArrayOutputStream stream = new ByteArrayOutputStream();
     int count = 0;
     try {
-      if (series.getType() == NumericLongArrayType.TYPE) {
-        long[] values = (long[]) series.data();
-        int idx = 0;
+      if (series.value().type() == NumericLongArrayType.TYPE) {
+        long[] values = ((NumericLongArrayType) series.value()).data();
+        int idx = ((NumericLongArrayType) series.value()).offset();
         
-        while (true) {
+        while (idx < ((NumericLongArrayType) series.value()).end()) {
           if ((values[idx] & NumericLongArrayType.TERIMNAL_FLAG) != 0) {
             // terminal
             break;
@@ -369,29 +371,28 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           idx += 2;
           count++;
         }
-      } else if (series.getType() == NumericByteArraySummaryType.TYPE) {
-        byte[] data = (byte[]) series.data();
-        int idx = 0;
-        while (true) {
-          int offset = Bytes.getInt(data, idx);
-          if (offset == 0x80000000) {
-            // terminal!
-            break;
-          }
-          
+      } else if (series.value().type() == NumericByteArraySummaryType.TYPE) {
+        byte[] data = ((NumericByteArraySummaryType) series.value()).data();
+        System.out.println("     DATA: " + Arrays.toString(data) + "\nEND: " + ((NumericByteArraySummaryType) series.value()).end());
+        int idx = ((NumericByteArraySummaryType) series.value()).offset();
+        while (idx < ((NumericByteArraySummaryType) series.value()).end()) {
+          System.out.println("______ idx: " + idx);
+          long ts = Bytes.getLong(data, idx);          
+          idx += 8;
           // TODO millis and nanos
-          long ts = Bytes.getLong(data, idx);
+          //long ts = Bytes.getLong(data, idx);
           if (ts < context.query().startTime().epoch()) {
-            idx += 8;
             byte values = data[idx++];
             for (int i = 0; i < values; i++) {
               idx += NumericCodec.getValueLengthFromQualifier(data, idx + 1) + 2;
             }
+            System.out.println("         SKIPPING data earlier than range: " + ts);
             continue;
-          }
-          if (ts > context.query().endTime().epoch()) {
+          } else if (ts > context.query().endTime().epoch()) {
+            System.out.println("TS greater than end: " + ts);
             break;
           }
+          System.out.println("      GOOD TS: " + ts);
           
           if (count > 0) {
             stream.write(',');
@@ -404,18 +405,24 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           stream.write('{');
            
           byte values = data[idx++];
+          System.out.println("       NUM Vs: " + values);
           for (int i = 0; i < values; i++) {
+            
+            byte type = data[idx++];
+            System.out.println("         type: " + type);
             if (i > 0) {
               stream.write(',');
             }
             stream.write('"');
-            stream.write(Byte.toString(data[idx++]).getBytes());
+            stream.write(Byte.toString(type).getBytes());
             stream.write('"');
             stream.write(':');
             
-            final int len = NumericCodec.getValueLengthFromQualifier(data, idx + 1);
-            byte flags = NumericCodec.getFlags(data, idx, (byte) NumericCodec.S_Q_WIDTH);
-            idx += 2;
+            final int len = NumericCodec.getValueLengthFromQualifier(data, idx);
+            System.out.println("       LEN: " + len);
+            byte flags = NumericCodec.getFlags(data, idx, (byte) 1);
+            System.out.println("       FLAGS: " + flags);
+            idx++;
             if ((flags & NumericCodec.FLAG_FLOAT) != 0) {
               stream.write(Double.toString(NumericCodec.extractFloatingPointValue(data, idx, flags)).getBytes());
             } else {
@@ -423,18 +430,18 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
             }
             idx += len;
           }
-          
+          System.out.println("---------------------");
           stream.write('}');
           count++;
         }
       }
-    } catch (IOException e) {
+    } catch (Throwable t) {
       // TODO Auto-generated catch block
-      e.printStackTrace();
-      LOG.error("WTF?", e);
+      t.printStackTrace();
+      LOG.error("WTF?", t);
     }
-    
     if (count < 1) {
+      System.out.println("           done serdes early.. count: " + count);
       callback.onComplete(series);
       return;
     }
@@ -462,6 +469,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       
       set.series.put(series.set().start().epoch(), stream.toByteArray());
     }
+    System.out.println("           done serdes. count: " + count);
     callback.onComplete(series);
   }
   

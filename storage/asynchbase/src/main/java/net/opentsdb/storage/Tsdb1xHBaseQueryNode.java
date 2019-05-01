@@ -344,7 +344,8 @@ public class Tsdb1xHBaseQueryNode extends BaseTsdb1xQueryNode {
       }
     } else {
       System.out.println("           [[ NO ROLLUPS!!!");
-      rollup_intervals = null;
+      throw new RuntimeException("GGGGGGGGGGGGGGGGGR");
+      //rollup_intervals = null;
     }
     
     upstream = context.upstream(this);

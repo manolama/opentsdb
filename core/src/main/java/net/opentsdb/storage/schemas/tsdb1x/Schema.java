@@ -1204,7 +1204,7 @@ public class Schema implements WritableTimeSeriesDataStore {
       final TypeToken<? extends TimeSeriesDataType> type,
       final TimeStamp base_timestamp, 
       final long id_hash, 
-      final ObjectPool long_array_pool,
+      final ObjectPool array_pool,
       final PartialTimeSeriesSet set,
       final RollupInterval interval) {
     ObjectPool pool = pools.get(type);
@@ -1225,7 +1225,7 @@ public class Schema implements WritableTimeSeriesDataStore {
       pools.putIfAbsent(type, pool);
     }
     final Tsdb1xPartialTimeSeries series = (Tsdb1xPartialTimeSeries) pool.claim().object();
-    series.reset(base_timestamp, id_hash, long_array_pool, set, interval);
+    series.reset(base_timestamp, id_hash, array_pool, set, interval);
     return series;
   }
   

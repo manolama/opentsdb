@@ -16,12 +16,13 @@ package net.opentsdb.storage.schemas.tsdb1x;
 
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
+import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.pools.CloseablePooledObject;
 import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.rollup.RollupInterval;
 
-public interface Tsdb1xPartialTimeSeries extends PartialTimeSeries, 
+public interface Tsdb1xPartialTimeSeries<T extends TimeSeriesDataType> extends PartialTimeSeries<T>, 
     CloseablePooledObject {
 
   public void reset(final TimeStamp base_timestamp, 

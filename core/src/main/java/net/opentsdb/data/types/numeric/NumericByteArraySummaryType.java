@@ -55,4 +55,10 @@ public interface NumericByteArraySummaryType extends TimeSeriesDataType {
     return TYPE;
   }
   
+  public int offset();
+  
+  public int end();
+  
+  public byte[] data();
+  
 }

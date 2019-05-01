@@ -69,4 +69,10 @@ public interface NumericLongArrayType extends TimeSeriesDataType {
     return TYPE;
   }
   
+  public int offset();
+  
+  public int end();
+  
+  public long[] data();
+  
 }

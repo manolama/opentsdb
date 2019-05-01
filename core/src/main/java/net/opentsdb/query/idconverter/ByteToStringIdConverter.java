@@ -265,11 +265,11 @@ public class ByteToStringIdConverter extends AbstractQueryNode {
     
   }
 
-  class WrappedPartialTimeSeries implements PartialTimeSeries {
-    final PartialTimeSeries source;
+  class WrappedPartialTimeSeries implements PartialTimeSeries<TimeSeriesDataType> {
+    final PartialTimeSeries<TimeSeriesDataType> source;
     final PartialTimeSeriesSet set;
     
-    WrappedPartialTimeSeries(final PartialTimeSeries source, final PartialTimeSeriesSet set) {
+    WrappedPartialTimeSeries(final PartialTimeSeries<TimeSeriesDataType> source, final PartialTimeSeriesSet set) {
       this.source = source;
       this.set = set;
     }
@@ -288,15 +288,15 @@ public class ByteToStringIdConverter extends AbstractQueryNode {
     public PartialTimeSeriesSet set() {
       return set;
     }
+//
+//    @Override
+//    public TypeToken<? extends TimeSeriesDataType> getType() {
+//      return source.getType();
+//    }
 
     @Override
-    public TypeToken<? extends TimeSeriesDataType> getType() {
-      return source.getType();
-    }
-
-    @Override
-    public Object data() {
-      return source.data();
+    public TimeSeriesDataType value() {
+      return source.value();
     }
     
   }

@@ -17,6 +17,7 @@ package net.opentsdb.query.serdes;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.data.PartialTimeSeries;
+import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.stats.Span;
@@ -47,7 +48,7 @@ public interface TimeSeriesSerdes {
    * @param callback A non-null callback to run when serialization is complete.
    * @param span An optional tracer span.
    */
-  public void serialize(final PartialTimeSeries series,
+  public void serialize(final PartialTimeSeries<? extends TimeSeriesDataType> series,
                         final SerdesCallback callback,
                         final Span span);
   

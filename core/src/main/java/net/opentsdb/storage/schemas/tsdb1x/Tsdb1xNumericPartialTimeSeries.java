@@ -24,7 +24,9 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.reflect.TypeToken;
 
+import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
+import net.opentsdb.data.PartialTimeSeriesValue;
 import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeStamp;
@@ -43,7 +45,8 @@ import net.opentsdb.rollup.RollupInterval;
  * 
  * @since 3.0
  */
-public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
+public class Tsdb1xNumericPartialTimeSeries implements 
+    Tsdb1xPartialTimeSeries<NumericLongArrayType>, NumericLongArrayType {
   private static final Logger LOG = LoggerFactory.getLogger(
       Tsdb1xNumericPartialTimeSeries.class);
   
@@ -334,20 +337,10 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
     return set;
   }
 
-  @Override
-  public TypeToken<? extends TimeSeriesDataType> getType() {
-    return NumericLongArrayType.TYPE;
-  }
-  
-  @Override
-  public Object data() {
-    if (pooled_array != null) {
-      reference_counter.incrementAndGet();
-      return pooled_array.object();
-    } else {
-      return null;
-    }
-  }
+//  @Override
+//  public TypeToken<? extends TimeSeriesDataType> getType() {
+//    return NumericLongArrayType.TYPE;
+//  }
   
   @Override
   public void dedupe(final boolean keep_earliest, final boolean reverse) {
@@ -531,4 +524,27 @@ public class Tsdb1xNumericPartialTimeSeries implements Tsdb1xPartialTimeSeries {
     }
     
   }
+
+  @Override
+  public NumericLongArrayType value() {
+    return this;
+  }
+  
+
+  @Override
+  public int offset() {
+    return 0;
+  }
+
+  @Override
+  public int end() {
+    return write_idx;
+  }
+
+  @Override
+  public long[] data() {
+    return (long[]) pooled_array.object();
+  }
+
+  
 }
