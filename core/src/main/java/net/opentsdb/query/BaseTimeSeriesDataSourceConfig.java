@@ -228,7 +228,7 @@ public abstract class BaseTimeSeriesDataSourceConfig extends BaseQueryNodeConfig
   @Override
   public List<String> getSummaryAggregations() {
     // ******** TEMP *******
-    if (true) {
+    if (false) {
       return Lists.newArrayList("sum");
     }
     return summary_aggregations;
@@ -237,7 +237,7 @@ public abstract class BaseTimeSeriesDataSourceConfig extends BaseQueryNodeConfig
   @Override
   public List<String> getRollupIntervals() {
     // ******** TEMP *******
-    if (true) {
+    if (false) {
       return Lists.newArrayList("1h");
     }
     return rollup_intervals;

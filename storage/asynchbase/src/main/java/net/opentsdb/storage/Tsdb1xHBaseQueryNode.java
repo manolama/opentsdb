@@ -331,21 +331,17 @@ public class Tsdb1xHBaseQueryNode extends BaseTsdb1xQueryNode {
         rollup_usage != RollupUsage.ROLLUP_RAW &&
         config.getRollupIntervals() != null && 
         !config.getRollupIntervals().isEmpty()) {
-      System.out.println("   [[[[ SEtp rollups.....");
       rollup_intervals = Lists.newArrayListWithExpectedSize(
           config.getRollupIntervals().size());
       for (final String interval : config.getRollupIntervals()) {
         final RollupInterval ri = parent.schema().rollupConfig()
             .getRollupInterval(interval);
-        System.out.println("                RI: " + ri);
         if (ri != null) {
           rollup_intervals.add(ri);
         }
       }
     } else {
-      System.out.println("           [[ NO ROLLUPS!!!");
-      throw new RuntimeException("GGGGGGGGGGGGGGGGGR");
-      //rollup_intervals = null;
+      rollup_intervals = null;
     }
     
     upstream = context.upstream(this);
