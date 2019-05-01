@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
 
+import net.opentsdb.core.Const;
 import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeriesDataType;
@@ -54,7 +55,7 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
   protected boolean needs_repair;
   
   /** The last offset, used to determine if we need a repair. */
-  protected int last_offset = -1;
+  protected long last_ts = -1;
   
   protected byte last_type = -1;
   
@@ -108,7 +109,7 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
       set = null;
       write_idx = 0;
       needs_repair = false;
-      last_offset = -1;
+      last_ts = -1;
       last_type = -1;
       System.out.println("    RELEASE: " + System.identityHashCode(this));
       //new RuntimeException().printStackTrace();
@@ -127,7 +128,7 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
   public void addColumn(final byte prefix,
                         final byte[] qualifier, 
                         final byte[] value) {
-    if (qualifier.length < 2) {
+    if (qualifier.length < 1) {
       throw new IllegalDataException("Qualifier was too short.");
     }
     if (value.length < 1) {
@@ -147,18 +148,18 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
     // that it's a byte prefix, and > 5 then it's a string prefix.
     // ALSO note that appends are <offset><value> like raw data appends though
     // the offset is interval based instead of time based.
-    final int type; // TODO make sure type < 126
+    int type;
     final int offset_start;
     if (qualifier.length < 6) {
       type = qualifier[0];
-      offset_start = 1;
+      offset_start = qualifier.length == 1 ? -1 : 1;
     } else {
       type = interval.rollupConfig().getIdForAggregator(qualifier);
       offset_start = interval.rollupConfig().getOffsetStartFromQualifier(qualifier);
     }
     
     byte[] data = (byte[]) pooled_array.object();
-    int value_length = NumericCodec.getValueLengthFromQualifier(qualifier, offset_start);
+    int value_length = offset_start >= 0 ? NumericCodec.getValueLengthFromQualifier(qualifier, offset_start) : 0;
     System.out.println("      EXP: " + value_length + "  GOT: " + value.length);
     if (value.length == value_length) {
       if (write_idx + 8 + 1 + 2 + value.length >= data.length) {
@@ -166,18 +167,18 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
         data = (byte[]) pooled_array.object();
       }
       
-      int offset = (int) RollupUtils.getOffsetFromRollupQualifier(qualifier, offset_start, interval);
-      if (offset < last_offset || 
-          (offset == last_offset && last_type == (byte) type)) {
+      long ts = RollupUtils.getTimestampFromRollupQualifier(
+          qualifier, base_timestamp.epoch(), interval, offset_start);
+      if (ts < last_ts || (ts == last_ts && last_type == (byte) type)) {
         needs_repair = true;
       }
       
       last_type = (byte) type;
       // TODO nanos and millis?
       
-      System.out.println("       %%% Offset: " + offset + "  TS: " + ((base_timestamp.msEpoch() + offset) / 1000));
+      System.out.println("       %%% Offset: " + ts + "  TS: " + (ts / 1000));
       
-      Bytes.setLong(data, (base_timestamp.msEpoch() + offset) / 1000, write_idx);
+      Bytes.setLong(data, ts / 1000, write_idx);
       write_idx += 8;
       data[write_idx++] = 1;
       data[write_idx++] = (byte) type;
@@ -194,39 +195,39 @@ public class Tsdb1xNumericSummaryPartialTimeSeries implements Tsdb1xPartialTimeS
       // appended! So multiple offsets and values in the value array.
       // this has to be fast so we just dump data in, then we'll work on sorting
       // and deduping in that function.
-      // TODO - how do we track order for diff types?
+      // timestamps are just 2 bytes for now.
       for (int i = 0; i < value.length;) {
-        value_length = NumericCodec.getValueLengthFromQualifier(value, i);
-        if (write_idx + 8 + 1 + 2 + value.length >= data.length) {
+        int offset = Bytes.getUnsignedShort(value, i);
+        long ts = RollupUtils.getTimestampFromRollupQualifier(offset, base_timestamp.epoch(), interval);
+        if (ts < last_ts || (ts == last_ts && last_type == (byte) type)) {
+          needs_repair = true;
+        }
+        
+        byte flags = (byte) offset;
+        value_length = (byte) ((flags & 0x7) + 1);
+        LOG.info("     VLen: " + value_length);
+        if (write_idx + 8 + 1 + 2 + value_length >= data.length) {
           new ReAllocatedArray();
           data = (byte[]) pooled_array.object();
         }
         
-        int offset = (int) RollupUtils.getOffsetFromRollupQualifier(value, offset_start, interval);
-        if (offset < last_offset || 
-            (offset == last_offset && last_type == (byte) type)) {
-          needs_repair = true;
-        }
-        
         last_type = (byte) type;
-        Bytes.setLong(data, base_timestamp.epoch() + (offset * interval.getIntervalSeconds()), write_idx);
+        LOG.info("       TYPE: " + type);
+        LOG.info("      TS: " + ts / 1000);
+        Bytes.setLong(data, ts / 1000, write_idx);
         write_idx += 8;
         data[write_idx++] = 1;
         data[write_idx++] = (byte) type;
         
-        if ((qualifier[offset_start] & NumericCodec.MS_BYTE_FLAG) == 
-              NumericCodec.MS_BYTE_FLAG) {
-          data[write_idx++] = NumericCodec.getFlags(qualifier, i, (byte) NumericCodec.MS_Q_WIDTH);
-          i += NumericCodec.MS_Q_WIDTH;
-        } else {
-          data[write_idx++] = NumericCodec.getFlags(qualifier, i, (byte) NumericCodec.S_Q_WIDTH);
-          i += NumericCodec.S_Q_WIDTH;
-        }
+        data[write_idx++] = NumericCodec.getFlags(value, i, (byte) NumericCodec.S_Q_WIDTH);
+        i += NumericCodec.S_Q_WIDTH;
+        LOG.info("        IDX: " + i + "    VL: " + value.length + "   WI: " + write_idx + "  DL: " + data.length + "  val len: " + value_length);
         System.arraycopy(value, i, data, write_idx, value_length);
         write_idx += value_length;
         i += value_length;
       }
     }
+    LOG.info(" FINISHED WRITING COLMN.");
     System.out.println(" (((( " + write_idx + " ))))");
   }
   
