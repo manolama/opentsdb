@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2016-2018  The OpenTSDB Authors.
+// Copyright (C) 2016-2019  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -53,6 +53,7 @@ import net.opentsdb.rollup.RollupUtils;
 import net.opentsdb.rollup.RollupUtils.RollupUsage;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
+import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStore;
 import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.Pair;
@@ -94,7 +95,7 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
   private static final Logger LOG = LoggerFactory.getLogger(Tsdb1xMultiGet.class);
   
   /** The upstream query node that owns this scanner set. */
-  protected final Tsdb1xQueryNode node;
+  protected final Tsdb1xHBaseQueryNode node;
   
   /** The query config from the node. */
   protected final TimeSeriesDataSourceConfig source_config;
@@ -138,7 +139,7 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
    * we're querying when falling back. May be null. */
   protected volatile TimeStamp fallback_timestamp;
   
-  /** Index into the {@link Tsdb1xQueryNode#rollupIntervals()} that we're
+  /** Index into the {@link Tsdb1xHBaseQueryNode#rollupIntervals()} that we're
    * working on. -1 means we're query raw only, 0 or more means we're
    * working with rollups. A value >= the rollup intervals size means we've
    * fallen back to the raw table.
@@ -172,7 +173,7 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
    * @param tsuids A non-null and non-empty list of TSUIDs.
    * @throws IllegalArgumentException if the params were null or empty.
    */
-  public Tsdb1xMultiGet(final Tsdb1xQueryNode node, 
+  public Tsdb1xMultiGet(final Tsdb1xHBaseQueryNode node, 
                         final TimeSeriesDataSourceConfig source_config, 
                         final List<byte[]> tsuids) {
     if (node == null) {
@@ -219,29 +220,28 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
       Collections.sort(tsuids, Bytes.MEMCMP);
     }
     
-    final Configuration config = node.parent()
-        .tsdb().getConfig();
+    final Configuration config = node.tsdb().getConfig();
     
     if (source_config.hasKey(Tsdb1xHBaseDataStore.MULTI_GET_CONCURRENT_KEY)) {
       concurrency_multi_get = source_config.getInt(config, 
           Tsdb1xHBaseDataStore.MULTI_GET_CONCURRENT_KEY);
     } else {
-      concurrency_multi_get = node.parent()
-          .dynamicInt(Tsdb1xHBaseDataStore.MULTI_GET_CONCURRENT_KEY);
+      concurrency_multi_get = node.tsdb().getConfig()
+          .getInt(node.getConfigKey(Tsdb1xDataStore.MULTI_GET_CONCURRENT_KEY));
     }
     if (source_config.hasKey(Tsdb1xHBaseDataStore.MULTI_GET_BATCH_KEY)) {
       batch_size = source_config.getInt(config, 
           Tsdb1xHBaseDataStore.MULTI_GET_BATCH_KEY);
     } else {
-      batch_size = node.parent()
-          .dynamicInt(Tsdb1xHBaseDataStore.MULTI_GET_BATCH_KEY);
+      batch_size = node.tsdb().getConfig()
+          .getInt(node.getConfigKey(Tsdb1xDataStore.MULTI_GET_BATCH_KEY));
     }
     if (source_config.hasKey(Schema.QUERY_REVERSE_KEY)) {
       reversed = source_config.getBoolean(config, 
           Schema.QUERY_REVERSE_KEY);
     } else {
-      reversed = node.parent()
-          .dynamicBoolean(Schema.QUERY_REVERSE_KEY);
+      reversed = node.tsdb().getConfig()
+          .getBoolean(node.getConfigKey(Schema.QUERY_REVERSE_KEY));
     }
     if (source_config.hasKey(Tsdb1xHBaseDataStore.PRE_AGG_KEY)) {
       pre_aggregate = source_config.getBoolean(config, 
@@ -308,9 +308,9 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
           tables.add(interval.getTemporalTable());
         }
       }
-      tables.add(node.parent().dataTable());
+      tables.add(node.store().dataTable());
     } else {
-      tables = Lists.newArrayList(node.parent().dataTable());
+      tables = Lists.newArrayList(node.store().dataTable());
     }
     state = State.CONTINUE;
   }
@@ -695,7 +695,7 @@ public class Tsdb1xMultiGet implements HBaseExecutor {
     
     try {
       final Deferred<List<GetResultOrException>> deferred = 
-          node.parent().client().get(requests);
+          ((Tsdb1xHBaseDataStore) node.store()).client().get(requests);
       if (child == null || !child.isDebug()) {
         deferred.addCallback(response_cb)
                 .addErrback(error_cb);

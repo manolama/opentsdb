@@ -24,24 +24,18 @@ import com.google.common.collect.Maps;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
-import net.opentsdb.core.BaseTSDBPlugin;
-import net.opentsdb.core.TSDB;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
 import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStore;
 import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStoreFactory;
 
 /**
- * Simple singleton factory that implements a default and named HBase
+ * Simple factory that implements a default and named HBase
  * clients (for different configurations).
  * 
  * @since 3.0
  */
-public class Tsdb1xHBaseFactory extends BaseTSDBPlugin implements Tsdb1xDataStoreFactory {
-  
+public class Tsdb1xHBaseFactory extends Tsdb1xDataStoreFactory {
   public static final String TYPE = "Tsdb1xHBase";
-  
-  /** A TSD to pull config data from. */
-  private TSDB tsdb;
   
   /** The default clients. */
   protected volatile Tsdb1xHBaseDataStore default_client;
@@ -49,18 +43,10 @@ public class Tsdb1xHBaseFactory extends BaseTSDBPlugin implements Tsdb1xDataStor
   /** A map of non-default clients. */
   protected Map<String, Tsdb1xHBaseDataStore> clients = Maps.newConcurrentMap();
   
-  @Override
-  public String type() {
-    return TYPE;
+  public Tsdb1xHBaseFactory() {
+    type = TYPE;
   }
-
-  @Override
-  public Deferred<Object> initialize(final TSDB tsdb, final String id) {
-    this.id = Strings.isNullOrEmpty(id) ? TYPE : id;
-    this.tsdb = tsdb;
-    return Deferred.fromResult(null);
-  }
-
+  
   @Override
   public Deferred<Object> shutdown() {
     final List<Deferred<Object>> deferreds = Lists.newArrayListWithCapacity(
@@ -79,15 +65,9 @@ public class Tsdb1xHBaseFactory extends BaseTSDBPlugin implements Tsdb1xDataStor
           }
         });
   }
-
+  
   @Override
-  public String version() {
-    return "3.0.0";
-  }
-
-  @Override
-  public Tsdb1xDataStore newInstance(final TSDB tsdb, 
-                                     final String id, 
+  public Tsdb1xDataStore newInstance(final String id, 
                                      final Schema schema) {
     // DCLP on the default.
     if (Strings.isNullOrEmpty(id)) {
@@ -114,9 +94,5 @@ public class Tsdb1xHBaseFactory extends BaseTSDBPlugin implements Tsdb1xDataStor
     }
     return client;
   }
-
-  /** @return Package private TSDB instance to read the config. */
-  TSDB tsdb() {
-    return tsdb;
-  }
+  
 }

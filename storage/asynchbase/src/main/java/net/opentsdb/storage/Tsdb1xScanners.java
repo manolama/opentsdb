@@ -60,6 +60,7 @@ import net.opentsdb.storage.schemas.tsdb1x.ResolvedPassThroughFilter;
 import net.opentsdb.storage.schemas.tsdb1x.ResolvedQueryFilter;
 import net.opentsdb.storage.schemas.tsdb1x.ResolvedTagValueFilter;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
+import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStore;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueIdType;
 import net.opentsdb.utils.ByteSet;
@@ -81,7 +82,7 @@ import net.opentsdb.utils.Pair;
  * will perform the initialization on the first call. 
  * <b>Note:</b> Subsequent calls to {@link #fetchNext(Tsdb1xQueryResult, Span)}
  * should only be made after this scanner has responded with a result. 
- * Only one {@link Tsdb1xQueryNode} can be filled at a time.
+ * Only one {@link Tsdb1xHBaseQueryNode} can be filled at a time.
  * <p>
  * The class also handles rollup queries with fallback when so configured.
  * Currently fallback is limited to trying the next higher resolution 
@@ -95,7 +96,7 @@ public class Tsdb1xScanners implements HBaseExecutor {
   private static final Logger LOG = LoggerFactory.getLogger(Tsdb1xScanners.class);
   
   /** The upstream query node that owns this scanner set. */
-  protected final Tsdb1xQueryNode node;
+  protected final Tsdb1xHBaseQueryNode node;
   
   /** The data source config. */
   protected final TimeSeriesDataSourceConfig source_config;
@@ -167,7 +168,7 @@ public class Tsdb1xScanners implements HBaseExecutor {
    * matching the metric.
    * @throws IllegalArgumentException if the node or query were null.
    */
-  public Tsdb1xScanners(final Tsdb1xQueryNode node, 
+  public Tsdb1xScanners(final Tsdb1xHBaseQueryNode node, 
                         final TimeSeriesDataSourceConfig source_config) {
     if (node == null) {
       throw new IllegalArgumentException("Node cannot be null.");
@@ -178,35 +179,34 @@ public class Tsdb1xScanners implements HBaseExecutor {
     this.node = node;
     this.source_config = source_config;
     
-    final Configuration config = node.parent()
-        .tsdb().getConfig();
+    final Configuration config = node.tsdb().getConfig();
     if (source_config.hasKey(Tsdb1xHBaseDataStore.EXPANSION_LIMIT_KEY)) {
       expansion_limit = source_config.getInt(config, 
           Tsdb1xHBaseDataStore.EXPANSION_LIMIT_KEY);
     } else {
-      expansion_limit = node.parent()
-          .dynamicInt(Tsdb1xHBaseDataStore.EXPANSION_LIMIT_KEY);
+      expansion_limit = node.tsdb().getConfig()
+          .getInt(node.getConfigKey(Tsdb1xDataStore.EXPANSION_LIMIT_KEY));
     }
     if (source_config.hasKey(Tsdb1xHBaseDataStore.ROWS_PER_SCAN_KEY)) {
       rows_per_scan = source_config.getInt(config, 
           Tsdb1xHBaseDataStore.ROWS_PER_SCAN_KEY);
     } else {
-      rows_per_scan = node.parent()
-          .dynamicInt(Tsdb1xHBaseDataStore.ROWS_PER_SCAN_KEY);
+      rows_per_scan = node.tsdb().getConfig()
+          .getInt(node.getConfigKey(Tsdb1xDataStore.ROWS_PER_SCAN_KEY));
     }
     if (source_config.hasKey(Tsdb1xHBaseDataStore.SKIP_NSUN_TAGK_KEY)) {
       skip_nsun_tagks = source_config.getBoolean(config, 
           Tsdb1xHBaseDataStore.SKIP_NSUN_TAGK_KEY);
     } else {
-      skip_nsun_tagks = node.parent()
-          .dynamicBoolean(Tsdb1xHBaseDataStore.SKIP_NSUN_TAGK_KEY);
+      skip_nsun_tagks = node.tsdb().getConfig()
+          .getBoolean(node.getConfigKey(Tsdb1xDataStore.SKIP_NSUN_TAGK_KEY));
     }
     if (source_config.hasKey(Tsdb1xHBaseDataStore.SKIP_NSUN_TAGV_KEY)) {
       skip_nsun_tagvs = source_config.getBoolean(config, 
           Tsdb1xHBaseDataStore.SKIP_NSUN_TAGV_KEY);
     } else {
-      skip_nsun_tagvs = node.parent()
-          .dynamicBoolean(Tsdb1xHBaseDataStore.SKIP_NSUN_TAGV_KEY);
+      skip_nsun_tagvs = node.tsdb().getConfig()
+          .getBoolean(node.getConfigKey(Tsdb1xDataStore.SKIP_NSUN_TAGV_KEY));
     }
     if (source_config.hasKey(Tsdb1xHBaseDataStore.PRE_AGG_KEY)) {
       pre_aggregate = source_config.getBoolean(config, 
@@ -218,22 +218,22 @@ public class Tsdb1xScanners implements HBaseExecutor {
       enable_fuzzy_filter = source_config.getBoolean(config, 
           Tsdb1xHBaseDataStore.FUZZY_FILTER_KEY);
     } else {
-      enable_fuzzy_filter = node.parent()
-          .dynamicBoolean(Tsdb1xHBaseDataStore.FUZZY_FILTER_KEY);
+      enable_fuzzy_filter = node.tsdb().getConfig()
+          .getBoolean(node.getConfigKey(Tsdb1xDataStore.FUZZY_FILTER_KEY));
     }
     if (source_config.hasKey(Schema.QUERY_REVERSE_KEY)) {
       reverse_scan = source_config.getBoolean(config, 
           Schema.QUERY_REVERSE_KEY);
     } else {
-      reverse_scan = node.parent()
-          .dynamicBoolean(Schema.QUERY_REVERSE_KEY);
+      reverse_scan = node.tsdb().getConfig()
+          .getBoolean(node.getConfigKey(Schema.QUERY_REVERSE_KEY));
     }
     if (source_config.hasKey(Tsdb1xHBaseDataStore.MAX_MG_CARDINALITY_KEY)) {
       max_multi_get_cardinality = source_config.getInt(config, 
           Tsdb1xHBaseDataStore.MAX_MG_CARDINALITY_KEY);
     } else {
-      max_multi_get_cardinality = node.parent()
-          .dynamicInt(Tsdb1xHBaseDataStore.MAX_MG_CARDINALITY_KEY);
+      max_multi_get_cardinality = node.tsdb().getConfig()
+          .getInt(node.getConfigKey(Tsdb1xDataStore.MAX_MG_CARDINALITY_KEY));
     }
   }
   
@@ -744,7 +744,7 @@ public class Tsdb1xScanners implements HBaseExecutor {
           final byte[] stop_key = setStopKey(metric, interval);
           
           for (int x = 0; x < array.length; x++) {
-            final Scanner scanner = node.parent()
+            final Scanner scanner = ((Tsdb1xHBaseDataStore) node.store())
                 .client().newScanner(pre_aggregate ? 
                     interval.getGroupbyTable() : interval.getTemporalTable());
             
@@ -795,8 +795,8 @@ public class Tsdb1xScanners implements HBaseExecutor {
         final byte[] stop_key = setStopKey(metric, null);
         
         for (int i = 0; i < array.length; i++) {
-          final Scanner scanner = node.parent()
-              .client().newScanner(node.parent().dataTable());
+          final Scanner scanner = ((Tsdb1xHBaseDataStore) node.store())
+              .client().newScanner(node.store().dataTable());
           
           scanner.setFamily(Tsdb1xHBaseDataStore.DATA_FAMILY);
           scanner.setMaxNumRows(rows_per_scan);
@@ -1150,7 +1150,7 @@ public class Tsdb1xScanners implements HBaseExecutor {
   }
   
   /** @return The parent node. */
-  Tsdb1xQueryNode node() {
+  Tsdb1xHBaseQueryNode node() {
     return node;
   }
 }

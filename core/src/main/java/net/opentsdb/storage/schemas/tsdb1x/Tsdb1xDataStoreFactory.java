@@ -14,6 +14,9 @@
 // limitations under the License.
 package net.opentsdb.storage.schemas.tsdb1x;
 
+import com.google.common.base.Strings;
+import com.stumbleupon.async.Deferred;
+
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDBPlugin;
 
@@ -23,17 +26,51 @@ import net.opentsdb.core.TSDBPlugin;
  * 
  * @since 3.0
  */
-public interface Tsdb1xDataStoreFactory extends TSDBPlugin {
+public abstract class Tsdb1xDataStoreFactory implements TSDBPlugin {
 
+  /** A TSD to pull config data from. */
+  protected TSDB tsdb;
+  
+  protected String type;
+  
+  protected String id;
+  
+  @Override
+  public Deferred<Object> initialize(final TSDB tsdb, final String id) {
+    this.id = Strings.isNullOrEmpty(id) ? type : id;
+    this.tsdb = tsdb;
+    return Deferred.fromResult(null);
+  }
+  
   /**
    * Returns a new (or shared) instance of the data store. 
-   * @param tsdb A non-null TSDB instance to pull the config from.
    * @param id An optional (may be null or empty) ID for the instance.
    * @param schema A non-null schema to use for encoding and decoding
    * data with the store.
    * @return A non-null data store.
    */
-  public Tsdb1xDataStore newInstance(final TSDB tsdb, 
-                                     final String id, 
-                                     final Schema schema);
+  public abstract Tsdb1xDataStore newInstance(final String id, 
+                                              final Schema schema);
+  
+  
+  @Override
+  public String type() {
+    return type;
+  }
+  
+  @Override
+  public String version() {
+    return "3.0.0";
+  }
+  
+  @Override
+  public String id() {
+    return id;
+  }
+  
+  /** @return Package private TSDB instance to read the config. */
+  public TSDB tsdb() {
+    return tsdb;
+  }
+  
 }

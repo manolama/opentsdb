@@ -48,6 +48,7 @@ import net.opentsdb.rollup.RollupInterval;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.HBaseExecutor.State;
 import net.opentsdb.storage.schemas.tsdb1x.TSUID;
+import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStore;
 import net.opentsdb.uid.NoSuchUniqueId;
 import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.Exceptions;
@@ -916,7 +917,9 @@ public class Tsdb1xScanner {
       
       @Override
       public Void call(final Exception ex) throws Exception {
-        if (ex instanceof NoSuchUniqueId && owner.node().skipNSUI()) {
+        if (ex instanceof NoSuchUniqueId && 
+            owner.node().tsdb().getConfig().getBoolean(
+                owner.node.getConfigKey(Tsdb1xDataStore.SKIP_NSUI_KEY))) {
           if (LOG.isDebugEnabled()) {
             LOG.debug("Row contained a bad UID: " + Bytes.pretty(tsuid) 
               + " " + ex.getMessage());

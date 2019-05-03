@@ -54,7 +54,10 @@ import net.opentsdb.rollup.RollupInterval;
 import net.opentsdb.rollup.RollupUtils.RollupUsage;
 import net.opentsdb.stats.Span;
 import net.opentsdb.storage.HBaseExecutor.State;
+import net.opentsdb.storage.schemas.tsdb1x.BaseTsdb1xQueryNode;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
+import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStore;
+import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStoreFactory;
 import net.opentsdb.uid.NoSuchUniqueName;
 import net.opentsdb.uid.UniqueIdType;
 import net.opentsdb.utils.Bytes;
@@ -69,33 +72,12 @@ import net.opentsdb.utils.Exceptions;
  * 
  * @since 3.0
  */
-public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
+public class Tsdb1xHBaseQueryNode extends BaseTsdb1xQueryNode {
   private static final Logger LOG = LoggerFactory.getLogger(
-      Tsdb1xQueryNode.class);
+      Tsdb1xHBaseQueryNode.class);
 
   private static final Deferred<Void> INITIALIZED = 
       Deferred.fromResult(null);
-  
-  /** A reference to the parent of this node. */
-  protected final Tsdb1xHBaseDataStore parent;
-  
-  /** The pipeline context. */
-  protected final QueryPipelineContext context;
-  
-  /** The upstream query nodes. */
-  protected Collection<QueryNode> upstream;
-  
-  /** The downstream query nodes. */
-  protected Collection<QueryNode> downstream;
-  
-  /** The downstream source nodes. */
-  protected Collection<TimeSeriesDataSource> downstream_sources;
-  
-  /** The query source config. */
-  protected final TimeSeriesDataSourceConfig config;
-  
-  /** The sequence ID counter. */
-  protected final AtomicLong sequence_id;
   
   /** Whether the node has been initialized. Initialization starts with
    * the call to {@link #fetchNext(Span)}. */
@@ -108,99 +90,21 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
   /** The executor for this node. */
   protected HBaseExecutor executor;
   
-  /** Whether or not to skip NoSuchUniqueName errors for tag keys on resolution. */
-  protected final boolean skip_nsun_tagks;
-  
-  /** Whether or not to skip NoSuchUniqueName errors for tag values on resolution. */
-  protected final boolean skip_nsun_tagvs;
-  
-  /** Whether or not to skip name-less IDs when received from HBase. */
-  protected final boolean skip_nsui;
-  
-  /** Whether or not to delete the data found by this query. */
-  protected final boolean delete;
-  
-  /** Rollup fallback mode. */
-  protected final RollupUsage rollup_usage;
-  
-  /** Rollup intervals matching the query downsampler if applicable. */
-  protected List<RollupInterval> rollup_intervals;
-  
-  /** When we start fetching data. */
-  protected long fetch_start;
-  
   /**
    * Default ctor.
    * @param factory The Tsdb1xHBaseDataStore that instantiated this node.
    * @param context A non-null query pipeline context.
    * @param config A non-null config.
    */
-  public Tsdb1xQueryNode(final Tsdb1xHBaseDataStore parent, 
-                         final QueryPipelineContext context,
-                         final TimeSeriesDataSourceConfig config) {
-    if (parent == null) {
-      throw new IllegalArgumentException("Parent cannot be null.");
-    }
-    if (context == null) {
-      throw new IllegalArgumentException("Context cannot be null.");
-    }
-    if (config == null) {
-      throw new IllegalArgumentException("Configuration cannot be null.");
-    }
-    if (context.tsdb().getConfig() == null) {
-      throw new IllegalArgumentException("Can't execute a query without "
-          + "a configuration in the source config!");
-    }
-    this.parent = parent;
-    this.context = context;
-    this.config = config;
-    
-    sequence_id = new AtomicLong();
+  public Tsdb1xHBaseQueryNode(final Tsdb1xDataStoreFactory factory,
+                              final Tsdb1xDataStore store,
+                              final QueryPipelineContext context,
+                              final TimeSeriesDataSourceConfig config) {
+    super(factory, store, context, config);
     initialized = new AtomicBoolean();
     initializing = new AtomicBoolean();
-    
-    if (config.hasKey(Tsdb1xHBaseDataStore.SKIP_NSUN_TAGK_KEY)) {
-      skip_nsun_tagks = config.getBoolean(context.tsdb().getConfig(), 
-          Tsdb1xHBaseDataStore.SKIP_NSUN_TAGK_KEY);
-    } else {
-      skip_nsun_tagks = parent
-          .dynamicBoolean(Tsdb1xHBaseDataStore.SKIP_NSUN_TAGK_KEY);
-    }
-    if (config.hasKey(Tsdb1xHBaseDataStore.SKIP_NSUN_TAGV_KEY)) {
-      skip_nsun_tagvs = config.getBoolean(context.tsdb().getConfig(), 
-          Tsdb1xHBaseDataStore.SKIP_NSUN_TAGV_KEY);
-    } else {
-      skip_nsun_tagvs = parent
-          .dynamicBoolean(Tsdb1xHBaseDataStore.SKIP_NSUN_TAGV_KEY);
-    }
-    if (config.hasKey(Tsdb1xHBaseDataStore.SKIP_NSUI_KEY)) {
-      skip_nsui = config.getBoolean(context.tsdb().getConfig(), 
-          Tsdb1xHBaseDataStore.SKIP_NSUI_KEY);
-    } else {
-      skip_nsui = parent
-          .dynamicBoolean(Tsdb1xHBaseDataStore.SKIP_NSUI_KEY);
-    }
-    if (config.hasKey(Tsdb1xHBaseDataStore.DELETE_KEY)) {
-      delete = config.getBoolean(context.tsdb().getConfig(), 
-          Tsdb1xHBaseDataStore.DELETE_KEY);
-    } else {
-      delete = parent
-          .dynamicBoolean(Tsdb1xHBaseDataStore.DELETE_KEY);
-    }
-    if (config.hasKey(Tsdb1xHBaseDataStore.ROLLUP_USAGE_KEY)) {
-      rollup_usage = RollupUsage.parse(config.getString(context.tsdb().getConfig(),
-          Tsdb1xHBaseDataStore.ROLLUP_USAGE_KEY));
-    } else {
-      rollup_usage = RollupUsage.parse(parent
-          .dynamicString(Tsdb1xHBaseDataStore.ROLLUP_USAGE_KEY));
-    }
   }
-
-  @Override
-  public QueryNodeConfig config() {
-    return config;
-  }
-
+  
   @Override
   public void close() {
     if (executor != null) {
@@ -223,25 +127,13 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
     }
 
     executor.fetchNext(new Tsdb1xQueryResult(
-          sequence_id.getAndIncrement(), 
-          Tsdb1xQueryNode.this, 
-          parent.schema()), 
+          0, 
+          Tsdb1xHBaseQueryNode.this, 
+          store.schema()), 
     span);
 
   }
   
-  @Override
-  public void onComplete(final QueryNode downstream, 
-                         final long final_sequence,
-                         final long total_sequences) {
-    context.tsdb().getQueryThreadPool().submit(new Runnable() {
-      @Override
-      public void run() {
-        completeUpstream(final_sequence, total_sequences);
-      }
-    });
-  }
-
   @Override
   public void onNext(final QueryResult next) {
     context.tsdb().getQueryThreadPool().submit(new Runnable() {
@@ -252,76 +144,16 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
         sendUpstream(next);
         if (state == State.COMPLETE || 
             state == State.EXCEPTION) {
-          completeUpstream(sequence_id.get(), sequence_id.get());
+          completeUpstream(0, 0);
         }
       }
     });
   }
   
-  @Override
-  public void onNext(final PartialTimeSeries series) {
-    throw new IllegalArgumentException("Not implemented yet.");
-  }
-
-  @Override
-  public void onError(final Throwable t) {
-    context.tsdb().getQueryThreadPool().submit(new Runnable() {
-      @Override
-      public void run() {
-        sendUpstream(t);        
-      }
-    });
-  }
-
   @Override
   public TimeStamp sequenceEnd() {
     // TODO implement when the query has this information.
     return null;
-  }
-
-  @Override
-  public Schema schema() {
-    return parent.schema();
-  }
-  
-  @Override
-  public Deferred<Void> initialize(final Span span) {
-    final Span child;
-    if (span != null) {
-      child = span.newChild(getClass() + ".initialize()").start();
-    } else {
-      child = null;
-    }
-
-    if (parent.schema().rollupConfig() != null && 
-        rollup_usage != RollupUsage.ROLLUP_RAW &&
-        config.getRollupIntervals() != null && 
-        !config.getRollupIntervals().isEmpty()) {
-      rollup_intervals = Lists.newArrayListWithExpectedSize(
-          config.getRollupIntervals().size());
-      for (final String interval : config.getRollupIntervals()) {
-        final RollupInterval ri = parent.schema().rollupConfig()
-            .getRollupInterval(interval);
-        if (ri != null) {
-          rollup_intervals.add(ri);
-        }
-      }
-    } else {
-      rollup_intervals = null;
-    }
-    
-    upstream = context.upstream(this);
-    downstream = context.downstream(this);
-    downstream_sources = context.downstreamSources(this);
-    if (child != null) {
-      child.setSuccessTags().finish();
-    }
-    return INITIALIZED;
-  }
-  
-  @Override
-  public QueryPipelineContext pipelineContext() {
-    return context;
   }
   
   /**
@@ -335,125 +167,23 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
   }
   
   /**
-   * Sends the result to each of the upstream subscribers.
-   * 
-   * @param result A non-null result.
-   * @throws QueryUpstreamException if the upstream 
-   * {@link #onNext(QueryResult)} handler throws an exception. I hate
-   * checked exceptions but each node needs to be able to handle this
-   * ideally by cancelling the query.
-   * @throws IllegalArgumentException if the result was null.
-   */
-  protected void sendUpstream(final QueryResult result) 
-        throws QueryUpstreamException {
-    if (result == null) {
-      throw new IllegalArgumentException("Result cannot be null.");
-    }
-    
-    for (final QueryNode node : upstream) {
-      try {
-        node.onNext(result);
-      } catch (Exception e) {
-        throw new QueryUpstreamException("Failed to send results "
-            + "upstream to node: " + node, e);
-      }
-    }
-  }
-  
-  /**
-   * Sends the throwable upstream to each of the subscribing nodes. If 
-   * one or more upstream consumers throw an exception, it's caught and
-   * logged as a warning.
-   * 
-   * @param t A non-null throwable.
-   * @throws IllegalArgumentException if the throwable was null.
-   */
-  protected void sendUpstream(final Throwable t) {
-    if (t == null) {
-      throw new IllegalArgumentException("Throwable cannot be null.");
-    }
-    
-    for (final QueryNode node : upstream) {
-      try {
-        node.onError(t);
-      } catch (Exception e) {
-        LOG.warn("Failed to send exception upstream to node: " + node, e);
-      }
-    }
-  }
-  
-  /**
-   * Passes the sequence info upstream to all subscribers. If one or 
-   * more upstream consumers throw an exception, it's caught and logged 
-   * as a warning.
-   * 
-   * @param final_sequence The final sequence number to pass.
-   * @param total_sequences The total sequence count to pass.
-   */
-  protected void completeUpstream(final long final_sequence,
-                                  final long total_sequences) {
-    for (final QueryNode node : upstream) {
-      try {
-        node.onComplete(this, final_sequence, total_sequences);
-      } catch (Exception e) {
-        LOG.warn("Failed to mark upstream node complete: " + node, e);
-      }
-    }
-  }
-  
-  /** @return The parent for this node. */
-  Tsdb1xHBaseDataStore parent() {
-    return parent;
-  }
-  
-  /** @return Whether or not to skip name-less UIDs found in storage. */
-  boolean skipNSUI() {
-    return skip_nsui;
-  }
-  
-  /**
-   * @param prefix A 1 to 254 prefix for a data type.
-   * @return True if the type should be included, false if we're filtering
-   * out that data type.
-   */
-  boolean fetchDataType(final byte prefix) {
-    // TODO - implement
-    return true;
-  }
-  
-  /** @return Whether or not to delete the found data. */
-  boolean deleteData() {
-    return delete;
-  }
-
-  /** @return A list of applicable rollup intervals. May be null. */
-  List<RollupInterval> rollupIntervals() {
-    return rollup_intervals;
-  }
-  
-  /** @return The rollup usage mode. */
-  RollupUsage rollupUsage() {
-    return rollup_usage;
-  }
-  
-  /**
    * Initializes the query, either calling meta or setting up the scanner.
    * @param span An optional tracing span.
    */
   @VisibleForTesting
   void setup(final Span span) {
-    if (parent.schema().metaSchema() != null) {
-      parent.schema().metaSchema().runQuery(context, config, span)
+    if (store.schema().metaSchema() != null) {
+      store.schema().metaSchema().runQuery(context, config, span)
           .addCallback(new MetaCB(span))
           .addErrback(new MetaErrorCB(span));
     } else {
       synchronized (this) {
-        executor = new Tsdb1xScanners(Tsdb1xQueryNode.this, config);
+        executor = new Tsdb1xScanners(Tsdb1xHBaseQueryNode.this, config);
         if (initialized.compareAndSet(false, true)) {
           executor.fetchNext(new Tsdb1xQueryResult(
-              sequence_id.incrementAndGet(), 
-              Tsdb1xQueryNode.this, 
-              parent.schema()), 
+              0, 
+              Tsdb1xHBaseQueryNode.this, 
+              store.schema()), 
           span);
         } else {
           LOG.error("WTF? We lost an initialization race??");
@@ -517,8 +247,8 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
           LOG.debug("No data returned from meta store.");
         }
         initialized.compareAndSet(false, true);
-        sendUpstream(new Tsdb1xQueryResult(0, Tsdb1xQueryNode.this, 
-            parent.schema()));
+        sendUpstream(new Tsdb1xQueryResult(0, Tsdb1xHBaseQueryNode.this, 
+            store.schema()));
         completeUpstream(0, 0);
         return null;
       case EXCEPTION:
@@ -546,13 +276,13 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
         return null;
       }
       
-      synchronized (Tsdb1xQueryNode.this) {
-        executor = new Tsdb1xScanners(Tsdb1xQueryNode.this, config);
+      synchronized (Tsdb1xHBaseQueryNode.this) {
+        executor = new Tsdb1xScanners(Tsdb1xHBaseQueryNode.this, config);
         if (initialized.compareAndSet(false, true)) {
           executor.fetchNext(new Tsdb1xQueryResult(
-              sequence_id.incrementAndGet(), 
-              Tsdb1xQueryNode.this, 
-              parent.schema()), 
+              0, 
+              Tsdb1xHBaseQueryNode.this, 
+              store.schema()), 
           span);
         } else {
           LOG.error("WTF? We lost an initialization race??");
@@ -579,9 +309,9 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
       child = span;
     }
     
-    final int metric_width = parent.schema().metricWidth();
-    final int tagk_width = parent.schema().tagkWidth();
-    final int tagv_width = parent.schema().tagvWidth();
+    final int metric_width = store.schema().metricWidth();
+    final int tagk_width = store.schema().tagkWidth();
+    final int tagv_width = store.schema().tagvWidth();
     
     if (result.idType() == Const.TS_BYTE_ID) {
       // easy! Just flatten the bytes.
@@ -614,16 +344,16 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
       }
       
       synchronized (this) {
-        executor = new Tsdb1xMultiGet(Tsdb1xQueryNode.this, config, tsuids);
+        executor = new Tsdb1xMultiGet(Tsdb1xHBaseQueryNode.this, config, tsuids);
         if (initialized.compareAndSet(false, true)) {
           if (child != null) {
             child.setSuccessTags()
                  .finish();
           }
           executor.fetchNext(new Tsdb1xQueryResult(
-              sequence_id.incrementAndGet(), 
-              Tsdb1xQueryNode.this, 
-              parent.schema()), 
+              0, 
+              Tsdb1xHBaseQueryNode.this, 
+              store.schema()), 
           span);
         } else {
           LOG.error("WTF? We lost an initialization race??");
@@ -654,7 +384,7 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
       // now resolve
       final List<String> tagks = Lists.newArrayList(dedupe_tagks);
       final List<String> tagvs = Lists.newArrayList(dedupe_tagvs);
-      final byte[] metric_uid = new byte[parent
+      final byte[] metric_uid = new byte[store
                                          .schema().metricWidth()];
       final Map<String, byte[]> tagk_map = 
           Maps.newHashMapWithExpectedSize(tagks.size());
@@ -718,7 +448,8 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
           if (is_tagvs) {
             for (int i = 0; i < uids.size(); i++) {
               if (uids.get(i) == null) {
-                if (skip_nsun_tagvs) {
+                if (store.tsdb().getConfig().getBoolean(
+                    store.getConfigKey(Tsdb1xDataStore.SKIP_NSUN_TAGV_KEY))) {
                   if (LOG.isDebugEnabled()) {
                     LOG.debug("Dropping tag value without an ID: " 
                         + tagvs.get(i));
@@ -740,7 +471,8 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
           } else {
             for (int i = 0; i < uids.size(); i++) {
               if (uids.get(i) == null) {
-                if (skip_nsun_tagks) {
+                if (store.tsdb().getConfig().getBoolean(
+                    store.getConfigKey(Tsdb1xDataStore.SKIP_NSUN_TAGV_KEY))) {
                   if (LOG.isDebugEnabled()) {
                     LOG.debug("Dropping tag key without an ID: " 
                         + tagks.get(i));
@@ -811,7 +543,7 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
           // TODO - what happens if we didn't resolve anything???
           synchronized (this) {
             executor = new Tsdb1xMultiGet(
-                Tsdb1xQueryNode.this, 
+                Tsdb1xHBaseQueryNode.this, 
                 config, 
                 tsuids);
             if (initialized.compareAndSet(false, true)) {
@@ -820,9 +552,9 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
                      .finish();
               }
               executor.fetchNext(new Tsdb1xQueryResult(
-                  sequence_id.incrementAndGet(), 
-                  Tsdb1xQueryNode.this, 
-                  parent.schema()), 
+                  0, 
+                  Tsdb1xHBaseQueryNode.this, 
+                  store.schema()), 
               span);
             } else {
               LOG.error("WTF? We lost an initialization race??");
@@ -834,16 +566,17 @@ public class Tsdb1xQueryNode implements TimeSeriesDataSource, SourceNode {
       }
       
       final List<Deferred<Object>> deferreds = Lists.newArrayListWithCapacity(3);
-      deferreds.add(parent.schema()
+      deferreds.add(store.schema()
           .getId(UniqueIdType.METRIC, metric, span)
             .addCallbacks(new MetricCB(), new ErrorCB()));
-      deferreds.add(parent.schema()
+      deferreds.add(store.schema()
           .getIds(UniqueIdType.TAGK, tagks, span)
             .addCallbacks(new TagCB(false), new ErrorCB()));
-      deferreds.add(parent.schema()
+      deferreds.add(store.schema()
           .getIds(UniqueIdType.TAGV, tagvs, span)
             .addCallbacks(new TagCB(true), new ErrorCB()));
       Deferred.group(deferreds).addCallbacks(new GroupCB(), new ErrorCB());
     }
   }
+
 }

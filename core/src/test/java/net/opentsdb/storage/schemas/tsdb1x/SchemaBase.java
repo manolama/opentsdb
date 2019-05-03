@@ -126,7 +126,7 @@ public class SchemaBase {
     // return the default
     when(tsdb.registry.getPlugin(eq(Tsdb1xDataStoreFactory.class), anyString()))
       .thenReturn(store_factory);
-    when(store_factory.newInstance(any(TSDB.class), anyString(), any(Schema.class)))
+    when(store_factory.newInstance(anyString(), any(Schema.class)))
       .thenReturn(store);    
     when(tsdb.registry.getSharedObject("default_uidstore"))
       .thenReturn(uid_store);

@@ -137,7 +137,7 @@ public class Schema implements WritableTimeSeriesDataStore {
     if (store_factory == null) {
       throw new ConfigurationException("No factory found for: " + store_name);
     }
-    data_store = store_factory.newInstance(tsdb, id, this);
+    data_store = store_factory.newInstance(id, this);
     if (data_store == null) {
       throw new IllegalStateException("Store factory " + store_factory 
           + " returned a null data store instance.");

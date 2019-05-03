@@ -142,8 +142,9 @@ public class UTBase {
     
     when(tsdb.registry.getPlugin(eq(Tsdb1xDataStoreFactory.class), anyString()))
       .thenReturn(store_factory);
-    when(store_factory.newInstance(any(TSDB.class), any(), any(Schema.class)))
-      .thenReturn(data_store);    
+    when(store_factory.newInstance(any(), any(Schema.class)))
+      .thenReturn(data_store);
+    when(store_factory.tsdb()).thenReturn(tsdb);
     when(data_store.tsdb()).thenReturn(tsdb);
     when(data_store.getConfigKey(anyString()))
       .thenAnswer(new Answer<String>() {
@@ -167,8 +168,8 @@ public class UTBase {
           @Override
           public UniqueId answer(InvocationOnMock invocation)
               throws Throwable {
-            // TODO Auto-generated method stub
-            return new LRUUniqueId(tsdb, null, (UniqueIdType) invocation.getArguments()[2], uid_store);
+            return new LRUUniqueId(tsdb, null, 
+                (UniqueIdType) invocation.getArguments()[2], uid_store);
           }
         });
     
