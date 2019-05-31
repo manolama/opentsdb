@@ -14,23 +14,34 @@
 // limitations under the License.
 package net.opentsdb.query.processor.downsample;
 
+import java.time.Duration;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAmount;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.reflect.TypeToken;
+import com.stumbleupon.async.Callback;
+import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.common.Const;
+import net.opentsdb.data.PartialTimeSeries;
+import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeries;
+import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSpecification;
@@ -46,6 +57,8 @@ import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.processor.ProcessorFactory;
+import net.opentsdb.stats.Span;
+import net.opentsdb.utils.DateTime;
 
 /**
  * A processing node that performs downsampling on each individual time series
@@ -58,6 +71,18 @@ public class Downsample extends AbstractQueryNode {
   
   /** The non-null config. */
   private final DownsampleConfig config;
+  
+  protected final long interval_ms;
+  
+  protected final boolean use_calendar;
+  
+  protected long set_interval;
+  
+  protected Map<String, long[]> set_sizes;
+  
+  protected Map<String, AtomicReferenceArray<DownsamplePartialTimeSeriesSet>> sets;
+  
+  protected boolean aligned;
   
   /**
    * Default ctor.
@@ -73,6 +98,72 @@ public class Downsample extends AbstractQueryNode {
       throw new IllegalArgumentException("Configuration cannot be null.");
     }
     this.config = config;
+    interval_ms = DateTime.parseDuration(config.getInterval());
+    use_calendar = config.timezone() != null && 
+        !config.timezone().equals(Const.UTC);
+  }
+  
+  @Override
+  public Deferred<Void> initialize(final Span span) {
+    class PushCB implements Callback<Void, Void> {
+      @Override
+      public Void call(final Void ignored) throws Exception {
+        set_sizes = Maps.newHashMapWithExpectedSize(downstream_sources.size());
+        for (final TimeSeriesDataSource source : downstream_sources) {
+          long max = 0;
+          long min = Long.MAX_VALUE;
+          final String[] set_intervals = source.setIntervals();
+          for (int i = 0; i < set_intervals.length; i++) {
+            long interval = DateTime.parseDuration(set_intervals[i]);
+            if (interval < min) {
+              min = interval;
+            } else if (interval < max) {
+              max = interval;
+            }
+          }
+          
+          long config_interval = DateTime.parseDuration(config.getInterval());
+          if (config_interval > min) {
+            min = config_interval;
+          }
+          
+          long num_intervals = (config.endTime().msEpoch() - 
+              config.startTime().msEpoch()) / max;
+          if (num_intervals <= 0) {
+            // in case the segment size is larger than the query size.
+            num_intervals = 1;
+          }
+          
+          // TODO - we may want some logic to figure a more optimal size in
+          // the event we have rollups and fall back to raw, etc.
+          long[] sizes = new long[2 + (int) num_intervals];
+          sizes[0] = max;
+          sizes[1] = num_intervals;
+          
+          final Duration duration = Duration.ofSeconds(max / 1000);
+          if (use_calendar) {
+            // TODO - snap
+            // TODO - see if our calendar boundaries are nicely aligned
+          } else {
+            final TimeStamp ts = new SecondTimeStamp(
+                config.startTime().msEpoch() - (config.startTime().msEpoch() % max));
+            for (int i = 0; i < num_intervals; i++) {
+              sizes[i + 2] = ts.epoch();
+              ts.add(duration);
+            }
+          }
+          
+          set_sizes.put(source.config().getId(), sizes);
+        }
+        return null;
+      }
+    }
+    
+    // TODO - centralize this flag.
+    if (context.tsdb().getConfig().hasProperty("tsd.storage.enable_push")) {
+      return super.initialize(span).addCallback(new PushCB());
+    }
+    return super.initialize(span);
   }
 
   @Override
@@ -95,6 +186,54 @@ public class Downsample extends AbstractQueryNode {
         LOG.error("Failed to call upstream onNext on Node: " + us, e);
         results.close();
       }
+    }
+  }
+  
+  @Override
+  public void onNext(final PartialTimeSeries pts) {
+    final String source = pts.set().dataSource();
+    long[] sizes = set_sizes.get(source);
+    if (sizes == null) {
+      LOG.error("WTF? No sizes for: " + source);
+      this.sendUpstream(new RuntimeException("GRR"));
+    }
+    
+    final AtomicReferenceArray<DownsamplePartialTimeSeriesSet> source_sets = sets.get(source);
+    if (source_sets == null) {
+      LOG.error("WTF? No sets for: " + source);
+      this.sendUpstream(new RuntimeException("GRR"));
+    }
+    long start = pts.set().start().epoch();
+    int idx = (int) ((start - sizes[2]) / sizes[1]);
+    if (source_sets.get(idx) == null) {
+      DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+      if (source_sets.compareAndSet(idx, null, set)) {
+        set.reset(this, source, idx);
+      } else {
+        // lost the race
+        set = source_sets.get(idx);
+      }
+      set.process(pts);
+    }
+    
+    if (idx + 1 == sizes[1]) {
+      return;
+    }
+    
+    // see if we need to add to more sets.
+    idx++;
+    while (pts.set().end().epoch() > sizes[idx + 2] && idx < sizes[1]) {
+      if (source_sets.get(idx) == null) {
+        DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+        if (source_sets.compareAndSet(idx, null, set)) {
+          set.reset(this, source, idx);
+        } else {
+          // lost the race
+          set = source_sets.get(idx);
+        }
+        set.process(pts);
+      }
+      idx++;
     }
   }
   
