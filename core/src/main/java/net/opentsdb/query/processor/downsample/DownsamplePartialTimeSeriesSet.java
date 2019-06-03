@@ -3,9 +3,12 @@ package net.opentsdb.query.processor.downsample;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLongArray;
 
 import com.google.common.collect.Maps;
 
+import net.opentsdb.data.NoDataPartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.SecondTimeStamp;
@@ -16,22 +19,35 @@ import net.opentsdb.data.types.numeric.NumericLongArrayType;
 import net.opentsdb.query.QueryNode;
 
 public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet {
+  protected final static long END_MASK = 0x00000000FFFFFFFFL;
+  
   protected Downsample node;
   TimeStamp start = new SecondTimeStamp(0L);
   TimeStamp end = new SecondTimeStamp(0L);
   int total_sets;
   String source;
   long interval;
+  
+  // TODO - padding
+  // format [32b start ts epoch:32b end ts epoch][series counts]...
+  AtomicLongArray set_boundaries;
+  AtomicBoolean[] completed_array;
+  
+  AtomicBoolean all_sets_accounted_for = new AtomicBoolean();
+  AtomicBoolean complete = new AtomicBoolean();
+  AtomicInteger count = new AtomicInteger();
+  volatile int last_multi;
+  
   // TODO - different data types
   Map<Long, DownsamplePartialTimeSeries> timeseries = Maps.newConcurrentMap();
   
   void reset(final Downsample node, final String source, final int idx) {
     this.node = node;
     this.source = source;
-    final long[] sizes = node.set_sizes.get(source);
-    interval = sizes[0];
-    total_sets = (int) sizes[1];
-    start.updateEpoch(sizes[idx + 2]);
+    final long[] sizes = node.getSizes(source);
+    interval = sizes[1];
+    total_sets = (int) sizes[2];
+    start.updateEpoch(sizes[idx + 3]);
     end.update(start);
     
     if (node.use_calendar) {
@@ -45,9 +61,24 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet {
     boolean multiples = (series.set().end().msEpoch() - 
         series.set().start().msEpoch()) < interval;
     
-    // TODO - compute sets
+    // This is where it gets really really ugly as we may need multiple sets 
+    // in this single set and we need to track what we've seen and haven't seen.
+    // So we'll keep the start and end time of each set in a single long (as two
+    // ints) and the final time series count in the adjacent index so we can
+    // track how many series we expect.
+    if (multiples) {
+      handleMultiples(series);
+    } else if (series instanceof NoDataPartialTimeSeries) {
+      // TODO return no data
+      return;
+    } else {
+      final int count = this.count.incrementAndGet();
+      if (series.set().complete() && count == series.set().timeSeriesCount()) {
+        complete.compareAndSet(false, true);
+      }
+    }
     
-    if (series.value() == null) {
+    if (series instanceof NoDataPartialTimeSeries) {
       // TODO
     } else {
       DownsamplePartialTimeSeries pts = timeseries.get(series.idHash());
@@ -82,8 +113,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet {
 
   @Override
   public boolean complete() {
-    // TODO Auto-generated method stub
-    return false;
+    return complete.get();
   }
 
   @Override
@@ -114,13 +144,161 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet {
 
   @Override
   public int timeSeriesCount() {
-    // TODO Auto-generated method stub
-    return 0;
+    return count.get();
   }
 
   @Override
   public TimeSpecification timeSpecification() {
     // TODO Auto-generated method stub
     return null;
+  }
+
+  protected void handleMultiples(final PartialTimeSeries series) {
+    long start = 0;
+    int boundary_index = -1;    
+    // ugly walk but should be fairly quick as we don't expect arrays to be
+    // too large.
+    // TODO - determine if we need a better lookup.
+    if (all_sets_accounted_for.get()) {
+      // no need for sync since we're just incrementing counters at this point.
+      for (int i = 0; i < set_boundaries.length(); i += 2) {
+        start = set_boundaries.get(i) >>> 32;
+        if (series.set().start().epoch() <= start) {
+          setMultiples(i, series);
+        }
+      }
+      
+      return;
+    }
+    
+    // NOTE: We have to sync here as we shuffle indices around.
+    synchronized (this) {
+      if (set_boundaries == null) {
+        long concat = series.set().start().epoch() << 32;
+        concat |= ((int) series.set().end().epoch());
+        // use the min so we don't have to resize.
+        final long[] sizes = node.getSizes(source);
+        int size = (int) ((end.msEpoch() - this.start.msEpoch()) / sizes[0]);
+        set_boundaries = new AtomicLongArray(size * 2);
+        completed_array = new AtomicBoolean[size];
+        for (int i = 0; i < size; i++) {
+          completed_array[i] = new AtomicBoolean();
+        }
+        set_boundaries.set(0, concat);
+        setMultiples(0, series);
+        last_multi = 1;
+        // we don't need to check for all in yet because we know we're missing
+        // at least one.
+        return;
+      } 
+      
+      // we lost a race so let's double check to see if another series from the
+      // same set is in here now.
+      if (set_boundaries != null) {
+        for (int i = 0; i < set_boundaries.length(); i += 2) {
+          start = set_boundaries.get(i) >>> 32;
+          if (series.set().start().epoch() <= start) {
+            boundary_index = i;
+            break;
+          }
+        }
+      }
+      
+      if (boundary_index >= 0 && series.set().start().epoch() == start) {
+        // found it, so see if we're done. Just increment now.
+        setMultiples(boundary_index, series);
+      } else {
+        // not found so we add it.
+        long concat = series.set().start().epoch() << 32;
+        concat |= ((int) series.set().end().epoch());
+        // we didn't find it so we need to update the boundaries array
+        // init if needed
+        if (boundary_index < 0) {
+          // didn't find one later than the start time so use the last free slot
+          System.out.println("Setting at last idx: " + last_multi);
+          set_boundaries.set(last_multi * 2, concat);
+          setMultiples(last_multi * 2, series);
+          last_multi++;
+        } else {
+          // shift
+          for (int i = set_boundaries.length() - 1; i >= boundary_index + 2; i--) {
+            set_boundaries.set(i, set_boundaries.get(i - 2));
+          }
+          // also have to do it for the completes!!
+          for (int i = completed_array.length - 1; i >= (boundary_index / 2) + 1; i--) {
+            completed_array[i].set(completed_array[i - 1].get());
+          }
+          
+          // insert
+          set_boundaries.set(boundary_index, concat);
+          set_boundaries.set(boundary_index + 1, 0);
+          setMultiples(boundary_index, series);
+          last_multi++;
+        }
+          
+        // now we need to see if all sets have been seen.
+        // TODO - mix in with the above for speed but for now we can re-walk.
+        long temp = set_boundaries.get(0);
+        if (this.start.epoch() > temp >>> 32) {
+          // missing the first set
+          System.out.println(" NOT FIRST...");
+          return;
+        }
+        
+        long end = temp & END_MASK;
+        for (int i = 2; i < set_boundaries.length(); i += 2) {
+          temp = set_boundaries.get(i);
+          if (end != temp >>> 32) {
+            // next segment start didn't match current segments end.
+            System.out.println("MISSING MIDD: " + i);
+            return;
+          }
+          end = temp & END_MASK;
+        }
+        
+        if (this.end.epoch() < end) {
+          // missing the last segment.
+          System.out.println("NOT END");
+          return;
+        }
+        // yay all in!
+        all_sets_accounted_for.set(true);
+        checkMultipleComplete();
+      }
+    }
+  }
+  
+  void setMultiples(final int index, final PartialTimeSeries series) {
+    if (!(series instanceof NoDataPartialTimeSeries)) {
+      long finished = set_boundaries.incrementAndGet(index + 1);
+      if (series.set().complete() && finished == series.set().timeSeriesCount()) {
+        completed_array[index / 2].set(true);
+        checkMultipleComplete();
+      }
+    } else if (series.set().complete() && series.set().timeSeriesCount() == 0) {
+      completed_array[index / 2].set(true);
+      checkMultipleComplete();
+    }
+  }
+  
+  void checkMultipleComplete() {
+    if (!all_sets_accounted_for.get()) {
+      return;
+    }
+    for (int i = 0; i < last_multi; i++) {
+      if (!completed_array[i].get()) {
+        System.out.println("   NOT DONE AT: " + i);
+        return;
+      }
+    }
+    // all done!
+    long max = 0;
+    for (int i = 1; i < set_boundaries.length(); i += 2) {
+      if (set_boundaries.get(i) > max) {
+        max = set_boundaries.get(i);
+      }
+    }
+    count.set((int) max);
+    complete.compareAndSet(false, true);
   }
 }

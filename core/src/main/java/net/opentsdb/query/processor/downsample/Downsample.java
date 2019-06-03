@@ -78,6 +78,7 @@ public class Downsample extends AbstractQueryNode {
   
   protected long set_interval;
   
+  // set size layout: 0 => min interval, 1 => max interval, 2 => intervals, 3+ => ?
   protected Map<String, long[]> set_sizes;
   
   protected Map<String, AtomicReferenceArray<DownsamplePartialTimeSeriesSet>> sets;
@@ -136,9 +137,10 @@ public class Downsample extends AbstractQueryNode {
           
           // TODO - we may want some logic to figure a more optimal size in
           // the event we have rollups and fall back to raw, etc.
-          long[] sizes = new long[2 + (int) num_intervals];
-          sizes[0] = max;
-          sizes[1] = num_intervals;
+          long[] sizes = new long[3 + (int) num_intervals];
+          sizes[0] = min;
+          sizes[1] = max;
+          sizes[2] = num_intervals;
           
           final Duration duration = Duration.ofSeconds(max / 1000);
           if (use_calendar) {
@@ -198,13 +200,14 @@ public class Downsample extends AbstractQueryNode {
       this.sendUpstream(new RuntimeException("GRR"));
     }
     
-    final AtomicReferenceArray<DownsamplePartialTimeSeriesSet> source_sets = sets.get(source);
+    final AtomicReferenceArray<DownsamplePartialTimeSeriesSet> source_sets = 
+        sets.get(source);
     if (source_sets == null) {
       LOG.error("WTF? No sets for: " + source);
       this.sendUpstream(new RuntimeException("GRR"));
     }
     long start = pts.set().start().epoch();
-    int idx = (int) ((start - sizes[2]) / sizes[1]);
+    int idx = (int) ((start - sizes[3]) / sizes[2]);
     if (source_sets.get(idx) == null) {
       DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
       if (source_sets.compareAndSet(idx, null, set)) {
@@ -216,13 +219,13 @@ public class Downsample extends AbstractQueryNode {
       set.process(pts);
     }
     
-    if (idx + 1 == sizes[1]) {
+    if (idx + 1 == sizes[2]) {
       return;
     }
     
     // see if we need to add to more sets.
     idx++;
-    while (pts.set().end().epoch() > sizes[idx + 2] && idx < sizes[1]) {
+    while (pts.set().end().epoch() > sizes[idx + 3] && idx < sizes[2]) {
       if (source_sets.get(idx) == null) {
         DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
         if (source_sets.compareAndSet(idx, null, set)) {
@@ -235,6 +238,10 @@ public class Downsample extends AbstractQueryNode {
       }
       idx++;
     }
+  }
+  
+  long[] getSizes(final String source) {
+    return set_sizes.get(source);
   }
   
   /**
