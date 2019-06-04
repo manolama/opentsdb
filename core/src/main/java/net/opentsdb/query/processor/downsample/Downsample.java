@@ -47,6 +47,7 @@ import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
+import net.opentsdb.exceptions.QueryUpstreamException;
 import net.opentsdb.data.ZonedNanoTimeStamp;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.BaseWrappedQueryResult;
@@ -242,6 +243,11 @@ public class Downsample extends AbstractQueryNode {
   
   long[] getSizes(final String source) {
     return set_sizes.get(source);
+  }
+  
+  protected void sendUpstream(final PartialTimeSeries series) 
+      throws QueryUpstreamException {
+    super.sendUpstream(series);
   }
   
   /**
