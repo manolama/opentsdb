@@ -79,7 +79,7 @@ import net.opentsdb.utils.UnitTestException;
 
 public class TestHttpQueryV3Source {
 
-  private QueryNodeFactory factory;
+  private BaseHttpExecutorFactory factory;
   private QueryContext context;
   private QueryPipelineContext ctx;
   private CloseableHttpAsyncClient client;
@@ -130,7 +130,8 @@ public class TestHttpQueryV3Source {
     assertEquals("application/json", request.getFirstHeader("Content-Type").getValue());
     assertNull(request.getFirstHeader("Cookie"));
     String json = EntityUtils.toString(((HttpPost) request).getEntity());
-    assertTrue(json.contains("\"start\":\"1h-ago\""));
+    assertTrue(json.matches(".*\"start\":\"\\d{13}\".*"));
+    assertTrue(json.matches(".*\"end\":\"\\d{13}\".*"));
     assertTrue(json.contains("\"mode\":\"SINGLE\""));
     assertTrue(json.contains("\"id\":\"m1\""));
     assertTrue(json.contains("\"metric\":\"system.cpu.user\""));
@@ -180,7 +181,8 @@ public class TestHttpQueryV3Source {
     assertEquals("application/json", request.getFirstHeader("Content-Type").getValue());
     assertNull(request.getFirstHeader("Cookie"));
     String json = EntityUtils.toString(((HttpPost) request).getEntity());
-    assertTrue(json.contains("\"start\":\"1h-ago\""));
+    assertTrue(json.matches(".*\"start\":\"\\d{13}\".*"));
+    assertTrue(json.matches(".*\"end\":\"\\d{13}\".*"));
     assertTrue(json.contains("\"mode\":\"SINGLE\""));
     assertTrue(json.contains("\"id\":\"m1\""));
     assertTrue(json.contains("\"metric\":\"system.cpu.user\""));
@@ -240,7 +242,8 @@ public class TestHttpQueryV3Source {
     assertEquals("application/json", request.getFirstHeader("Content-Type").getValue());
     assertNull(request.getFirstHeader("Cookie"));
     String json = EntityUtils.toString(((HttpPost) request).getEntity());
-    assertTrue(json.contains("\"start\":\"24h-ago\""));
+    assertTrue(json.matches(".*\"start\":\"\\d{13}\".*"));
+    assertTrue(json.matches(".*\"end\":\"\\d{13}\".*"));
     assertTrue(json.contains("\"mode\":\"SINGLE\""));
     assertTrue(json.contains("\"id\":\"m1\""));
     assertTrue(json.contains("\"interval\":\"15m\""));
@@ -304,7 +307,8 @@ public class TestHttpQueryV3Source {
     assertEquals("application/json", request.getFirstHeader("Content-Type").getValue());
     assertNull(request.getFirstHeader("Cookie"));
     String json = EntityUtils.toString(((HttpPost) request).getEntity());
-    assertTrue(json.contains("\"start\":\"1h-ago\""));
+    assertTrue(json.matches(".*\"start\":\"\\d{13}\".*"));
+    assertTrue(json.matches(".*\"end\":\"\\d{13}\".*"));
     assertTrue(json.contains("\"mode\":\"SINGLE\""));
     assertTrue(json.contains("\"id\":\"m1\""));
     assertTrue(json.contains("\"metric\":\"system.cpu.user\""));
@@ -351,7 +355,8 @@ public class TestHttpQueryV3Source {
     assertEquals("application/json", request.getFirstHeader("Content-Type").getValue());
     assertNull(request.getFirstHeader("Cookie"));
     String json = EntityUtils.toString(((HttpPost) request).getEntity());
-    assertTrue(json.contains("\"start\":\"1h-ago\""));
+    assertTrue(json.matches(".*\"start\":\"\\d{13}\".*"));
+    assertTrue(json.matches(".*\"end\":\"\\d{13}\".*"));
     assertTrue(json.contains("\"mode\":\"SINGLE\""));
     assertTrue(json.contains("\"id\":\"m1\""));
     assertTrue(json.contains("\"metric\":\"system.cpu.user\""));
@@ -418,7 +423,8 @@ public class TestHttpQueryV3Source {
     assertEquals("application/json", request.getFirstHeader("Content-Type").getValue());
     assertEquals("MyCookie", request.getFirstHeader("Cookie").getValue());
     String json = EntityUtils.toString(((HttpPost) request).getEntity());
-    assertTrue(json.contains("\"start\":\"1h-ago\""));
+    assertTrue(json.matches(".*\"start\":\"\\d{13}\".*"));
+    assertTrue(json.matches(".*\"end\":\"\\d{13}\".*"));
     assertTrue(json.contains("\"mode\":\"SINGLE\""));
     assertTrue(json.contains("\"id\":\"m1\""));
     assertTrue(json.contains("\"metric\":\"system.cpu.user\""));
@@ -448,7 +454,8 @@ public class TestHttpQueryV3Source {
     assertEquals("MyCookie", request.getFirstHeader("Cookie").getValue());
     assertEquals("UnitTest", request.getFirstHeader("X-OpenTSDB-User").getValue());
     String json = EntityUtils.toString(((HttpPost) request).getEntity());
-    assertTrue(json.contains("\"start\":\"1h-ago\""));
+    assertTrue(json.matches(".*\"start\":\"\\d{13}\".*"));
+    assertTrue(json.matches(".*\"end\":\"\\d{13}\".*"));
     assertTrue(json.contains("\"mode\":\"SINGLE\""));
     assertTrue(json.contains("\"id\":\"m1\""));
     assertTrue(json.contains("\"metric\":\"system.cpu.user\""));
@@ -617,6 +624,8 @@ public class TestHttpQueryV3Source {
     verify(upstream, never()).onNext(any(QueryResult.class));
     verify(upstream, never()).onError(any(Throwable.class));
     verify(upstream, never()).onComplete(any(QueryNode.class), anyLong(), anyLong());
+    verify(client, times(1)).execute(any(HttpUriRequest.class), 
+        any(FutureCallback.class));
     
     HttpResponse response = mock(HttpResponse.class);
     StatusLine status = mock(StatusLine.class);
@@ -630,6 +639,111 @@ public class TestHttpQueryV3Source {
     verify(upstream, times(1)).onNext(any(QueryResult.class));
     verify(upstream, never()).onError(any(Throwable.class));
     verify(upstream, never()).onComplete(any(QueryNode.class), anyLong(), anyLong());
+    verify(client, times(1)).execute(any(HttpUriRequest.class), 
+        any(FutureCallback.class));
+  }
+  
+  @Test
+  public void response405JsonTwice() throws Exception {
+    String json = "{\"error\":{\"code\":405,\"message\":\"Not Allowed\","
+        + "\"trace\":\"java.lang.IllegalArgumentException:Not Allowed\"}}";
+    when(factory.retries()).thenReturn(3);
+    
+    TimeSeriesDataSourceConfig config = setQuery();
+    HttpQueryV3Source src = new HttpQueryV3Source(factory, ctx, config, client, host, endpoint);
+    src.initialize(null).join(250);
+    src.fetchNext(null);
+    
+    verify(upstream, never()).onNext(any(QueryResult.class));
+    verify(upstream, never()).onError(any(Throwable.class));
+    verify(upstream, never()).onComplete(any(QueryNode.class), anyLong(), anyLong());
+    verify(client, times(1)).execute(any(HttpUriRequest.class), 
+        any(FutureCallback.class));
+    
+    HttpResponse response = mock(HttpResponse.class);
+    StatusLine status = mock(StatusLine.class);
+    HttpEntity entity = new StringEntity(json);
+    when(response.getStatusLine()).thenReturn(status);
+    when(response.getEntity()).thenReturn(entity);
+    when(status.getStatusCode()).thenReturn(405);
+    
+    callback.completed(response);
+    
+    verify(upstream, never()).onNext(any(QueryResult.class));
+    verify(upstream, never()).onError(any(Throwable.class));
+    verify(upstream, never()).onComplete(any(QueryNode.class), anyLong(), anyLong());
+    verify(client, times(2)).execute(any(HttpUriRequest.class), 
+        any(FutureCallback.class));
+    
+    // same issue
+    callback.completed(response);
+    
+    verify(upstream, times(1)).onNext(any(QueryResult.class));
+    verify(upstream, never()).onError(any(Throwable.class));
+    verify(upstream, never()).onComplete(any(QueryNode.class), anyLong(), anyLong());
+    verify(client, times(2)).execute(any(HttpUriRequest.class), 
+        any(FutureCallback.class));
+  }
+  
+  @Test
+  public void response405JsonThrice() throws Exception {
+    String json = "{\"error\":{\"code\":405,\"message\":\"Not Allowed\","
+        + "\"trace\":\"java.lang.IllegalArgumentException:Not Allowed\"}}";
+    when(factory.retries()).thenReturn(2);
+    
+    TimeSeriesDataSourceConfig config = setQuery();
+    HttpQueryV3Source src = new HttpQueryV3Source(factory, ctx, config, client, host, endpoint);
+    src.initialize(null).join(250);
+    src.fetchNext(null);
+    
+    verify(upstream, never()).onNext(any(QueryResult.class));
+    verify(upstream, never()).onError(any(Throwable.class));
+    verify(upstream, never()).onComplete(any(QueryNode.class), anyLong(), anyLong());
+    verify(client, times(1)).execute(any(HttpUriRequest.class), 
+        any(FutureCallback.class));
+    
+    HttpResponse response = mock(HttpResponse.class);
+    StatusLine status = mock(StatusLine.class);
+    HttpEntity entity = new StringEntity(json);
+    when(response.getStatusLine()).thenReturn(status);
+    when(response.getEntity()).thenReturn(entity);
+    when(status.getStatusCode()).thenReturn(405);
+    
+    callback.completed(response);
+    
+    verify(upstream, never()).onNext(any(QueryResult.class));
+    verify(upstream, never()).onError(any(Throwable.class));
+    verify(upstream, never()).onComplete(any(QueryNode.class), anyLong(), anyLong());
+    verify(client, times(2)).execute(any(HttpUriRequest.class), 
+        any(FutureCallback.class));
+    
+    json = "{\"error\":{\"code\":405,\"message\":\"Not Allowed For bob\","
+        + "\"trace\":\"java.lang.IllegalArgumentException:Not Allowed For bob\"}}";
+    entity = new StringEntity(json);
+    when(response.getEntity()).thenReturn(entity);
+    
+    // diff 
+    callback.completed(response);
+    
+    verify(upstream, never()).onNext(any(QueryResult.class));
+    verify(upstream, never()).onError(any(Throwable.class));
+    verify(upstream, never()).onComplete(any(QueryNode.class), anyLong(), anyLong());
+    verify(client, times(3)).execute(any(HttpUriRequest.class), 
+        any(FutureCallback.class));
+    
+    json = "{\"error\":{\"code\":405,\"message\":\"Not Allowed For sue\","
+        + "\"trace\":\"java.lang.IllegalArgumentException:Not Allowed For sue\"}}";
+    entity = new StringEntity(json);
+    when(response.getEntity()).thenReturn(entity);
+    
+    // diff 
+    callback.completed(response);
+    
+    verify(upstream, times(1)).onNext(any(QueryResult.class));
+    verify(upstream, never()).onError(any(Throwable.class));
+    verify(upstream, never()).onComplete(any(QueryNode.class), anyLong(), anyLong());
+    verify(client, times(3)).execute(any(HttpUriRequest.class), 
+        any(FutureCallback.class));
   }
   
   TimeSeriesDataSourceConfig setQuery() throws Exception {

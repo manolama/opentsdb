@@ -58,6 +58,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAmount;
 import java.util.List;
 import java.util.Map;
@@ -131,8 +132,9 @@ public class HttpQueryV3Source extends AbstractQueryNode implements SourceNode {
   public void fetchNext(final Span span) {
     final long start = DateTime.nanoTime();
     SemanticQuery.Builder builder = SemanticQuery.newBuilder()
-        .setStart(context.query().getStart())
-        .setEnd(context.query().getEnd())
+        // always use the absolute time here so the queries match.
+        .setStart(Long.toString(context.query().startTime().msEpoch()))
+        .setEnd(Long.toString(context.query().endTime().msEpoch()))
         .setMode(context.query().getMode())
         .setTimeZone(context.query().getTimezone())
         .setLogLevel(context.query().getLogLevel());
@@ -280,12 +282,13 @@ public class HttpQueryV3Source extends AbstractQueryNode implements SourceNode {
     
     final StatsTimer[] timer = new StatsTimer[] { 
         pipelineContext().tsdb().getStatsCollector().startTimer(
-            REMOTE_LATENCY_METRIC, true) };
+            REMOTE_LATENCY_METRIC, ChronoUnit.MILLIS) };
     final String[] current_host = new String[] { HttpQueryV3Source.this.host };
     
     /** Does the fun bit of parsing the response and calling the deferred. */
     class ResponseCallback implements FutureCallback<HttpResponse> {
       int retries = 0;
+      RemoteQueryExecutionException previous_ex = null;
       
       @Override
       public void cancelled() {
@@ -321,6 +324,36 @@ public class HttpQueryV3Source extends AbstractQueryNode implements SourceNode {
           String json = null;
           
           if (response.getStatusLine().getStatusCode() != 200) {
+            try {
+              DefaultSharedHttpClient.parseResponse(response, 0, host);
+            } catch (Exception e) {
+              if (e instanceof RemoteQueryExecutionException) {
+                if (response.getStatusLine().getStatusCode() == 400) {
+                  sendUpstream(BadQueryResult.newBuilder()
+                      .setNode(HttpQueryV3Source.this)
+                      .setException(e)
+                      .setDataSource(config.getId())
+                      .build());
+                  return;
+                } else if (previous_ex != null && 
+                    previous_ex.getStatusCode() == 
+                      ((RemoteQueryExecutionException) e).getStatusCode() &&
+                    previous_ex.getMessage().equals(
+                        ((RemoteQueryExecutionException) e).getMessage())) {
+                  // in this case we've tried up to two hosts and got the same
+                  // error so it could be either a query issue or a node issue
+                  // so we don't need to bother.
+                  sendUpstream(BadQueryResult.newBuilder()
+                      .setNode(HttpQueryV3Source.this)
+                      .setException(e)
+                      .setDataSource(config.getId())
+                      .build());
+                  return;
+                }
+                previous_ex = (RemoteQueryExecutionException) e;
+              }
+            }
+            
             if (factory instanceof BaseHttpExecutorFactory) {
               ((BaseHttpExecutorFactory) factory).markHostAsBad(
                   HttpQueryV3Source.this.host, 
@@ -333,7 +366,7 @@ public class HttpQueryV3Source extends AbstractQueryNode implements SourceNode {
                   post.setURI(URI.create(current_host[0] + endpoint));
                   EntityUtils.consume(response.getEntity());
                   timer[0] = pipelineContext().tsdb().getStatsCollector().startTimer(
-                      REMOTE_LATENCY_METRIC, true);
+                      REMOTE_LATENCY_METRIC, ChronoUnit.MILLIS);
                   client.execute(post, this);
                   context.queryContext().logWarn(HttpQueryV3Source.this, 
                       "Retrying query to [" + current_host[0] + endpoint + "] after " 
@@ -484,7 +517,7 @@ public class HttpQueryV3Source extends AbstractQueryNode implements SourceNode {
               current_host[0] = ((BaseHttpExecutorFactory) factory).nextHost();
               post.setURI(URI.create(current_host[0] + endpoint));
               timer[0] = pipelineContext().tsdb().getStatsCollector().startTimer(
-                  REMOTE_LATENCY_METRIC, true);
+                  REMOTE_LATENCY_METRIC, ChronoUnit.MILLIS);
               client.execute(post, this);
               context.queryContext().logWarn(HttpQueryV3Source.this, 
                   "Retrying query to [" + current_host[0] + endpoint + "] after " 

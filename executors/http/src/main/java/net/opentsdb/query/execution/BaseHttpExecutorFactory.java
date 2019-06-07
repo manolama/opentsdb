@@ -52,13 +52,14 @@ import net.opentsdb.utils.SharedHttpClient;
  * @since 3.0
  */
 public abstract class BaseHttpExecutorFactory implements 
-    TimeSeriesDataSourceFactory {
+    TimeSeriesDataSourceFactory, TimerTask {
   private static final Logger LOG = LoggerFactory.getLogger(
       BaseHttpExecutorFactory.class);
   
   public static final String MARKED_NEW_BAD_METRIC = "http.executor.health.new.failed";
   public static final String MARKED_STILL_BAD_METRIC = "http.executor.health.failed";
   public static final String MARKED_RECOVERED_METRIC = "http.executor.health.recovered";
+  public static final String STATUS_METRIC = "http.executor.health.status";
   
   public static final String KEY_PREFIX = "opentsdb.http.executor.";
   public static final String RETRY_KEY = "retries";
@@ -79,6 +80,7 @@ public abstract class BaseHttpExecutorFactory implements
   protected String id;
   
   /** The list of hosts. */
+  // TODO - atomic array to avoid syncing it
   protected List<Pair<String, Boolean>> hosts;
   
   /** The map of outstanding checks. */
@@ -114,7 +116,7 @@ public abstract class BaseHttpExecutorFactory implements
     }
     client = shared_client.getClient();
     retries = tsdb.getConfig().getInt(getConfigKey(RETRY_KEY));
-    
+    tsdb.getMaintenanceTimer().newTimeout(this, 60, TimeUnit.SECONDS);
     return Deferred.fromResult(null);
   }
   
@@ -207,7 +209,7 @@ public abstract class BaseHttpExecutorFactory implements
                         LOG.info("Recovered V3 HTTP host: " + host);
                         tsdb.getStatsCollector().incrementCounter(
                             MARKED_RECOVERED_METRIC, 
-                            "host", host, "status", "200");
+                            "remote", host, "status", "200");
                         // important to remove this from the checks map.
                         checks.remove(host);
                       }
@@ -221,7 +223,7 @@ public abstract class BaseHttpExecutorFactory implements
                       + result.getStatusLine().getStatusCode());
                 }
                 tsdb.getStatsCollector().incrementCounter(MARKED_STILL_BAD_METRIC, 
-                    "host", host, "status", 
+                    "remote", host, "status", 
                     Integer.toString(result.getStatusLine().getStatusCode()));
                 reschedule();
               }
@@ -235,7 +237,7 @@ public abstract class BaseHttpExecutorFactory implements
             public void failed(final Exception ex) {
               LOG.error("Failed to check host: " + host, ex);
               tsdb.getStatsCollector().incrementCounter(MARKED_STILL_BAD_METRIC, 
-                  "host", host, "status", "0");
+                  "remote", host, "status", "0");
               reschedule();
             }
 
@@ -271,7 +273,7 @@ public abstract class BaseHttpExecutorFactory implements
       LOG.warn("Host " + host + " was marked as failed with code: " + code 
           + ". Will schedule health checks.");
       tsdb.getStatsCollector().incrementCounter(MARKED_NEW_BAD_METRIC, 
-          "host", host, "status", Integer.toString(code));
+          "remote", host, "status", Integer.toString(code));
       TimerTask task = new Check();
       if (checks.putIfAbsent(host, task) == null) {
         tsdb.getMaintenanceTimer().newTimeout(
@@ -281,6 +283,23 @@ public abstract class BaseHttpExecutorFactory implements
       }
       // otherwise we lost a race so don't start it.
     }
+  }
+  
+  @Override
+  public void run(final Timeout timeout) {
+    try {
+      // ugg!!!!
+      synchronized (hosts) {
+        for (final Pair<String, Boolean> pair : hosts) {
+          tsdb.getStatsCollector().setGauge(STATUS_METRIC, 
+              pair.getValue() ? 1 : 0, 
+              "remote", pair.getKey());
+        }
+      }
+    } catch (Throwable t) {
+      LOG.error("Unexpected exception processing stats", t);
+    }
+    tsdb.getMaintenanceTimer().newTimeout(this, 60, TimeUnit.SECONDS);
   }
   
   /**
