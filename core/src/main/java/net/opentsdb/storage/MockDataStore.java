@@ -554,7 +554,8 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       
       if (ids.isEmpty()) {
         // nothing found!
-        MockPTSSet set = new MockPTSSet(1, 0, ids);
+        MockPTSSet set = new MockPTSSet(1, 
+            (context.query().startTime().epoch() - (context.query().startTime().epoch() % 3600)), ids);
         set.complete = true;
         final PooledMockPTS ppts = (PooledMockPTS) pool.claim().object();
         ppts.setData(null, null, 0, set);
@@ -573,10 +574,10 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       
       // one hour at a time. Gross huh? That's what happens in a store allocated
       // by time series instead of time.
-      int idx = 0;
       long ts = st.msEpoch();
+      System.out.println("      [MOCK] S: " + st.msEpoch() + "  E: " + e.msEpoch() + "  DELTA: " + (e.msEpoch() - st.msEpoch()));
       while (ts < e.msEpoch()) {
-        MockPTSSet set = new MockPTSSet(total, idx++, ids);
+        MockPTSSet set = new MockPTSSet(total, ts / 1000, ids);
         Iterator<Entry<Long, Iterator<MockRow>>> iterator = iterators.entrySet().iterator();
         final PooledMockPTS[] last_ppts = new PooledMockPTS[1];
         

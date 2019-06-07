@@ -22,6 +22,42 @@ public class TestDownsamplePartialTimeSeriesSet {
 
   private Downsample node;
   
+  @Test
+  public void foo() throws Exception {
+    double f = -2.9529477653E-314;
+    double n = -2.9529477653314;
+    double l = 2.9529477653E64;
+    
+    long fl = Double.doubleToRawLongBits(f);
+    long nl = Double.doubleToRawLongBits(n);
+    long ll = Double.doubleToLongBits(l);
+    
+    long xorn = nl ^ fl;
+    long xorl = ll ^ nl;
+    System.out.println("XORN: " + xorn);
+    System.out.println("XORL: " + xorl);
+    byte leadingZeros = (byte) Long.numberOfLeadingZeros(xorn);
+    byte trailingZeros = (byte) Long.numberOfTrailingZeros(xorn);
+    byte meaningFullBits = (byte) (64 - leadingZeros - trailingZeros);
+    System.out.println("LZ: " + leadingZeros + "  TZ: " + trailingZeros + "  Meaning: " + meaningFullBits);
+    
+    leadingZeros = (byte) Long.numberOfLeadingZeros(xorl);
+    trailingZeros = (byte) Long.numberOfTrailingZeros(xorl);
+    meaningFullBits = (byte) (64 - leadingZeros - trailingZeros);
+    System.out.println("LZ: " + leadingZeros + "  TZ: " + trailingZeros + "  Meaning: " + meaningFullBits);
+    
+    // revert
+    long new_nl = xorn ^ fl;
+    double new_n = Double.longBitsToDouble(new_nl);
+    System.out.println("N: " + new_n);
+    System.out.println("DELTA N: " + (new_n - n));
+    
+    long new_ll = xorl ^ nl;
+    double new_l = Double.longBitsToDouble(new_ll);
+    System.out.println("L: " + new_l);
+    System.out.println("DELTA L: " + (new_l - l));
+  }
+  
   @Before
   public void before() throws Exception {
     node = mock(Downsample.class);

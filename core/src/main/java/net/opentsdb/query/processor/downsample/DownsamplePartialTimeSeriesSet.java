@@ -112,7 +112,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet {
       DownsamplePartialTimeSeries pts = timeseries.get(series.idHash());
       if (pts == null) {
         if (series.value().type() == NumericLongArrayType.TYPE) {
-          pts = new DownsampleNumericPartialTimeSeries(null); // TODO - pool
+          pts = new DownsampleNumericPartialTimeSeries(node.pipelineContext().tsdb()); // TODO - pool
           DownsamplePartialTimeSeries extant = timeseries.putIfAbsent(series.idHash(), pts);
           if (extant != null) {
             pts = extant;
