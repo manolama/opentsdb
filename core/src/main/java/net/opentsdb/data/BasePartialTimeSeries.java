@@ -2,6 +2,8 @@ package net.opentsdb.data;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.reflect.TypeToken;
+
 import net.opentsdb.pools.CloseablePooledObject;
 import net.opentsdb.pools.PooledObject;
 
@@ -13,6 +15,9 @@ public abstract class BasePartialTimeSeries<T extends TimeSeriesDataType>
   
   /** A hash for the time series ID. */
   protected long id_hash;
+  
+  /** The type of ID. */
+  protected TypeToken<? extends TimeSeriesId> id_type;
   
   /** The set we currently belong to. */
   protected PartialTimeSeriesSet set;
@@ -36,6 +41,11 @@ public abstract class BasePartialTimeSeries<T extends TimeSeriesDataType>
   @Override
   public long idHash() {
     return id_hash;
+  }
+  
+  @Override
+  public TypeToken<? extends TimeSeriesId> idType() {
+    return id_type;
   }
 
   @Override

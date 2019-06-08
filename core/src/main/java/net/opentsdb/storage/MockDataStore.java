@@ -512,9 +512,9 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
         LOG.debug("Running the filter: " + filter);
       }
       
-      final Map<Long, TimeSeriesId> ids = Maps.newHashMap();
       final Map<Long, Iterator<MockRow>> iterators = Maps.newHashMap();
       final Map<Long, MockRow> rows = Maps.newHashMap();
+      int count = 0;
       
       for (final Entry<TimeSeriesDatumStringId, MockSpan> entry : database.entrySet()) {
         // TODO - handle filter types
@@ -546,16 +546,19 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
         }
         
         final long id_hash = row.id().buildHashCode();
-        ids.putIfAbsent(id_hash, row.id());
+        if (!context.hasId(id_hash, Const.TS_STRING_ID)) {
+          context.addId(id_hash, row.id);
+        }
         
         iterators.put(id_hash, iterator);
         rows.put(id_hash, row);
+        count++;
       }
       
-      if (ids.isEmpty()) {
+      if (count == 0) {
         // nothing found!
         MockPTSSet set = new MockPTSSet(1, 
-            (context.query().startTime().epoch() - (context.query().startTime().epoch() % 3600)), ids);
+            (context.query().startTime().epoch() - (context.query().startTime().epoch() % 3600)));
         set.complete = true;
         final PooledMockPTS ppts = (PooledMockPTS) pool.claim().object();
         ppts.setData(null, null, 0, set);
@@ -577,7 +580,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       long ts = st.msEpoch();
       System.out.println("      [MOCK] S: " + st.msEpoch() + "  E: " + e.msEpoch() + "  DELTA: " + (e.msEpoch() - st.msEpoch()));
       while (ts < e.msEpoch()) {
-        MockPTSSet set = new MockPTSSet(total, ts / 1000, ids);
+        MockPTSSet set = new MockPTSSet(total, ts / 1000);
         Iterator<Entry<Long, Iterator<MockRow>>> iterator = iterators.entrySet().iterator();
         final PooledMockPTS[] last_ppts = new PooledMockPTS[1];
         
@@ -647,15 +650,12 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       
       private final TimeStamp start;
       private TimeStamp end;
-      private Map<Long, TimeSeriesId> ids;
       private final int total;
       
       MockPTSSet(final int total, 
-                 final long start, 
-                 final Map<Long, TimeSeriesId> ids) {
+                 final long start) {
         this.total = total;
         this.start = new SecondTimeStamp(start);
-        this.ids = ids;
       }
       
       @Override
@@ -696,12 +696,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
         }
         return end;
       }
-
-      @Override
-      public TimeSeriesId id(long hash) {
-        return ids.get(hash);
-      }
-
+      
       @Override
       public synchronized int timeSeriesCount() {
         return count;
@@ -1260,6 +1255,11 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       return id_hash;
     }
 
+    @Override
+    public TypeToken<? extends TimeSeriesId> idType() {
+      return Const.TS_STRING_ID;
+    }
+    
     @Override
     public PartialTimeSeriesSet set() {
       return set;

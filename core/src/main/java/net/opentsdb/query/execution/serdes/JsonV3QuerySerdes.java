@@ -23,7 +23,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.TreeMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 import net.opentsdb.query.processor.summarizer.Summarizer;
@@ -33,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 import com.stumbleupon.async.DeferredGroupException;
@@ -324,72 +324,44 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       final StringBuilder stream = (StringBuilder) pooled_object.object();
       stream.setLength(0);
       int count = 0;
-      if (series.value().type() == NumericLongArrayType.TYPE) {
-        long[] values = ((NumericLongArrayType) series.value()).data();
-        int idx = ((NumericLongArrayType) series.value()).offset();
-        
-        while (idx < ((NumericLongArrayType) series.value()).end()) {
-          long ts = 0;
-          if((values[idx] & NumericLongArrayType.MILLISECOND_FLAG) != 0) {
-            ts = (values[idx] & NumericLongArrayType.TIMESTAMP_MASK) / 1000;
-          } else {
-            ts = values[idx] & NumericLongArrayType.TIMESTAMP_MASK;
-          }
-          if (ts < context.query().startTime().epoch()) {
-            idx += 2;
-            continue;
-          }
-          if (ts > context.query().endTime().epoch()) {
-            break;
-          }
-          
-          if (count > 0) {
-            stream.append(',');
-          }
-          stream.append('"');
-          stream.append(ts);
-          
-          stream.append('"');
-          stream.append(':');
-          if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
-            double d = Double.longBitsToDouble(values[idx + 1]);
-            if (Double.isNaN(d)) {
-              stream.append("\"NaN\"".getBytes());
-            } else {
-              stream.append(d);
-            }
-          } else {
-            stream.append(values[idx + 1]);
-          }
-          idx += 2;
-          count++;
+      long[] values = ((NumericLongArrayType) series.value()).data();
+      int idx = ((NumericLongArrayType) series.value()).offset();
+      
+      while (idx < ((NumericLongArrayType) series.value()).end()) {
+        long ts = 0;
+        if((values[idx] & NumericLongArrayType.MILLISECOND_FLAG) != 0) {
+          ts = (values[idx] & NumericLongArrayType.TIMESTAMP_MASK) / 1000;
+        } else {
+          ts = values[idx] & NumericLongArrayType.TIMESTAMP_MASK;
         }
-      } else if (series.value().type() == NumericArrayType.TYPE) {
-        System.out.println("      TYPE: " + series.value().type());
-        NumericArrayType nat = (NumericArrayType) series.value();
-        System.out.println("    O: " + nat.offset() + "   E: " + nat.end());
-//        if (nat.isInteger()) {
-//          for (int i = nat.offset(); i < nat.end(); i++) {
-//            if (i > nat.offset()) {
-//              stream.append(",");
-//            }
-//            //System.out.println(nat.longArray()[i]);
-//            stream.append("\"0\":" + nat.longArray()[i]);
-//          }
-//        } else {
-//          for (int i = nat.offset(); i < nat.end(); i++) {
-//            if (i > nat.offset()) {
-//              stream.append(",");
-//            }
-//            if (Double.isNaN(nat.doubleArray()[i])) {
-//              stream.append("\"0\":" + "\"NaN\"".getBytes());
-//            } else {
-//              System.out.println(nat.doubleArray()[i]);
-//              stream.append("\"0\":" + nat.doubleArray()[i]);
-//            }
-//          }
-//        }
-        //count = nat.end();
+        if (ts < context.query().startTime().epoch()) {
+          idx += 2;
+          continue;
+        }
+        if (ts > context.query().endTime().epoch()) {
+          break;
+        }
+        
+        if (count > 0) {
+          stream.append(',');
+        }
+        stream.append('"');
+        stream.append(ts);
+        
+        stream.append('"');
+        stream.append(':');
+        if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
+          double d = Double.longBitsToDouble(values[idx + 1]);
+          if (Double.isNaN(d)) {
+            stream.append("NaN".getBytes());
+          } else {
+            stream.append(d);
+          }
+        } else {
+          stream.append(values[idx + 1]);
+        }
+        idx += 2;
+        count++;
       }
       
       if (count < 1) {
@@ -414,6 +386,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       if (set == null) {
         set = new SeriesWrapper();
         set.id_hash = series.idHash();
+        set.id_type = series.idType();
         set.set = series.set();
         final SeriesWrapper extant = source_shards.putIfAbsent(series.idHash(), set);
         if (extant != null) {
@@ -892,6 +865,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
   class SeriesWrapper {
     public PartialTimeSeriesSet set;
     public long id_hash;
+    public TypeToken<? extends TimeSeriesId> id_type;
     public ConcurrentSkipListMap<Long, String> series = 
         new ConcurrentSkipListMap<Long, String>();
   }
@@ -947,7 +921,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
 
           // serialize the ID
           json.writeStartObject();
-          TimeSeriesId raw_id = shard.set.id(shard.id_hash);
+          TimeSeriesId raw_id = context.getId(shard.id_hash, shard.id_type);
           if (raw_id == null) {
             // MISSING! Fill
             continue;
