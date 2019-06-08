@@ -246,7 +246,7 @@ public class Downsample extends AbstractQueryNode {
     System.out.println("   SET CLASS: " + pts.set().getClass());
     int idx = (int) ((start - sizes[3]) / (sizes[1] / 1000));
     System.out.println("          ST: " + start + "  s3: " + sizes[3] + "  s2: " + sizes[2] + "  IDX: " + idx + "  SSL: " + source_sets.length());
-    if (idx >= source_sets.length()) {
+    if (idx >= source_sets.length() || idx < 0) {
       System.out.println("WTF?  Bad idx: " + idx);
       return;
     }

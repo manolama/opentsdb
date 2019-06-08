@@ -41,6 +41,7 @@ public class DownsampleNumericPartialTimeSeries extends
   
   @Override
   public void addSeries(final PartialTimeSeries series) {
+    id_hash = series.idHash();
     if (((DownsamplePartialTimeSeriesSet) set).set_boundaries == null) {
       // WOOT! Simple case where we just agg and send it up
       runSingle(series);

@@ -163,13 +163,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet {
   public TimeStamp end() {
     return end;
   }
-
-  @Override
-  public TimeSeriesId id(long hash) {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
+  
   @Override
   public int timeSeriesCount() {
     return count.get();
