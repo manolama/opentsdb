@@ -31,6 +31,12 @@ public class DownsampleNumericPartialTimeSeries extends
   protected long[] long_array;
   protected double[] double_array;
   
+  protected PooledObject accumulator_array;
+  protected long[] accumulator_long_array;
+  protected double[] accumulator_double_array;
+  protected int accumulator_idx = 0;
+  protected MutableNumericValue mdp = new MutableNumericValue();
+  
   /** The current write index for array stores. */
   protected int write_idx;
   
@@ -111,16 +117,10 @@ public class DownsampleNumericPartialTimeSeries extends
     long[] values = ((NumericLongArrayType) series.value()).data();
     int idx = ((NumericLongArrayType) series.value()).offset();
     
-    PooledObject local_array = null;
-    long[] local_long_array = null;
-    double[] local_double_array = null;
-    int local_idx = 0;
-    MutableNumericValue mdp = new MutableNumericValue();
-    
     final TimeStamp boundary = set.start().getCopy();
     boundary.add(((DownsampleConfig) node.config()).interval()); 
-    System.out.println("   BOUNDARY: " + boundary);
-    while (idx < ((NumericLongArrayType) series.value()).end()) {
+    while (idx <= ((NumericLongArrayType) series.value()).end() && idx < 
+        ((NumericLongArrayType) series.value()).end()) {
       long ts = 0; // in ms.  TODO - nanos
       if((values[idx] & NumericLongArrayType.MILLISECOND_FLAG) != 0) {
         ts = values[idx] & NumericLongArrayType.TIMESTAMP_MASK;
@@ -128,30 +128,33 @@ public class DownsampleNumericPartialTimeSeries extends
         ts = (values[idx] & NumericLongArrayType.TIMESTAMP_MASK) * 1000;
       }
       if (ts >= boundary.msEpoch()) {
-        if (local_idx > 0) {
+        if (accumulator_idx > 0) {
           // TODO - agg and put
-          if (local_long_array != null) {
-            node.aggregator.run(local_long_array, 0, local_idx, mdp);
-            if (double_array != null) {
-              double_array[write_idx++] = mdp.toDouble();
-            } else {
+          if (accumulator_long_array != null) {
+            node.aggregator.run(accumulator_long_array, 0, accumulator_idx, mdp);
+            if (mdp.isInteger()) {
               long_array[write_idx++] = mdp.longValue();
+            } else {
+              if (double_array == null) {
+                flipFlopMainArray();
+              }
+              double_array[write_idx++] = mdp.toDouble();
             }
           } else {
-            node.aggregator.run(local_double_array, 0, local_idx, ((DownsampleConfig) node.config()).getInfectiousNan(), mdp);
+            node.aggregator.run(accumulator_double_array, 0, accumulator_idx, ((DownsampleConfig) node.config()).getInfectiousNan(), mdp);
             if (long_array != null && double_array == null) {
-              flipflop();
+              flipFlopMainArray();
             }
             double_array[write_idx++] = mdp.doubleValue();
           }
           boundary.add(((DownsampleConfig) node.config()).interval()); 
-          local_idx = 0;
+          accumulator_idx = 0;
         }
         
         while (boundary.msEpoch() < ts) {
           // TODO - proper fill
           if (long_array != null && double_array == null) {
-            flipflop();
+            flipFlopMainArray();
           }
           double_array[write_idx++] = Double.NaN;
           boundary.add(((DownsampleConfig) node.config()).interval()); 
@@ -171,38 +174,38 @@ public class DownsampleNumericPartialTimeSeries extends
             double_array = new double[((DownsamplePartialTimeSeriesSet) set).size];
           }
           
-          local_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
-          local_double_array = (double[]) local_array.object();
+          accumulator_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
+          accumulator_double_array = (double[]) accumulator_array.object();
         }
         
         // flip it
-        if (local_double_array == null) {
+        if (accumulator_double_array == null) {
           final PooledObject temp_object = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
-          if (((double[]) temp_object.object()).length <= local_long_array.length) {
+          if (((double[]) temp_object.object()).length <= accumulator_long_array.length) {
             // too long!
             temp_object.release();
-            local_double_array = new double[local_long_array.length];
+            accumulator_double_array = new double[accumulator_long_array.length];
           } else {
-            local_double_array = (double[]) temp_object.object();
+            accumulator_double_array = (double[]) temp_object.object();
           }
           
-          for (int i = 0; i < local_idx; i++) {
-            local_double_array[i] = local_long_array[i];
+          for (int i = 0; i < accumulator_idx; i++) {
+            accumulator_double_array[i] = accumulator_long_array[i];
           }
-          local_array.release();
-          local_array = temp_object;
-          local_long_array = null;
+          accumulator_array.release();
+          accumulator_array = temp_object;
+          accumulator_long_array = null;
         }
         
-        if (local_double_array.length <= local_idx) {
+        if (accumulator_double_array.length <= accumulator_idx) {
           // too big for pool or local
-          local_double_array = Arrays.copyOf(local_double_array, local_double_array.length + 32);
-          if (local_array != null) {
-            local_array.release();
-            local_array = null;
+          accumulator_double_array = Arrays.copyOf(accumulator_double_array, accumulator_double_array.length + 32);
+          if (accumulator_array != null) {
+            accumulator_array.release();
+            accumulator_array = null;
           }
         }
-        local_double_array[local_idx++] = Double.longBitsToDouble(values[idx + 1]);
+        accumulator_double_array[accumulator_idx++] = Double.longBitsToDouble(values[idx + 1]);
         idx += 2;
       } else {
         if (double_array == null && long_array == null) {
@@ -217,37 +220,65 @@ public class DownsampleNumericPartialTimeSeries extends
             long_array = new long[((DownsamplePartialTimeSeriesSet) set).size];
           }
           
-          local_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
-          local_long_array = (long[]) local_array.object();
+          accumulator_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
+          accumulator_long_array = (long[]) accumulator_array.object();
         }
         
-        if (local_long_array == null) {
-          if (local_double_array.length <= local_idx) {
+        if (accumulator_long_array == null) {
+          if (accumulator_double_array.length <= accumulator_idx) {
             // too big for pool or local
-            local_double_array = Arrays.copyOf(local_double_array, local_double_array.length + 32);
-            if (local_array != null) {
-              local_array.release();
-              local_array = null;
+            accumulator_double_array = Arrays.copyOf(accumulator_double_array, accumulator_double_array.length + 32);
+            if (accumulator_array != null) {
+              accumulator_array.release();
+              accumulator_array = null;
             }
           }
-          local_double_array[local_idx++] = values[idx + 1];
+          accumulator_double_array[accumulator_idx++] = values[idx + 1];
         } else {
-          if (local_long_array.length <= local_idx) {
+          if (accumulator_long_array.length <= accumulator_idx) {
             // too big for pool or local
-            local_long_array = Arrays.copyOf(local_long_array, local_long_array.length + 32);
-            if (local_array != null) {
-              local_array.release();
-              local_array = null;
+            accumulator_long_array = Arrays.copyOf(accumulator_long_array, accumulator_long_array.length + 32);
+            if (accumulator_array != null) {
+              accumulator_array.release();
+              accumulator_array = null;
             }
           }
-          local_long_array[local_idx++] = values[idx + 1];
+          accumulator_long_array[accumulator_idx++] = values[idx + 1];
         }
         idx += 2;
       }
     }
+    
+    // release resources
+    if (accumulator_array != null) {
+      accumulator_array.release();
+      accumulator_array = null;
+    }
+    accumulator_long_array = null;
+    accumulator_double_array = null;
   }
   
-  void flipflop() {
+  void flipFlopLocalArray() {
+    PooledObject new_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
+    if (((double[]) new_array.object()).length <= accumulator_long_array.length) {
+      // ugg the pool is too small.
+      // TODO - get a size from the pool BEFORE we claim it.
+      new_array = null;
+      accumulator_double_array = new double[accumulator_long_array.length];
+    } else {
+      accumulator_double_array = (double[]) new_array.object();
+    }
+    for (int i = 0; i < write_idx; i++) {
+      accumulator_double_array[i] = accumulator_long_array[i];
+    }
+    accumulator_long_array = null;
+    if (accumulator_array != null) {
+      accumulator_array.release();
+    }
+    accumulator_array = new_array;
+  }
+  
+  void flipFlopMainArray() {
     PooledObject new_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
     if (((double[]) new_array.object()).length <= long_array.length) {
       // ugg the pool is too small.

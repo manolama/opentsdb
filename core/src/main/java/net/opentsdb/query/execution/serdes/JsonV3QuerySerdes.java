@@ -371,35 +371,45 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
         TimeStamp ts = series.set().start().getCopy();
         if (nat.isInteger()) {
           for (int i = nat.offset(); i < nat.end(); i++) {
-            if (i > nat.offset()) {
-              stream.append(",");
+            if (ts.compare(Op.GTE, context.query().startTime())) {
+              if (ts.compare(Op.GT, context.query().endTime())) {
+                break;
+              }
+              if (count++ > 0) {
+                stream.append(",");
+              }
+              stream.append('"');
+              stream.append(ts.epoch());
+              
+              stream.append('"');
+              stream.append(':');
+              stream.append(nat.longArray()[i]);
             }
-            stream.append('"');
-            stream.append(ts.epoch());
-            
-            stream.append('"');
-            stream.append(':');
-            stream.append(nat.longArray()[i]);
             series.set().timeSpecification().nextTimestamp(ts);
           }
         } else {
           for (int i = nat.offset(); i < nat.end(); i++) {
-            if (i > nat.offset()) {
-              stream.append(",");
+            if (ts.compare(Op.GTE, context.query().startTime())) {
+              if (ts.compare(Op.GT, context.query().endTime())) {
+                break;
+              }
+              if (count++ > 0) {
+                stream.append(",");
+              }
+              stream.append('"');
+              stream.append(ts.epoch());
+              
+              stream.append('"');
+              stream.append(':');
+              if (Double.isNaN(nat.doubleArray()[i])) {
+                stream.append("\"NaN\"".getBytes());
+              } else {
+                stream.append(nat.doubleArray()[i]);
+              }
             }
-            stream.append('"');
-            stream.append(ts.epoch());
-            
-            stream.append('"');
-            stream.append(':');
-            if (Double.isNaN(nat.doubleArray()[i])) {
-              stream.append("\"NaN\"".getBytes());
-            } else {
-              stream.append(nat.doubleArray()[i]);
-            }
+            series.set().timeSpecification().nextTimestamp(ts);
           }
         }
-        count = nat.end();
       }
       
       if (count < 1) {
@@ -959,7 +969,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
 
           // serialize the ID
           json.writeStartObject();
-          System.out.println("ASKING FOR: " + shard.id_hash + "  " + shard.id_type);
           TimeSeriesId raw_id = context.getId(shard.id_hash, shard.id_type);
           if (raw_id == null) {
             // MISSING! Fill
