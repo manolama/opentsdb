@@ -36,14 +36,13 @@ public class DownsampleNumericPartialTimeSeries extends
   protected double[] accumulator_double_array;
   protected int accumulator_idx = 0;
   protected MutableNumericValue mdp = new MutableNumericValue();
-  TimeStamp boundary = set.start().getCopy();
+  TimeStamp boundary;
   
   @Override
   public void reset(final DownsamplePartialTimeSeriesSet set, final boolean multiples) {
     this.set = set; // this is the new downsample set.
     pts_count = new AtomicInteger();
     node = set.node;
-    boundary.add(((DownsampleConfig) node.config()).interval()); 
   }
   
   /** The current write index for array stores. */
@@ -60,6 +59,8 @@ public class DownsampleNumericPartialTimeSeries extends
     id_type = series.idType();
     if (((DownsamplePartialTimeSeriesSet) set).set_boundaries == null) {
       // WOOT! Simple case where we just agg and send it up
+      boundary = series.set().start().getCopy();
+      boundary.add(((DownsampleConfig) node.config()).interval()); 
       runSingle(series);
       ((DownsamplePartialTimeSeriesSet) set).node.sendUpstream(this);
       return;
@@ -180,34 +181,7 @@ public class DownsampleNumericPartialTimeSeries extends
           accumulator_double_array = (double[]) accumulator_array.object();
         }
         
-        // flip it
-        if (accumulator_double_array == null) {
-          final PooledObject temp_object = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
-          if (((double[]) temp_object.object()).length <= accumulator_long_array.length) {
-            // too long!
-            temp_object.release();
-            accumulator_double_array = new double[accumulator_long_array.length];
-          } else {
-            accumulator_double_array = (double[]) temp_object.object();
-          }
-          
-          for (int i = 0; i < accumulator_idx; i++) {
-            accumulator_double_array[i] = accumulator_long_array[i];
-          }
-          accumulator_array.release();
-          accumulator_array = temp_object;
-          accumulator_long_array = null;
-        }
-        
-        if (accumulator_double_array.length <= accumulator_idx) {
-          // too big for pool or local
-          accumulator_double_array = Arrays.copyOf(accumulator_double_array, accumulator_double_array.length + 32);
-          if (accumulator_array != null) {
-            accumulator_array.release();
-            accumulator_array = null;
-          }
-        }
-        accumulator_double_array[accumulator_idx++] = Double.longBitsToDouble(values[idx + 1]);
+        addLocal(Double.longBitsToDouble(values[idx + 1]));
         idx += 2;
       } else {
         if (double_array == null && long_array == null) {
@@ -226,27 +200,7 @@ public class DownsampleNumericPartialTimeSeries extends
           accumulator_long_array = (long[]) accumulator_array.object();
         }
         
-        if (accumulator_long_array == null) {
-          if (accumulator_double_array.length <= accumulator_idx) {
-            // too big for pool or local
-            accumulator_double_array = Arrays.copyOf(accumulator_double_array, accumulator_double_array.length + 32);
-            if (accumulator_array != null) {
-              accumulator_array.release();
-              accumulator_array = null;
-            }
-          }
-          accumulator_double_array[accumulator_idx++] = values[idx + 1];
-        } else {
-          if (accumulator_long_array.length <= accumulator_idx) {
-            // too big for pool or local
-            accumulator_long_array = Arrays.copyOf(accumulator_long_array, accumulator_long_array.length + 32);
-            if (accumulator_array != null) {
-              accumulator_array.release();
-              accumulator_array = null;
-            }
-          }
-          accumulator_long_array[accumulator_idx++] = values[idx + 1];
-        }
+        addLocal(values[idx + 1]);
         idx += 2;
       }
     }
@@ -258,6 +212,30 @@ public class DownsampleNumericPartialTimeSeries extends
     }
     accumulator_long_array = null;
     accumulator_double_array = null;
+  }
+  
+  void addLocal(final long value) {
+    if (accumulator_long_array == null) {
+      if (accumulator_double_array.length <= accumulator_idx) {
+        growDouble();
+      }
+      accumulator_double_array[accumulator_idx++] = value;
+    } else {
+      if (accumulator_idx >= accumulator_long_array.length) {
+        growLong();
+      }
+      accumulator_long_array[accumulator_idx++] = value;
+    }
+  }
+  
+  void addLocal(final double value) {
+    if (accumulator_double_array == null) {
+      flipFlopLocalArray();
+    }
+    if (accumulator_double_array.length <= accumulator_idx) {
+      growDouble();
+    }
+    accumulator_double_array[accumulator_idx++] = value;
   }
   
   void flipFlopLocalArray() {
@@ -298,6 +276,52 @@ public class DownsampleNumericPartialTimeSeries extends
       value_array.release();
     }
     value_array = new_array;
+  }
+
+  void growLong() {
+    PooledObject new_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
+    if (((long[]) new_array.object()).length <= accumulator_idx) {
+      // UGG pool is too small
+      // TODO - get a size from the pool BEFORE we claim it.
+      new_array = null;
+      accumulator_long_array = Arrays.copyOf(accumulator_long_array, 
+          accumulator_long_array.length + 32);
+      if (accumulator_array != null) {
+        accumulator_array.release();
+      }
+    } else {
+      for (int i = 0; i < accumulator_idx; i++) {
+        ((long[]) new_array.object())[i] = accumulator_long_array[i];
+      }
+      accumulator_long_array = (long[]) new_array.object();
+      if (accumulator_array != null) {
+        accumulator_array.release();
+      }
+      accumulator_array = new_array;
+    }
+  }
+  
+  void growDouble() {
+    PooledObject new_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
+    if (((double[]) new_array.object()).length <= accumulator_idx) {
+      // UGG pool is too small
+      // TODO - get a size from the pool BEFORE we claim it.
+      new_array = null;
+      accumulator_double_array = Arrays.copyOf(accumulator_double_array, 
+          accumulator_double_array.length + 32);
+      if (accumulator_array != null) {
+        accumulator_array.release();
+      }
+    } else {
+      for (int i = 0; i < accumulator_idx; i++) {
+        ((double[]) new_array.object())[i] = accumulator_double_array[i];
+      }
+      accumulator_double_array = (double[]) new_array.object();
+      if (accumulator_array != null) {
+        accumulator_array.release();
+      }
+      accumulator_array = new_array;
+    }
   }
 }
 
