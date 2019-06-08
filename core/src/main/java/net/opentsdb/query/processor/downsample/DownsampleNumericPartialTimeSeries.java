@@ -36,6 +36,15 @@ public class DownsampleNumericPartialTimeSeries extends
   protected double[] accumulator_double_array;
   protected int accumulator_idx = 0;
   protected MutableNumericValue mdp = new MutableNumericValue();
+  TimeStamp boundary = set.start().getCopy();
+  
+  @Override
+  public void reset(final DownsamplePartialTimeSeriesSet set, final boolean multiples) {
+    this.set = set; // this is the new downsample set.
+    pts_count = new AtomicInteger();
+    node = set.node;
+    boundary.add(((DownsampleConfig) node.config()).interval()); 
+  }
   
   /** The current write index for array stores. */
   protected int write_idx;
@@ -104,13 +113,6 @@ public class DownsampleNumericPartialTimeSeries extends
   @Override
   public double[] doubleArray() {
     return (double[]) value_array.object();
-  }
-
-  @Override
-  public void reset(final DownsamplePartialTimeSeriesSet set, final boolean multiples) {
-    this.set = set; // this is the new downsample set.
-    pts_count = new AtomicInteger();
-    node = set.node;
   }
   
   void runSingle(final PartialTimeSeries series) {
