@@ -1,6 +1,9 @@
 package net.opentsdb.query.processor.downsample;
 
 import java.time.Duration;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAmount;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -23,7 +26,8 @@ import net.opentsdb.pools.NoDataPartialTimeSeriesPool;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.utils.DateTime;
 
-public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet {
+public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
+ TimeSpecification {
   private static final Logger LOG = LoggerFactory.getLogger(
       DownsamplePartialTimeSeriesSet.class);
   
@@ -171,8 +175,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet {
 
   @Override
   public TimeSpecification timeSpecification() {
-    // TODO Auto-generated method stub
-    return null;
+    return this;
   }
 
   protected void handleMultiples(final PartialTimeSeries series) {
@@ -327,5 +330,37 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet {
     }
     count.set((int) max);
     complete.compareAndSet(false, true);
+  }
+
+  @Override
+  public TemporalAmount interval() {
+    return ((DownsampleConfig) node.config()).interval();
+  }
+
+  @Override
+  public String stringInterval() {
+    return ((DownsampleConfig) node.config()).getInterval();
+  }
+
+  @Override
+  public ChronoUnit units() {
+    return ((DownsampleConfig) node.config()).units();
+  }
+
+  @Override
+  public ZoneId timezone() {
+    return ((DownsampleConfig) node.config()).timezone();
+  }
+
+  @Override
+  public void updateTimestamp(int offset, TimeStamp timestamp) {
+    for (int i = 0; i < offset; i++) {
+      timestamp.add(((DownsampleConfig) node.config()).interval());
+    }
+  }
+
+  @Override
+  public void nextTimestamp(TimeStamp timestamp) {
+    timestamp.add(((DownsampleConfig) node.config()).interval());
   }
 }

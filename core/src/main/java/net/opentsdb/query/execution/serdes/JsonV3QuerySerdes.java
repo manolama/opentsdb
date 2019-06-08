@@ -324,44 +324,82 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       final StringBuilder stream = (StringBuilder) pooled_object.object();
       stream.setLength(0);
       int count = 0;
-      long[] values = ((NumericLongArrayType) series.value()).data();
-      int idx = ((NumericLongArrayType) series.value()).offset();
-      
-      while (idx < ((NumericLongArrayType) series.value()).end()) {
-        long ts = 0;
-        if((values[idx] & NumericLongArrayType.MILLISECOND_FLAG) != 0) {
-          ts = (values[idx] & NumericLongArrayType.TIMESTAMP_MASK) / 1000;
-        } else {
-          ts = values[idx] & NumericLongArrayType.TIMESTAMP_MASK;
-        }
-        if (ts < context.query().startTime().epoch()) {
-          idx += 2;
-          continue;
-        }
-        if (ts > context.query().endTime().epoch()) {
-          break;
-        }
+      if (series.value().type() == NumericLongArrayType.TYPE) {
+        long[] values = ((NumericLongArrayType) series.value()).data();
+        int idx = ((NumericLongArrayType) series.value()).offset();
         
-        if (count > 0) {
-          stream.append(',');
-        }
-        stream.append('"');
-        stream.append(ts);
-        
-        stream.append('"');
-        stream.append(':');
-        if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
-          double d = Double.longBitsToDouble(values[idx + 1]);
-          if (Double.isNaN(d)) {
-            stream.append("NaN".getBytes());
+        while (idx < ((NumericLongArrayType) series.value()).end()) {
+          long ts = 0;
+          if((values[idx] & NumericLongArrayType.MILLISECOND_FLAG) != 0) {
+            ts = (values[idx] & NumericLongArrayType.TIMESTAMP_MASK) / 1000;
           } else {
-            stream.append(d);
+            ts = values[idx] & NumericLongArrayType.TIMESTAMP_MASK;
+          }
+          if (ts < context.query().startTime().epoch()) {
+            idx += 2;
+            continue;
+          }
+          if (ts > context.query().endTime().epoch()) {
+            break;
+          }
+          
+          if (count > 0) {
+            stream.append(',');
+          }
+          stream.append('"');
+          stream.append(ts);
+          
+          stream.append('"');
+          stream.append(':');
+          if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
+            double d = Double.longBitsToDouble(values[idx + 1]);
+            if (Double.isNaN(d)) {
+              stream.append("\"NaN\"".getBytes());
+            } else {
+              stream.append(d);
+            }
+          } else {
+            stream.append(values[idx + 1]);
+          }
+          idx += 2;
+          count++;
+        }
+      } else if (series.value().type() == NumericArrayType.TYPE) {
+        System.out.println("      TYPE: " + series.value().type());
+        NumericArrayType nat = (NumericArrayType) series.value();
+        System.out.println("    O: " + nat.offset() + "   E: " + nat.end());
+        TimeStamp ts = series.set().start().getCopy();
+        if (nat.isInteger()) {
+          for (int i = nat.offset(); i < nat.end(); i++) {
+            if (i > nat.offset()) {
+              stream.append(",");
+            }
+            stream.append('"');
+            stream.append(ts.epoch());
+            
+            stream.append('"');
+            stream.append(':');
+            stream.append(nat.longArray()[i]);
+            series.set().timeSpecification().nextTimestamp(ts);
           }
         } else {
-          stream.append(values[idx + 1]);
+          for (int i = nat.offset(); i < nat.end(); i++) {
+            if (i > nat.offset()) {
+              stream.append(",");
+            }
+            stream.append('"');
+            stream.append(ts.epoch());
+            
+            stream.append('"');
+            stream.append(':');
+            if (Double.isNaN(nat.doubleArray()[i])) {
+              stream.append("\"NaN\"".getBytes());
+            } else {
+              stream.append(nat.doubleArray()[i]);
+            }
+          }
         }
-        idx += 2;
-        count++;
+        count = nat.end();
       }
       
       if (count < 1) {
@@ -921,6 +959,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
 
           // serialize the ID
           json.writeStartObject();
+          System.out.println("ASKING FOR: " + shard.id_hash + "  " + shard.id_type);
           TimeSeriesId raw_id = context.getId(shard.id_hash, shard.id_type);
           if (raw_id == null) {
             // MISSING! Fill
