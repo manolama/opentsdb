@@ -522,7 +522,6 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       
       // <row_base_time, <id_hash, row>> 
       final Map<Long, Map<Long, MockRow>> rows = Maps.newHashMap();
-      //final Map<Long, MockRow> rows = Maps.newHashMap();
       int count = 0;
       
       for (final Entry<TimeSeriesDatumStringId, MockSpan> entry : database.entrySet()) {
@@ -565,7 +564,6 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       }
       
       if (count == 0) {
-        System.out.println("[[MOCK]] No data!");
         // nothing found!
         final MockPTSSet set = new MockPTSSet(1, 
             (context.query().startTime().epoch() - (context.query().startTime().epoch() % 3600)));
@@ -581,7 +579,6 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
             }
           });
         } else {
-          System.out.println("[[MOCK]] send up no data.");
           sendUpstream(ppts);
         }
         return;
@@ -598,17 +595,17 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
               tsdb.getRegistry().getObjectPool(NoDataPartialTimeSeriesPool.TYPE).claim().object();
           ppts.reset(set);   
           set.complete = true;
-          System.out.println(" NDPTS: " + ppts.set());
+          
           if (thread_pool != null) {
             thread_pool.submit(new Runnable() {
               @Override
               public void run() {
-                System.out.println("[[MOCK]] send up empty at " + set.start().epoch());
+                //System.out.println("[[MOCK]] send up empty at " + set.start().epoch());
                 sendUpstream(ppts);
               }
             });
           } else {
-            System.out.println("[[MOCK]] send up empty at " + set.start().epoch());
+            //System.out.println("[[MOCK]] send up empty at " + set.start().epoch());
             sendUpstream(ppts);
           }
         } else {
@@ -617,7 +614,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
           for (int i = 0; i < ids.size(); i++) {
             if (i + 1 == ids.size()) {
               set.increment(true);
-              System.out.println(" [[mock]] setting complete at " + i + " with " + set.timeSeriesCount() + " time series.");
+              //System.out.println(" [[mock]] setting complete at " + i + " with " + set.timeSeriesCount() + " time series.");
             } else {
               set.increment(false);
             }
@@ -629,12 +626,12 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
               thread_pool.submit(new Runnable() {
                 @Override
                 public void run() {
-                  System.out.println("[[MOCK]] send up");
+                  //System.out.println("[[MOCK]] send up");
                   sendUpstream(pmpts);
                 }
               });
             } else {
-              System.out.println("[[MOCK]] send up");
+              //System.out.println("[[MOCK]] send up");
               sendUpstream(ppts);
             }
           }

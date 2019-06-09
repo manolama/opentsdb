@@ -107,17 +107,17 @@ public class DownsampleNumericPartialTimeSeries extends
 
   @Override
   public boolean isInteger() {
-    return value_array.object() instanceof long[];
+    return long_array != null;
   }
 
   @Override
   public long[] longArray() {
-    return (long[]) value_array.object();
+    return long_array;
   }
 
   @Override
   public double[] doubleArray() {
-    return (double[]) value_array.object();
+    return double_array;
   }
   
   void runSingle(final PartialTimeSeries series) {
@@ -177,6 +177,10 @@ public class DownsampleNumericPartialTimeSeries extends
         addLocal(values[idx + 1]);
         idx += 2;
       }
+    }
+    
+    if (accumulator_idx > 0) {
+      runAccumulatorOrFill(boundary.msEpoch());
     }
     
     // release resources
@@ -432,6 +436,7 @@ public class DownsampleNumericPartialTimeSeries extends
         }
         double_array[write_idx++] = mdp.doubleValue();
       }
+      System.out.println("       [ds] ran: " + boundary.epoch());
       boundary.add(((DownsampleConfig) node.config()).interval()); 
       accumulator_idx = 0;
     }

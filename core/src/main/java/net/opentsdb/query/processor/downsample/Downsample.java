@@ -149,8 +149,8 @@ public class Downsample extends AbstractQueryNode {
           final int amt = DateTime.getDurationInterval(max_string);
           final String u = DateTime.getDurationUnits(max_string);
           System.out.println("  UNITS: " + u + "  AMT: " + amt + "  INT: " + config.interval());
-          TimeStamp st = new MillisecondTimeStamp(config.startTime().msEpoch());
-          TimeStamp end = new MillisecondTimeStamp(config.endTime().msEpoch());
+          TimeStamp st = new SecondTimeStamp(context.query().startTime().epoch());
+          TimeStamp end = new SecondTimeStamp(context.query().endTime().epoch());
           if (u.toLowerCase().equals("h")) {
             st.snapToPreviousInterval(amt, ChronoUnit.HOURS);
             end.snapToPreviousInterval(amt, ChronoUnit.HOURS);
@@ -160,7 +160,8 @@ public class Downsample extends AbstractQueryNode {
           } else {
             throw new RuntimeException("Unsupported unit: " + u);
           }
-          end.add(DateTime.parseDuration2(max_string));
+          final TemporalAmount duration = DateTime.parseDuration2(max_string);
+          end.add(duration);
           
           System.out.println("CFG: " + config.startTime().epoch() + "  SNAP " + st.epoch() + " EN: " + end.epoch() + " D " + (end.epoch() - st.epoch()));
           long num_intervals = (end.msEpoch() - st.msEpoch()) / max;
@@ -176,7 +177,6 @@ public class Downsample extends AbstractQueryNode {
           sizes[1] = max;
           sizes[2] = num_intervals;
           
-          final Duration duration = Duration.ofSeconds(max / 1000);
           if (use_calendar) {
             // TODO - snap
             // TODO - see if our calendar boundaries are nicely aligned
