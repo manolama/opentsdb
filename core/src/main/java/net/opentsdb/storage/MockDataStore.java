@@ -49,6 +49,7 @@ import net.opentsdb.common.Const;
 import net.opentsdb.configuration.ConfigurationException;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.MillisecondTimeStamp;
+import net.opentsdb.data.NoDataPartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.SecondTimeStamp;
@@ -75,6 +76,7 @@ import net.opentsdb.pools.BaseObjectPoolAllocator;
 import net.opentsdb.pools.CloseablePooledObject;
 import net.opentsdb.pools.DefaultObjectPoolConfig;
 import net.opentsdb.pools.LongArrayPool;
+import net.opentsdb.pools.NoDataPartialTimeSeriesPool;
 import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.pools.ObjectPoolConfig;
 import net.opentsdb.pools.PooledObject;
@@ -130,7 +132,8 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     this.id = id;
     
     if (LOG.isDebugEnabled()) {
-      LOG.debug("Intantiating mock data store with ID: " + this.id + "@" + System.identityHashCode(this));
+      LOG.debug("Intantiating mock data store with ID: " + this.id + "@" 
+          + System.identityHashCode(this));
     }
     
     database = Maps.newHashMap();
@@ -349,6 +352,10 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       }
     }
     
+    LOG.info("Generating mock data starting at " + (start_timestamp / 1000) 
+        + " for " + hours + " hours every " + interval + "ms for " + hosts 
+        + " hosts for a total of " + (METRICS.size() * DATACENTERS.size() * hosts) 
+        + " time series.");
     for (int t = 0; t < hours; t++) {
       for (final String metric : METRICS) {
         for (final String dc : DATACENTERS) {
@@ -494,6 +501,7 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     }
     
     void runPartials() {
+      try {
       final TimeStamp st = context.query().startTime().getCopy();
       st.snapToPreviousInterval(3600, ChronoUnit.SECONDS);
       TimeStamp e = context.query().endTime().getCopy();
@@ -512,8 +520,9 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
         LOG.debug("Running the filter: " + filter);
       }
       
-      final Map<Long, Iterator<MockRow>> iterators = Maps.newHashMap();
-      final Map<Long, MockRow> rows = Maps.newHashMap();
+      // <row_base_time, <id_hash, row>> 
+      final Map<Long, Map<Long, MockRow>> rows = Maps.newHashMap();
+      //final Map<Long, MockRow> rows = Maps.newHashMap();
       int count = 0;
       
       for (final Entry<TimeSeriesDatumStringId, MockSpan> entry : database.entrySet()) {
@@ -529,39 +538,41 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
         }
         
         // matched the filters
-        MockRow row = null;
         Iterator<MockRow> iterator = entry.getValue().rows.iterator();
         while (iterator.hasNext()) {
-          row = iterator.next();
-          if (row.base_timestamp >= st.msEpoch()) {
+          final MockRow row = iterator.next();
+          if (row.base_timestamp < st.msEpoch()) {
+            continue;
+          }
+          
+          if (row.base_timestamp > e.msEpoch()) {
             break;
           }
+          
+          Map<Long, MockRow> map = rows.get(row.base_timestamp);
+          if (map == null) {
+            map = Maps.newHashMap();
+            rows.put(row.base_timestamp, map);
+          }
+          final long id_hash = row.id().buildHashCode();
+          if (!context.hasId(id_hash, Const.TS_STRING_ID)) {
+            context.addId(id_hash, row.id);
+          }
+          
+          map.put(id_hash, row);
+          count++;
         }
-        if (row == null) {
-          continue;
-        }
-        
-        if (row.base_timestamp > e.msEpoch()) {
-          continue;
-        }
-        
-        final long id_hash = row.id().buildHashCode();
-        if (!context.hasId(id_hash, Const.TS_STRING_ID)) {
-          context.addId(id_hash, row.id);
-        }
-        
-        iterators.put(id_hash, iterator);
-        rows.put(id_hash, row);
-        count++;
       }
       
       if (count == 0) {
+        System.out.println("[[MOCK]] No data!");
         // nothing found!
-        MockPTSSet set = new MockPTSSet(1, 
+        final MockPTSSet set = new MockPTSSet(1, 
             (context.query().startTime().epoch() - (context.query().startTime().epoch() % 3600)));
         set.complete = true;
-        final PooledMockPTS ppts = (PooledMockPTS) pool.claim().object();
-        ppts.setData(null, null, 0, set);
+        final NoDataPartialTimeSeries ppts = (NoDataPartialTimeSeries) 
+            tsdb.getRegistry().getObjectPool(NoDataPartialTimeSeriesPool.TYPE).claim().object();
+        ppts.reset(set);
         if (thread_pool != null) {
           thread_pool.submit(new Runnable() {
             @Override
@@ -570,76 +581,177 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
             }
           });
         } else {
+          System.out.println("[[MOCK]] send up no data.");
           sendUpstream(ppts);
         }
         return;
       }
       
-      // one hour at a time. Gross huh? That's what happens in a store allocated
-      // by time series instead of time.
       long ts = st.msEpoch();
-      System.out.println("      [MOCK] S: " + st.msEpoch() + "  E: " + e.msEpoch() + "  DELTA: " + (e.msEpoch() - st.msEpoch()));
+      System.out.println("      [MOCK] S: " + st.msEpoch() + "  E: " + e.msEpoch() + "  DELTA: " + (e.msEpoch() - st.msEpoch()) + " TOTAL: " + total);
       while (ts < e.msEpoch()) {
-        MockPTSSet set = new MockPTSSet(total, ts / 1000);
-        Iterator<Entry<Long, Iterator<MockRow>>> iterator = iterators.entrySet().iterator();
-        final PooledMockPTS[] last_ppts = new PooledMockPTS[1];
-        
-        while (iterator.hasNext()) {
-          final Entry<Long, Iterator<MockRow>> its = iterator.next();
-          MockRow row = rows.get(its.getKey());
-          if (row == null) {
-            // done
-            continue;
-          }
-          
-          if (row.base_timestamp == ts) {
-            PooledMockPTS ppts = (PooledMockPTS) pool.claim().object();
-            ppts.setData(row, array_pool, its.getKey(), set);
-            
-            if (last_ppts[0] != null) {
-              if (thread_pool != null) {
-                set.increment(false);
-                final PooledMockPTS pmpts = last_ppts[0];
-                thread_pool.submit(new Runnable() {
-                  @Override
-                  public void run() {
-                    sendUpstream(pmpts);
-                  }
-                });
-              } else {
-                set.increment(false);
-                sendUpstream(last_ppts[0]);
-              }
-            }
-            last_ppts[0] = ppts;
-          }
-          
-          if (its.getValue().hasNext()) {
-            rows.put(its.getKey(), its.getValue().next());
-          }
-        }
-        
-        if (last_ppts[0] != null) {
-          // SUPER IMPORTANT we set it as finished here.
-          set.increment(true);
-          
+        System.out.println("---------------");
+        final MockPTSSet set = new MockPTSSet(total, ts / 1000);
+        final Map<Long, MockRow> series = rows.get(ts);
+        if (series == null) {
+          final NoDataPartialTimeSeries ppts = (NoDataPartialTimeSeries) 
+              tsdb.getRegistry().getObjectPool(NoDataPartialTimeSeriesPool.TYPE).claim().object();
+          ppts.reset(set);   
+          set.complete = true;
+          System.out.println(" NDPTS: " + ppts.set());
           if (thread_pool != null) {
-            final PooledMockPTS pmpts = last_ppts[0];
             thread_pool.submit(new Runnable() {
               @Override
               public void run() {
-                sendUpstream(pmpts);
+                System.out.println("[[MOCK]] send up empty at " + set.start().epoch());
+                sendUpstream(ppts);
               }
             });
           } else {
-            sendUpstream(last_ppts[0]);
+            System.out.println("[[MOCK]] send up empty at " + set.start().epoch());
+            sendUpstream(ppts);
+          }
+        } else {
+          // got data!
+          List<Long> ids = Lists.newArrayList(series.keySet());
+          for (int i = 0; i < ids.size(); i++) {
+            if (i + 1 == ids.size()) {
+              set.increment(true);
+              System.out.println(" [[mock]] setting complete at " + i + " with " + set.timeSeriesCount() + " time series.");
+            } else {
+              set.increment(false);
+            }
+            
+            PooledMockPTS ppts = (PooledMockPTS) pool.claim().object();
+            ppts.setData(series.get(ids.get(i)), array_pool, ids.get(i), set);
+            if (thread_pool != null) {
+              final PooledMockPTS pmpts = ppts;
+              thread_pool.submit(new Runnable() {
+                @Override
+                public void run() {
+                  System.out.println("[[MOCK]] send up");
+                  sendUpstream(pmpts);
+                }
+              });
+            } else {
+              System.out.println("[[MOCK]] send up");
+              sendUpstream(ppts);
+            }
           }
         }
+//        if (last_row == null || last_row.base_timestamp == ts) {
+//          final PooledMockPTS[] last_ppts = new PooledMockPTS[1];
+//          
+//          if (last_row != null) {
+//            System.out.println("[mock] MATCHED: " + ts);
+//            PooledMockPTS ppts = (PooledMockPTS) pool.claim().object();
+//            ppts.setData(last_row, array_pool, last_entry.getKey(), set);
+//            
+//            if (last_ppts[0] != null) {
+//              if (thread_pool != null) {
+//                set.increment(false);
+//                final PooledMockPTS pmpts = last_ppts[0];
+//                thread_pool.submit(new Runnable() {
+//                  @Override
+//                  public void run() {
+//                    System.out.println("[[MOCK]] send up");
+//                    sendUpstream(pmpts);
+//                  }
+//                });
+//              } else {
+//                set.increment(false);
+//                System.out.println("[[MOCK]] send up");
+//                sendUpstream(last_ppts[0]);
+//              }
+//            }
+//            last_row = null;
+//          }
+//          
+//          while (last_iterator.hasNext()) {
+//            final Entry<Long, Iterator<MockRow>> its = last_iterator.next();
+//            MockRow row = rows.get(its.getKey());
+//            if (row == null) {
+//              System.out.println(" [mock] skip row");
+//              // done
+//              continue;
+//            }
+//            System.out.println("[mock] " + ts + " " + row.base_timestamp + " D: " + (row.base_timestamp - ts));
+//            if (row.base_timestamp == ts) {
+//              System.out.println("[mock] MATCHED: " + ts);
+//              PooledMockPTS ppts = (PooledMockPTS) pool.claim().object();
+//              ppts.setData(row, array_pool, its.getKey(), set);
+//              
+//              if (last_ppts[0] != null) {
+//                if (thread_pool != null) {
+//                  set.increment(false);
+//                  final PooledMockPTS pmpts = last_ppts[0];
+//                  thread_pool.submit(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                      System.out.println("[[MOCK]] send up");
+//                      sendUpstream(pmpts);
+//                    }
+//                  });
+//                } else {
+//                  set.increment(false);
+//                  System.out.println("[[MOCK]] send up");
+//                  sendUpstream(last_ppts[0]);
+//                }
+//              }
+//              last_ppts[0] = ppts;
+//            }
+//            
+//            if (its.getValue().hasNext()) {
+//              rows.put(its.getKey(), its.getValue().next());
+//              //System.out.println("[mock] add row....... " + ts + "  " + row.base_timestamp);
+//            }
+//          }
+//        }
+//        
+//        if (last_ppts[0] != null) {
+//          // SUPER IMPORTANT we set it as finished here.
+//          set.increment(true);
+//          
+//          if (thread_pool != null) {
+//            final PooledMockPTS pmpts = last_ppts[0];
+//            thread_pool.submit(new Runnable() {
+//              @Override
+//              public void run() {
+//                System.out.println("[[MOCK]] send up");
+//                sendUpstream(pmpts);
+//              }
+//            });
+//          } else {
+//            System.out.println("[[MOCK]] send up");
+//            sendUpstream(last_ppts[0]);
+//          }
+//        } else {
+//          final NoDataPartialTimeSeries ppts = (NoDataPartialTimeSeries) 
+//              tsdb.getRegistry().getObjectPool(NoDataPartialTimeSeriesPool.TYPE).claim().object();
+//          ppts.reset(set);   
+//          set.complete = true;
+//          System.out.println(" NDPTS: " + ppts.set());
+//          if (thread_pool != null) {
+//            thread_pool.submit(new Runnable() {
+//              @Override
+//              public void run() {
+//                System.out.println("[[MOCK]] send up empty at " + set.start().epoch());
+//                sendUpstream(ppts);
+//              }
+//            });
+//          } else {
+//            System.out.println("[[MOCK]] send up empty at " + set.start().epoch());
+//            sendUpstream(ppts);
+//          }
+//        }
         
         ts += 3600_000;
       }
       if (LOG.isDebugEnabled()) {
         LOG.debug("Finished sending data.");
+      }
+      } catch (Throwable t) {
+        t.printStackTrace();
       }
     }
     
@@ -656,6 +768,8 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
                  final long start) {
         this.total = total;
         this.start = new SecondTimeStamp(start);
+        end = this.start.getCopy();
+        end.add(Duration.ofSeconds(3600));
       }
       
       @Override
@@ -686,14 +800,6 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
 
       @Override
       public TimeStamp end() {
-        if (end == null) {
-          synchronized(this) {
-            if (end == null) {
-              end = start.getCopy();
-              end.add(Duration.ofSeconds(3600));
-            }
-          }
-        }
         return end;
       }
       

@@ -77,7 +77,9 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
   void process(final PartialTimeSeries series) {
     boolean multiples = (series.set().end().msEpoch() - 
         series.set().start().msEpoch()) < interval;
-    
+    if (multiples) {
+      System.out.println("******* MULTIPLES *******");
+    }
     // This is where it gets really really ugly as we may need multiple sets 
     // in this single set and we need to track what we've seen and haven't seen.
     // So we'll keep the start and end time of each set in a single long (as two
@@ -85,15 +87,11 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
     // track how many series we expect.
     if (multiples) {
       handleMultiples(series);
+      return;
     } else if (series instanceof NoDataPartialTimeSeries) {
+      System.out.println("  WORKING NDPTS");
       if (complete.compareAndSet(false, true)) {
         // TODO return no data
-        try {
-          series.close();
-        } catch (Exception e) {
-          LOG.error("Failed to close No Data PTS", e);
-        }
-        
         final NoDataPartialTimeSeries ndpts = (NoDataPartialTimeSeries)
           node.pipelineContext().tsdb().getRegistry().getObjectPool(
               NoDataPartialTimeSeriesPool.TYPE).claim().object();
@@ -106,12 +104,14 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
     } else {
       final int count = this.count.incrementAndGet();
       if (series.set().complete() && count == series.set().timeSeriesCount()) {
+        System.out.println("  SINGLES are complete!");
         complete.compareAndSet(false, true);
       }
     }
     
     if (series instanceof NoDataPartialTimeSeries) {
       // TODO - gotta mark some series as done
+      System.out.println(" ------- TODO handle NDPTS");
     } else {
       DownsamplePartialTimeSeries pts = timeseries.get(series.idHash());
       if (pts == null) {
@@ -128,6 +128,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
         }
       }
       
+      System.out.println("  sent to pts...");
       pts.addSeries(series);
     }
   }

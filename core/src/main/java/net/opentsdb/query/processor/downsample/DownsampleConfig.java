@@ -186,15 +186,9 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
     }
     
     end = builder.end;
-    if (!Strings.isNullOrEmpty(builder.end)) {
-      if (!run_all) {
-        end_time.snapToPreviousInterval(interval_part, units);
-      }
-      // TODO - fall to next interval?
-    } else {
-      if (!run_all) {
-        end_time.snapToPreviousInterval(interval_part, units);
-      }
+    if (!run_all) {
+      end_time.add(duration);
+      end_time.snapToPreviousInterval(interval_part, units);
     }
     
     // make sure we have at least one interval in our range

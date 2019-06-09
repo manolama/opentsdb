@@ -23,7 +23,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
@@ -33,13 +32,12 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.common.Const;
-import net.opentsdb.data.Aggregator;
+import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeries;
@@ -125,6 +123,7 @@ public class Downsample extends AbstractQueryNode {
         set_sizes = Maps.newHashMapWithExpectedSize(downstream_sources.size());
         for (final TimeSeriesDataSource source : downstream_sources) {
           try {
+          String max_string = null;
           long max = 0;
           long min = Long.MAX_VALUE;
           final String[] set_intervals = source.setIntervals();
@@ -135,6 +134,7 @@ public class Downsample extends AbstractQueryNode {
               min = interval;
             }
             if (interval > max) {
+              max_string = set_intervals[i];
               max = interval;
             }
           }
@@ -145,13 +145,25 @@ public class Downsample extends AbstractQueryNode {
           }
           System.out.println("       MAX: " + max);
           
-          long st = config.startTime().msEpoch();
-          st -= st % max;
-          long end = config.endTime().msEpoch();
-          end -= end % max;
-          end += max;
+          // TODO - calendar
+          final int amt = DateTime.getDurationInterval(max_string);
+          final String u = DateTime.getDurationUnits(max_string);
+          System.out.println("  UNITS: " + u + "  AMT: " + amt + "  INT: " + config.interval());
+          TimeStamp st = new MillisecondTimeStamp(config.startTime().msEpoch());
+          TimeStamp end = new MillisecondTimeStamp(config.endTime().msEpoch());
+          if (u.toLowerCase().equals("h")) {
+            st.snapToPreviousInterval(amt, ChronoUnit.HOURS);
+            end.snapToPreviousInterval(amt, ChronoUnit.HOURS);
+          } else if (u.toLowerCase().equals("d")) {
+            st.snapToPreviousInterval(amt, ChronoUnit.DAYS);
+            end.snapToPreviousInterval(amt, ChronoUnit.DAYS); 
+          } else {
+            throw new RuntimeException("Unsupported unit: " + u);
+          }
+          end.add(DateTime.parseDuration2(max_string));
           
-          long num_intervals = (end - st) / max;
+          System.out.println("CFG: " + config.startTime().epoch() + "  SNAP " + st.epoch() + " EN: " + end.epoch() + " D " + (end.epoch() - st.epoch()));
+          long num_intervals = (end.msEpoch() - st.msEpoch()) / max;
           if (num_intervals <= 0) {
             // in case the segment size is larger than the query size.
             num_intervals = 1;
@@ -169,14 +181,10 @@ public class Downsample extends AbstractQueryNode {
             // TODO - snap
             // TODO - see if our calendar boundaries are nicely aligned
           } else {
-            System.out.println("        CTS: " + config.startTime());
-            final TimeStamp ts = new SecondTimeStamp(
-                (config.startTime().msEpoch() - (config.startTime().msEpoch() % max))
-                  / 1000);
             for (int i = 0; i < num_intervals; i++) {
-              System.out.println("        TS: " + ts);
-              sizes[i + 3] = ts.epoch();
-              ts.add(duration);
+              System.out.println("        TS: " + st);
+              sizes[i + 3] = st.epoch();
+              st.add(duration);
             }
           }
           System.out.println("  SETS: " + Arrays.toString(sizes));
@@ -229,6 +237,7 @@ public class Downsample extends AbstractQueryNode {
   
   @Override
   public void onNext(final PartialTimeSeries pts) {
+    System.out.println("[[[[[[ PTS ]]]]]]]");
     final String source = pts.set().dataSource();
     long[] sizes = set_sizes.get(source);
     if (sizes == null) {
@@ -243,14 +252,12 @@ public class Downsample extends AbstractQueryNode {
       this.sendUpstream(new RuntimeException("GRR"));
     }
     long start = pts.set().start().epoch();
-    System.out.println("   SET CLASS: " + pts.set().getClass());
     int idx = (int) ((start - sizes[3]) / (sizes[1] / 1000));
-    System.out.println("          ST: " + start + "  s3: " + sizes[3] + "  s2: " + sizes[2] + "  IDX: " + idx + "  SSL: " + source_sets.length());
+    System.out.println("          ST: " + start + "  s3: " + sizes[3] + "  s1: " + sizes[1] + "  IDX: " + idx + "  SSL: " + source_sets.length());
     if (idx >= source_sets.length() || idx < 0) {
       System.out.println("WTF?  Bad idx: " + idx);
       return;
     }
-    
     
     DownsamplePartialTimeSeriesSet set = source_sets.get(idx);
     if (set == null) {
@@ -283,6 +290,8 @@ public class Downsample extends AbstractQueryNode {
       }
       idx++;
     }
+    
+    // TODO - free the pts
   }
   
   long[] getSizes(final String source) {

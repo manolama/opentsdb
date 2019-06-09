@@ -234,13 +234,33 @@ public class DownsampleFactory extends BaseQueryNodeFactory {
       }
       TimeSeriesDataSourceConfig.Builder new_source = 
           (TimeSeriesDataSourceConfig.Builder)
-            ((TimeSeriesDataSourceConfig) source).toBuilder();
+            ((TimeSeriesDataSourceConfig) source)
+            .toBuilder();
       new_source.setSummaryInterval(((DownsampleConfig) newConfig).getInterval());
       if (((DownsampleConfig) newConfig).getAggregator().equalsIgnoreCase("avg")) {
         new_source.addSummaryAggregation("sum");
         new_source.addSummaryAggregation("count");
       } else {
         new_source.addSummaryAggregation(((DownsampleConfig) newConfig).getAggregator());
+      }
+      
+      final long interval = DateTime.parseDuration(((DownsampleConfig) config).getInterval());
+      if (!Strings.isNullOrEmpty(((TimeSeriesDataSourceConfig) source).getPrePadding())) {
+        final long padding = DateTime.parseDuration(((TimeSeriesDataSourceConfig) source).getPrePadding());
+        if (padding < interval) {
+          new_source.setPrePadding(((DownsampleConfig) config).getInterval());
+        }
+      } else {
+        new_source.setPrePadding(((DownsampleConfig) config).getInterval());
+      }
+      
+      if (!Strings.isNullOrEmpty(((TimeSeriesDataSourceConfig) source).getPostPadding())) {
+        final long padding = DateTime.parseDuration(((TimeSeriesDataSourceConfig) source).getPostPadding());
+        if (padding < interval) {
+          new_source.setPostPadding(((DownsampleConfig) config).getInterval());
+        }
+      } else {
+        new_source.setPostPadding(((DownsampleConfig) config).getInterval());
       }
       
       plan.replace(source, new_source.build());
