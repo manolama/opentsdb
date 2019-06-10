@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAmount;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -12,6 +13,7 @@ import java.util.concurrent.atomic.AtomicLongArray;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 import net.opentsdb.data.NoDataPartialTimeSeries;
@@ -50,6 +52,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
   AtomicBoolean all_sets_accounted_for = new AtomicBoolean();
   AtomicBoolean complete = new AtomicBoolean();
   AtomicInteger count = new AtomicInteger();
+  List<NoDataPartialTimeSeries> ndptss = Lists.newArrayList();
   volatile int last_multi;
   
   // TODO - different data types
@@ -76,7 +79,9 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
   
   void process(final PartialTimeSeries series) {
     boolean multiples = (series.set().end().msEpoch() - 
-        series.set().start().msEpoch()) < interval;
+        series.set().start().msEpoch()) < node.interval_ms;
+    System.out.println(" [ds]  MD: " + (series.set().end().msEpoch() - 
+        series.set().start().msEpoch()) + "  INT: " + node.interval_ms);
     if (multiples) {
       System.out.println("******* MULTIPLES *******");
     }
@@ -87,7 +92,6 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
     // track how many series we expect.
     if (multiples) {
       handleMultiples(series);
-      return;
     } else if (series instanceof NoDataPartialTimeSeries) {
       System.out.println("  WORKING NDPTS");
       if (complete.compareAndSet(false, true)) {
@@ -100,36 +104,24 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
       } else {
         LOG.warn("Received a No Data PTS after sending upstream.");
       }
-      return;
     } else {
       final int count = this.count.incrementAndGet();
       if (series.set().complete() && count == series.set().timeSeriesCount()) {
         System.out.println("  SINGLES are complete!");
-        complete.compareAndSet(false, true);
-      }
-    }
-    
-    if (series instanceof NoDataPartialTimeSeries) {
-      // TODO - gotta mark some series as done
-      System.out.println(" ------- TODO handle NDPTS");
-    } else {
-      DownsamplePartialTimeSeries pts = timeseries.get(series.idHash());
-      if (pts == null) {
-        if (series.value().type() == NumericLongArrayType.TYPE) {
-          pts = new DownsampleNumericPartialTimeSeries(node.pipelineContext().tsdb()); // TODO - pool
-          DownsamplePartialTimeSeries extant = timeseries.putIfAbsent(series.idHash(), pts);
-          if (extant != null) {
-            pts = extant;
-          } else {
-            pts.reset(this, multiples);
-          }
-        } else {
-          throw new RuntimeException("Unhandled type: " + series.value().type());
+        if (!complete.compareAndSet(false, true)) {
+          LOG.warn("Singles set as complete after being marked complete. "
+              + "Programming error.");
         }
       }
       
-      System.out.println("  sent to pts...");
-      pts.addSeries(series);
+      DownsampleNumericPartialTimeSeries pts;
+      if (series.value().type() == NumericLongArrayType.TYPE) {
+        pts = new DownsampleNumericPartialTimeSeries(node.pipelineContext().tsdb()); // TODO - pool
+        pts.reset(this, true);
+        pts.addSeries(series);
+      } else {
+        throw new RuntimeException("Unhandled type: " + series.value().type());
+      }
     }
   }
 
@@ -186,6 +178,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
     // too large.
     // TODO - determine if we need a better lookup.
     if (all_sets_accounted_for.get()) {
+      System.out.println(" [[[ds]]] all in for multiples!!");
       // no need for sync since we're just incrementing counters at this point.
       for (int i = 0; i < set_boundaries.length(); i += 2) {
         start = set_boundaries.get(i) >>> 32;
@@ -299,6 +292,41 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
   }
   
   void setMultiples(final int index, final PartialTimeSeries series) {
+    // TODO sync
+    if (series instanceof NoDataPartialTimeSeries) {
+      // TODO - gotta mark some series as done
+      System.out.println(" ------- TODO handle NDPTS");
+      ndptss.add((NoDataPartialTimeSeries) series);
+      for (DownsamplePartialTimeSeries pts : timeseries.values()) {
+        pts.addSeries(series);
+      }
+    } else {
+      DownsamplePartialTimeSeries pts = timeseries.get(series.idHash());
+      if (pts == null) {
+        System.out.println(" [[ds]] MISS, making new dpts " + series.idHash());
+        if (series.value().type() == NumericLongArrayType.TYPE) {
+          pts = new DownsampleNumericPartialTimeSeries(node.pipelineContext().tsdb()); // TODO - pool
+          DownsamplePartialTimeSeries extant = timeseries.putIfAbsent(series.idHash(), pts);
+          if (extant != null) {
+            pts = extant;
+          } else {
+            pts.reset(this, true);
+          }
+          for (final NoDataPartialTimeSeries ndpts : ndptss) {
+            pts.addSeries(ndpts);
+          }
+          timeseries.put(series.idHash(), pts);
+        } else {
+          throw new RuntimeException("Unhandled type: " + series.value().type());
+        }
+      } else {
+        System.out.println("  [[ds]] HIT!! Had dpts " + series.idHash());
+      }
+      
+      System.out.println("  sent to pts...");
+      pts.addSeries(series);
+    }
+    
     if (series instanceof NoDataPartialTimeSeries || 
         series.set().complete() && series.set().timeSeriesCount() == 0) {
       completed_array[index / 2].set(true);

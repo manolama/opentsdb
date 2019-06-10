@@ -505,6 +505,9 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       final TimeStamp st = context.query().startTime().getCopy();
       st.snapToPreviousInterval(3600, ChronoUnit.SECONDS);
       TimeStamp e = context.query().endTime().getCopy();
+//      if (!Strings.isNullOrEmpty(config.getPostPadding())) {
+//        e.add(DateTime.parseDuration2(config.getPostPadding()));
+//      }
       e.snapToPreviousInterval(3600, ChronoUnit.SECONDS);
       e.add(Duration.ofSeconds(3600));
       final int total = (int) (e.epoch() - st.epoch()) / 3600;

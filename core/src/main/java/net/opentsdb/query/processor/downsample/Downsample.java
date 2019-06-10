@@ -123,8 +123,8 @@ public class Downsample extends AbstractQueryNode {
         set_sizes = Maps.newHashMapWithExpectedSize(downstream_sources.size());
         for (final TimeSeriesDataSource source : downstream_sources) {
           try {
-          String max_string = null;
-          long max = 0;
+          String max_string = config.getInterval();
+          long max = DateTime.parseDuration(config.getInterval());
           long min = Long.MAX_VALUE;
           final String[] set_intervals = source.setIntervals();
           for (int i = 0; i < set_intervals.length; i++) {
@@ -237,7 +237,6 @@ public class Downsample extends AbstractQueryNode {
   
   @Override
   public void onNext(final PartialTimeSeries pts) {
-    System.out.println("[[[[[[ PTS ]]]]]]]");
     final String source = pts.set().dataSource();
     long[] sizes = set_sizes.get(source);
     if (sizes == null) {

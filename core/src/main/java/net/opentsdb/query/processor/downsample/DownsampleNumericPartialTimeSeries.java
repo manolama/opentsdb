@@ -2,7 +2,6 @@ package net.opentsdb.query.processor.downsample;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.Lists;
 
@@ -10,7 +9,6 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.data.BasePartialTimeSeries;
 import net.opentsdb.data.NoDataPartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeries;
-import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeStamp;
@@ -21,7 +19,6 @@ import net.opentsdb.data.types.numeric.NumericLongArrayType;
 import net.opentsdb.pools.DoubleArrayPool;
 import net.opentsdb.pools.LongArrayPool;
 import net.opentsdb.pools.PooledObject;
-import net.opentsdb.utils.DateTime;
 
 public class DownsampleNumericPartialTimeSeries extends 
   BasePartialTimeSeries<NumericArrayType> 
@@ -62,6 +59,7 @@ public class DownsampleNumericPartialTimeSeries extends
   
   @Override
   public void addSeries(final PartialTimeSeries series) {
+    System.out.println(" [[[[[ds]]]] got series");
     id_hash = series.idHash();
     id_type = series.idType();
     if (id_type == null) {
@@ -196,6 +194,7 @@ public class DownsampleNumericPartialTimeSeries extends
   // block threads very long and it may be a good idea to back things up a bit
   // here anyway.
   synchronized void runMulti(final PartialTimeSeries series) {
+    System.out.println("    [[[ds]]] run multiple in PTS!");
     if (next.epoch() < 0) {
       next.update(set.start());
       boundary.update(next);
@@ -209,12 +208,12 @@ public class DownsampleNumericPartialTimeSeries extends
           // run it!
           next.update(local.set().end());
           runAccumulatorOrFill(next.epoch());
-          try {
-            local.close();
-          } catch (Exception e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-          }
+//          try {
+//            local.close();
+//          } catch (Exception e) {
+//            // TODO Auto-generated catch block
+//            e.printStackTrace();
+//          }
         } else {
           // buffer since we're missing a piece
           series_list.add(local);
@@ -300,8 +299,11 @@ public class DownsampleNumericPartialTimeSeries extends
     }
     
     // determine if we send it up or not.
+    pts_count++;
+    System.out.println("   RAN multi. All in? " + ((DownsamplePartialTimeSeriesSet) set).all_sets_accounted_for.get() + "  Last multi: " + ((DownsamplePartialTimeSeriesSet) set).last_multi + "  Cnt: " + pts_count);
     if (((DownsamplePartialTimeSeriesSet) set).all_sets_accounted_for.get() &&
-        pts_count++ == ((DownsamplePartialTimeSeriesSet) set).last_multi) {
+        pts_count == ((DownsamplePartialTimeSeriesSet) set).last_multi) {
+      System.out.println("    [[[[DS]]] Send multi upstream!!!");
       ((DownsamplePartialTimeSeriesSet) set).node.sendUpstream(this);
     }
   }
