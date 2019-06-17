@@ -41,12 +41,22 @@ import net.opentsdb.utils.Pair;
 /**
  * A configuration implementation for Downsampling processors.
  * <p>
- * Given the {@link TimeSeriesQuery}, the builder will parse out the start and 
- * end timestamps and snap to an interval greater than or equal to the query
- * start time and less than or equal to the query end time using the interval.
+ * Downsampled buckets are inclusive of the start time and exclusive of the end
+ * time. The DownsampleFactory must set the {@link #startTime()} and 
+ * {@link #endTime()} of this config with the TimeSeriesQuery start and end 
+ * timestamps so we can calculate the first bucket within the query range.
  * <p>
- * If the end time would be the same as the start, after snapping, the builder
- * will throw an {@link IllegalArgumentException}.
+ * Error conditions:
+ * <ul>
+ * <li>If the query time span is smaller than the interval, an error is thrown.</li>
+ * </ul>
+ * <p>
+ * Non-error conditions:
+ * <ul>
+ * <li>If no buckets fall within the query time span, then an empty result is 
+ * returned. This could happen for queries that ae sliding in time and only
+ * occasionally match up properly</li>
+ * </ul>
  * <p>
  * By default, snaps are to the UTC calendar. If you want to snap to a different
  * calendar for hourly and greater intervals, please supply the timezone.
@@ -187,7 +197,7 @@ public class DownsampleConfig extends BaseQueryNodeConfigWithInterpolators {
     
     end = builder.end;
     if (!run_all) {
-      end_time.add(duration);
+      //end_time.add(duration);
       end_time.snapToPreviousInterval(interval_part, units);
     }
     

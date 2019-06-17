@@ -35,4 +35,12 @@ public interface TimeSeriesDataSource extends QueryNode {
    * raw store). */
   public String[] setIntervals();
   
+  /** @return The start time of the first set returned by the query. This will
+   * usually be the first set where data for the query start time appears. 
+   * However some functions may need padding, e.g. sliding windows, so the start
+   * time may be from an earlier segment. 
+   * NOTE: This must be the start time aligned for all {@link #setIntervals()}.
+   * */
+  public TimeStamp firstSetStart();
+  
 }

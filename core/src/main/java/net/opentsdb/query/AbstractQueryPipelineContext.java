@@ -433,6 +433,7 @@ public abstract class AbstractQueryPipelineContext implements
   @Override
   public void onComplete(final PartialTimeSeries series) {
     // TODO - need to track multiple sinks eventually.
+    System.out.println("[AQPC] total sets: " + series.set().totalSets() + " for " + System.identityHashCode(series.set()));
     try {
       final String set_id = series.set().node().config().getId() + ":" 
           + series.set().dataSource();
@@ -459,18 +460,17 @@ public abstract class AbstractQueryPipelineContext implements
       
       int cnt = 0;
       int max = -1;
-      //synchronized (wrapper) {
-        if (series.set().timeSeriesCount() > 0) {
-          cnt = wrapper.counter.incrementAndGet();
+      if (series.set().timeSeriesCount() > 0) {
+        cnt = wrapper.counter.incrementAndGet();
+      }
+      if (series.set().complete()) {
+        if (series.set().timeSeriesCount() > wrapper.max.get()) {
+          wrapper.max.set(series.set().timeSeriesCount());
         }
-        if (series.set().complete()) {
-          if (series.set().timeSeriesCount() > wrapper.max.get()) {
-            wrapper.max.set(series.set().timeSeriesCount());
-          }
-        }
-        max = wrapper.max.get();
-      //}
+      }
+      max = wrapper.max.get();
       
+      System.out.println("[AQPC] max: " + max + "  Cnt: " + cnt);
       if (max >= 0 && max == cnt) {
         AtomicInteger ctr = finished_sources.get(set_id);
         if (ctr == null) {

@@ -46,6 +46,7 @@ import net.opentsdb.core.TSDBPlugin;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.data.TimeSeriesStringId;
+import net.opentsdb.data.TimeStamp;
 import net.opentsdb.exceptions.QueryExecutionCanceled;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.BaseQueryNodeConfig;
@@ -525,6 +526,12 @@ public class CachingQueryExecutor extends BaseTSDBPlugin implements QuerySourceF
 
     @Override
     public String[] setIntervals() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public TimeStamp firstSetStart() {
       // TODO Auto-generated method stub
       return null;
     }

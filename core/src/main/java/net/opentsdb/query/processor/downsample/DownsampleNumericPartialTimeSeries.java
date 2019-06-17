@@ -303,7 +303,7 @@ public class DownsampleNumericPartialTimeSeries extends
     System.out.println("   RAN multi. All in? " + ((DownsamplePartialTimeSeriesSet) set).all_sets_accounted_for.get() + "  Last multi: " + ((DownsamplePartialTimeSeriesSet) set).last_multi + "  Cnt: " + pts_count);
     if (((DownsamplePartialTimeSeriesSet) set).all_sets_accounted_for.get() &&
         pts_count == ((DownsamplePartialTimeSeriesSet) set).last_multi) {
-      System.out.println("    [[[[DS]]] Send multi upstream!!!");
+      System.out.println("     ---------- DS ------ Send multi upstream!!!");
       ((DownsamplePartialTimeSeriesSet) set).node.sendUpstream(this);
     }
   }
