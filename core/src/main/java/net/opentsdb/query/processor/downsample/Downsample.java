@@ -103,6 +103,7 @@ public class Downsample extends AbstractQueryNode {
     interval_ms = DateTime.parseDuration(config.getInterval());
     use_calendar = config.timezone() != null && 
         !config.timezone().equals(Const.UTC);
+    set_sizes = Maps.newConcurrentMap();
     sets = Maps.newConcurrentMap();
     NumericAggregatorFactory agg_factory = context.tsdb()
         .getRegistry().getPlugin(NumericAggregatorFactory.class, 
@@ -112,132 +113,6 @@ public class Downsample extends AbstractQueryNode {
   
   @Override
   public Deferred<Void> initialize(final Span span) {
-    class PushCB implements Callback<Void, Void> {
-      @Override
-      public Void call(final Void ignored) throws Exception {
-        System.out.println("   DS: " + downstream_sources.size());
-        set_sizes = Maps.newHashMapWithExpectedSize(downstream_sources.size());
-        for (final TimeSeriesDataSource source : downstream_sources) {
-          System.out.println("[[SRC]]: " + System.identityHashCode(source));
-          String max_string = config.getInterval();
-          long max = interval_ms;
-          long min = Long.MAX_VALUE;
-          final String[] set_intervals = source.setIntervals();
-          if (set_intervals == null) {
-            throw new IllegalStateException("Source " + source.config().getId() 
-                + " returned a null set intervals.");
-          }
-          for (int i = 0; i < set_intervals.length; i++) {
-            long interval = DateTime.parseDuration(set_intervals[i]);
-            System.out.println("       SET INT: " + set_intervals[i] + "  I " + interval);
-            if (interval < min) {
-              min = interval;
-            }
-            if (interval > max) {
-              max_string = set_intervals[i];
-              max = interval;
-            }
-          }
-          
-          long config_interval = interval_ms;
-          if (config_interval < min) {
-            min = config_interval;
-          }
-          System.out.println("       MAX: " + max);
-          
-          // TODO - calendar
-          final int amt = DateTime.getDurationInterval(max_string);
-          final String u = DateTime.getDurationUnits(max_string);
-          System.out.println("  UNITS: " + u + "  AMT: " + amt + "  INT: " + config.interval());
-          TimeStamp st = source.firstSetStart().getCopy();
-          TimeStamp end = new SecondTimeStamp(context.query().endTime().epoch());
-          if (u.toLowerCase().equals("h")) {
-            end.snapToPreviousInterval(amt, ChronoUnit.HOURS);
-          } else if (u.toLowerCase().equals("d")) {
-            end.snapToPreviousInterval(amt, ChronoUnit.DAYS); 
-          } else {
-            throw new IllegalStateException("Unsupported source interval "
-                + "unit: " + u);
-          }
-          
-          final TemporalAmount duration = DateTime.parseDuration2(max_string);
-          if (end.compare(Op.LT, config.endTime())) {
-            // we need at least one more segment.
-            end.add(duration);
-          }
-          
-          long num_intervals = (end.msEpoch() - st.msEpoch()) / max;
-          if (num_intervals <= 0) {
-            // in case the segment size is larger than the query size.
-            num_intervals = 1;
-          }
-          
-          System.out.println("CFG: " + config.startTime().epoch() + "  SNAP " + st.epoch() + " EN: " + end.epoch() + " D " + (end.epoch() - st.epoch()));
-          if (interval_ms > 0 && max % interval_ms != 0) {
-            // crap. We may have a weird interval lik 45m on top of 1h segments
-            // where we need to span multiple segments.
-            if (LOG.isDebugEnabled()) {
-              LOG.debug("Odd interval: " + config.getInterval() 
-                + " for downsampling.");
-            }
-            
-            final long start_ts = source.firstSetStart().msEpoch();
-            long end_ts = start_ts + max;
-            while ((end_ts - start_ts) % interval_ms != 0 && end_ts < end.msEpoch()) {
-              end_ts += max;
-            }
-            
-            if (end_ts >= end.msEpoch()) {
-              // we'll just return one big segment, *sniff*
-              System.out.println("JUST ONE INTERVAL " + end_ts + "  QE: " + end.msEpoch());
-              max = (end_ts - start_ts);
-              num_intervals = 1;
-            } else {
-              // we can break it up. The last segment may be oddly shaped.
-              max = (end_ts - start_ts);
-              num_intervals = (end.msEpoch() - st.msEpoch()) / max;
-              if (num_intervals <= 0) {
-                // in case the segment size is larger than the query size.
-                num_intervals = 1;
-              }
-            }
-            System.out.println("NEW interval = " + ((end_ts - start_ts) / 1000) +"s");
-            
-          }
-          
-          // TODO - we may want some logic to figure a more optimal size in
-          // the event we have rollups and fall back to raw, etc.
-          long[] sizes = new long[3 + (int) num_intervals];
-          sizes[0] = min;
-          sizes[1] = max;
-          sizes[2] = num_intervals;
-          
-          for (int i = 0; i < num_intervals; i++) {
-            System.out.println("        TS: " + st);
-            sizes[i + 3] = st.epoch();
-            st.add(duration);
-          }
-          
-          System.out.println("  SETS: " + Arrays.toString(sizes) + " FOR: " + source.config().getId());
-          set_sizes.put(source.config().getId(), sizes);
-          sets.put(source.config().getId(), 
-              new AtomicReferenceArray<DownsamplePartialTimeSeriesSet>((int) num_intervals));
-        }
-        System.out.println("-----------");
-        return null;
-      }
-    }
-    
-    if (!context.tsdb().getConfig().hasProperty("tsd.storage.enable_push")) {
-      context.tsdb().getConfig().register("tsd.storage.enable_push", false, false, "TEST");
-    }
-    
-    // TODO - centralize this flag.
-    if (context.tsdb().getConfig().getBoolean("tsd.storage.enable_push")) {
-      System.out.println("   INIT W PUSH");
-      return super.initialize(span).addCallback(new PushCB());
-    }
-    System.out.println("INIT no push.....");
     return super.initialize(span);
   }
 
@@ -267,10 +142,28 @@ public class Downsample extends AbstractQueryNode {
   @Override
   public void onNext(final PartialTimeSeries pts) {
     final String source = pts.set().dataSource();
-    final long[] sizes = set_sizes.get(source);
+    long[] sizes = set_sizes.get(source);
     if (sizes == null) {
-      LOG.warn("Unexpected PTs from source: " + source);
-      return;
+      boolean matched = false;
+      for (final TimeSeriesDataSource src : downstream_sources) {
+        if (pts.set().dataSource().equals(src.config().getId())) {
+          matched = true;
+          break;
+        }
+      }
+      
+      if (!matched) {
+        // not one of ours.
+        return;
+      }
+      
+      try {
+        sizes = initSet(pts);
+      } catch (Throwable t) {
+        LOG.error("Failed to initialize source: " + source);
+        sendUpstream(t);
+        return;
+      }
     }
     
     final AtomicReferenceArray<DownsamplePartialTimeSeriesSet> source_sets = 
@@ -308,10 +201,212 @@ public class Downsample extends AbstractQueryNode {
     }
     set.process(pts);
     
+    // now we have to see if our incoming set spans multiple local sets.
+    while (++idx < source_sets.length() && 
+           pts.set().end().compare(Op.GT, set.end())) {
+      System.out.println(" ADDING pts to another sert at idx " + idx);
+      set = source_sets.get(idx);
+      if (set == null) {
+        set = (DownsamplePartialTimeSeriesSet) context.tsdb().getRegistry()
+            .getObjectPool(DownsamplePartialTimeSeriesSetPool.TYPE).claim().object();
+        if (source_sets.compareAndSet(idx, null, set)) {
+          set.reset(this, source, idx);
+        } else {
+          // lost the race
+          try {
+            set.close();
+          } catch (Exception e) {
+            LOG.error("Failed to put set back in the downsample set pool.");
+          }
+          set = source_sets.get(idx);
+        }
+      }
+      set.process(pts);
+    }
+    
     // TODO - free the pts
   }
   
-  long[] getSizes(final String source) {
+  /**
+   * Three important things to consider here:
+   * <ol>
+   * <li>The sizes of segments from the data source. Usually 1h, though may be
+   * greater like 1 day for rollup data.</li>
+   * <li>The actual set size from the given pts. This could be from another node
+   * that returns a size greater than that of the source max. E.g. another
+   * downsample node.</li>
+   * <li>The downsample interval. Some cases could cause us to return one big
+   * segment, like 33m.</li>
+   * </ol>
+   * @param pts
+   * @return
+   */
+  protected synchronized long[] initSet(final PartialTimeSeries pts) {
+    System.out.println("   DS: " + downstream_sources.size());
+    final String data_source = pts.set().dataSource();
+    TimeSeriesDataSource source = null;
+    for (final TimeSeriesDataSource src : downstream_sources) {
+      if (data_source.equals(src.config().getId())) {
+        source = src;
+        break;
+      }
+    }
+    
+    if (source == null) {
+      // not one of ours.
+      return null;
+    }
+    
+    System.out.println("[[SRC]]: " + System.identityHashCode(this));
+    
+    // shortcut if we have an empty result.
+    if (pts.set().totalSets() == 1) {
+      long[] sizes = new long[4];
+      sizes[0] = interval_ms;
+      sizes[1] = (pts.set().end().msEpoch() - pts.set().start().msEpoch());
+      sizes[2] = 1;
+      sizes[3] = pts.set().start().epoch();
+      AtomicReferenceArray<DownsamplePartialTimeSeriesSet> extant = 
+          sets.putIfAbsent(source.config().getId(), new AtomicReferenceArray<DownsamplePartialTimeSeriesSet>(1));
+      if (extant == null) {
+        long[] extant_sizes = set_sizes.putIfAbsent(source.config().getId(), sizes);
+        if (extant_sizes != null) {
+          LOG.warn("Still lost a race initializating a set for source: " 
+              + source.config().getId());
+          return extant_sizes;
+        }
+      }
+      return sizes;
+    }
+    
+    // else we have multiple intervals and need to compute the width we'll use
+    // for our segments.
+    String max_string = config.getInterval();
+    long max = interval_ms;
+    long min = Long.MAX_VALUE;
+    final String[] set_intervals = source.setIntervals();
+    if (set_intervals == null) {
+      throw new IllegalStateException("Source " + source.config().getId() 
+          + " returned a null set intervals.");
+    }
+    for (int i = 0; i < set_intervals.length; i++) {
+      long interval = DateTime.parseDuration(set_intervals[i]);
+      System.out.println("       SET INT: " + set_intervals[i] + "  I " + interval);
+      if (interval < min) {
+        min = interval;
+      }
+      if (interval > max) {
+        max_string = set_intervals[i];
+        max = interval;
+      }
+    }
+    
+    long config_interval = interval_ms;
+    if (config_interval < min) {
+      min = config_interval;
+    }
+
+    // TODO - see if we want to just set the max to the segment size. Otherwise
+    // we may be splitting segments into smaller chunks.
+//    if ((pts.set().end().msEpoch() - pts.set().start().msEpoch()) > max) {
+//      // the given segment was actually larger so we *may* want to use that
+//      // instead.
+//    }
+    System.out.println("       MAX: " + max);
+    
+    // TODO - calendar
+    final int amt = DateTime.getDurationInterval(max_string);
+    final String u = DateTime.getDurationUnits(max_string);
+    System.out.println("  UNITS: " + u + "  AMT: " + amt + "  INT: " + config.interval());
+    TimeStamp st = source.firstSetStart().getCopy();
+    TimeStamp end = new SecondTimeStamp(context.query().endTime().epoch());
+    if (u.toLowerCase().equals("h")) {
+      end.snapToPreviousInterval(amt, ChronoUnit.HOURS);
+    } else if (u.toLowerCase().equals("d")) {
+      end.snapToPreviousInterval(amt, ChronoUnit.DAYS); 
+    } else {
+      throw new IllegalStateException("Unsupported source interval "
+          + "unit: " + u);
+    }
+    
+    final TemporalAmount duration = DateTime.parseDuration2(max_string);
+    if (end.compare(Op.LT, config.endTime())) {
+      // we need at least one more segment.
+      end.add(duration);
+    }
+    
+    long num_intervals = (end.msEpoch() - st.msEpoch()) / max;
+    if (num_intervals <= 0) {
+      // in case the segment size is larger than the query size.
+      num_intervals = 1;
+    }
+    
+    System.out.println("CFG: " + config.startTime().epoch() + "  SNAP " + st.epoch() + " EN: " + end.epoch() + " D " + (end.epoch() - st.epoch()));
+    if (interval_ms > 0 && max % interval_ms != 0) {
+      // crap. We may have a weird interval lik 45m on top of 1h segments
+      // where we need to span multiple segments.
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Odd interval: " + config.getInterval() 
+          + " for downsampling.");
+      }
+      
+      final long start_ts = source.firstSetStart().msEpoch();
+      long end_ts = start_ts + max;
+      while ((end_ts - start_ts) % interval_ms != 0 && end_ts < end.msEpoch()) {
+        end_ts += max;
+      }
+      
+      if (end_ts >= end.msEpoch()) {
+        // we'll just return one big segment, *sniff*
+        System.out.println("JUST ONE INTERVAL " + end_ts + "  QE: " + end.msEpoch());
+        max = (end_ts - start_ts);
+        num_intervals = 1;
+      } else {
+        // we can break it up. The last segment may be oddly shaped.
+        max = (end_ts - start_ts);
+        num_intervals = (end.msEpoch() - st.msEpoch()) / max;
+        if (num_intervals <= 0) {
+          // in case the segment size is larger than the query size.
+          num_intervals = 1;
+        }
+      }
+      System.out.println("NEW interval = " + ((end_ts - start_ts) / 1000) +"s");
+      
+    }
+    
+    // TODO - we may want some logic to figure a more optimal size in
+    // the event we have rollups and fall back to raw, etc.
+    long[] sizes = new long[3 + (int) num_intervals];
+    sizes[0] = min;
+    sizes[1] = max;
+    sizes[2] = num_intervals;
+    
+    for (int i = 0; i < num_intervals; i++) {
+      System.out.println("        TS: " + st);
+      sizes[i + 3] = st.epoch();
+      st.add(duration);
+    }
+    
+    System.out.println("  SETS: " + Arrays.toString(sizes) + " FOR: " + source.config().getId());
+    // WARNING: Ordering is super important here.
+    AtomicReferenceArray<DownsamplePartialTimeSeriesSet> extant = 
+        sets.putIfAbsent(source.config().getId(), new AtomicReferenceArray<DownsamplePartialTimeSeriesSet>((int) num_intervals));
+    if (extant == null) {
+      long[] extant_sizes = set_sizes.putIfAbsent(source.config().getId(), sizes);
+      if (extant_sizes != null) {
+        LOG.warn("Still lost a race initializating a set for source: " 
+            + source.config().getId());
+        return extant_sizes;
+      }
+    } else {
+      // lost the race on the ARA.
+    }
+    System.out.println("-----------");
+
+    return sizes;
+  }
+  
+  protected long[] getSizes(final String source) {
     return set_sizes.get(source);
   }
   

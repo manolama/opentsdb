@@ -85,8 +85,8 @@ public abstract class AbstractQueryNode implements QueryNode {
     if (child != null) {
       child.setSuccessTags().finish();
     }
-    // TODO - the static entry breaks UTs that have callbacks.
-    return Deferred.fromResult(null); //INITIALIZED;
+    
+    return INITIALIZED;
   }
   
   @Override

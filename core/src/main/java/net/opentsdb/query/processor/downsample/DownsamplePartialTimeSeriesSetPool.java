@@ -10,10 +10,12 @@ import net.opentsdb.pools.DefaultObjectPoolConfig;
 import net.opentsdb.pools.ObjectPoolConfig;
 
 public class DownsamplePartialTimeSeriesSetPool extends BaseObjectPoolAllocator {
-  public static final String TYPE = "DownsamplePartialTimeSeriesSet";
+  public static final String TYPE = "DownsampleNumericPartialTimeSeries";
   public static final TypeToken<?> TYPE_TOKEN = TypeToken.of(
-      DownsamplePartialTimeSeriesSet.class);
+      DownsampleNumericPartialTimeSeries.class);
 
+  private TSDB tsdb;
+  
   @Override
   public String type() {
     return TYPE;
@@ -21,6 +23,7 @@ public class DownsamplePartialTimeSeriesSetPool extends BaseObjectPoolAllocator 
   
   @Override
   public Deferred<Object> initialize(final TSDB tsdb, final String id) {
+    this.tsdb = tsdb;
     if (Strings.isNullOrEmpty(id)) {
       this.id = TYPE;
     } else {
@@ -44,7 +47,7 @@ public class DownsamplePartialTimeSeriesSetPool extends BaseObjectPoolAllocator 
   
   @Override
   public Object allocate() {
-    return new DownsamplePartialTimeSeriesSet();
+    return new DownsampleNumericPartialTimeSeries(tsdb);
   }
   
   @Override
