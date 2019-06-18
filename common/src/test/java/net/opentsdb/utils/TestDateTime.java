@@ -564,6 +564,25 @@ public final class TestDateTime {
   }
 
   @Test
+  public void durationFromSeconds() throws Exception {
+    assertEquals(Duration.ofSeconds(86400 * 364 + 5), 
+        DateTime.durationFromSeconds(86400 * 364 + 5));
+    assertEquals(Period.ofDays(364), 
+        DateTime.durationFromSeconds(86400 * 364));
+    assertEquals(Period.ofYears(5),
+        DateTime.durationFromSeconds(86400 * 365 * 5));
+    assertEquals(Period.ofMonths(6), 
+        DateTime.durationFromSeconds(86400 * 30 * 6));
+    assertEquals(Period.ofMonths(1), 
+        DateTime.durationFromSeconds(86400 * 30));
+    assertEquals(Period.ofWeeks(4), DateTime.durationFromSeconds(86400 * 7 * 4));
+    assertEquals(Period.ofWeeks(1), DateTime.durationFromSeconds(86400 * 7));
+    assertEquals(Period.ofDays(3), DateTime.durationFromSeconds(86400 * 3));
+    assertEquals(Period.ofDays(1), DateTime.durationFromSeconds(86400));
+    assertEquals(Duration.ofSeconds(86400 - 1), DateTime.durationFromSeconds(86400 - 1));
+  }
+  
+  @Test
   public void currentTimeMillis() {
     PowerMockito.mockStatic(System.class);
     when(System.currentTimeMillis()).thenReturn(1388534400000L);

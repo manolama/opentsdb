@@ -314,6 +314,27 @@ public class DateTime {
   }
   
   /**
+   * Attempts to parse the given seconds into a duration of years, months,
+   * weeks, days or just seconds. It walks in that order to see if the given
+   * duration is divisible into the unit. (For months, we use 30 days). 
+   * @param seconds An amount of seconds greater than 0.
+   * @return A temporal amount.
+   */
+  public static TemporalAmount durationFromSeconds(final long seconds) {
+    if (seconds % (86400 * 365) == 0) {
+      return Period.ofYears((int) seconds / (86400 * 365));
+    } else if (seconds % (86400 * 30) == 0) {
+      return Period.ofMonths((int) seconds / (86400 * 30));
+    } else if (seconds % (86400 * 7) == 0) {
+      return Period.ofWeeks((int) seconds / (86400 * 7));
+    } else if (seconds % 86400 == 0) {
+      return Period.ofDays((int) seconds / 86400);
+    } else {
+      return Duration.ofSeconds(seconds);
+    }
+  }
+  
+  /**
    * Returns the suffix or "units" of the duration as a string. The result will
    * be ms, s, m, h, d, w, n or y.
    * @param duration The duration in the format #units, e.g. 1d or 6h
