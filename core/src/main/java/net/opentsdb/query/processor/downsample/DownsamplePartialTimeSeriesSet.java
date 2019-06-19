@@ -23,6 +23,7 @@ import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.TimeStamp;
+import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.types.numeric.NumericLongArrayType;
 import net.opentsdb.pools.NoDataPartialTimeSeriesPool;
 import net.opentsdb.pools.PooledObject;
@@ -44,6 +45,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
   protected Downsample node;
   TimeStamp start = new SecondTimeStamp(0L);
   TimeStamp end = new SecondTimeStamp(0L);
+  TimeStamp query_end = new SecondTimeStamp(0L);
   int total_sets;
   String source;
   long interval;
@@ -71,20 +73,53 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
     interval = sizes[1];
     total_sets = (int) sizes[2];
     start.updateEpoch(sizes[idx + 3]);
-    end.update(start);
     
-    if (node.use_calendar) {
-      // TODO - 
+    if (idx + 4 >= sizes.length) {
+      end.update(start);
+      if (((DownsampleConfig) node.config()).timezone() != null) {
+        end.add(DateTime.durationFromSeconds(interval / 1000));
+      } else {
+        end.add(Duration.ofMillis(interval));
+      }
+      
+      if ((end.epoch() - (sizes[0] / 1000)) > 
+        node.pipelineContext().query().endTime().epoch()) {
+        System.out.println("   USING the query time for end.");
+        query_end.update(node.pipelineContext().query().endTime());
+      } else {
+        query_end.update(end);
+      }
     } else {
-      end.add(Duration.ofSeconds(sizes[1] / 1000));
+      end.updateEpoch(sizes[idx + 4]);
+      query_end.update(end);
     }
     
     size = (int) ((end.msEpoch() - start.msEpoch()) / sizes[0]);
   }
   
   void process(final PartialTimeSeries series) {
-    boolean multiples = (series.set().end().msEpoch() - 
-        series.set().start().msEpoch()) < node.interval_ms;
+    if (complete.get()) {
+      // this can happen if for some reason the upstream node sent us a set
+      // that's outside of the query bounds when we're on the tail set and it
+      // overlaps the query end by one or more intervals.
+      if (series.set().start().compare(Op.GTE, query_end)) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Received and dropping a PTS for segment " 
+              + series.set().start().epoch() + " to " 
+              + series.set().end().epoch() + " which was beyond our "
+              + "query end time of " + query_end.epoch());
+        }
+      } else {
+        LOG.warn("Received and dropping a PTS for segment " 
+            + series.set().start().epoch() + " to " 
+            + series.set().end().epoch() + " which was within our "
+            + "query end time of " + query_end.epoch() + ", but we were complete.");
+      }
+      return;
+    }
+    
+    boolean multiples = !(series.set().start().compare(Op.LTE, start) &&
+        series.set().end().compare(Op.GTE, end));
     System.out.println(" [ds]  MD: " + (series.set().end().msEpoch() - 
         series.set().start().msEpoch()) + "  INT: " + node.interval_ms);
 
@@ -186,6 +221,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
       System.out.println(" [[[ds]]] all sets in for multiples!!");
       // no need for sync since we're just incrementing counters at this point.
       checkMultipleComplete();
+      
       for (int i = 0; i < set_boundaries.length(); i += 2) {
         start = set_boundaries.get(i) >>> 32;
         if (series.set().start().epoch() == start) {
@@ -203,13 +239,19 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
         concat |= ((int) series.set().end().epoch());
         // use the min so we don't have to resize.
         final long[] sizes = node.getSizes(source);
-        int size = (int) ((end.msEpoch() - this.start.msEpoch()) / sizes[0]);
+        int size = (int) ((query_end.msEpoch() - this.start.msEpoch()) / sizes[0]);
         set_boundaries = new AtomicLongArray(size * 2);
         completed_array = new AtomicBoolean[size];
         for (int i = 0; i < size; i++) {
           completed_array[i] = new AtomicBoolean();
         }
         set_boundaries.set(0, concat);
+        
+        if (size == 1) {
+          System.out.println("ALL IN! for set " + this.start.epoch());
+          all_sets_accounted_for.set(true);
+        }
+        
         setMultiples(0, series);
         last_multi = 1;
         // we don't need to check for all in OR complete yet because we know we're missing
@@ -288,11 +330,11 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
         
         if (all_in) {
           end = set_boundaries.get((last_multi - 1) * 2) & END_MASK;
-          if (this.end.epoch() > end) {
+          if (query_end.epoch() > end) {
             // missing the last segment.
-            System.out.println("NOT END  " + this.end.epoch() + " => " + end +
-                "  E-S " + (this.end.epoch() - this.start.epoch()) + "  D: " + 
-                (end - this.end.epoch()));
+            System.out.println("NOT END  " + query_end.epoch() + " => " + end +
+                "  E-S " + (query_end.epoch() - this.start.epoch()) + "  D: " + 
+                (query_end.epoch() - end));
             all_in = false;
           }
         }
@@ -303,8 +345,6 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
           all_sets_accounted_for.set(true);
           checkMultipleComplete();
         }
-        
-        //setMultiples(boundary_index, series);
       }
     }
     
@@ -341,7 +381,6 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
         //System.out.println(" [[ds]] MISS, making new dpts " + series.idHash());
         if (series.value().type() == NumericLongArrayType.TYPE) {
           pts = (DownsampleNumericPartialTimeSeries) node.pipelineContext().tsdb().getRegistry().getObjectPool(DownsampleNumericPartialTimeSeriesPool.TYPE).claim().object();
-          System.out.println("GOT MOCK: " + pts);
           DownsamplePartialTimeSeries extant = timeseries.putIfAbsent(series.idHash(), pts);
           if (extant != null) {
             try {
@@ -378,7 +417,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
     if (!all_sets_accounted_for.get()) {
       return;
     }
-    
+    // TODO - watch for races here on last_multi and the completed array.
     for (int i = 0; i < last_multi; i++) {
       if (!completed_array[i].get()) {
         System.out.println("   NOT DONE AT: " + i);

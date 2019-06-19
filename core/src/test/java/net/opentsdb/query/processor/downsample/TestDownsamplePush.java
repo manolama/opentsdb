@@ -30,9 +30,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.ZoneId;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import org.junit.Before;
@@ -66,9 +68,13 @@ import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.interpolation.types.numeric.NumericSummaryInterpolatorConfig;
 import net.opentsdb.query.pojo.FillPolicy;
+import net.opentsdb.utils.DateTime;
 
 public class TestDownsamplePush {
   
+  // 12h offset w DST
+  final static ZoneId FJZ = ZoneId.of("Pacific/Fiji");
+ 
   private static MockTSDB TSDB;
   private static NumericInterpolatorConfig NUMERIC_CONFIG;
   private static NumericSummaryInterpolatorConfig SUMMARY_CONFIG;
@@ -799,6 +805,98 @@ public class TestDownsamplePush {
   }
   
   @Test
+  public void onNextOneSourceDSTDaysQueryRollups() throws Exception {
+    // 2017 1/13 to 1/18
+    query = SemanticQuery.newBuilder()
+        .setMode(QueryMode.SINGLE)
+        .setStart(Long.toString(1484265600))
+        .setEnd(Long.toString(1484697600))
+        .setExecutionGraph(Collections.emptyList())
+        .build();
+    when(context.query()).thenReturn(query);
+    
+    config = (DownsampleConfig) DownsampleConfig.newBuilder()
+        .setAggregator("sum")
+        .setInterval("1d")
+        .setStart(Long.toString(1484265600))
+        .setEnd(Long.toString(1484697600))
+        .setTimeZone(FJZ.toString())
+        .addInterpolatorConfig(NUMERIC_CONFIG)
+        .addInterpolatorConfig(SUMMARY_CONFIG)
+        .setId("foo")
+        .build();
+    setupSource("src1", 1484265600, new String[] { "1d", "1h" });
+    PartialTimeSeries pts = mockSeries(1484265600, 1484352000, "src1", 3);
+    
+    Downsample ds = new Downsample(factory, context, config);
+    ds.initialize(null).join();
+    ds.onNext(pts);
+    
+    assertSame(config, ds.config());
+    verify(context, times(1)).upstream(ds);
+    verify(context, times(1)).downstream(ds);
+    verify(context, times(1)).downstreamSources(ds);
+    
+    assertEquals(1, ds.set_sizes.size());
+    long[] sizes = ds.set_sizes.get("src1");
+    assertEquals(8, sizes.length);
+    assertEquals(86400000, sizes[0]);
+    assertEquals(86400000, sizes[1]);
+    assertEquals(5, sizes[2]);
+    assertEquals(1484265600, sizes[3]);
+    assertEquals(1484352000, sizes[4]);
+    assertEquals(1484442000, sizes[5]); // Sunday, January 15, 2017 1:00:00 UTC
+    assertEquals(1484528400, sizes[6]); // also off by 1
+    assertEquals(1484614800, sizes[7]); // also off by 1
+    
+    assertEquals(1, ds.sets.size());
+    AtomicReferenceArray<DownsamplePartialTimeSeriesSet> ref = 
+        ds.sets.get("src1");
+    assertEquals(5, ref.length());
+    assertNotNull(ref.get(0));
+    assertNull(ref.get(1));
+    assertNull(ref.get(2));
+    assertNull(ref.get(3));
+    assertNull(ref.get(4));
+    
+    assertEquals(86400000, ds.interval_ms);
+    
+    // middle arrived first 1/15 aligned UTC
+    pts = mockSeries(1484438400, 1484524800, "src1", 3);
+    ds = new Downsample(factory, context, config);
+    ds.initialize(null).join();
+    ds.onNext(pts);
+    
+    assertSame(config, ds.config());
+    verify(context, times(1)).upstream(ds);
+    verify(context, times(1)).downstream(ds);
+    verify(context, times(1)).downstreamSources(ds);
+    
+    assertEquals(1, ds.set_sizes.size());
+    sizes = ds.set_sizes.get("src1");
+    assertEquals(8, sizes.length);
+    assertEquals(86400000, sizes[0]);
+    assertEquals(86400000, sizes[1]);
+    assertEquals(5, sizes[2]);
+    assertEquals(1484265600, sizes[3]);
+    assertEquals(1484352000, sizes[4]);
+    assertEquals(1484442000, sizes[5]); // Sunday, January 15, 2017 1:00:00 UTC
+    assertEquals(1484528400, sizes[6]); // also off by 1
+    assertEquals(1484614800, sizes[7]); // also off by 1
+    
+    assertEquals(1, ds.sets.size());
+    ref = ds.sets.get("src1");
+    assertEquals(5, ref.length());
+    assertNull(ref.get(0));
+    assertNull(ref.get(1));
+    assertNotNull(ref.get(2));
+    assertNull(ref.get(3));
+    assertNull(ref.get(4));
+    
+    assertEquals(86400000, ds.interval_ms);
+  }
+  
+  @Test
   public void onNextTwoSource() throws Exception {
     // 12:16 to 12:30
     setConfig(1559996160, 1559997000, "15s");
@@ -890,9 +988,9 @@ public class TestDownsamplePush {
     assertEquals(10800000, sizes[1]);
     assertEquals(4, sizes[2]);
     assertEquals(1559955600, sizes[3]);
-    assertEquals(1559959200, sizes[4]);
-    assertEquals(1559962800, sizes[5]);
-    assertEquals(1559966400, sizes[6]);
+    assertEquals(1559966400, sizes[4]);
+    assertEquals(1559977200, sizes[5]);
+    assertEquals(1559988000, sizes[6]);
     
     assertEquals(1, ds.sets.size());
     AtomicReferenceArray<DownsamplePartialTimeSeriesSet> ref = 

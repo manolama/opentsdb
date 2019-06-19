@@ -14,6 +14,8 @@
 // limitations under the License.
 package net.opentsdb.query.processor.downsample;
 
+import java.time.Duration;
+import java.time.Period;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAmount;
@@ -257,8 +259,6 @@ public class Downsample extends AbstractQueryNode {
       return null;
     }
     
-    System.out.println("[[SRC]]: " + System.identityHashCode(this));
-    
     // shortcut if we have an empty result.
     if (pts.set().totalSets() == 1) {
       long[] sizes = new long[4];
@@ -283,7 +283,7 @@ public class Downsample extends AbstractQueryNode {
     // for our segments.
     String max_string = config.getInterval();
     long max = interval_ms;
-    long min = Long.MAX_VALUE;
+    //long min = Long.MAX_VALUE;
     final String[] set_intervals = source.setIntervals();
     if (set_intervals == null) {
       throw new IllegalStateException("Source " + source.config().getId() 
@@ -292,19 +292,19 @@ public class Downsample extends AbstractQueryNode {
     for (int i = 0; i < set_intervals.length; i++) {
       long interval = DateTime.parseDuration(set_intervals[i]);
       System.out.println("       SET INT: " + set_intervals[i] + "  I " + interval);
-      if (interval < min) {
-        min = interval;
-      }
+//      if (interval < min) {
+//        min = interval;
+//      }
       if (interval > max) {
         max_string = set_intervals[i];
         max = interval;
       }
     }
     
-    long config_interval = interval_ms;
-    if (config_interval < min) {
-      min = config_interval;
-    }
+//    long config_interval = interval_ms;
+//    if (config_interval < min) {
+//      min = config_interval;
+//    }
 
     // TODO - see if we want to just set the max to the segment size. Otherwise
     // we may be splitting segments into smaller chunks.
@@ -318,8 +318,12 @@ public class Downsample extends AbstractQueryNode {
     final int amt = DateTime.getDurationInterval(max_string);
     final String u = DateTime.getDurationUnits(max_string);
     System.out.println("  UNITS: " + u + "  AMT: " + amt + "  INT: " + config.interval());
-    TimeStamp st = source.firstSetStart().getCopy();
-    TimeStamp end = new SecondTimeStamp(context.query().endTime().epoch());
+    TimeStamp st = config.timezone() != null ? 
+        new ZonedNanoTimeStamp(source.firstSetStart().epoch(), 0, config.timezone()) : 
+          source.firstSetStart().getCopy();
+    TimeStamp end = config.timezone() != null ? 
+        new ZonedNanoTimeStamp(context.query().endTime().epoch(), 0, config.timezone()) : 
+          new SecondTimeStamp(context.query().endTime().epoch());
     if (u.toLowerCase().equals("h")) {
       end.snapToPreviousInterval(amt, ChronoUnit.HOURS);
     } else if (u.toLowerCase().equals("d")) {
@@ -329,7 +333,13 @@ public class Downsample extends AbstractQueryNode {
           + "unit: " + u);
     }
     
-    final TemporalAmount duration = DateTime.parseDuration2(max_string);
+    TemporalAmount duration;
+    if (config.timezone() == null) {
+      duration = DateTime.parseDuration2(max_string);
+    } else {
+      final long seconds = DateTime.parseDuration(max_string) / 1000;
+      duration = DateTime.durationFromSeconds(seconds);
+    }
     if (end.compare(Op.LT, config.endTime())) {
       // we need at least one more segment.
       end.add(duration);
@@ -372,12 +382,18 @@ public class Downsample extends AbstractQueryNode {
       }
       System.out.println("NEW interval = " + ((end_ts - start_ts) / 1000) +"s");
       
+      // if calendaring is involved, we need to handle that.
+      if (config.timezone() != null) {
+        duration = DateTime.durationFromSeconds(max / 1000);
+      } else {
+        duration = Duration.ofSeconds(max / 1000);
+      }
     }
     
     // TODO - we may want some logic to figure a more optimal size in
     // the event we have rollups and fall back to raw, etc.
     long[] sizes = new long[3 + (int) num_intervals];
-    sizes[0] = min;
+    sizes[0] = interval_ms;
     sizes[1] = max;
     sizes[2] = num_intervals;
     
