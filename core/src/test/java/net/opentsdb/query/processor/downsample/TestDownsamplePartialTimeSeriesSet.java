@@ -5,7 +5,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -15,8 +14,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.temporal.ChronoUnit;
-import java.util.Collections;
 import java.util.List;
 
 import org.junit.Before;
@@ -159,6 +156,75 @@ public class TestDownsamplePartialTimeSeriesSet {
     assertEquals(config.getInterval(), set.stringInterval());
     assertEquals(config.units(), set.units());
     assertEquals(Const.UTC, set.timezone());
+  }
+  
+  @Test
+  public void closeRelease() throws Exception {
+    PartialTimeSeriesSet set_a = mock(PartialTimeSeriesSet.class);
+    PartialTimeSeriesSet set_b = mock(PartialTimeSeriesSet.class);
+    PartialTimeSeriesSet set_c = mock(PartialTimeSeriesSet.class);
+    PartialTimeSeriesSet set_d = mock(PartialTimeSeriesSet.class);
+    
+    when(set_a.start()).thenReturn(new SecondTimeStamp(1559433600));
+    when(set_a.end()).thenReturn(new SecondTimeStamp(1559455200));
+    when(set_a.complete()).thenReturn(true);
+    when(set_a.timeSeriesCount()).thenReturn(1);
+    
+    when(set_b.start()).thenReturn(new SecondTimeStamp(1559455200));
+    when(set_b.end()).thenReturn(new SecondTimeStamp(1559476800));
+    when(set_b.complete()).thenReturn(true);
+    when(set_b.timeSeriesCount()).thenReturn(1);
+    
+    when(set_c.start()).thenReturn(new SecondTimeStamp(1559476800));
+    when(set_c.end()).thenReturn(new SecondTimeStamp(1559498400));
+    when(set_c.complete()).thenReturn(true);
+    when(set_c.timeSeriesCount()).thenReturn(1);
+    
+    when(set_d.start()).thenReturn(new SecondTimeStamp(1559498400));
+    when(set_d.end()).thenReturn(new SecondTimeStamp(1559520000));
+    when(set_d.complete()).thenReturn(true);
+    when(set_d.timeSeriesCount()).thenReturn(1);
+    
+    long[] sizes = new long[] {
+        21600_000,  // 6h
+        86400_000,  // 1d
+        1,          // num new sets
+        1559433600  // start at midnight
+    };
+    when(node.getSizes("m1")).thenReturn(sizes);
+    
+    PooledObject po = mock(PooledObject.class);
+    DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+    set.setPooledObject(po);
+    set.reset(node, "m1", 0);
+    
+    PartialTimeSeries pts = mockSeries(NumericLongArrayType.TYPE, set_a);
+    set.process(pts);
+    
+    // now pass in b
+    pts = mockSeries(NumericLongArrayType.TYPE, set_b);
+    set.process(pts);
+    
+    // now pass in c
+    pts = mockSeries(NumericLongArrayType.TYPE, set_c);
+    set.process(pts);
+    
+    // final, d
+    pts = mockSeries(NumericLongArrayType.TYPE, set_d);
+    set.process(pts);
+    
+    set.close();
+    assertEquals(-1, set.start().epoch());
+    assertEquals(-1, set.end().epoch());
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertFalse(set.complete.get());
+    assertEquals(0, set.count.get());
+    assertEquals(0, set.ndptss.size());
+    assertEquals(0, set.last_multi);
+    assertTrue(set.timeseries.isEmpty());
+    verify(po, times(1)).release();
   }
   
   @Test

@@ -20,11 +20,11 @@ import net.opentsdb.data.NoDataPartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.SecondTimeStamp;
-import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.types.numeric.NumericLongArrayType;
+import net.opentsdb.pools.CloseablePooledObject;
 import net.opentsdb.pools.NoDataPartialTimeSeriesPool;
 import net.opentsdb.pools.PooledObject;
 import net.opentsdb.query.QueryNode;
@@ -36,33 +36,37 @@ import net.opentsdb.utils.DateTime;
  *
  */
 public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
- TimeSpecification {
+   TimeSpecification, CloseablePooledObject {
   private static final Logger LOG = LoggerFactory.getLogger(
       DownsamplePartialTimeSeriesSet.class);
   
   protected final static long END_MASK = 0x00000000FFFFFFFFL;
   
-  protected Downsample node;
-  TimeStamp start = new SecondTimeStamp(0L);
-  TimeStamp end = new SecondTimeStamp(0L);
-  int total_sets;
-  String source;
-  long interval;
+  protected PooledObject pooled_object;
   
-  // TODO - padding
+  protected Downsample node;
+  protected TimeStamp start = new SecondTimeStamp(0L);
+  protected TimeStamp end = new SecondTimeStamp(0L);
+  protected int total_sets;
+  protected String source;
+  protected long interval;
+  
   // format [32b start ts epoch:32b end ts epoch][series counts]...
   // also our sentinel to tell if multi's are enabled or not.
-  AtomicLongArray set_boundaries;
-  AtomicBoolean[] completed_array;
+  protected AtomicLongArray set_boundaries;
   
-  AtomicBoolean all_sets_accounted_for = new AtomicBoolean();
-  AtomicBoolean complete = new AtomicBoolean();
-  AtomicInteger count = new AtomicInteger();
-  List<NoDataPartialTimeSeries> ndptss = Lists.newArrayList();
-  volatile int last_multi;
+  // TODO - padding which means unwrapping the arrays and atomic intervals so 
+  // they are no longer object references.
+  protected AtomicBoolean[] completed_array;
+  
+  protected AtomicBoolean all_sets_accounted_for = new AtomicBoolean();
+  protected AtomicBoolean complete = new AtomicBoolean();
+  protected AtomicInteger count = new AtomicInteger();
+  protected List<NoDataPartialTimeSeries> ndptss = Lists.newArrayList();
+  protected volatile int last_multi;
   
   // TODO - different data types
-  Map<Long, DownsamplePartialTimeSeries> timeseries = Maps.newConcurrentMap();
+  protected Map<Long, DownsamplePartialTimeSeries> timeseries = Maps.newConcurrentMap();
   
   void reset(final Downsample node, final String source, final int idx) {
     this.node = node;
@@ -159,8 +163,17 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
 
   @Override
   public void close() throws Exception {
-    // TODO Auto-generated method stub
-    
+    start.updateEpoch(-1);
+    end.updateEpoch(-1);
+    set_boundaries = null;
+    completed_array = null;
+    all_sets_accounted_for.set(false);
+    complete.set(false);
+    count.set(0);
+    ndptss.clear();
+    last_multi = 0;
+    timeseries.clear();
+    release();
   }
 
   @Override
@@ -233,6 +246,23 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
   @Override
   public void nextTimestamp(TimeStamp timestamp) {
     timestamp.add(((DownsampleConfig) node.config()).interval());
+  }
+  
+  @Override
+  public Object object() {
+    return this;
+  }
+
+  @Override
+  public void release() {
+    if (pooled_object != null) {
+      pooled_object.release();
+    }
+  }
+
+  @Override
+  public void setPooledObject(final PooledObject pooled_object) {
+    this.pooled_object = pooled_object;
   }
   
   protected void handleMultiples(final PartialTimeSeries series) {
@@ -472,4 +502,5 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
       System.out.println("[[ SET ]] set " + this.start.epoch() + " COMPLETE!  TS size: " + timeseries.size() + "  Count: " + count.get());
     }
   }
+
 }
