@@ -3,6 +3,7 @@ package net.opentsdb.query.processor.downsample;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
@@ -14,6 +15,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.temporal.ChronoUnit;
+import java.util.Collections;
 import java.util.List;
 
 import org.junit.Before;
@@ -25,6 +28,7 @@ import org.mockito.stubbing.Answer;
 import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
 
+import net.opentsdb.common.Const;
 import net.opentsdb.core.DefaultRegistry;
 import net.opentsdb.core.MockTSDB;
 import net.opentsdb.data.NoDataPartialTimeSeries;
@@ -36,13 +40,19 @@ import net.opentsdb.data.types.numeric.NumericLongArrayType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.pools.PooledObject;
+import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryPipelineContext;
+import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.TimeSeriesQuery;
+import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
+import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
+import net.opentsdb.query.pojo.FillPolicy;
 
 public class TestDownsamplePartialTimeSeriesSet {
 
   private static MockTSDB TSDB;
   private static List<DownsampleNumericPartialTimeSeries> SERIES;
+  private static NumericInterpolatorConfig NUMERIC_CONFIG;
   
   private QueryPipelineContext context;
   private TimeSeriesQuery query;
@@ -54,6 +64,12 @@ public class TestDownsamplePartialTimeSeriesSet {
     TSDB.registry = spy(new DefaultRegistry(TSDB));
     ((DefaultRegistry) TSDB.registry).initialize(true);
     SERIES = Lists.newArrayList();
+    
+    NUMERIC_CONFIG = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
+        .setFillPolicy(FillPolicy.NOT_A_NUMBER)
+        .setRealFillPolicy(FillWithRealPolicy.PREFER_NEXT)
+        .setDataType(NumericType.TYPE.toString())
+        .build();
     
     ObjectPool mock_pool = mock(ObjectPool.class);
     doReturn(mock_pool).when(TSDB.registry).getObjectPool(
@@ -86,8 +102,365 @@ public class TestDownsamplePartialTimeSeriesSet {
   }
   
   @Test
-  public void resetAndTimeSpec() throws Exception {
+  public void resetAndGetters() throws Exception {
+    when(query.endTime()).thenReturn(new SecondTimeStamp(1559993400));
     
+    DownsampleConfig config = (DownsampleConfig) DownsampleConfig.newBuilder()
+        .setAggregator("sum")
+        .setInterval("45m")
+        .setStart(Long.toString(1559955600))
+        .setEnd(Long.toString(1559993400))
+        .addInterpolatorConfig(NUMERIC_CONFIG)
+        .setId("foo")
+        .build();
+    when(node.config()).thenReturn(config);
+    
+    long[] sizes = new long[] {
+        2700_000,   // 45m
+        10800_000,  // 3h
+        4,          // num new sets
+        1559955600, 
+        1559966400,
+        1559977200,
+        1559988000
+    };
+    when(node.getSizes("m1")).thenReturn(sizes);
+    
+    // first index
+    DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+    set.reset(node, "m1", 0);
+    
+    assertEquals(4, set.totalSets());
+    assertFalse(set.complete());
+    assertSame(node, set.node());
+    assertEquals("m1", set.dataSource());
+    assertEquals(sizes[3], set.start().epoch());
+    assertEquals(sizes[4], set.end().epoch());
+    assertEquals(0, set.timeSeriesCount());
+    assertSame(set, set.timeSpecification());
+    assertEquals(config.interval(), set.interval());
+    assertEquals(config.getInterval(), set.stringInterval());
+    assertEquals(config.units(), set.units());
+    assertEquals(Const.UTC, set.timezone());
+    
+    // last index changes to the config end time.
+    set = new DownsamplePartialTimeSeriesSet();
+    set.reset(node, "m1", 3);
+    
+    assertEquals(4, set.totalSets());
+    assertFalse(set.complete());
+    assertSame(node, set.node());
+    assertEquals("m1", set.dataSource());
+    assertEquals(sizes[6], set.start().epoch());
+    assertEquals(config.endTime().epoch(), set.end().epoch());
+    assertEquals(0, set.timeSeriesCount());
+    assertSame(set, set.timeSpecification());
+    assertEquals(config.interval(), set.interval());
+    assertEquals(config.getInterval(), set.stringInterval());
+    assertEquals(config.units(), set.units());
+    assertEquals(Const.UTC, set.timezone());
+  }
+  
+  @Test
+  public void handleSingleAlignedOneSeriesComplete() throws Exception {
+    PartialTimeSeriesSet set_a = mock(PartialTimeSeriesSet.class);
+    when(set_a.start()).thenReturn(new SecondTimeStamp(1559995200));
+    when(set_a.end()).thenReturn(new SecondTimeStamp(1559998800));
+    when(set_a.complete()).thenReturn(true);
+    when(set_a.timeSeriesCount()).thenReturn(1);
+    
+    long[] sizes = new long[] {
+        3600_000,   // 1h
+        3600_000,   // 1h
+        2,          // num new sets
+        1559995200,
+        1559998800
+    };
+   
+    when(node.getSizes("m1")).thenReturn(sizes);
+    
+    DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+    set.reset(node, "m1", 0);
+    
+    PartialTimeSeries pts = mockSeries(NumericLongArrayType.TYPE, set_a);
+    set.process(pts);
+    
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertTrue(set.complete.get());
+    assertEquals(1, set.count.get());
+    verify(SERIES.get(0), times(1)).addSeries(pts);
+  }
+  
+  @Test
+  public void handleSingleAlignedTwoSeriesCompleteInitially() throws Exception {
+    PartialTimeSeriesSet set_a = mock(PartialTimeSeriesSet.class);
+    when(set_a.start()).thenReturn(new SecondTimeStamp(1559995200));
+    when(set_a.end()).thenReturn(new SecondTimeStamp(1559998800));
+    when(set_a.complete()).thenReturn(true);
+    when(set_a.timeSeriesCount()).thenReturn(2);
+    
+    long[] sizes = new long[] {
+        3600_000,   // 1h
+        3600_000,   // 1h
+        2,          // num new sets
+        1559995200,
+        1559998800
+    };
+   
+    when(node.getSizes("m1")).thenReturn(sizes);
+    
+    DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+    set.reset(node, "m1", 0);
+    
+    PartialTimeSeries pts = mockSeries(NumericLongArrayType.TYPE, set_a);
+    set.process(pts);
+    
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertFalse(set.complete.get());
+    assertEquals(1, set.count.get());
+    verify(SERIES.get(0), times(1)).addSeries(pts);
+    
+    pts = mockSeries(NumericLongArrayType.TYPE, set_a, 24);
+    set.process(pts);
+    
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertTrue(set.complete.get());
+    assertEquals(2, set.count.get());
+    verify(SERIES.get(1), times(1)).addSeries(pts);
+  }
+  
+  @Test
+  public void handleSingleAlignedTwoSeriesCompleteOnSecond() throws Exception {
+    PartialTimeSeriesSet set_a = mock(PartialTimeSeriesSet.class);
+    when(set_a.start()).thenReturn(new SecondTimeStamp(1559995200));
+    when(set_a.end()).thenReturn(new SecondTimeStamp(1559998800));
+    
+    long[] sizes = new long[] {
+        3600_000,   // 1h
+        3600_000,   // 1h
+        2,          // num new sets
+        1559995200,
+        1559998800
+    };
+   
+    when(node.getSizes("m1")).thenReturn(sizes);
+    
+    DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+    set.reset(node, "m1", 0);
+    
+    PartialTimeSeries pts = mockSeries(NumericLongArrayType.TYPE, set_a);
+    set.process(pts);
+    
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertFalse(set.complete.get());
+    assertEquals(1, set.count.get());
+    verify(SERIES.get(0), times(1)).addSeries(pts);
+    
+    when(set_a.complete()).thenReturn(true);
+    when(set_a.timeSeriesCount()).thenReturn(2);
+    pts = mockSeries(NumericLongArrayType.TYPE, set_a, 24);
+    set.process(pts);
+    
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertTrue(set.complete.get());
+    assertEquals(2, set.count.get());
+    verify(SERIES.get(1), times(1)).addSeries(pts);
+  }
+  
+  @Test
+  public void handleSingleAlignedNoData() throws Exception {
+    PartialTimeSeriesSet set_a = mock(PartialTimeSeriesSet.class);
+    when(set_a.start()).thenReturn(new SecondTimeStamp(1559995200));
+    when(set_a.end()).thenReturn(new SecondTimeStamp(1559998800));
+    
+    long[] sizes = new long[] {
+        3600_000,   // 1h
+        3600_000,   // 1h
+        2,          // num new sets
+        1559995200,
+        1559998800
+    };
+   
+    when(node.getSizes("m1")).thenReturn(sizes);
+    
+    DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+    set.reset(node, "m1", 0);
+    
+    PartialTimeSeries pts = mock(NoDataPartialTimeSeries.class);
+    when(pts.set()).thenReturn(set_a);
+    set.process(pts);
+    
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertTrue(set.complete.get());
+    assertEquals(0, set.count.get());
+    assertEquals(0, SERIES.size());
+    verify(node, times(1)).sendUpstream(any(NoDataPartialTimeSeries.class));
+  }
+  
+  @Test
+  public void handleSingleLargerSegmentOneSeriesComplete() throws Exception {
+    PartialTimeSeriesSet set_a = mock(PartialTimeSeriesSet.class);
+    // pretend it's a day
+    when(set_a.start()).thenReturn(new SecondTimeStamp(1559952000));
+    when(set_a.end()).thenReturn(new SecondTimeStamp(1560038400));
+    when(set_a.complete()).thenReturn(true);
+    when(set_a.timeSeriesCount()).thenReturn(1);
+    
+    long[] sizes = new long[] {
+        3600_000,    // 1h
+        3600_000,    // 1h
+        24,          // num new sets
+        1559995200,  // fudged
+        1559998800
+    };
+   
+    when(node.getSizes("m1")).thenReturn(sizes);
+    
+    DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+    set.reset(node, "m1", 0);
+    
+    PartialTimeSeries pts = mockSeries(NumericLongArrayType.TYPE, set_a);
+    set.process(pts);
+    
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertTrue(set.complete.get());
+    assertEquals(1, set.count.get());
+    verify(SERIES.get(0), times(1)).addSeries(pts);
+  }
+  
+  @Test
+  public void handleSingleLargerSegmentTwoSeriesCompleteInitially() throws Exception {
+    PartialTimeSeriesSet set_a = mock(PartialTimeSeriesSet.class);
+    // pretend it's a day
+    when(set_a.start()).thenReturn(new SecondTimeStamp(1559952000));
+    when(set_a.end()).thenReturn(new SecondTimeStamp(1560038400));
+    when(set_a.complete()).thenReturn(true);
+    when(set_a.timeSeriesCount()).thenReturn(2);
+    
+    long[] sizes = new long[] {
+        3600_000,    // 1h
+        3600_000,    // 1h
+        24,          // num new sets
+        1559995200,  // fudged
+        1559998800
+    };
+   
+    when(node.getSizes("m1")).thenReturn(sizes);
+    
+    DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+    set.reset(node, "m1", 0);
+    
+    PartialTimeSeries pts = mockSeries(NumericLongArrayType.TYPE, set_a);
+    set.process(pts);
+    
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertFalse(set.complete.get());
+    assertEquals(1, set.count.get());
+    verify(SERIES.get(0), times(1)).addSeries(pts);
+    
+    pts = mockSeries(NumericLongArrayType.TYPE, set_a, 24);
+    set.process(pts);
+    
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertTrue(set.complete.get());
+    assertEquals(2, set.count.get());
+    verify(SERIES.get(1), times(1)).addSeries(pts);
+  }
+  
+  @Test
+  public void handleSingleLargerSegmentTwoSeriesCompleteOnSecond() throws Exception {
+    PartialTimeSeriesSet set_a = mock(PartialTimeSeriesSet.class);
+    // pretend it's a day
+    when(set_a.start()).thenReturn(new SecondTimeStamp(1559952000));
+    when(set_a.end()).thenReturn(new SecondTimeStamp(1560038400));
+    
+    long[] sizes = new long[] {
+        3600_000,    // 1h
+        3600_000,    // 1h
+        24,          // num new sets
+        1559995200,  // fudged
+        1559998800
+    };
+   
+    when(node.getSizes("m1")).thenReturn(sizes);
+    
+    DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+    set.reset(node, "m1", 0);
+    
+    PartialTimeSeries pts = mockSeries(NumericLongArrayType.TYPE, set_a);
+    set.process(pts);
+    
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertFalse(set.complete.get());
+    assertEquals(1, set.count.get());
+    verify(SERIES.get(0), times(1)).addSeries(pts);
+    
+    when(set_a.complete()).thenReturn(true);
+    when(set_a.timeSeriesCount()).thenReturn(2);
+    pts = mockSeries(NumericLongArrayType.TYPE, set_a, 24);
+    set.process(pts);
+    
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertTrue(set.complete.get());
+    assertEquals(2, set.count.get());
+    verify(SERIES.get(1), times(1)).addSeries(pts);
+  }
+  
+  @Test
+  public void handleSingleLargerSegmentNoData() throws Exception {
+    PartialTimeSeriesSet set_a = mock(PartialTimeSeriesSet.class);
+    // pretend it's a day
+    when(set_a.start()).thenReturn(new SecondTimeStamp(1559952000));
+    when(set_a.end()).thenReturn(new SecondTimeStamp(1560038400));
+    when(set_a.complete()).thenReturn(true);
+    when(set_a.timeSeriesCount()).thenReturn(1);
+    
+    long[] sizes = new long[] {
+        3600_000,    // 1h
+        3600_000,    // 1h
+        24,          // num new sets
+        1559995200,  // fudged
+        1559998800
+    };
+   
+    when(node.getSizes("m1")).thenReturn(sizes);
+    
+    DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+    set.reset(node, "m1", 0);
+    
+    PartialTimeSeries pts = mock(NoDataPartialTimeSeries.class);
+    when(pts.set()).thenReturn(set_a);
+    set.process(pts);
+    
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertTrue(set.complete.get());
+    assertEquals(0, set.count.get());
+    assertEquals(0, SERIES.size());
+    verify(node, times(1)).sendUpstream(any(NoDataPartialTimeSeries.class));
   }
   
   @Test
@@ -4017,7 +4390,9 @@ public class TestDownsamplePartialTimeSeriesSet {
     when(node.getSizes("m1")).thenReturn(sizes);
     
     // just the first 45m
-    when(query.endTime()).thenReturn(new SecondTimeStamp(1559990700));
+    DownsampleConfig config = mock(DownsampleConfig.class);
+    when(config.endTime()).thenReturn(new SecondTimeStamp(1559990700));
+    when(node.config()).thenReturn(config);
     
     DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
     set.reset(node, "m1", 3);
@@ -4025,12 +4400,13 @@ public class TestDownsamplePartialTimeSeriesSet {
     PartialTimeSeries pts = mockSeries(NumericLongArrayType.TYPE, set_a);
     set.process(pts);
     
-    assertEquals(2, set.set_boundaries.length());
-    assertEquals(1, set.completed_array.length);
-    assertTrue(set.all_sets_accounted_for.get());
+    // follows single path
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
     assertTrue(set.complete.get());
     assertEquals(1, set.count.get());
-    assertTrue(set.completed_array[0].get());
+    assertNull(set.completed_array);
   }
   
   @Test
@@ -4054,7 +4430,9 @@ public class TestDownsamplePartialTimeSeriesSet {
     when(node.getSizes("m1")).thenReturn(sizes);
     
     // just the first 45m
-    when(query.endTime()).thenReturn(new SecondTimeStamp(1559990700));
+    DownsampleConfig config = mock(DownsampleConfig.class);
+    when(config.endTime()).thenReturn(new SecondTimeStamp(1559990700));
+    when(node.config()).thenReturn(config);
     
     DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
     set.reset(node, "m1", 3);
@@ -4062,12 +4440,12 @@ public class TestDownsamplePartialTimeSeriesSet {
     PartialTimeSeries pts = mockSeries(NumericLongArrayType.TYPE, set_a);
     set.process(pts);
     
-    assertEquals(2, set.set_boundaries.length());
-    assertEquals(1, set.completed_array.length);
-    assertTrue(set.all_sets_accounted_for.get());
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
     assertFalse(set.complete.get());
-    assertEquals(0, set.count.get());
-    assertFalse(set.completed_array[0].get());
+    assertEquals(1, set.count.get());
+    assertNull(set.completed_array);
         
     // next series is done
     when(set_a.complete()).thenReturn(true);
@@ -4075,12 +4453,12 @@ public class TestDownsamplePartialTimeSeriesSet {
     pts = mockSeries(NumericLongArrayType.TYPE, set_a, 24);
     set.process(pts);
     
-    assertEquals(2, set.set_boundaries.length());
-    assertEquals(1, set.completed_array.length);
-    assertTrue(set.all_sets_accounted_for.get());
+    assertNull(set.set_boundaries);
+    assertNull(set.completed_array);
+    assertFalse(set.all_sets_accounted_for.get());
     assertTrue(set.complete.get());
     assertEquals(2, set.count.get());
-    assertTrue(set.completed_array[0].get());
+    assertNull(set.completed_array);
   }
 
   @Test
@@ -4104,7 +4482,9 @@ public class TestDownsamplePartialTimeSeriesSet {
     when(node.getSizes("m1")).thenReturn(sizes);
     
     // just the first 45m
-    when(query.endTime()).thenReturn(new SecondTimeStamp(1559990700));
+    DownsampleConfig config = mock(DownsampleConfig.class);
+    when(config.endTime()).thenReturn(new SecondTimeStamp(1559990700));
+    when(node.config()).thenReturn(config);
     
     DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
     set.reset(node, "m1", 3);
@@ -4113,12 +4493,12 @@ public class TestDownsamplePartialTimeSeriesSet {
     when(pts.set()).thenReturn(set_a);
     set.process(pts);
     
-    assertEquals(2, set.set_boundaries.length());
-    assertEquals(1, set.completed_array.length);
-    assertTrue(set.all_sets_accounted_for.get());
+    // follows the non-multi path
+    assertNull(set.set_boundaries);
+    assertFalse(set.all_sets_accounted_for.get());
     assertTrue(set.complete.get());
     assertEquals(0, set.count.get());
-    assertTrue(set.completed_array[0].get());
+    assertNull(set.completed_array);
     verify(node, times(1)).sendUpstream(any(PartialTimeSeries.class));
   }
   
@@ -4151,7 +4531,9 @@ public class TestDownsamplePartialTimeSeriesSet {
     when(node.getSizes("m1")).thenReturn(sizes);
     
     // just the first 2 45m
-    when(query.endTime()).thenReturn(new SecondTimeStamp(1559993400));
+    DownsampleConfig config = mock(DownsampleConfig.class);
+    when(config.endTime()).thenReturn(new SecondTimeStamp(1559993400));
+    when(node.config()).thenReturn(config);
     
     DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
     set.reset(node, "m1", 3);
@@ -4214,7 +4596,9 @@ public class TestDownsamplePartialTimeSeriesSet {
     when(node.getSizes("m1")).thenReturn(sizes);
     
     // just the first 2 45m
-    when(query.endTime()).thenReturn(new SecondTimeStamp(1559993400));
+    DownsampleConfig config = mock(DownsampleConfig.class);
+    when(config.endTime()).thenReturn(new SecondTimeStamp(1559993400));
+    when(node.config()).thenReturn(config);
     
     DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
     set.reset(node, "m1", 3);
@@ -4246,6 +4630,82 @@ public class TestDownsamplePartialTimeSeriesSet {
   }
   
   @Test
+  public void handleMultipleTrailingSegmentTwoOverlaps1SeriesIgnoredSetBeforeComplete() throws Exception {
+    // e.g. 45 minute downsample produces 3 hour segments and we only want the 
+    // the first chunk here.
+    PartialTimeSeriesSet set_a = mock(PartialTimeSeriesSet.class);
+    PartialTimeSeriesSet set_b = mock(PartialTimeSeriesSet.class);
+    PartialTimeSeriesSet set_c = mock(PartialTimeSeriesSet.class);
+    
+    when(set_a.start()).thenReturn(new SecondTimeStamp(1559988000));
+    when(set_a.end()).thenReturn(new SecondTimeStamp(1559991600));
+    when(set_a.complete()).thenReturn(true);
+    when(set_a.timeSeriesCount()).thenReturn(1);
+    
+    when(set_b.start()).thenReturn(new SecondTimeStamp(1559991600));
+    when(set_b.end()).thenReturn(new SecondTimeStamp(1559995200));
+    when(set_b.complete()).thenReturn(true);
+    when(set_b.timeSeriesCount()).thenReturn(1);
+    
+    when(set_c.start()).thenReturn(new SecondTimeStamp(1559995200));
+    when(set_c.end()).thenReturn(new SecondTimeStamp(1559998800));
+    when(set_c.complete()).thenReturn(true);
+    when(set_c.timeSeriesCount()).thenReturn(1);
+    
+    long[] sizes = new long[] {
+        2700_000,   // 45m
+        10800_000,  // 3h
+        3,          // num new sets
+        1559955600, 
+        1559966400,
+        1559977200,
+        1559988000
+    };
+    when(node.getSizes("m1")).thenReturn(sizes);
+    
+    // just the first 2 45m
+    DownsampleConfig config = mock(DownsampleConfig.class);
+    when(config.endTime()).thenReturn(new SecondTimeStamp(1559993400));
+    when(node.config()).thenReturn(config);
+    
+    DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
+    set.reset(node, "m1", 3);
+    
+    PartialTimeSeries pts = mockSeries(NumericLongArrayType.TYPE, set_a);
+    set.process(pts);
+    
+    assertEquals(4, set.set_boundaries.length());
+    assertEquals(2, set.completed_array.length);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertFalse(set.complete.get());
+    assertEquals(0, set.count.get());
+    assertTrue(set.completed_array[0].get());
+    assertFalse(set.completed_array[1].get());
+    
+    pts = mockSeries(NumericLongArrayType.TYPE, set_c);
+    set.process(pts);
+    
+    assertEquals(4, set.set_boundaries.length());
+    assertEquals(2, set.completed_array.length);
+    assertFalse(set.all_sets_accounted_for.get());
+    assertFalse(set.complete.get());
+    assertEquals(0, set.count.get());
+    assertTrue(set.completed_array[0].get());
+    assertFalse(set.completed_array[1].get());
+    
+    pts = mockSeries(NumericLongArrayType.TYPE, set_b);
+    set.process(pts);
+    
+    assertEquals(4, set.set_boundaries.length());
+    assertEquals(2, set.completed_array.length);
+    assertTrue(set.all_sets_accounted_for.get());
+    assertTrue(set.complete.get());
+    assertEquals(1, set.count.get());
+    assertTrue(set.completed_array[0].get());
+    assertTrue(set.completed_array[1].get());
+  }
+  
+  @Test
   public void handleMultipleTrailingSegmentTwoOverlaps1SeriesOutOfOrder() throws Exception {
     // e.g. 45 minute downsample produces 3 hour segments and we only want the 
     // the first chunk here.
@@ -4274,7 +4734,9 @@ public class TestDownsamplePartialTimeSeriesSet {
     when(node.getSizes("m1")).thenReturn(sizes);
     
     // just the first 2 45m
-    when(query.endTime()).thenReturn(new SecondTimeStamp(1559993400));
+    DownsampleConfig config = mock(DownsampleConfig.class);
+    when(config.endTime()).thenReturn(new SecondTimeStamp(1559993400));
+    when(node.config()).thenReturn(config);
     
     DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
     set.reset(node, "m1", 3);
@@ -4331,7 +4793,9 @@ public class TestDownsamplePartialTimeSeriesSet {
     when(node.getSizes("m1")).thenReturn(sizes);
     
     // just the first 2 45m
-    when(query.endTime()).thenReturn(new SecondTimeStamp(1559993400));
+    DownsampleConfig config = mock(DownsampleConfig.class);
+    when(config.endTime()).thenReturn(new SecondTimeStamp(1559993400));
+    when(node.config()).thenReturn(config);
     
     DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
     set.reset(node, "m1", 3);
@@ -4408,7 +4872,9 @@ public class TestDownsamplePartialTimeSeriesSet {
     when(node.getSizes("m1")).thenReturn(sizes);
     
     // just the first 2 45m
-    when(query.endTime()).thenReturn(new SecondTimeStamp(1559993400));
+    DownsampleConfig config = mock(DownsampleConfig.class);
+    when(config.endTime()).thenReturn(new SecondTimeStamp(1559993400));
+    when(node.config()).thenReturn(config);
     
     DownsamplePartialTimeSeriesSet set = new DownsamplePartialTimeSeriesSet();
     set.reset(node, "m1", 3);

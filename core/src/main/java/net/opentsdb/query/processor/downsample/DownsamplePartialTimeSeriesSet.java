@@ -45,11 +45,9 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
   protected Downsample node;
   TimeStamp start = new SecondTimeStamp(0L);
   TimeStamp end = new SecondTimeStamp(0L);
-  TimeStamp query_end = new SecondTimeStamp(0L);
   int total_sets;
   String source;
   long interval;
-  int size;
   
   // TODO - padding
   // format [32b start ts epoch:32b end ts epoch][series counts]...
@@ -85,16 +83,11 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
       if ((end.epoch() - (sizes[0] / 1000)) > 
         node.pipelineContext().query().endTime().epoch()) {
         System.out.println("   USING the query time for end.");
-        query_end.update(node.pipelineContext().query().endTime());
-      } else {
-        query_end.update(end);
+        end.update(((DownsampleConfig) node.config()).endTime());
       }
     } else {
       end.updateEpoch(sizes[idx + 4]);
-      query_end.update(end);
     }
-    
-    size = (int) ((end.msEpoch() - start.msEpoch()) / sizes[0]);
   }
   
   void process(final PartialTimeSeries series) {
@@ -102,18 +95,18 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
       // this can happen if for some reason the upstream node sent us a set
       // that's outside of the query bounds when we're on the tail set and it
       // overlaps the query end by one or more intervals.
-      if (series.set().start().compare(Op.GTE, query_end)) {
+      if (series.set().start().compare(Op.GTE, end)) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Received and dropping a PTS for segment " 
               + series.set().start().epoch() + " to " 
               + series.set().end().epoch() + " which was beyond our "
-              + "query end time of " + query_end.epoch());
+              + "query end time of " + end.epoch());
         }
       } else {
         LOG.warn("Received and dropping a PTS for segment " 
             + series.set().start().epoch() + " to " 
             + series.set().end().epoch() + " which was within our "
-            + "query end time of " + query_end.epoch() + ", but we were complete.");
+            + "query end time of " + end.epoch() + ", but we were complete.");
       }
       return;
     }
@@ -209,9 +202,53 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
   public TimeSpecification timeSpecification() {
     return this;
   }
+  
+  @Override
+  public TemporalAmount interval() {
+    return ((DownsampleConfig) node.config()).interval();
+  }
 
+  @Override
+  public String stringInterval() {
+    return ((DownsampleConfig) node.config()).getInterval();
+  }
+
+  @Override
+  public ChronoUnit units() {
+    return ((DownsampleConfig) node.config()).units();
+  }
+
+  @Override
+  public ZoneId timezone() {
+    return ((DownsampleConfig) node.config()).timezone();
+  }
+
+  @Override
+  public void updateTimestamp(int offset, TimeStamp timestamp) {
+    for (int i = 0; i < offset; i++) {
+      timestamp.add(((DownsampleConfig) node.config()).interval());
+    }
+  }
+
+  @Override
+  public void nextTimestamp(TimeStamp timestamp) {
+    timestamp.add(((DownsampleConfig) node.config()).interval());
+  }
+  
   protected void handleMultiples(final PartialTimeSeries series) {
     System.out.println("[[SET]] Incoming set: " + series.set().start().epoch() + " => " + series.set().end().epoch() + "  Local: " + this.start.epoch() + " => " + this.end.epoch());
+    
+    if (series.set().start().compare(Op.GTE, end)) {
+      // edge case wherein we got a set outside of our boundary.
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Received and dropping a PTS for segment " 
+            + series.set().start().epoch() + " to " 
+            + series.set().end().epoch() + " which was beyond our "
+            + "query end time of " + end.epoch());
+      }
+      return;
+    }
+    
     long start = 0;
     int boundary_index = -1;    
     // ugly walk but should be fairly quick as we don't expect arrays to be
@@ -239,7 +276,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
         concat |= ((int) series.set().end().epoch());
         // use the min so we don't have to resize.
         final long[] sizes = node.getSizes(source);
-        int size = (int) ((query_end.msEpoch() - this.start.msEpoch()) / sizes[0]);
+        int size = (int) ((end.msEpoch() - this.start.msEpoch()) / sizes[0]);
         set_boundaries = new AtomicLongArray(size * 2);
         completed_array = new AtomicBoolean[size];
         for (int i = 0; i < size; i++) {
@@ -330,11 +367,11 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
         
         if (all_in) {
           end = set_boundaries.get((last_multi - 1) * 2) & END_MASK;
-          if (query_end.epoch() > end) {
+          if (this.end.epoch() > end) {
             // missing the last segment.
-            System.out.println("NOT END  " + query_end.epoch() + " => " + end +
-                "  E-S " + (query_end.epoch() - this.start.epoch()) + "  D: " + 
-                (query_end.epoch() - end));
+            System.out.println("NOT END  " + this.end.epoch() + " => " + end +
+                "  E-S " + (this.end.epoch() - this.start.epoch()) + "  D: " + 
+                (this.end.epoch() - end));
             all_in = false;
           }
         }
@@ -413,7 +450,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
     }
   }
   
-  void checkMultipleComplete() {
+  private void checkMultipleComplete() {
     if (!all_sets_accounted_for.get()) {
       return;
     }
@@ -434,37 +471,5 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
     } else {
       System.out.println("[[ SET ]] set " + this.start.epoch() + " COMPLETE!  TS size: " + timeseries.size() + "  Count: " + count.get());
     }
-  }
-
-  @Override
-  public TemporalAmount interval() {
-    return ((DownsampleConfig) node.config()).interval();
-  }
-
-  @Override
-  public String stringInterval() {
-    return ((DownsampleConfig) node.config()).getInterval();
-  }
-
-  @Override
-  public ChronoUnit units() {
-    return ((DownsampleConfig) node.config()).units();
-  }
-
-  @Override
-  public ZoneId timezone() {
-    return ((DownsampleConfig) node.config()).timezone();
-  }
-
-  @Override
-  public void updateTimestamp(int offset, TimeStamp timestamp) {
-    for (int i = 0; i < offset; i++) {
-      timestamp.add(((DownsampleConfig) node.config()).interval());
-    }
-  }
-
-  @Override
-  public void nextTimestamp(TimeStamp timestamp) {
-    timestamp.add(((DownsampleConfig) node.config()).interval());
   }
 }
