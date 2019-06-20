@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.google.common.collect.Lists;
 
+import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.BasePartialTimeSeries;
 import net.opentsdb.data.NoDataPartialTimeSeries;
@@ -13,6 +14,7 @@ import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
+import net.opentsdb.data.ZonedNanoTimeStamp;
 import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericLongArrayType;
@@ -39,15 +41,8 @@ public class DownsampleNumericPartialTimeSeries extends
   protected double[] accumulator_double_array;
   protected int accumulator_idx = 0;
   protected MutableNumericValue mdp = new MutableNumericValue();
-  TimeStamp boundary = new SecondTimeStamp(-1);
-  TimeStamp next = new SecondTimeStamp(-1);
-  
-  @Override
-  public void reset(final DownsamplePartialTimeSeriesSet set, final boolean multiples) {
-    this.set = set; // this is the new downsample set.
-    series_list = Lists.newArrayList();
-    node = set.node;
-  }
+  protected TimeStamp boundary = new ZonedNanoTimeStamp(-1, 0, Const.UTC);
+  protected TimeStamp next = new ZonedNanoTimeStamp(-1, 0, Const.UTC);
   
   /** The current write index for array stores. */
   protected int write_idx;
@@ -55,6 +50,13 @@ public class DownsampleNumericPartialTimeSeries extends
   protected DownsampleNumericPartialTimeSeries(final TSDB tsdb) {
     super();
     this.tsdb = tsdb;
+  }
+  
+  @Override
+  public void reset(final DownsamplePartialTimeSeriesSet set) {
+    this.set = set; // this is the new downsample set.
+    series_list = Lists.newArrayList();
+    node = (Downsample) set.node();
   }
   
   @Override
@@ -70,7 +72,7 @@ public class DownsampleNumericPartialTimeSeries extends
       // WOOT! Simple case where we just agg and send it up
       runSingle(series);
       System.out.println("       SENT UP");
-      ((DownsamplePartialTimeSeriesSet) set).node.sendUpstream(this);
+      ((Downsample) set.node()).sendUpstream(this);
       return;
     } else {
       // UGG!!! We have to follow the complex and ugly multi-series-path
@@ -90,7 +92,7 @@ public class DownsampleNumericPartialTimeSeries extends
     }
     
     // TODO reset reset of it
-    this.baseRelease();
+    baseRelease();
   }
   
   @Override
@@ -141,12 +143,12 @@ public class DownsampleNumericPartialTimeSeries extends
           System.out.println("       INIT DOUBLE!!!!");
           value_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
           double_array = (double[]) value_array.object();
-          if (double_array.length <= ((DownsamplePartialTimeSeriesSet) set).size) {
+          if (double_array.length <= ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
             // ugg the pool is too small.
             // TODO - get a size from the pool BEFORE we claim it.
             value_array.release();
             value_array = null;
-            double_array = new double[((DownsamplePartialTimeSeriesSet) set).size];
+            double_array = new double[((DownsamplePartialTimeSeriesSet) set).arraySize()];
           }
           
           accumulator_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
@@ -160,12 +162,12 @@ public class DownsampleNumericPartialTimeSeries extends
           System.out.println("       INIT LONG!!!!");
           value_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
           long_array = (long[]) value_array.object();
-          if (long_array.length <= ((DownsamplePartialTimeSeriesSet) set).size) {
+          if (long_array.length <= ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
             // ugg the pool is too small.
             // TODO - get a size from the pool BEFORE we claim it.
             value_array.release();
             value_array = null;
-            long_array = new long[((DownsamplePartialTimeSeriesSet) set).size];
+            long_array = new long[((DownsamplePartialTimeSeriesSet) set).arraySize()];
           }
           
           accumulator_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
@@ -188,6 +190,8 @@ public class DownsampleNumericPartialTimeSeries extends
     }
     accumulator_long_array = null;
     accumulator_double_array = null;
+    
+    fillRemainder();
   }
   
   // NOTE the barrier here. We could reduce the time it's locked but we shouldn't
@@ -232,12 +236,12 @@ public class DownsampleNumericPartialTimeSeries extends
               System.out.println("       INIT DOUBLE!!!!");
               value_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
               double_array = (double[]) value_array.object();
-              if (double_array.length <= ((DownsamplePartialTimeSeriesSet) set).size) {
+              if (double_array.length <= ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
                 // ugg the pool is too small.
                 // TODO - get a size from the pool BEFORE we claim it.
                 value_array.release();
                 value_array = null;
-                double_array = new double[((DownsamplePartialTimeSeriesSet) set).size];
+                double_array = new double[((DownsamplePartialTimeSeriesSet) set).arraySize()];
               }
               
               accumulator_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
@@ -251,12 +255,12 @@ public class DownsampleNumericPartialTimeSeries extends
               System.out.println("       INIT LONG!!!!");
               value_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
               long_array = (long[]) value_array.object();
-              if (long_array.length <= ((DownsamplePartialTimeSeriesSet) set).size) {
+              if (long_array.length <= ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
                 // ugg the pool is too small.
                 // TODO - get a size from the pool BEFORE we claim it.
                 value_array.release();
                 value_array = null;
-                long_array = new long[((DownsamplePartialTimeSeriesSet) set).size];
+                long_array = new long[((DownsamplePartialTimeSeriesSet) set).arraySize()];
               }
               
               accumulator_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
@@ -422,8 +426,8 @@ public class DownsampleNumericPartialTimeSeries extends
     if (accumulator_idx > 0) {
       // TODO - agg and put
       if (accumulator_long_array != null) {
-        node.aggregator.run(accumulator_long_array, 0, accumulator_idx, mdp);
-        if (mdp.isInteger()) {
+        node.aggregator().run(accumulator_long_array, 0, accumulator_idx, mdp);
+        if (mdp.isInteger() && long_array != null) {
           long_array[write_idx++] = mdp.longValue();
         } else {
           if (double_array == null) {
@@ -432,7 +436,7 @@ public class DownsampleNumericPartialTimeSeries extends
           double_array[write_idx++] = mdp.toDouble();
         }
       } else {
-        node.aggregator.run(accumulator_double_array, 0, accumulator_idx, ((DownsampleConfig) node.config()).getInfectiousNan(), mdp);
+        node.aggregator().run(accumulator_double_array, 0, accumulator_idx, ((DownsampleConfig) node.config()).getInfectiousNan(), mdp);
         if (long_array != null && double_array == null) {
           flipFlopMainArray();
         }
@@ -450,6 +454,18 @@ public class DownsampleNumericPartialTimeSeries extends
       }
       double_array[write_idx++] = Double.NaN;
       boundary.add(((DownsampleConfig) node.config()).interval()); 
+    }
+  }
+
+  void fillRemainder() {
+    // if the write index is less than the size we need to fill
+    while (write_idx < ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
+      // TODO other fills
+      if (double_array == null) {
+        flipFlopMainArray();
+      }
+      
+      double_array[write_idx++] = Double.NaN;
     }
   }
 }

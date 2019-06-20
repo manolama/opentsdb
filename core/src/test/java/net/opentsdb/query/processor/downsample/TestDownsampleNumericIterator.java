@@ -423,7 +423,7 @@ public class TestDownsampleNumericIterator {
   }
   
   @Test
-  public void downsampleLoneDouble() throws Exception {
+  public void downsampleLongDouble() throws Exception {
     // behaves the same with the difference that the old version would return the
     // first value at BASE_TIME but now we skip it.
     source = new NumericMillisecondShard(BaseTimeSeriesStringId.newBuilder()

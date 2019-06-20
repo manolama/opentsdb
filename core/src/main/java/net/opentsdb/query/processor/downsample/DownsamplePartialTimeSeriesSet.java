@@ -31,9 +31,30 @@ import net.opentsdb.query.QueryNode;
 import net.opentsdb.utils.DateTime;
 
 /**
- * TODO - crap!!! For the total time series we can't rely on max of set 
- * counts. We have to find the UNIQUE series!!! UGG
- *
+ * A segment of downsample data. This is an ugly class so check out how it works:
+ * <p>
+ * There are two modes:
+ * <ul>
+ * <li>Single source set per DS Set.</li>
+ * <li>Multiple source sets pre DS Set.</li>
+ * </ul>
+ * <p>
+ * The single case is pretty straight forward. E.g. if we have 1m downsampling
+ * and 1 hour source segments then we would create 1h DS segments and every
+ * time series would be able to downsample within a segment. In this case we
+ * increment the #count for every PTS received. When we get the total time series
+ * count from the source set and the source set is complete, we'll tag this set
+ * as complete.
+ * <p>
+ * Multiple sources may be needed in cases such as:
+ * <ul>
+ * <li>Calendaring is in effect with a DST zone that breaks alignment.</li>
+ * <li>Odd intervals are used that would span multiple sources.</li>
+ * <li>Run-all is enabled.</li>
+ * </ul>
+ * <p>
+ * In this case we have to keep track of NoDataPartialTimeSeries and real series.
+ * We use the time series map, set boundaries array, etc to track our series.
  */
 public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
    TimeSpecification, CloseablePooledObject {
@@ -64,6 +85,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
   protected AtomicInteger count = new AtomicInteger();
   protected List<NoDataPartialTimeSeries> ndptss = Lists.newArrayList();
   protected volatile int last_multi;
+  protected int array_size;
   
   // TODO - different data types
   protected Map<Long, DownsamplePartialTimeSeries> timeseries = Maps.newConcurrentMap();
@@ -92,6 +114,8 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
     } else {
       end.updateEpoch(sizes[idx + 4]);
     }
+    
+    array_size = (int) ((end.epoch() - start.epoch()) / (sizes[0] / 1000));
   }
   
   void process(final PartialTimeSeries series) {
@@ -153,7 +177,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
       DownsampleNumericPartialTimeSeries pts;
       if (series.value().type() == NumericLongArrayType.TYPE) {
         pts = (DownsampleNumericPartialTimeSeries) node.pipelineContext().tsdb().getRegistry().getObjectPool(DownsampleNumericPartialTimeSeriesPool.TYPE).claim().object();
-        pts.reset(this, true);
+        pts.reset(this);
         pts.addSeries(series);
       } else {
         throw new RuntimeException("Unhandled type: " + series.value().type());
@@ -263,6 +287,10 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
   @Override
   public void setPooledObject(final PooledObject pooled_object) {
     this.pooled_object = pooled_object;
+  }
+  
+  protected int arraySize() {
+    return array_size;
   }
   
   protected void handleMultiples(final PartialTimeSeries series) {
@@ -457,7 +485,7 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
             }
             pts = extant;
           } else {
-            pts.reset(this, true);
+            pts.reset(this);
           }
           for (final NoDataPartialTimeSeries ndpts : ndptss) {
             pts.addSeries(ndpts);

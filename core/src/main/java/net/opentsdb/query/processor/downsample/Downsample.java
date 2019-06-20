@@ -431,6 +431,9 @@ public class Downsample extends AbstractQueryNode {
     super.sendUpstream(series);
   }
   
+  protected NumericAggregator aggregator() {
+    return aggregator;
+  }
   /**
    * A downsample result that's a member class of the main node so that we share
    * the references to the config and node.

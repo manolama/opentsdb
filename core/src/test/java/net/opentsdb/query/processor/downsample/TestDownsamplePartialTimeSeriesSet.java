@@ -139,6 +139,7 @@ public class TestDownsamplePartialTimeSeriesSet {
     assertEquals(config.getInterval(), set.stringInterval());
     assertEquals(config.units(), set.units());
     assertEquals(Const.UTC, set.timezone());
+    assertEquals(4, set.arraySize());
     
     // last index changes to the config end time.
     set = new DownsamplePartialTimeSeriesSet();
@@ -156,6 +157,7 @@ public class TestDownsamplePartialTimeSeriesSet {
     assertEquals(config.getInterval(), set.stringInterval());
     assertEquals(config.units(), set.units());
     assertEquals(Const.UTC, set.timezone());
+    assertEquals(1, set.arraySize());
   }
   
   @Test

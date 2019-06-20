@@ -10,6 +10,6 @@ public interface DownsamplePartialTimeSeries<T extends TimeSeriesDataType>
   
   public void addSeries(final PartialTimeSeries series);
   
-  public void reset(final DownsamplePartialTimeSeriesSet set, final boolean multiples);
+  public void reset(final DownsamplePartialTimeSeriesSet set);
   
 }

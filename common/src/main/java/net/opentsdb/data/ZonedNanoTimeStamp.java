@@ -84,7 +84,7 @@ public class ZonedNanoTimeStamp implements TimeStamp {
     this.timestamp = ZonedDateTime.from(timestamp);
   }
   
-  public ZonedNanoTimeStamp(long epoch_millis, ZoneId zone) {
+  public ZonedNanoTimeStamp(final long epoch_millis, final ZoneId zone) {
     if (zone == null) {
       throw new IllegalArgumentException("Zone cannot be null.");
     }
@@ -141,6 +141,18 @@ public class ZonedNanoTimeStamp implements TimeStamp {
     this.timestamp = ZonedDateTime.ofInstant(
         Instant.ofEpochSecond(epoch, nano), 
         this.timestamp.getZone());
+  }
+  
+  /**
+   * Override that allows for updating the timezone as well as the time stamp.
+   * @param epoch The unix epoch timestamp (seconds of course).
+   * @param nano The nano second offset.
+   * @param zone The non-null timezone. Use {@link Const#UTC} if you don't have one.
+   */
+  public void update(final long epoch, final long nano, final ZoneId zone) {
+    this.timestamp = ZonedDateTime.ofInstant(
+        Instant.ofEpochSecond(epoch, nano), 
+        zone);
   }
 
   @Override
