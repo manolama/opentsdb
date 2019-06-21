@@ -68,7 +68,7 @@ public class DownsampleNumericPartialTimeSeries extends
       id_type = series.idType();
     }
     
-    if (((DownsamplePartialTimeSeriesSet) set).set_boundaries == null) {
+    if (((DownsamplePartialTimeSeriesSet) set).lastMulti() < 1) {
       // WOOT! Simple case where we just agg and send it up
       runSingle(series);
       System.out.println("       SENT UP");
@@ -121,194 +121,160 @@ public class DownsampleNumericPartialTimeSeries extends
   }
   
   void runSingle(final PartialTimeSeries series) {
-    long[] values = ((NumericLongArrayType) series.value()).data();
-    int idx = ((NumericLongArrayType) series.value()).offset();
-    
-    boundary.update(set.start());
-    boundary.add(((DownsampleConfig) node.config()).interval()); 
-    while (idx <= ((NumericLongArrayType) series.value()).end() && idx < 
-        ((NumericLongArrayType) series.value()).end()) {
-      long ts = 0; // in ms.  TODO - nanos
-      if((values[idx] & NumericLongArrayType.MILLISECOND_FLAG) != 0) {
-        ts = values[idx] & NumericLongArrayType.TIMESTAMP_MASK;
-      } else {
-        ts = (values[idx] & NumericLongArrayType.TIMESTAMP_MASK) * 1000;
-      }
-      if (ts >= boundary.msEpoch()) {
-        runAccumulatorOrFill(ts);
-      }
-      
-      if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
-        if (double_array == null && long_array == null) {
-          System.out.println("       INIT DOUBLE!!!!");
-          value_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
-          double_array = (double[]) value_array.object();
-          if (double_array.length <= ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
-            // ugg the pool is too small.
-            // TODO - get a size from the pool BEFORE we claim it.
-            value_array.release();
-            value_array = null;
-            double_array = new double[((DownsamplePartialTimeSeriesSet) set).arraySize()];
-          }
-          
-          accumulator_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
-          accumulator_double_array = (double[]) accumulator_array.object();
-        }
-        
-        addLocal(Double.longBitsToDouble(values[idx + 1]));
-        idx += 2;
-      } else {
-        if (double_array == null && long_array == null) {
-          System.out.println("       INIT LONG!!!!");
-          value_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
-          long_array = (long[]) value_array.object();
-          if (long_array.length <= ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
-            // ugg the pool is too small.
-            // TODO - get a size from the pool BEFORE we claim it.
-            value_array.release();
-            value_array = null;
-            long_array = new long[((DownsamplePartialTimeSeriesSet) set).arraySize()];
-          }
-          
-          accumulator_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
-          accumulator_long_array = (long[]) accumulator_array.object();
-        }
-        
-        addLocal(values[idx + 1]);
-        idx += 2;
-      }
+//    final long[] values = ((NumericLongArrayType) series.value()).data();
+//    int idx = ((NumericLongArrayType) series.value()).offset();
+//    
+    if (((DownsampleConfig) node.config()).getRunAll()) {
+      boundary.update(set.end());
+    } else {
+      boundary.update(set.start());
+      boundary.add(((DownsampleConfig) node.config()).interval());
     }
     
-    if (accumulator_idx > 0) {
-      runAccumulatorOrFill(boundary.msEpoch());
-    }
+    aggSeries(series);
+//    while (idx <= ((NumericLongArrayType) series.value()).end() && 
+//        idx < ((NumericLongArrayType) series.value()).end()) {
+//      long ts = 0; // in ms.  TODO - nanos
+//      if((values[idx] & NumericLongArrayType.MILLISECOND_FLAG) != 0) {
+//        ts = values[idx] & NumericLongArrayType.TIMESTAMP_MASK;
+//      } else {
+//        ts = (values[idx] & NumericLongArrayType.TIMESTAMP_MASK) * 1000;
+//      }
+//      
+//      // skip values earlier than our start time and those later than our end time
+//      if (ts < set.start().msEpoch()) {
+//        // TODO - nanos
+//        idx += 2;
+//        continue;
+//      }
+//      if (ts > set.end().msEpoch() ||
+//          boundary.compare(Op.GT, set.end())) {
+//        break;
+//      }
+//      
+//      if (ts >= boundary.msEpoch()) {
+//        runAccumulatorOrFill(ts);
+//      }
+//      
+//      if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
+//        if (double_array == null && long_array == null) {
+//          System.out.println("       INIT DOUBLE!!!!");
+//          value_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
+//          double_array = (double[]) value_array.object();
+//          if (double_array.length <= ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
+//            // ugg the pool is too small.
+//            // TODO - get a size from the pool BEFORE we claim it.
+//            value_array.release();
+//            value_array = null;
+//            double_array = new double[((DownsamplePartialTimeSeriesSet) set).arraySize()];
+//          }
+//          
+//          accumulator_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
+//          accumulator_double_array = (double[]) accumulator_array.object();
+//        }
+//        
+//        addLocal(Double.longBitsToDouble(values[idx + 1]));
+//        idx += 2;
+//      } else {
+//        if (double_array == null && long_array == null) {
+//          System.out.println("       INIT LONG!!!!");
+//          value_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
+//          long_array = (long[]) value_array.object();
+//          if (long_array.length <= ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
+//            // ugg the pool is too small.
+//            // TODO - get a size from the pool BEFORE we claim it.
+//            value_array.release();
+//            value_array = null;
+//            long_array = new long[((DownsamplePartialTimeSeriesSet) set).arraySize()];
+//          }
+//          
+//          accumulator_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
+//          accumulator_long_array = (long[]) accumulator_array.object();
+//        }
+//        
+//        addLocal(values[idx + 1]);
+//        idx += 2;
+//      }
+//    }
+//    System.out.println("AIDX: " + accumulator_idx);
+//    if (accumulator_idx > 0 && boundary.compare(Op.LTE, set.end())) {
+//      runAccumulatorOrFill(boundary.msEpoch());
+//    }
     
     // release resources
-    if (accumulator_array != null) {
-      accumulator_array.release();
-      accumulator_array = null;
-    }
-    accumulator_long_array = null;
-    accumulator_double_array = null;
-    
-    fillRemainder();
+    releaseAndFill();
   }
   
   // NOTE the barrier here. We could reduce the time it's locked but we shouldn't
   // block threads very long and it may be a good idea to back things up a bit
   // here anyway.
   synchronized void runMulti(final PartialTimeSeries series) {
-    System.out.println("    [[[ds]]] run multiple in PTS!");
+    System.out.println("    [[[ds]]] run multiple in PTS! ");
     if (next.epoch() < 0) {
       next.update(set.start());
-      boundary.update(next);
-      boundary.add(((DownsampleConfig) node.config()).interval()); 
+      if (((DownsampleConfig) node.config()).getRunAll()) {
+        boundary.update(set.end());
+      } else {
+        boundary.update(set.start());
+        boundary.add(((DownsampleConfig) node.config()).interval());
+      }
     }
     
-    PartialTimeSeries local = series;
-    while (true) {
-      if (local instanceof NoDataPartialTimeSeries) {
-        if (local.set().start().compare(Op.EQ, next)) {
+    // start with the given pts
+    PartialTimeSeries current_pts = series;
+    int temp = 0;
+    do {
+      System.out.println("     START LOOP W: " + current_pts.set().start().epoch());
+      boolean added = false;
+      if (current_pts instanceof NoDataPartialTimeSeries) {
+        if (current_pts.set().start().compare(Op.LTE, next)) {
           // run it!
-          next.update(local.set().end());
+          next.update(current_pts.set().end());
           runAccumulatorOrFill(next.epoch());
-//          try {
-//            local.close();
-//          } catch (Exception e) {
-//            // TODO Auto-generated catch block
-//            e.printStackTrace();
-//          }
         } else {
           // buffer since we're missing a piece
-          series_list.add(local);
-          break;
+          series_list.add(current_pts);
+          added = true;
         }
+      } else if (current_pts.set().start().compare(Op.LTE, next)) {
+        aggSeries(current_pts);
+        next.update(current_pts.set().end());
+        System.out.println("     BOUNDARY " + boundary.epoch() + " Vs Next " + next.epoch() + "  " + (next.epoch() - boundary.epoch()));
+        fillTillNext();
       } else {
-        if (local.set().start().compare(Op.EQ, next)) {
-          // run it!
-          next.update(local.set().end());
-          
-          long[] values = ((NumericLongArrayType) local.value()).data();
-          int idx = ((NumericLongArrayType) local.value()).offset();
-          
-          if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
-            if (double_array == null && long_array == null) {
-              System.out.println("       INIT DOUBLE!!!!");
-              value_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
-              double_array = (double[]) value_array.object();
-              if (double_array.length <= ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
-                // ugg the pool is too small.
-                // TODO - get a size from the pool BEFORE we claim it.
-                value_array.release();
-                value_array = null;
-                double_array = new double[((DownsamplePartialTimeSeriesSet) set).arraySize()];
-              }
-              
-              accumulator_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
-              accumulator_double_array = (double[]) accumulator_array.object();
-            }
-            
-            addLocal(Double.longBitsToDouble(values[idx + 1]));
-            idx += 2;
-          } else {
-            if (double_array == null && long_array == null) {
-              System.out.println("       INIT LONG!!!!");
-              value_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
-              long_array = (long[]) value_array.object();
-              if (long_array.length <= ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
-                // ugg the pool is too small.
-                // TODO - get a size from the pool BEFORE we claim it.
-                value_array.release();
-                value_array = null;
-                long_array = new long[((DownsamplePartialTimeSeriesSet) set).arraySize()];
-              }
-              
-              accumulator_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
-              accumulator_long_array = (long[]) accumulator_array.object();
-            }
-            
-            addLocal(values[idx + 1]);
-            idx += 2;
-          }
-        } else {
-          // buffer since we're missing a piece
-          series_list.add(local);
-          break;
-        }
-        
-        if (series_list.size() == 0) {
-          break;
-        }
-        
-        if (next.compare(Op.EQ, set.end())) {
-          break;
-        }
-        
-        // see if we have the next set
-        local = null;
-        for (int i = 0; i < series_list.size(); i++) {
-          final PartialTimeSeries pts = series_list.get(i);
-          if (pts.set().start().compare(Op.EQ, next)) {
-            local = pts;
-            break;
-          }
-        }
-        
-        if (local == null) {
-          // don't have next yet.
+        series_list.add(current_pts);
+        added = true;
+      }
+      
+      if (added) {
+        System.out.println("ADDED!!!!!");
+        break;
+      }
+      
+      // otherwise we may be able to advance and release some series.
+      current_pts = null;
+      for (int i = 0; i < series_list.size(); i++) {
+        current_pts = series_list.get(i);
+        if (current_pts != null && 
+            next.compare(Op.EQ, current_pts.set().start())) {
+          series_list.set(i, null);
           break;
         }
       }
       
-    }
+      if (++temp >= 10) {
+        break;
+      }
+    } while (current_pts != null);
     
     // determine if we send it up or not.
     pts_count++;
-    System.out.println("   RAN multi. All in? " + ((DownsamplePartialTimeSeriesSet) set).all_sets_accounted_for.get() + "  Last multi: " + ((DownsamplePartialTimeSeriesSet) set).last_multi + "  Cnt: " + pts_count);
-    if (((DownsamplePartialTimeSeriesSet) set).all_sets_accounted_for.get() &&
-        pts_count == ((DownsamplePartialTimeSeriesSet) set).last_multi) {
+    System.out.println("   RAN multi. All in? " + ((DownsamplePartialTimeSeriesSet) set).allSetsAccountedFor() + "  Last multi: " + ((DownsamplePartialTimeSeriesSet) set).lastMulti() + "  Cnt: " + pts_count + " NEXT: " + next.epoch());
+    if (((DownsamplePartialTimeSeriesSet) set).allSetsAccountedFor() &&
+        pts_count == ((DownsamplePartialTimeSeriesSet) set).lastMulti()) {
+      releaseAndFill();
       System.out.println("     ---------- DS ------ Send multi upstream!!!");
-      ((DownsamplePartialTimeSeriesSet) set).node.sendUpstream(this);
+      ((Downsample) set.node()).sendUpstream(this);
     }
   }
   
@@ -358,7 +324,8 @@ public class DownsampleNumericPartialTimeSeries extends
   
   void flipFlopMainArray() {
     PooledObject new_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
-    if (((double[]) new_array.object()).length <= long_array.length) {
+    if (((double[]) new_array.object()).length <= 
+        (long_array != null ? long_array.length : ((DownsamplePartialTimeSeriesSet) set).arraySize())) {
       // ugg the pool is too small.
       // TODO - get a size from the pool BEFORE we claim it.
       new_array = null;
@@ -443,7 +410,9 @@ public class DownsampleNumericPartialTimeSeries extends
         double_array[write_idx++] = mdp.doubleValue();
       }
       System.out.println("       [ds] ran: " + boundary.epoch());
-      boundary.add(((DownsampleConfig) node.config()).interval()); 
+      if (!((DownsampleConfig) node.config()).getRunAll()) {
+        boundary.add(((DownsampleConfig) node.config()).interval());
+      }
       accumulator_idx = 0;
     }
     
@@ -453,7 +422,9 @@ public class DownsampleNumericPartialTimeSeries extends
         flipFlopMainArray();
       }
       double_array[write_idx++] = Double.NaN;
-      boundary.add(((DownsampleConfig) node.config()).interval()); 
+      if (!((DownsampleConfig) node.config()).getRunAll()) {
+        boundary.add(((DownsampleConfig) node.config()).interval());
+      }
     }
   }
 
@@ -466,6 +437,107 @@ public class DownsampleNumericPartialTimeSeries extends
       }
       
       double_array[write_idx++] = Double.NaN;
+    }
+  }
+  
+  void fillTillNext() {
+    while (boundary.compare(Op.LTE, next)) {
+      // TODO other fills
+      if (double_array == null) {
+        flipFlopMainArray();
+      }
+      
+      double_array[write_idx++] = Double.NaN;
+      if (!((DownsampleConfig) node.config()).getRunAll()) {
+        boundary.add(((DownsampleConfig) node.config()).interval());
+      }
+    }
+  }
+
+  void releaseAndFill() {
+    if (accumulator_array != null) {
+      accumulator_array.release();
+      accumulator_array = null;
+    }
+    accumulator_long_array = null;
+    accumulator_double_array = null;
+    
+    fillRemainder();
+  }
+  
+  void aggSeries(final PartialTimeSeries series) {
+    final long[] values = ((NumericLongArrayType) series.value()).data();
+    int idx = ((NumericLongArrayType) series.value()).offset();
+    
+    while (idx <= ((NumericLongArrayType) series.value()).end()) {
+      long ts = 0; // in ms.  TODO - nanos
+      if((values[idx] & NumericLongArrayType.MILLISECOND_FLAG) != 0) {
+        ts = values[idx] & NumericLongArrayType.TIMESTAMP_MASK;
+      } else {
+        ts = (values[idx] & NumericLongArrayType.TIMESTAMP_MASK) * 1000;
+      }
+      
+      // skip values earlier than our start time and those later than our end time
+      if (ts < set.start().msEpoch()) {
+        // TODO - nanos
+        idx += 2;
+        continue;
+      }
+      
+      // stop if we've reached the end of the set.
+      if (ts > set.end().msEpoch() ||
+        boundary.compare(Op.GT, set.end())) {
+        break;
+      }
+      
+      if (ts >= boundary.msEpoch()) {
+        System.out.println("      filling....");
+        runAccumulatorOrFill(ts);
+      }
+      
+      if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
+        if (double_array == null && long_array == null) {
+          System.out.println("       INIT DOUBLE!!!!");
+          value_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
+          double_array = (double[]) value_array.object();
+          if (double_array.length <= ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
+            // ugg the pool is too small.
+            // TODO - get a size from the pool BEFORE we claim it.
+            value_array.release();
+            value_array = null;
+            double_array = new double[((DownsamplePartialTimeSeriesSet) set).arraySize()];
+          }
+          
+          accumulator_array = tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE).claim();
+          accumulator_double_array = (double[]) accumulator_array.object();
+        }
+        
+        addLocal(Double.longBitsToDouble(values[idx + 1]));
+        idx += 2;
+      } else {
+        if (double_array == null && long_array == null) {
+          System.out.println("       INIT LONG!!!!");
+          value_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
+          long_array = (long[]) value_array.object();
+          if (long_array.length <= ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
+            // ugg the pool is too small.
+            // TODO - get a size from the pool BEFORE we claim it.
+            value_array.release();
+            value_array = null;
+            long_array = new long[((DownsamplePartialTimeSeriesSet) set).arraySize()];
+          }
+          
+          accumulator_array = tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE).claim();
+          accumulator_long_array = (long[]) accumulator_array.object();
+        }
+        
+        addLocal(values[idx + 1]);
+        idx += 2;
+      }
+    }
+    System.out.println("AIDX: " + accumulator_idx);
+    if (accumulator_idx > 0 && boundary.compare(Op.LTE, set.end())) {
+      runAccumulatorOrFill(boundary.msEpoch());
     }
   }
 }

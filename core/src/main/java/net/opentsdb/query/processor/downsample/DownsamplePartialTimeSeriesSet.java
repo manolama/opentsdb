@@ -507,6 +507,14 @@ public class DownsamplePartialTimeSeriesSet implements PartialTimeSeriesSet,
       pts.addSeries(series);
     }
   }
+
+  protected int lastMulti() {
+    return last_multi;
+  }
+  
+  protected boolean allSetsAccountedFor() {
+    return all_sets_accounted_for.get();
+  }
   
   private void checkMultipleComplete() {
     if (!all_sets_accounted_for.get()) {
