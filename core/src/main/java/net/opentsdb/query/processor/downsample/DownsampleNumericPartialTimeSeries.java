@@ -10,7 +10,6 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.data.BasePartialTimeSeries;
 import net.opentsdb.data.NoDataPartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeries;
-import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
@@ -159,8 +158,13 @@ public class DownsampleNumericPartialTimeSeries extends
       if (current_pts instanceof NoDataPartialTimeSeries) {
         if (current_pts.set().start().compare(Op.LTE, next)) {
           // run it!
-          //next.update(current_pts.set().end());
-          runAccumulatorOrFill(next.epoch());
+          if (accumulator_idx <= 0) {
+            fillTillNext();
+          } else {
+            runAccumulatorOrFill(current_pts.set().end().epoch());
+          }
+          next.update(current_pts.set().end());
+          //runAccumulatorOrFill(next.epoch());
         } else {
           // buffer since we're missing a piece
           series_list.add(current_pts);
@@ -323,7 +327,10 @@ public class DownsampleNumericPartialTimeSeries extends
   }
 
   void runAccumulatorOrFill(final long ts) {
+    if (ts == boundary.msEpoch())
+      System.out.println("        ACCUMULATE[[[[[[ EQUALS!!!!!! ]]]]]]]]" );
     if (accumulator_idx > 0) {
+      System.out.println("        Flushing: " + accumulator_idx);
       // TODO - agg and put
       if (accumulator_long_array != null) {
         node.aggregator().run(accumulator_long_array, 0, accumulator_idx, mdp);
@@ -335,21 +342,37 @@ public class DownsampleNumericPartialTimeSeries extends
           }
           double_array[write_idx++] = mdp.toDouble();
         }
+        System.out.println("AGG: " + mdp);
       } else {
         node.aggregator().run(accumulator_double_array, 0, accumulator_idx, ((DownsampleConfig) node.config()).getInfectiousNan(), mdp);
         if (long_array != null && double_array == null) {
           flipFlopMainArray();
         }
         double_array[write_idx++] = mdp.doubleValue();
+        System.out.println("AGG: " + mdp);
       }
       System.out.println("       [ds] ran: " + boundary.epoch());
       if (!((DownsampleConfig) node.config()).getRunAll()) {
         boundary.add(((DownsampleConfig) node.config()).interval());
       }
       accumulator_idx = 0;
+    } else if (ts == boundary.msEpoch()) {
+      // edge case wherein the timestamp matches the boundary but we hadn't 
+      // written anything for the last cell.
+      if (long_array != null && double_array == null) {
+        flipFlopMainArray();
+      } else if (double_array == null) {
+        initDouble();
+      }
+      double_array[write_idx++] = Double.NaN;
+      if (!((DownsampleConfig) node.config()).getRunAll()) {
+        boundary.add(((DownsampleConfig) node.config()).interval());
+      }
+      return;
     }
     
-    while (boundary.msEpoch() < ts) {
+    while (!((DownsampleConfig) node.config()).getRunAll() && 
+        boundary.msEpoch() <= ts) {
       System.out.println("                 ok, filling here");
       // TODO - proper fill
       if (long_array != null && double_array == null) {
@@ -430,7 +453,7 @@ public class DownsampleNumericPartialTimeSeries extends
       }
       
       if (ts >= boundary.msEpoch()) {
-        System.out.println("      filling.... " + (boundary.msEpoch() - ts));
+        System.out.println("      flushing or filling.... " + (ts - boundary.msEpoch()));
         runAccumulatorOrFill(ts);
       }
       
@@ -450,16 +473,7 @@ public class DownsampleNumericPartialTimeSeries extends
         idx += 2;
       }
     }
-    System.out.println("     EXIT Loop: " + idx + "  " + ((NumericLongArrayType) series.value()).end());
-    
     System.out.println("AIDX: " + accumulator_idx + "  idx " + idx + " L: " + values.length + "  B: " + (set.end().epoch() - boundary.epoch()));
-    System.out.println(" " + 
-        (accumulator_idx > 0) + "\n " +
-        boundary.compare(Op.LTE, set.end()) + "\n " + 
-        (idx >= ((NumericLongArrayType) series.value()).end()) + "\n " +
-        (next.epoch() > 0) + "\n " +
-        (next.epoch() > 0 ? boundary.compare(Op.LTE, next) : true));
-    
     if (next.epoch() > 0) {
       // advance so we can see if we need to run the last bucket or not.
       next.update(series.set().end());
