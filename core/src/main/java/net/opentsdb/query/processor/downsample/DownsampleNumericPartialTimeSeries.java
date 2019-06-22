@@ -129,7 +129,7 @@ public class DownsampleNumericPartialTimeSeries extends
     }
     
     aggSeries(series);
-
+    
     // release resources
     releaseAndFill();
   }
@@ -394,7 +394,7 @@ public class DownsampleNumericPartialTimeSeries extends
     fillRemainder();
   }
   
-  void aggSeries(final PartialTimeSeries series) {
+  boolean aggSeries(final PartialTimeSeries series) {
     final long[] values = ((NumericLongArrayType) series.value()).data();
     int idx = ((NumericLongArrayType) series.value()).offset();
     
@@ -407,7 +407,9 @@ public class DownsampleNumericPartialTimeSeries extends
       }
       
       // skip values earlier than our start time and those later than our end time
-      if (ts < set.start().msEpoch()) {
+      if (ts < set.start().msEpoch() ||
+          (next.epoch() > 0 && ts < next.msEpoch())) {
+        System.out.println("    DROPPING: " + (next.msEpoch() - ts));
         // TODO - nanos
         idx += 2;
         continue;
@@ -468,6 +470,8 @@ public class DownsampleNumericPartialTimeSeries extends
     if (accumulator_idx > 0 && boundary.compare(Op.LTE, set.end())) {
       runAccumulatorOrFill(boundary.msEpoch());
     }
+    
+    return false;
   }
 }
 

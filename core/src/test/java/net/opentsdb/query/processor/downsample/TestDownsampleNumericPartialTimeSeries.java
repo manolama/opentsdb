@@ -480,7 +480,7 @@ public class TestDownsampleNumericPartialTimeSeries {
     when(ds_set.lastMulti()).thenReturn(2);
     PartialTimeSeriesSet set_b = getSourceSet(BASE_TIME + (60 * 30), BASE_TIME + 3600);
     MockNumericLongArrayTimeSeries pts_b = new MockNumericLongArrayTimeSeries(set_b, 42);
-    pts_b.addValue(BASE_TIME, 4)
+    pts_b.addValue(BASE_TIME, 4) // this one is too early!
       .addValue(BASE_TIME + 60 * 30, 128)
       .addValue(BASE_TIME + 60 * 40, 256)
       .addValue(BASE_TIME + 60 * 50, 512)
@@ -488,7 +488,7 @@ public class TestDownsampleNumericPartialTimeSeries {
     
     dpts.addSeries(pts_b);
     debug(dpts);
-    assertArrayEquals(new long[] { 28, 96, 388, 1536 },
+    assertArrayEquals(new long[] { 28, 96, 384, 1536 },
         dpts.longArray(), dpts.offset(), dpts.end());
     assertSentAndCleanedUp(dpts);
   }
@@ -502,7 +502,7 @@ public class TestDownsampleNumericPartialTimeSeries {
     
     PartialTimeSeriesSet set_b = getSourceSet(BASE_TIME + (60 * 30), BASE_TIME + 3600);
     MockNumericLongArrayTimeSeries pts_b = new MockNumericLongArrayTimeSeries(set_b, 42);
-    pts_b.addValue(BASE_TIME, 4)
+    pts_b.addValue(BASE_TIME, 4) // this one is too early!
       .addValue(BASE_TIME + 60 * 30, 128)
       .addValue(BASE_TIME + 60 * 40, 256)
       .addValue(BASE_TIME + 60 * 50, 512)
@@ -528,7 +528,7 @@ public class TestDownsampleNumericPartialTimeSeries {
     
     dpts.addSeries(pts_a);
     debug(dpts);
-    assertArrayEquals(new long[] { 28, 96, 388, 1536 },
+    assertArrayEquals(new long[] { 28, 96, 384, 1536 },
         dpts.longArray(), dpts.offset(), dpts.end());
     assertSentAndCleanedUp(dpts);
   }
