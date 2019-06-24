@@ -25,12 +25,14 @@ import org.mockito.stubbing.Answer;
 
 import com.google.common.collect.Lists;
 
+import net.opentsdb.common.Const;
 import net.opentsdb.core.DefaultRegistry;
 import net.opentsdb.core.MockTSDB;
 import net.opentsdb.data.NoDataPartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeStamp;
+import net.opentsdb.data.ZonedNanoTimeStamp;
 import net.opentsdb.data.types.numeric.MockNumericLongArrayTimeSeries;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.data.types.numeric.aggregators.NumericAggregatorFactory;
@@ -48,14 +50,8 @@ import net.opentsdb.utils.DateTime;
 public class TestDownsampleNumericPartialTimeSeries {
   
   private static final int BASE_TIME = 1356998400;
-  //30 minute offset
-  final static String AF = "Asia/Kabul";
-  // 12h offset w/o DST
-  final static String TV = "Pacific/Funafuti";
   // 12h offset w DST
   final static String FJ = "Pacific/Fiji";
-  // Tue, 15 Dec 2015 04:02:25.123 UTC
-  final static long DST_TS = 1450137600000L;
   
   private static MockTSDB TSDB;
   private static List<DownsampleNumericPartialTimeSeries> SERIES;
@@ -477,6 +473,35 @@ public class TestDownsampleNumericPartialTimeSeries {
     assertSentAndCleanedUp(dpts);
     assertNull(dpts.doubleArray());
     assertTrue(dpts.isInteger());
+  }
+  
+  @Test
+  public void singleMilliAndNanoTimestamps() throws Exception {
+    final int size = 4;
+    DownsamplePartialTimeSeriesSet set = getSet(size, BASE_TIME, BASE_TIME + 3600);
+    setConfig("15m", "sum");
+    
+    ZonedNanoTimeStamp zts_a = new ZonedNanoTimeStamp(BASE_TIME + (60L * 10L), 55, Const.UTC);
+    ZonedNanoTimeStamp zts_b = new ZonedNanoTimeStamp(BASE_TIME + (60L * 25L), 801, Const.UTC);
+    MockNumericLongArrayTimeSeries pts = new MockNumericLongArrayTimeSeries(set, 42);
+    pts.addValue(BASE_TIME, 4)
+       .addValue((((long) BASE_TIME + (60L * 5L)) * 1000L) + 250L, 8)
+       .addValue(zts_a, -16)
+       .addValue(BASE_TIME + 60 * 15, 32.90)
+       .addValue((((long) BASE_TIME + (60L * 20L)) * 1000L) + 750L, 64.85)
+       .addValue(zts_b, -128.75);
+    
+    DownsampleNumericPartialTimeSeries dpts = new DownsampleNumericPartialTimeSeries(TSDB);
+    dpts.reset(set);
+    dpts.addSeries(pts);
+    debug(dpts);
+    assertArrayEquals(new double[] { 67.0, 97.75, Double.NaN, Double.NaN },
+        dpts.doubleArray(), dpts.offset(), dpts.end());
+    assertEquals(0, dpts.offset());
+    assertEquals(size, dpts.end());
+    assertSentAndCleanedUp(dpts);
+    assertNull(dpts.longArray());
+    assertFalse(dpts.isInteger());
   }
   
   @Test
@@ -906,6 +931,120 @@ public class TestDownsampleNumericPartialTimeSeries {
   }
   
   @Test
+  public void multi2RunAllInOrder() throws Exception {
+    final int size = 1;
+    DownsamplePartialTimeSeriesSet ds_set = getSet(size, BASE_TIME, BASE_TIME + 3600);
+    when(ds_set.lastMulti()).thenReturn(1);
+    setConfig("0all", "sum");
+    
+    PartialTimeSeriesSet set_a = getSourceSet(BASE_TIME, BASE_TIME + (60 * 30));
+    MockNumericLongArrayTimeSeries pts_a = new MockNumericLongArrayTimeSeries(set_a, 42);
+    pts_a.addValue(BASE_TIME, 4)
+      .addValue(BASE_TIME + 60, 8)
+      .addValue(BASE_TIME + 60 * 5, 16)
+      .addValue(BASE_TIME + 60 * 20, 32)
+      .addValue(BASE_TIME + 60 * 25, 64);
+    
+    DownsampleNumericPartialTimeSeries dpts = new DownsampleNumericPartialTimeSeries(TSDB);
+    dpts.reset(ds_set);
+    dpts.addSeries(pts_a);
+    debug(dpts);
+    
+    assertArrayEquals(new long[0],
+        dpts.longArray(), dpts.offset(), dpts.end());
+    verify(node, never()).sendUpstream(dpts);
+
+    when(ds_set.allSetsAccountedFor()).thenReturn(true);
+    when(ds_set.lastMulti()).thenReturn(2);
+    PartialTimeSeriesSet set_b = getSourceSet(BASE_TIME + (60 * 30), BASE_TIME + 3600);
+    MockNumericLongArrayTimeSeries pts_b = new MockNumericLongArrayTimeSeries(set_b, 42);
+    pts_b.addValue(BASE_TIME, 4) // this one is too early!
+      .addValue(BASE_TIME + 60 * 30, 128)
+      .addValue(BASE_TIME + 60 * 40, 256)
+      .addValue(BASE_TIME + 60 * 50, 512)
+      .addValue(BASE_TIME + 60 * 55, 1024);
+    
+    dpts.addSeries(pts_b);
+    debug(dpts);
+    assertArrayEquals(new long[] { 2044 },
+        dpts.longArray(), dpts.offset(), dpts.end());
+    assertSentAndCleanedUp(dpts);
+  }
+  
+  @Test
+  public void multi2RunAllOutOfOrder() throws Exception {
+    final int size = 1;
+    DownsamplePartialTimeSeriesSet ds_set = getSet(size, BASE_TIME, BASE_TIME + 3600);
+    when(ds_set.lastMulti()).thenReturn(1);
+    setConfig("0all", "sum");
+    
+    PartialTimeSeriesSet set_b = getSourceSet(BASE_TIME + (60 * 30), BASE_TIME + 3600);
+    MockNumericLongArrayTimeSeries pts_b = new MockNumericLongArrayTimeSeries(set_b, 42);
+    pts_b.addValue(BASE_TIME, 4) // this one is too early!
+      .addValue(BASE_TIME + 60 * 30, 128)
+      .addValue(BASE_TIME + 60 * 40, 256)
+      .addValue(BASE_TIME + 60 * 50, 512)
+      .addValue(BASE_TIME + 60 * 55, 1024);
+    
+    DownsampleNumericPartialTimeSeries dpts = new DownsampleNumericPartialTimeSeries(TSDB);
+    dpts.reset(ds_set);
+    dpts.addSeries(pts_b);
+    debug(dpts);
+    
+    assertArrayEquals(new long[0], dpts.longArray(), dpts.offset(), dpts.end());
+    verify(node, never()).sendUpstream(dpts);
+
+    when(ds_set.allSetsAccountedFor()).thenReturn(true);
+    when(ds_set.lastMulti()).thenReturn(2);
+    PartialTimeSeriesSet set_a = getSourceSet(BASE_TIME, BASE_TIME + (60 * 30));
+    MockNumericLongArrayTimeSeries pts_a = new MockNumericLongArrayTimeSeries(set_a, 42);
+    pts_a.addValue(BASE_TIME, 4)
+      .addValue(BASE_TIME + 60, 8)
+      .addValue(BASE_TIME + 60 * 5, 16)
+      .addValue(BASE_TIME + 60 * 20, 32)
+      .addValue(BASE_TIME + 60 * 25, 64);
+    
+    dpts.addSeries(pts_a);
+    debug(dpts);
+    assertArrayEquals(new long[] { 2044 },
+        dpts.longArray(), dpts.offset(), dpts.end());
+    assertSentAndCleanedUp(dpts);
+  }
+  
+  @Test
+  public void multi2RunAllInOrderBothNDPTS() throws Exception {
+    final int size = 1;
+    DownsamplePartialTimeSeriesSet ds_set = getSet(size, BASE_TIME, BASE_TIME + 3600);
+    when(ds_set.lastMulti()).thenReturn(1);
+    setConfig("0all", "sum");
+    
+    PartialTimeSeriesSet set_a = getSourceSet(BASE_TIME, BASE_TIME + (60 * 30));
+    NoDataPartialTimeSeries pts_a = mock(NoDataPartialTimeSeries.class);
+    when(pts_a.set()).thenReturn(set_a);
+    
+    DownsampleNumericPartialTimeSeries dpts = new DownsampleNumericPartialTimeSeries(TSDB);
+    dpts.reset(ds_set);
+    dpts.addSeries(pts_a);
+    debug(dpts);
+    
+    assertArrayEquals(new long[0],
+        dpts.longArray(), dpts.offset(), dpts.end());
+    verify(node, never()).sendUpstream(dpts);
+
+    when(ds_set.allSetsAccountedFor()).thenReturn(true);
+    when(ds_set.lastMulti()).thenReturn(2);
+    PartialTimeSeriesSet set_b = getSourceSet(BASE_TIME + (60 * 30), BASE_TIME + 3600);
+    NoDataPartialTimeSeries pts_b = mock(NoDataPartialTimeSeries.class);
+    when(pts_b.set()).thenReturn(set_b);
+    
+    dpts.addSeries(pts_b);
+    debug(dpts);
+    assertArrayEquals(new double[] { Double.NaN },
+        dpts.doubleArray(), dpts.offset(), dpts.end());
+    assertSentAndCleanedUp(dpts);
+  }
+  
+  @Test
   public void multi3at45mInOrder() throws Exception {
     final int size = 4;
     DownsamplePartialTimeSeriesSet ds_set = getSet(size, BASE_TIME, 
@@ -1308,6 +1447,193 @@ public class TestDownsampleNumericPartialTimeSeries {
         dpts.doubleArray(), dpts.offset(), dpts.end());
     assertEquals(0, dpts.series_list.size());
     assertSentAndCleanedUp(dpts);
+  }
+  
+  @Test
+  public void multi3RunAllInOrder() throws Exception {
+    final int size = 1;
+    DownsamplePartialTimeSeriesSet ds_set = getSet(size, BASE_TIME, 
+        BASE_TIME + (3600 * 3));
+    when(ds_set.lastMulti()).thenReturn(1);
+    setConfig("0all", "sum");
+    
+    PartialTimeSeriesSet set_a = getSourceSet(BASE_TIME, BASE_TIME + 3600);
+    MockNumericLongArrayTimeSeries pts_a = new MockNumericLongArrayTimeSeries(set_a, 42);
+    pts_a.addValue(BASE_TIME, 4)
+      .addValue(BASE_TIME + 60 * 10, 8)
+      .addValue(BASE_TIME + 60 * 40, 16)
+      .addValue(BASE_TIME + 60 * 45, 32)
+      .addValue(BASE_TIME + 60 * 55, 64);
+    
+    DownsampleNumericPartialTimeSeries dpts = new DownsampleNumericPartialTimeSeries(TSDB);
+    dpts.reset(ds_set);
+    dpts.addSeries(pts_a);
+    debug(dpts);
+    
+    assertArrayEquals(new long[0],
+        dpts.longArray(), dpts.offset(), dpts.end());
+    assertEquals(0, dpts.series_list.size());
+    verify(node, never()).sendUpstream(dpts);
+
+    when(ds_set.lastMulti()).thenReturn(2);
+    PartialTimeSeriesSet set_b = getSourceSet(BASE_TIME + 3600, BASE_TIME + (3600 * 2));
+    MockNumericLongArrayTimeSeries pts_b = new MockNumericLongArrayTimeSeries(set_b, 42);
+    pts_b.addValue(BASE_TIME + 3600 + 60 * 1, 128)
+      .addValue(BASE_TIME + 3600 + 60 * 30, 256)
+      .addValue(BASE_TIME + 3600 + 60 * 45, 512)
+      .addValue(BASE_TIME + 3600 + 60 * 55, 1024);
+    
+    dpts.addSeries(pts_b);
+    debug(dpts);
+    assertArrayEquals(new long[0],
+        dpts.longArray(), dpts.offset(), dpts.end());
+    assertEquals(0, dpts.series_list.size());
+    verify(node, never()).sendUpstream(dpts);
+    
+    when(ds_set.allSetsAccountedFor()).thenReturn(true);
+    when(ds_set.lastMulti()).thenReturn(3);
+    PartialTimeSeriesSet set_c = getSourceSet(BASE_TIME + (3600 * 2), BASE_TIME + (3600 * 3));
+    MockNumericLongArrayTimeSeries pts_c = new MockNumericLongArrayTimeSeries(set_c, 42);
+    pts_c.addValue(BASE_TIME + (3600 * 2) + 60 * 1, 2048)
+      .addValue(BASE_TIME + (3600 * 2) + 60 * 30, 4096)
+      .addValue(BASE_TIME + (3600 * 2) + 60 * 45, 8192)
+      .addValue(BASE_TIME + (3600 * 2) + 60 * 55, 16384);
+    
+    dpts.addSeries(pts_c);
+    debug(dpts);
+    
+    assertArrayEquals(new long[] { 32764 },
+        dpts.longArray(), dpts.offset(), dpts.end());
+    assertEquals(0, dpts.series_list.size());
+    assertSentAndCleanedUp(dpts);
+  }
+  
+  @Test
+  public void multi3atRunAllOutOfOrder() throws Exception {
+    final int size = 1;
+    DownsamplePartialTimeSeriesSet ds_set = getSet(size, BASE_TIME, 
+        BASE_TIME + (3600 * 3));
+    when(ds_set.lastMulti()).thenReturn(1);
+    setConfig("0all", "sum");
+    
+    PartialTimeSeriesSet set_c = getSourceSet(BASE_TIME + (3600 * 2), BASE_TIME + (3600 * 3));
+    MockNumericLongArrayTimeSeries pts_c = new MockNumericLongArrayTimeSeries(set_c, 42);
+    pts_c.addValue(BASE_TIME + (3600 * 2) + 60 * 1, 2048)
+      .addValue(BASE_TIME + (3600 * 2) + 60 * 30, 4096)
+      .addValue(BASE_TIME + (3600 * 2) + 60 * 45, 8192)
+      .addValue(BASE_TIME + (3600 * 2) + 60 * 55, 16384);
+    
+    DownsampleNumericPartialTimeSeries dpts = new DownsampleNumericPartialTimeSeries(TSDB);
+    dpts.reset(ds_set);
+    dpts.addSeries(pts_c);
+    debug(dpts);
+    
+    assertArrayEquals(new long[0],
+        dpts.longArray(), dpts.offset(), dpts.end());
+    assertEquals(1, dpts.series_list.size());
+    verify(node, never()).sendUpstream(dpts);
+
+    when(ds_set.lastMulti()).thenReturn(2);
+    PartialTimeSeriesSet set_b = getSourceSet(BASE_TIME + 3600, BASE_TIME + (3600 * 2));
+    MockNumericLongArrayTimeSeries pts_b = new MockNumericLongArrayTimeSeries(set_b, 42);
+    pts_b.addValue(BASE_TIME + 3600 + 60 * 1, 128)
+      .addValue(BASE_TIME + 3600 + 60 * 30, 256)
+      .addValue(BASE_TIME + 3600 + 60 * 45, 512)
+      .addValue(BASE_TIME + 3600 + 60 * 55, 1024);
+    
+    dpts.addSeries(pts_b);
+    debug(dpts);
+    assertArrayEquals(new long[0],
+        dpts.longArray(), dpts.offset(), dpts.end());
+    assertEquals(2, dpts.series_list.size());
+    verify(node, never()).sendUpstream(dpts);
+    
+    when(ds_set.allSetsAccountedFor()).thenReturn(true);
+    when(ds_set.lastMulti()).thenReturn(3);
+    PartialTimeSeriesSet set_a = getSourceSet(BASE_TIME, BASE_TIME + 3600);
+    MockNumericLongArrayTimeSeries pts_a = new MockNumericLongArrayTimeSeries(set_a, 42);
+    pts_a.addValue(BASE_TIME, 4)
+      .addValue(BASE_TIME + 60 * 10, 8)
+      .addValue(BASE_TIME + 60 * 40, 16)
+      .addValue(BASE_TIME + 60 * 45, 32)
+      .addValue(BASE_TIME + 60 * 55, 64);
+    
+    dpts.addSeries(pts_a);
+    debug(dpts);
+    
+    assertArrayEquals(new long[] { 32764 },
+        dpts.longArray(), dpts.offset(), dpts.end());
+    assertEquals(2, dpts.series_list.size());
+    assertSentAndCleanedUp(dpts);
+  }
+  
+  @Test
+  public void multi3atRunAllAllNDPTS() throws Exception {
+    final int size = 1;
+    DownsamplePartialTimeSeriesSet ds_set = getSet(size, BASE_TIME, 
+        BASE_TIME + (3600 * 3));
+    when(ds_set.lastMulti()).thenReturn(1);
+    setConfig("0all", "sum");
+    
+    PartialTimeSeriesSet set_c = getSourceSet(BASE_TIME + (3600 * 2), BASE_TIME + (3600 * 3));
+    NoDataPartialTimeSeries pts_c = mock(NoDataPartialTimeSeries.class);
+    when(pts_c.set()).thenReturn(set_c);
+    
+    DownsampleNumericPartialTimeSeries dpts = new DownsampleNumericPartialTimeSeries(TSDB);
+    dpts.reset(ds_set);
+    dpts.addSeries(pts_c);
+    debug(dpts);
+    
+    assertArrayEquals(new long[0],
+        dpts.longArray(), dpts.offset(), dpts.end());
+    assertEquals(1, dpts.series_list.size());
+    verify(node, never()).sendUpstream(dpts);
+
+    when(ds_set.lastMulti()).thenReturn(2);
+    PartialTimeSeriesSet set_b = getSourceSet(BASE_TIME + 3600, BASE_TIME + (3600 * 2));
+    NoDataPartialTimeSeries pts_b = mock(NoDataPartialTimeSeries.class);
+    when(pts_b.set()).thenReturn(set_b);
+    
+    dpts.addSeries(pts_b);
+    debug(dpts);
+    assertArrayEquals(new long[0],
+        dpts.longArray(), dpts.offset(), dpts.end());
+    assertEquals(2, dpts.series_list.size());
+    verify(node, never()).sendUpstream(dpts);
+    
+    when(ds_set.allSetsAccountedFor()).thenReturn(true);
+    when(ds_set.lastMulti()).thenReturn(3);
+    PartialTimeSeriesSet set_a = getSourceSet(BASE_TIME, BASE_TIME + 3600);
+    NoDataPartialTimeSeries pts_a = mock(NoDataPartialTimeSeries.class);
+    when(pts_a.set()).thenReturn(set_a);
+    
+    dpts.addSeries(pts_a);
+    debug(dpts);
+    
+    assertArrayEquals(new double[] { Double.NaN },
+        dpts.doubleArray(), dpts.offset(), dpts.end());
+    assertEquals(2, dpts.series_list.size());
+    assertSentAndCleanedUp(dpts);
+  }
+  
+  public void multiCalendarBasedInOrder() throws Exception {
+    int midnight = 1484438400;
+    // example 1h over dst
+    final int size = 24;
+    DownsamplePartialTimeSeriesSet set = getSet(size, midnight, midnight + 86400);
+    setConfig("1h", "sum");
+    
+    MockNumericLongArrayTimeSeries pts = new MockNumericLongArrayTimeSeries(set, 42);
+    pts.addValue(midnight - 60 * 2, 1)
+       .addValue(midnight - 60, 2)
+       .addValue(midnight, 4)
+       .addValue(midnight + 60, 8)
+       .addValue(midnight + 60 * 2, 16)
+       .addValue(midnight + 60 * 3, 32)
+       .addValue(midnight + 60 * 4, 64)
+       .addValue(midnight + 60 * 5, 128)
+       .addValue(midnight + 60 * 6, 256)
+       .addValue(midnight + 60 * 45, 1024); // last one skipped
   }
   
   DownsamplePartialTimeSeriesSet getSet(final int size, final int start, final int end) {

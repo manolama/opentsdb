@@ -163,7 +163,7 @@ public class DownsampleNumericPartialTimeSeries extends
           if (accumulator_idx <= 0) {
             fillTillNext();
           } else {
-            runAccumulatorOrFill(current_pts.set().end().msEpoch());
+            runAccumulatorOrFill(current_pts.set().end());
           }
           next.update(current_pts.set().end());
           //runAccumulatorOrFill(next.epoch());
@@ -328,9 +328,10 @@ public class DownsampleNumericPartialTimeSeries extends
     }
   }
 
-  void runAccumulatorOrFill(final long ts) {
-    if (ts == boundary.msEpoch())
-      System.out.println("        ACCUMULATE[[[[[[ EQUALS!!!!!! ]]]]]]]]" );
+  void runAccumulatorOrFill(final TimeStamp ts) {
+    // blech, handle the case where we get the boundary as our timestamp. I hate
+    // the copy.
+    final TimeStamp clone = ts == boundary ? ts.getCopy() : ts;
     if (accumulator_idx > 0) {
       System.out.println("        Flushing: " + accumulator_idx);
       // TODO - agg and put
@@ -358,7 +359,7 @@ public class DownsampleNumericPartialTimeSeries extends
         boundary.add(((DownsampleConfig) node.config()).interval());
       }
       accumulator_idx = 0;
-    } else if (ts == boundary.msEpoch()) {
+    } else if (ts == boundary || ts.msEpoch() == boundary.msEpoch()) {
       // edge case wherein the timestamp matches the boundary but we hadn't 
       // written anything for the last cell.
       if (long_array != null && double_array == null) {
@@ -374,8 +375,8 @@ public class DownsampleNumericPartialTimeSeries extends
     }
     
     while (!((DownsampleConfig) node.config()).getRunAll() && 
-        boundary.msEpoch() <= ts) {
-      System.out.println("                 ok, filling here");
+        boundary.compare(Op.LTE, clone)) {
+      System.out.println("                 ok, filling here B: " + boundary.msEpoch() + "  TS: " + ts.msEpoch());
       // TODO - proper fill
       if (long_array != null && double_array == null) {
         flipFlopMainArray();
@@ -402,6 +403,10 @@ public class DownsampleNumericPartialTimeSeries extends
   }
   
   void fillTillNext() {
+    if (((DownsampleConfig) node.config()).getRunAll()) {
+      return;
+    }
+    
     while (boundary.compare(Op.LTE, next)) {
       // TODO other fills
       if (double_array == null) {
@@ -439,15 +444,15 @@ public class DownsampleNumericPartialTimeSeries extends
                 new ZonedNanoTimeStamp(0, 0, ((DownsampleConfig) node.config()).timezone());
       
       while (idx <= ((NumericLongArrayType) series.value()).end()) {
+        System.out.println("   (IDX) " + idx + "  DIF : " + (boundary.msEpoch() - ts.msEpoch()));
         units = NumericLongArrayType.timestampUnits(values, idx);
         NumericLongArrayType.timestampInNanos(values, idx, ts);
-        System.out.println("   (IDX) " + idx + "  DIF : " + (boundary.msEpoch() - ts.msEpoch()));
         // skip values earlier than our start time and those later than our end time
         if (ts.compare(Op.LT, set.start()) ||
             (next.epoch() > 0 && ts.compare(Op.LT, next))) {
           System.out.println("    DROPPING: " + (next.msEpoch() - ts.msEpoch()));
           // TODO - nanos
-          idx += 2;
+          idx += units == ChronoUnit.NANOS ? 3 : 2;
           continue;
         }
         
@@ -460,7 +465,7 @@ public class DownsampleNumericPartialTimeSeries extends
         
         if (ts.compare(Op.GTE, boundary)) {
           System.out.println("      flushing or filling.... " + (ts.msEpoch() - boundary.msEpoch()));
-          runAccumulatorOrFill(ts.msEpoch());
+          runAccumulatorOrFill(ts);
         }
         
         if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
@@ -476,7 +481,7 @@ public class DownsampleNumericPartialTimeSeries extends
           }
           
           addLocal(values[idx + 1]);
-          idx += 2;
+          idx += units == ChronoUnit.NANOS ? 3 : 2;
         }
       }
     }
@@ -493,7 +498,7 @@ public class DownsampleNumericPartialTimeSeries extends
         //idx >= ((NumericLongArrayType) series.value()).end() &&
         (next.epoch() > 0 ? boundary.compare(Op.LTE, next) : true)) {
       System.out.println("         RUNNING ACCUMULATOR");
-      runAccumulatorOrFill(boundary.msEpoch());
+      runAccumulatorOrFill(boundary);
     }
   }
   
