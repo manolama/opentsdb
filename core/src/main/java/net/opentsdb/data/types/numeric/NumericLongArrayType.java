@@ -14,9 +14,12 @@
 // limitations under the License.
 package net.opentsdb.data.types.numeric;
 
+import java.time.temporal.ChronoUnit;
+
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.TimeSeriesDataType;
+import net.opentsdb.data.TimeStamp;
 
 /**
  * An encoding of timestamp and numeric values in a {@link long[]} for better
@@ -87,4 +90,138 @@ public interface NumericLongArrayType extends TimeSeriesDataType {
    */
   public long[] data();
   
+  /**
+   * Returns the units of the timestamp.
+   * <b>NOTE:</b> This method doesn't check for null or a valid index. Make sure
+   * to do that before calling in.
+   * @param array The non-null and non empty array to evaluate.
+   * @param offset The offset into the array at the first timestamp for a value..
+   * @return The units the timestamp is encoded in.
+   */
+  public static ChronoUnit timestampUnits(final long[] array, final int offset) {
+    if ((array[offset] & NANOSECOND_FLAG) != 0) {
+      return ChronoUnit.NANOS;
+    } else if((array[offset] & MILLISECOND_FLAG) != 0) {
+      return ChronoUnit.MILLIS;
+    } else {
+      return ChronoUnit.SECONDS;
+    }
+  }
+  
+  /**
+   * Returns the timestamp in milliseconds, truncating the timestamp if it's in
+   * nanoseconds.
+   * <b>NOTE:</b> This method doesn't check for null or a valid index. Make sure
+   * to do that before calling in.
+   * @param array The non-null and non empty array to evaluate.
+   * @param offset The offset into the array at the first timestamp for a value..
+   * @return The decoded timestamp in Unix Epoch millis.
+   */
+  public static long timestampInMillis(final long[] array, 
+                                       final int offset) {
+    return timestampInMillis(array, offset,
+        timestampUnits(array, offset));
+  }
+  
+  /**
+   * Returns the timestamp in milliseconds, truncating the timestamp if it's in
+   * nanoseconds.
+   * <b>NOTE:</b> This method doesn't check for null or a valid index. Make sure
+   * to do that before calling in.
+   * @param array The non-null and non empty array to evaluate.
+   * @param offset The offset into the array at the first timestamp for a value..
+   * @param units The units the timestamp is encoded in.
+   * @return The decoded timestamp in Unix Epoch millis.
+   */
+  public static long timestampInMillis(final long[] array, 
+                                       final int offset, 
+                                       final ChronoUnit units) {
+    switch (units) {
+    case SECONDS:
+      return (array[offset] & TIMESTAMP_MASK) * 1000L;
+    case MILLIS:
+      return array[offset] & TIMESTAMP_MASK;
+    case NANOS:
+      long base = (array[offset] & TIMESTAMP_MASK) * 1000L;
+      base += array[offset + 1] / 1000000L;
+      return base;
+    default:
+      throw new IllegalArgumentException("The units of " + units 
+          + " are not supported.");
+    }
+  }
+  
+  /**
+   * Updates the given timestamp with the nanosecond value.
+   * <b>NOTE:</b> This method doesn't check for nulls or a valid index. Make sure
+   * to do that before calling in.
+   * @param array The non-null and non empty array to evaluate.
+   * @param offset The offset into the array at the first timestamp for a value..
+   * @param timestamp The non-null timestamp to update.
+   */
+  public static void timestampInNanos(final long[] array, 
+                                      final int offset, 
+                                      final TimeStamp timestamp) {
+    final ChronoUnit units = timestampUnits(array, offset);
+    switch (units) {
+    case SECONDS:
+      timestamp.update(array[offset] & TIMESTAMP_MASK, 0);
+      break;
+    case MILLIS:
+      final long ts = (array[offset] & TIMESTAMP_MASK) / 1000;
+      final long millis = (array[offset] & TIMESTAMP_MASK) - (ts * 1000);
+      timestamp.update(ts, millis * 1000000);
+      break;
+    case NANOS:
+      timestamp.update(array[offset] & TIMESTAMP_MASK,
+          array[offset + 1]);
+      break;
+      default:
+        throw new IllegalArgumentException("The units of " + units 
+            + " are not supported.");
+    }
+  }
+  
+  /**
+   * Determines whether or not the value is encoded as a double in which case
+   * you can call {@link #getDouble(long[], int, ChronoUnit)}. If false just
+   * read the raw value as it's a long.
+   * <b>NOTE:</b> This method doesn't check for nulls or a valid index. Make sure
+   * to do that before calling in.
+   * @param array The non-null and non empty array to evaluate.
+   * @param offset The offset into the array at the first timestamp for a value..
+   * @return True if the value is encoded as a double, false if its a long.
+   */
+  public static boolean isDouble(final long[] array, final int offset) {
+    return (array[offset] & FLOAT_FLAG) != 0;
+  }
+  
+  /**
+   * Decodes the value as a double.
+   * <b>NOTE:</b> This method doesn't check for nulls or a valid index. Make sure
+   * to do that before calling in.
+   * @param array The non-null and non empty array to evaluate.
+   * @param offset The offset into the array at the first timestamp for a value..
+   * @return The decoded double value.
+   */
+  public static double getDouble(final long[] array, 
+                                 final int offset) {
+    return getDouble(array, offset, timestampUnits(array, offset));
+  }
+  
+  /**
+   * Decodes the value as a double.
+   * <b>NOTE:</b> This method doesn't check for nulls or a valid index. Make sure
+   * to do that before calling in.
+   * @param array The non-null and non empty array to evaluate.
+   * @param offset The offset into the array at the first timestamp for a value..
+   * @param units The units the timestamp is encoded in.
+   * @return The decoded double value.
+   */
+  public static double getDouble(final long[] array, 
+                                 final int offset, 
+                                 final ChronoUnit units) {
+    return Double.longBitsToDouble(array[offset + 
+                                         (units == ChronoUnit.NANOS ? 2 : 1)]);
+  }
 }

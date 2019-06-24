@@ -69,7 +69,7 @@ public class MockNumericLongArrayTimeSeries implements
     }
     
     // double
-    data[write_idx++] = FLOAT_FLAG | MILLISECOND_FLAG & ms_epoch;
+    data[write_idx++] = FLOAT_FLAG | MILLISECOND_FLAG | ms_epoch;
     data[write_idx++] = Double.doubleToRawLongBits(value);
     return this;
   }

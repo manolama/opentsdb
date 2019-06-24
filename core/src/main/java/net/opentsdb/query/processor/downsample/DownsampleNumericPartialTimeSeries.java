@@ -1,5 +1,6 @@
 package net.opentsdb.query.processor.downsample;
 
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
 
@@ -8,6 +9,7 @@ import com.google.common.collect.Lists;
 import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.BasePartialTimeSeries;
+import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.NoDataPartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
@@ -161,7 +163,7 @@ public class DownsampleNumericPartialTimeSeries extends
           if (accumulator_idx <= 0) {
             fillTillNext();
           } else {
-            runAccumulatorOrFill(current_pts.set().end().epoch());
+            runAccumulatorOrFill(current_pts.set().end().msEpoch());
           }
           next.update(current_pts.set().end());
           //runAccumulatorOrFill(next.epoch());
@@ -428,51 +430,57 @@ public class DownsampleNumericPartialTimeSeries extends
     final long[] values = ((NumericLongArrayType) series.value()).data();
     int idx = ((NumericLongArrayType) series.value()).offset();
     
-    while (idx <= ((NumericLongArrayType) series.value()).end()) {
-      long ts = 0; // in ms.  TODO - nanos
-      if((values[idx] & NumericLongArrayType.MILLISECOND_FLAG) != 0) {
-        ts = values[idx] & NumericLongArrayType.TIMESTAMP_MASK;
-      } else {
-        ts = (values[idx] & NumericLongArrayType.TIMESTAMP_MASK) * 1000;
-      }
-      System.out.println("   (IDX) " + idx + "  DIF : " + (boundary.msEpoch() - ts));
-      // skip values earlier than our start time and those later than our end time
-      if (ts < set.start().msEpoch() ||
-          (next.epoch() > 0 && ts < next.msEpoch())) {
-        System.out.println("    DROPPING: " + (next.msEpoch() - ts));
-        // TODO - nanos
-        idx += 2;
-        continue;
-      }
+    if (((NumericLongArrayType) series.value()).end() > 
+        ((NumericLongArrayType) series.value()).offset()) {
+      ChronoUnit units = NumericLongArrayType.timestampUnits(values, idx);
+      TimeStamp ts = (units == ChronoUnit.NANOS || 
+          ((DownsampleConfig) node.config()).timezone() != Const.UTC) ?
+              new MillisecondTimeStamp(0) : 
+                new ZonedNanoTimeStamp(0, 0, ((DownsampleConfig) node.config()).timezone());
       
-      // stop if we've reached the end of the set.
-      if (ts > set.end().msEpoch() ||
-        boundary.compare(Op.GT, set.end())) {
-        System.out.println("[[[[ exiting as we've hit the end ]]]]");
-        break;
-      }
-      
-      if (ts >= boundary.msEpoch()) {
-        System.out.println("      flushing or filling.... " + (ts - boundary.msEpoch()));
-        runAccumulatorOrFill(ts);
-      }
-      
-      if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
-        if (double_array == null && long_array == null) {
-          initDouble();
+      while (idx <= ((NumericLongArrayType) series.value()).end()) {
+        units = NumericLongArrayType.timestampUnits(values, idx);
+        NumericLongArrayType.timestampInNanos(values, idx, ts);
+        System.out.println("   (IDX) " + idx + "  DIF : " + (boundary.msEpoch() - ts.msEpoch()));
+        // skip values earlier than our start time and those later than our end time
+        if (ts.compare(Op.LT, set.start()) ||
+            (next.epoch() > 0 && ts.compare(Op.LT, next))) {
+          System.out.println("    DROPPING: " + (next.msEpoch() - ts.msEpoch()));
+          // TODO - nanos
+          idx += 2;
+          continue;
         }
         
-        addLocal(Double.longBitsToDouble(values[idx + 1]));
-        idx += 2;
-      } else {
-        if (double_array == null && long_array == null) {
-          initLong();
+        // stop if we've reached the end of the set.
+        if (ts.compare(Op.GT, set.end()) ||
+          boundary.compare(Op.GT, set.end())) {
+          System.out.println("[[[[ exiting as we've hit the end ]]]]");
+          break;
         }
         
-        addLocal(values[idx + 1]);
-        idx += 2;
+        if (ts.compare(Op.GTE, boundary)) {
+          System.out.println("      flushing or filling.... " + (ts.msEpoch() - boundary.msEpoch()));
+          runAccumulatorOrFill(ts.msEpoch());
+        }
+        
+        if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
+          if (double_array == null && long_array == null) {
+            initDouble();
+          }
+          
+          addLocal(Double.longBitsToDouble(values[idx + 1]));
+          idx += 2;
+        } else {
+          if (double_array == null && long_array == null) {
+            initLong();
+          }
+          
+          addLocal(values[idx + 1]);
+          idx += 2;
+        }
       }
     }
+    
     System.out.println("AIDX: " + accumulator_idx + "  idx " + idx + " L: " + values.length + "  B: " + (set.end().epoch() - boundary.epoch()));
     if (next.epoch() > 0) {
       // advance so we can see if we need to run the last bucket or not.
