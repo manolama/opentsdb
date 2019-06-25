@@ -224,4 +224,33 @@ public interface NumericLongArrayType extends TimeSeriesDataType {
     return Double.longBitsToDouble(array[offset + 
                                          (units == ChronoUnit.NANOS ? 2 : 1)]);
   }
+  
+  /**
+   * Fetches the long value at the proper offset.
+   * <b>NOTE:</b> This method doesn't check for nulls or a valid index. Make sure
+   * to do that before calling in.
+   * @param array The non-null and non empty array to evaluate.
+   * @param offset The offset into the array at the first timestamp for a value..
+   * @param units The units the timestamp is encoded in.
+   * @return The long value.
+   */
+  public static long getLong(final long[] array, 
+                             final int offset) {
+    return getLong(array, offset, timestampUnits(array, offset));
+  }
+  
+  /**
+   * Fetches the long value at the proper offset.
+   * <b>NOTE:</b> This method doesn't check for nulls or a valid index. Make sure
+   * to do that before calling in.
+   * @param array The non-null and non empty array to evaluate.
+   * @param offset The offset into the array at the first timestamp for a value..
+   * @param units The units the timestamp is encoded in.
+   * @return The long value.
+   */
+  public static long getLong(final long[] array, 
+                             final int offset, 
+                             final ChronoUnit units) {
+    return array[offset + (units == ChronoUnit.NANOS ? 2 : 1)];
+  }
 }
