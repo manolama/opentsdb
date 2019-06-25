@@ -44,6 +44,7 @@ public class DownsampleNumericPartialTimeSeries extends
   protected MutableNumericValue mdp = new MutableNumericValue();
   protected TimeStamp boundary = new ZonedNanoTimeStamp(-1, 0, Const.UTC);
   protected TimeStamp next = new ZonedNanoTimeStamp(-1, 0, Const.UTC);
+  protected TimeStamp agg_timestamp = new MillisecondTimeStamp(-1L);
   
   /** The current write index for array stores. */
   protected int write_idx;
@@ -58,6 +59,12 @@ public class DownsampleNumericPartialTimeSeries extends
     this.set = set; // this is the new downsample set.
     series_list = Lists.newArrayList();
     node = (Downsample) set.node();
+    
+    if (((DownsampleConfig) node.config()).timezone() != boundary.timezone()) {
+      ((ZonedNanoTimeStamp) boundary).update(-1, 0, ((DownsampleConfig) node.config()).timezone());
+      ((ZonedNanoTimeStamp) next).update(-1, 0, ((DownsampleConfig) node.config()).timezone());
+      System.out.println("******* UPDATING BOUNDARY TIME ZONE *************: " + boundary);
+    }
   }
   
   @Override
@@ -123,12 +130,14 @@ public class DownsampleNumericPartialTimeSeries extends
   
   void runSingle(final PartialTimeSeries series) {
     if (((DownsampleConfig) node.config()).getRunAll()) {
-      boundary.update(set.end());
+      // NOTE: Using the epoch/nanos here since we may have a TZ in play.
+      boundary.update(set.end().epoch(), set.end().nanos());
     } else {
-      boundary.update(set.start());
+      // NOTE: Using the epoch/nanos here since we may have a TZ in play.
+      boundary.update(set.start().epoch(), set.start().nanos());
       boundary.add(((DownsampleConfig) node.config()).interval());
     }
-    
+    System.out.println("[[[[[[[[[[[[[[[[[ RUN SINGLE: " + boundary);
     aggSeries(series);
     
     // release resources
@@ -143,9 +152,11 @@ public class DownsampleNumericPartialTimeSeries extends
     if (next.epoch() < 0) {
       next.update(set.start());
       if (((DownsampleConfig) node.config()).getRunAll()) {
-        boundary.update(set.end());
+        // NOTE: Using the epoch/nanos here since we may have a TZ in play.
+        boundary.update(set.end().epoch(), set.end().nanos());
       } else {
-        boundary.update(set.start());
+        // NOTE: Using the epoch/nanos here since we may have a TZ in play.
+        boundary.update(set.start().epoch(), set.start().nanos());
         boundary.add(((DownsampleConfig) node.config()).interval());
         System.out.println("   STARTING AT: " + boundary.epoch());
       }
@@ -438,43 +449,52 @@ public class DownsampleNumericPartialTimeSeries extends
     if (((NumericLongArrayType) series.value()).end() > 
         ((NumericLongArrayType) series.value()).offset()) {
       ChronoUnit units = NumericLongArrayType.timestampUnits(values, idx);
-      TimeStamp ts = (units == ChronoUnit.NANOS || 
-          ((DownsampleConfig) node.config()).timezone() != Const.UTC) ?
-              new MillisecondTimeStamp(0) : 
-                new ZonedNanoTimeStamp(0, 0, ((DownsampleConfig) node.config()).timezone());
+      
+      // see if we need to tweak the timestamp.
+      if (units == ChronoUnit.NANOS || 
+          ((DownsampleConfig) node.config()).timezone() != Const.UTC) {
+        if (!(agg_timestamp instanceof ZonedNanoTimeStamp)) {
+          agg_timestamp = new ZonedNanoTimeStamp(0, 0, ((DownsampleConfig) node.config()).timezone());
+        }
+        System.out.println("-------------- USING CALENDAR: " + agg_timestamp);
+      } else if (!(agg_timestamp instanceof MillisecondTimeStamp)) {
+        agg_timestamp = new MillisecondTimeStamp(0);
+      }  
       
       while (idx <= ((NumericLongArrayType) series.value()).end()) {
-        System.out.println("   (IDX) " + idx + "  DIF : " + (boundary.msEpoch() - ts.msEpoch()));
+        System.out.println("   (IDX) " + idx + "  DIF : " + (boundary.msEpoch() - agg_timestamp.msEpoch()));
         units = NumericLongArrayType.timestampUnits(values, idx);
-        NumericLongArrayType.timestampInNanos(values, idx, ts);
+        NumericLongArrayType.timestampInNanos(values, idx, agg_timestamp);
         // skip values earlier than our start time and those later than our end time
-        if (ts.compare(Op.LT, set.start()) ||
-            (next.epoch() > 0 && ts.compare(Op.LT, next))) {
-          System.out.println("    DROPPING: " + (next.msEpoch() - ts.msEpoch()));
+        if (agg_timestamp.compare(Op.LT, set.start()) ||
+            (next.epoch() > 0 && agg_timestamp.compare(Op.LT, next))) {
+          System.out.println("    DROPPING: " + (next.msEpoch() - agg_timestamp.msEpoch()));
           // TODO - nanos
           idx += units == ChronoUnit.NANOS ? 3 : 2;
           continue;
         }
         
         // stop if we've reached the end of the set.
-        if (ts.compare(Op.GT, set.end()) ||
+        if (agg_timestamp.compare(Op.GT, set.end()) ||
           boundary.compare(Op.GT, set.end())) {
           System.out.println("[[[[ exiting as we've hit the end ]]]]");
           break;
         }
         
-        if (ts.compare(Op.GTE, boundary)) {
-          System.out.println("      flushing or filling.... " + (ts.msEpoch() - boundary.msEpoch()));
-          runAccumulatorOrFill(ts);
+        if (agg_timestamp.compare(Op.GTE, boundary)) {
+          System.out.println("      flushing or filling.... " + boundary);
+          runAccumulatorOrFill(agg_timestamp);
         }
         
-        if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
+        //if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
+        if (NumericLongArrayType.isDouble(values, idx)) {
           if (double_array == null && long_array == null) {
             initDouble();
           }
           
           addLocal(Double.longBitsToDouble(values[idx + 1]));
-          idx += 2;
+          //addLocal(NumericLongArrayType.getDouble(values, idx, units));
+          idx += units == ChronoUnit.NANOS ? 3 : 2;
         } else {
           if (double_array == null && long_array == null) {
             initLong();

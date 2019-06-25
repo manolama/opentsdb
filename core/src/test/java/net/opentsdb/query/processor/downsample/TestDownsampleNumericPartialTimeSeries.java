@@ -14,6 +14,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 
@@ -51,7 +52,7 @@ public class TestDownsampleNumericPartialTimeSeries {
   
   private static final int BASE_TIME = 1356998400;
   // 12h offset w DST
-  final static String FJ = "Pacific/Fiji";
+  final static ZoneId FJZ = ZoneId.of("Pacific/Fiji");
   
   private static MockTSDB TSDB;
   private static List<DownsampleNumericPartialTimeSeries> SERIES;
@@ -502,6 +503,73 @@ public class TestDownsampleNumericPartialTimeSeries {
     assertSentAndCleanedUp(dpts);
     assertNull(dpts.longArray());
     assertFalse(dpts.isInteger());
+  }
+  
+  @Test
+  public void SingleCalendarBasedInOrder() throws Exception {
+    int midnight = 1484352000;
+    when(query.startTime()).thenReturn(new SecondTimeStamp(midnight));
+    when(query.endTime()).thenReturn(new SecondTimeStamp(midnight + (86400 * 2)));
+    
+    // example 1h over 2 days with dst
+    final int size = 2;
+    DownsamplePartialTimeSeriesSet set = getSet(size, midnight, midnight + (86400 * 2));
+    config = (DownsampleConfig) DownsampleConfig.newBuilder()
+        .setAggregator("sum")
+        .setInterval("1d")
+        //.setTimeZone(FJZ.toString())
+        .setStart(Long.toString(midnight))
+        .setEnd(Long.toString(midnight + (86400 * 2)))
+        .addInterpolatorConfig(NUMERIC_CONFIG)
+        .setId("foo")
+        .build();
+    when(node.config()).thenReturn(config);
+    NumericAggregatorFactory factory = TSDB.getRegistry().getPlugin(NumericAggregatorFactory.class, "sum");
+    when(node.aggregator()).thenReturn(factory.newAggregator(config.getInfectiousNan()));
+    
+    MockNumericLongArrayTimeSeries pts = new MockNumericLongArrayTimeSeries(set, 42);
+    long x = 1;
+    for (int i = 0; i < 48; i++) {
+      pts.addValue(midnight + (3600 * i), 1);
+      x = x + x;
+    }
+    
+    DownsampleNumericPartialTimeSeries dpts = new DownsampleNumericPartialTimeSeries(TSDB);
+    dpts.reset(set);
+    dpts.addSeries(pts);
+    debug(dpts);
+    assertArrayEquals(new long[] { 24, 24 },
+        dpts.longArray(), dpts.offset(), dpts.end());
+    assertEquals(0, dpts.offset());
+    assertEquals(size, dpts.end());
+    assertSentAndCleanedUp(dpts);
+    assertNull(dpts.doubleArray());
+    assertTrue(dpts.isInteger());
+    
+    // now run it with timezones
+    config = (DownsampleConfig) DownsampleConfig.newBuilder()
+        .setAggregator("sum")
+        .setInterval("1d")
+        .setTimeZone(FJZ.toString())
+        .setStart(Long.toString(midnight))
+        .setEnd(Long.toString(midnight + (86400 * 2)))
+        .addInterpolatorConfig(NUMERIC_CONFIG)
+        .setId("foo")
+        .build();
+    when(node.config()).thenReturn(config);
+    set = getSet(size, midnight, 1484528400);
+    
+    dpts = new DownsampleNumericPartialTimeSeries(TSDB);
+    dpts.reset(set);
+    dpts.addSeries(pts);
+    debug(dpts);
+    assertArrayEquals(new long[] { 25, 23 },
+        dpts.longArray(), dpts.offset(), dpts.end());
+    assertEquals(0, dpts.offset());
+    assertEquals(size, dpts.end());
+    assertSentAndCleanedUp(dpts);
+    assertNull(dpts.doubleArray());
+    assertTrue(dpts.isInteger());
   }
   
   @Test
@@ -1614,26 +1682,6 @@ public class TestDownsampleNumericPartialTimeSeries {
         dpts.doubleArray(), dpts.offset(), dpts.end());
     assertEquals(2, dpts.series_list.size());
     assertSentAndCleanedUp(dpts);
-  }
-  
-  public void multiCalendarBasedInOrder() throws Exception {
-    int midnight = 1484438400;
-    // example 1h over dst
-    final int size = 24;
-    DownsamplePartialTimeSeriesSet set = getSet(size, midnight, midnight + 86400);
-    setConfig("1h", "sum");
-    
-    MockNumericLongArrayTimeSeries pts = new MockNumericLongArrayTimeSeries(set, 42);
-    pts.addValue(midnight - 60 * 2, 1)
-       .addValue(midnight - 60, 2)
-       .addValue(midnight, 4)
-       .addValue(midnight + 60, 8)
-       .addValue(midnight + 60 * 2, 16)
-       .addValue(midnight + 60 * 3, 32)
-       .addValue(midnight + 60 * 4, 64)
-       .addValue(midnight + 60 * 5, 128)
-       .addValue(midnight + 60 * 6, 256)
-       .addValue(midnight + 60 * 45, 1024); // last one skipped
   }
   
   DownsamplePartialTimeSeriesSet getSet(final int size, final int start, final int end) {
