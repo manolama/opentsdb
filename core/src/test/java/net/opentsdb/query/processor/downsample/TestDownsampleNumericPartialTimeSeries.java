@@ -496,7 +496,7 @@ public class TestDownsampleNumericPartialTimeSeries {
     dpts.reset(set);
     dpts.addSeries(pts);
     debug(dpts);
-    assertArrayEquals(new double[] { 67.0, 97.75, Double.NaN, Double.NaN },
+    assertArrayEquals(new double[] { -4.0, -31, Double.NaN, Double.NaN },
         dpts.doubleArray(), dpts.offset(), dpts.end());
     assertEquals(0, dpts.offset());
     assertEquals(size, dpts.end());

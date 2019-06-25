@@ -486,21 +486,19 @@ public class DownsampleNumericPartialTimeSeries extends
           runAccumulatorOrFill(agg_timestamp);
         }
         
-        //if ((values[idx] & NumericLongArrayType.FLOAT_FLAG) != 0) {
         if (NumericLongArrayType.isDouble(values, idx)) {
           if (double_array == null && long_array == null) {
             initDouble();
           }
           
-          addLocal(Double.longBitsToDouble(values[idx + 1]));
-          //addLocal(NumericLongArrayType.getDouble(values, idx, units));
+          addLocal(NumericLongArrayType.getDouble(values, idx, units));
           idx += units == ChronoUnit.NANOS ? 3 : 2;
         } else {
           if (double_array == null && long_array == null) {
             initLong();
           }
           
-          addLocal(values[idx + 1]);
+          addLocal(values[idx + (units == ChronoUnit.NANOS ? 2 : 1)]);
           idx += units == ChronoUnit.NANOS ? 3 : 2;
         }
       }
