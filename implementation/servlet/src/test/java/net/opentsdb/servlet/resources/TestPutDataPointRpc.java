@@ -52,6 +52,20 @@ public final class TestPutDataPointRpc /*extends BaseTestPutRpc*/ {
     //assertNotNull(new PutDataPointRpc(tsdb.getConfig()));
   }
   
+  @Test
+  public void foo() throws Exception {
+    int st = 1561680000;
+    int end = 1561683600;
+    
+    for (int i = 0; i < 60; i++) {
+      st += 60;
+    }
+    
+    System.out.println("final ts: " + st);
+    System.out.println("final end: " + end);
+    System.out.println("Delta: " + (end - st));
+  }
+  
   // Socket RPC Tests ------------------------------------
 //
 //  @Test

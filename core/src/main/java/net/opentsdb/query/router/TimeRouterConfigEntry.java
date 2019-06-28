@@ -68,6 +68,8 @@ public class TimeRouterConfigEntry {
    * entire query range is encompassed by the config range. */
   private final boolean full_only;
   
+  private final String data_type;
+  
   /** The ID of the data source. */
   private final String source_id;
   
@@ -120,6 +122,7 @@ public class TimeRouterConfigEntry {
     }
     
     full_only = builder.fullOnly;
+    data_type = builder.dataType;
     source_id = builder.sourceId;
   }
   
@@ -155,6 +158,10 @@ public class TimeRouterConfigEntry {
     return full_only;
   }
 
+  public String getDataType() {
+    return data_type;
+  }
+  
   public String getSourceId() {
     return source_id;
   }
@@ -221,7 +228,26 @@ public class TimeRouterConfigEntry {
         }
       }
     }
-
+    
+    String type = ((TimeSeriesDataSourceConfig) config).getTypes() != null &&
+        !((TimeSeriesDataSourceConfig) config).getTypes().isEmpty() ?
+            ((TimeSeriesDataSourceConfig) config).getTypes().get(0) :
+              null;
+    System.out.println("WORKING: " + type + "  AND : " + data_type);
+    if (!Strings.isNullOrEmpty(type) || !Strings.isNullOrEmpty(data_type)) {
+      if (Strings.isNullOrEmpty(type)) {
+        type = "metric";
+      }
+      String dt = data_type;
+      if (Strings.isNullOrEmpty(data_type)) {
+        dt = "metric";
+      }
+      
+      if (!dt.toLowerCase().equals(type.toLowerCase())) {
+        System.out.println("WRONG TYPE. This factory has type: " + dt + " but we wanted " + type);
+        return MatchType.NONE;
+      }
+    }
     if (!factory.supportsQuery(query, config)) {
       return MatchType.NONE;
     }
@@ -243,6 +269,8 @@ public class TimeRouterConfigEntry {
     @JsonProperty
     private boolean fullOnly;
     @JsonProperty
+    private String dataType;
+    @JsonProperty
     private String sourceId;
     
     public Builder setStart(final String start) {
@@ -262,6 +290,11 @@ public class TimeRouterConfigEntry {
     
     public Builder setFullOnly(final boolean full_only) {
       fullOnly = full_only;
+      return this;
+    }
+    
+    public Builder setDataType(final String data_type) {
+      this.dataType = data_type;
       return this;
     }
     
