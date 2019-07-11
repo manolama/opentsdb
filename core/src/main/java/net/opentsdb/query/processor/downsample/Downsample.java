@@ -31,6 +31,7 @@ import net.opentsdb.data.TypedTimeSeriesIterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
@@ -49,6 +50,8 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.exceptions.QueryUpstreamException;
 import net.opentsdb.data.ZonedNanoTimeStamp;
+import net.opentsdb.data.types.numeric.MutableNumericType;
+import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.data.types.numeric.aggregators.NumericAggregator;
 import net.opentsdb.data.types.numeric.aggregators.NumericAggregatorFactory;
 import net.opentsdb.query.AbstractQueryNode;
@@ -59,6 +62,10 @@ import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.SemanticQuery;
+import net.opentsdb.query.interpolation.QueryInterpolatorConfig;
+import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
+import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorFactory;
+import net.opentsdb.query.interpolation.types.numeric.NumericTypeInterpolator;
 import net.opentsdb.query.processor.ProcessorFactory;
 import net.opentsdb.stats.Span;
 import net.opentsdb.utils.DateTime;
@@ -88,6 +95,12 @@ public class Downsample extends AbstractQueryNode {
   
   protected NumericAggregator aggregator;
   
+  protected NumericTypeInterpolator interpolator;
+  
+  protected NumericInterpolatorConfig interpolator_config;
+  
+  protected MutableNumericType fill_value;
+  
   /**
    * Default ctor.
    * @param factory A non-null {@link DownsampleFactory}.
@@ -111,6 +124,16 @@ public class Downsample extends AbstractQueryNode {
         .getRegistry().getPlugin(NumericAggregatorFactory.class, 
             config.getAggregator());
     aggregator = agg_factory.newAggregator(config.getInfectiousNan());
+    interpolator_config = (NumericInterpolatorConfig) config.interpolatorConfig(
+        NumericType.TYPE);
+    NumericInterpolatorFactory interpolator_factory = context.tsdb()
+        .getRegistry().getPlugin(NumericInterpolatorFactory.class, 
+            interpolator_config.getType());
+    interpolator = interpolator_factory.newInterpolator();
+    if (Strings.isNullOrEmpty(interpolator_config.getType())) {
+      fill_value = new MutableNumericType();
+      interpolator.fill(interpolator_config, null, null, null, fill_value);
+    }
   }
   
   @Override
@@ -434,6 +457,19 @@ public class Downsample extends AbstractQueryNode {
   protected NumericAggregator aggregator() {
     return aggregator;
   }
+  
+  protected NumericTypeInterpolator interpolator() {
+    return interpolator;
+  }
+  
+  protected NumericInterpolatorConfig interpolatorConfig() {
+    return interpolator_config;
+  }
+  
+  protected MutableNumericType fillValue() {
+    return fill_value;
+  }
+  
   /**
    * A downsample result that's a member class of the main node so that we share
    * the references to the config and node.

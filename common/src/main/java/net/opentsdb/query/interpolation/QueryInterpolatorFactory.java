@@ -60,7 +60,7 @@ public interface QueryInterpolatorFactory extends TSDBPlugin {
       final TypeToken<? extends TimeSeriesDataType> type, 
       final Iterator<TimeSeriesValue<? extends TimeSeriesDataType>> iterator, 
       final QueryInterpolatorConfig config);
-
+  
   /**
    * Called to register an interpolator for the given data type and ID
    * of the factory.

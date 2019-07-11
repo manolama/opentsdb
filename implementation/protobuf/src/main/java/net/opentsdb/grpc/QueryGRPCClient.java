@@ -20,6 +20,7 @@ import com.google.protobuf.UnsafeByteOperations;
 import io.grpc.stub.StreamObserver;
 import net.opentsdb.data.PBufQueryResult;
 import net.opentsdb.data.TimeSeriesDataSource;
+import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.pbuf.QueryResultPB;
 import net.opentsdb.data.pbuf.TimeSeriesQueryPB;
 import net.opentsdb.query.AbstractQueryNode;
@@ -75,6 +76,12 @@ public class QueryGRPCClient extends AbstractQueryNode implements
     // NOTE That we're not closing the client connection here.
   }
 
+  @Override
+  public TimeStamp firstSetStart() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+  
   @Override
   public void onComplete(final QueryNode downstream, 
                          final long final_sequence,

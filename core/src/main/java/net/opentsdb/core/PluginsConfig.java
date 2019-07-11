@@ -125,7 +125,10 @@ public class PluginsConfig extends Validatable {
         "net.opentsdb.query.QuerySinkFactory"));
     PRE_LOAD_DEFAULTS.add(Lists.newArrayList(
         "net.opentsdb.query.interpolation.QueryInterpolatorFactory", 
-        "net.opentsdb.query.interpolation.DefaultInterpolatorFactory"));    
+        "net.opentsdb.query.interpolation.DefaultInterpolatorFactory"));
+    PRE_LOAD_DEFAULTS.add(Lists.newArrayList(
+        "net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorFactory", 
+        "net.opentsdb.query.interpolation.types.numeric.FillingNumericInterpolatorFactory"));  
   }
 
   public static final List<List<String>> POST_LOAD_DEFAULTS = Lists.newArrayList();

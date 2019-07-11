@@ -16,6 +16,7 @@ import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.ZonedNanoTimeStamp;
+import net.opentsdb.data.types.numeric.MutableNumericType;
 import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericLongArrayType;
@@ -45,6 +46,7 @@ public class DownsampleNumericPartialTimeSeries extends
   protected TimeStamp boundary = new ZonedNanoTimeStamp(-1, 0, Const.UTC);
   protected TimeStamp next = new ZonedNanoTimeStamp(-1, 0, Const.UTC);
   protected TimeStamp agg_timestamp = new MillisecondTimeStamp(-1L);
+  protected MutableNumericType fill;
   
   /** The current write index for array stores. */
   protected int write_idx;
@@ -52,6 +54,7 @@ public class DownsampleNumericPartialTimeSeries extends
   protected DownsampleNumericPartialTimeSeries(final TSDB tsdb) {
     super();
     this.tsdb = tsdb;
+    fill = new MutableNumericType();
   }
   
   @Override
@@ -65,6 +68,7 @@ public class DownsampleNumericPartialTimeSeries extends
       ((ZonedNanoTimeStamp) next).update(-1, 0, ((DownsampleConfig) node.config()).timezone());
       System.out.println("******* UPDATING BOUNDARY TIME ZONE *************: " + boundary);
     }
+    
   }
   
   @Override
@@ -405,11 +409,19 @@ public class DownsampleNumericPartialTimeSeries extends
     // if the write index is less than the size we need to fill
     while (write_idx < ((DownsamplePartialTimeSeriesSet) set).arraySize()) {
       // TODO other fills
-      if (double_array == null) {
-        flipFlopMainArray();
+      if (node.fillValue().isInteger()) {
+        if (long_array != null) {
+          long_array[write_idx++] = node.fillValue().longValue();
+        } else {
+          double_array[write_idx++] = node.fillValue().toDouble();  
+        }
+      } else {
+        if (double_array == null) {
+          flipFlopMainArray();
+        }
+        
+        double_array[write_idx++] = node.fillValue().doubleValue();
       }
-      
-      double_array[write_idx++] = Double.NaN;
     }
   }
   
@@ -420,11 +432,19 @@ public class DownsampleNumericPartialTimeSeries extends
     
     while (boundary.compare(Op.LTE, next)) {
       // TODO other fills
-      if (double_array == null) {
-        flipFlopMainArray();
+      if (node.fillValue().isInteger()) {
+        if (long_array != null) {
+          long_array[write_idx++] = node.fillValue().longValue();
+        } else {
+          double_array[write_idx++] = node.fillValue().toDouble();  
+        }
+      } else {
+        if (double_array == null) {
+          flipFlopMainArray();
+        }
+        
+        double_array[write_idx++] = node.fillValue().doubleValue();
       }
-      
-      double_array[write_idx++] = Double.NaN;
       if (!((DownsampleConfig) node.config()).getRunAll()) {
         boundary.add(((DownsampleConfig) node.config()).interval());
       }

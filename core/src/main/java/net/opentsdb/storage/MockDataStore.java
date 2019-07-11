@@ -830,6 +830,12 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
         }
       }
     }
+
+    @Override
+    public TimeStamp firstSetStart() {
+      // TODO Auto-generated method stub
+      return null;
+    }
   }
   
   class LocalResult implements QueryResult, Runnable {
