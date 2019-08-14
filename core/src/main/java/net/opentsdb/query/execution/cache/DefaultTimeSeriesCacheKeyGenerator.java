@@ -25,8 +25,6 @@ import com.stumbleupon.async.Deferred;
 import net.opentsdb.configuration.ConfigurationCallback;
 import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.data.TimeStamp;
-import net.opentsdb.query.pojo.TimeSeriesQuery;
 import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.DateTime;
 
@@ -155,31 +153,10 @@ public class DefaultTimeSeriesCacheKeyGenerator
   }
   
   @Override
-  public byte[] generate(final TimeSeriesQuery query, 
-                         final boolean with_timestamps) {
-    if (query == null) {
-      throw new IllegalArgumentException("Query cannot be null.");
-    }
-    final byte[] hash = with_timestamps ? 
-        query.buildHashCode().asBytes() : 
-        query.buildTimelessHashCode().asBytes();
-    final byte[] key = new byte[hash.length + CACHE_PREFIX.length];
-    System.arraycopy(CACHE_PREFIX, 0, key, 0, CACHE_PREFIX.length);
-    System.arraycopy(hash, 0, key, CACHE_PREFIX.length, hash.length);
-    return key;
-  }
-
-  @Override
   public byte[][] generate(final long query_hash, 
                            final String interval,
                            final int[] timestamps,
                            final long[] expirations) {
-    if (timestamps == null) {
-      throw new IllegalArgumentException("Time ranges cannot be null.");
-    }
-    if (timestamps.length < 1) {
-      throw new IllegalArgumentException("Time ranges cannot be empty.");
-    }
     final byte[] hash = Bytes.fromLong(query_hash);
     final byte[] interval_bytes = interval.getBytes(Const.ASCII_CHARSET);
     final byte[] key = new byte[CACHE_PREFIX.length + hash.length + interval.length() + 4];
@@ -214,85 +191,85 @@ public class DefaultTimeSeriesCacheKeyGenerator
     }
     return keys;
   }
-  
-  @Override
-  public long expiration(final TimeSeriesQuery query, final long expiration) {
-    if (expiration == 0) {
-      return 0;
-    }
-    if (expiration > 0) {
-      return expiration;
-    }
-    if (query == null) {
-      return default_expiration;
-    }
-    
-    final TimeStamp end = query.getTime().endTime();
-    final long timestamp = DateTime.currentTimeMillis();
-    
-    // for data older than the cutoff, always return the max
-    if (historical_cutoff > 0 && (timestamp - end.msEpoch() > historical_cutoff)) {
-      return default_max_expiration;
-    }
-    
-    final long interval;
-    if (query.getMetrics().size() == 1 && 
-        query.getMetrics().get(0).getDownsampler() != null) {
-      // in this case we have a split query with one metric per query so
-      // we can look to the metric's downsampler. If there were multiple
-      // metrics then we can't really judge so we need to use the common
-      // denominator.
-      long ds_interval = DateTime.parseDuration(query.getMetrics().get(0).getDownsampler()
-          .getInterval());
-      if (ds_interval < 1) {
-        interval = default_interval;
-      } else {
-        interval = ds_interval;
-      }
-    } else if (query.getTime().getDownsampler() != null) {
-      long ds_interval = DateTime.parseDuration(query.getTime().getDownsampler()
-          .getInterval());
-      if (ds_interval < 1) {
-        interval = default_interval;
-      } else {
-        interval = ds_interval;
-      }
-    } else {
-      interval = default_interval;
-    }
-    
-    long min_cache = ((timestamp - (timestamp % interval)) + interval) - timestamp;
-    if (timestamp - end.msEpoch() < 0) {
-      // this is the "now" block so only cache it for a tiny bit of time, till the
-      // end of the interval.
-      return min_cache;
-    }
-    
-    final long delta = (timestamp - end.msEpoch());
-    if (historical_cutoff > 0 && delta > historical_cutoff) {
-      return default_max_expiration;
-    }
-    
-    // use step or not
-    if (historical_cutoff > 0 && step_interval > 0) {
-      // step
-      if (step_interval > delta) {
-        // this is the adjacent block and we don't want to cache it for very
-        // long as it may receive updates.
-        return min_cache;
-      }
-      long step = ((delta / step_interval) * step_interval) / 
-          (historical_cutoff / step_interval);
-      return step;
-    }
-    
-    if (historical_cutoff > 0) {
-      if (delta > historical_cutoff) {
-        return default_max_expiration;
-      }
-    }
-    return min_cache;
-  }
+//  
+//  @Override
+//  public long expiration(final TimeSeriesQuery query, final long expiration) {
+//    if (expiration == 0) {
+//      return 0;
+//    }
+//    if (expiration > 0) {
+//      return expiration;
+//    }
+//    if (query == null) {
+//      return default_expiration;
+//    }
+//    
+//    final TimeStamp end = query.getTime().endTime();
+//    final long timestamp = DateTime.currentTimeMillis();
+//    
+//    // for data older than the cutoff, always return the max
+//    if (historical_cutoff > 0 && (timestamp - end.msEpoch() > historical_cutoff)) {
+//      return default_max_expiration;
+//    }
+//    
+//    final long interval;
+//    if (query.getMetrics().size() == 1 && 
+//        query.getMetrics().get(0).getDownsampler() != null) {
+//      // in this case we have a split query with one metric per query so
+//      // we can look to the metric's downsampler. If there were multiple
+//      // metrics then we can't really judge so we need to use the common
+//      // denominator.
+//      long ds_interval = DateTime.parseDuration(query.getMetrics().get(0).getDownsampler()
+//          .getInterval());
+//      if (ds_interval < 1) {
+//        interval = default_interval;
+//      } else {
+//        interval = ds_interval;
+//      }
+//    } else if (query.getTime().getDownsampler() != null) {
+//      long ds_interval = DateTime.parseDuration(query.getTime().getDownsampler()
+//          .getInterval());
+//      if (ds_interval < 1) {
+//        interval = default_interval;
+//      } else {
+//        interval = ds_interval;
+//      }
+//    } else {
+//      interval = default_interval;
+//    }
+//    
+//    long min_cache = ((timestamp - (timestamp % interval)) + interval) - timestamp;
+//    if (timestamp - end.msEpoch() < 0) {
+//      // this is the "now" block so only cache it for a tiny bit of time, till the
+//      // end of the interval.
+//      return min_cache;
+//    }
+//    
+//    final long delta = (timestamp - end.msEpoch());
+//    if (historical_cutoff > 0 && delta > historical_cutoff) {
+//      return default_max_expiration;
+//    }
+//    
+//    // use step or not
+//    if (historical_cutoff > 0 && step_interval > 0) {
+//      // step
+//      if (step_interval > delta) {
+//        // this is the adjacent block and we don't want to cache it for very
+//        // long as it may receive updates.
+//        return min_cache;
+//      }
+//      long step = ((delta / step_interval) * step_interval) / 
+//          (historical_cutoff / step_interval);
+//      return step;
+//    }
+//    
+//    if (historical_cutoff > 0) {
+//      if (delta > historical_cutoff) {
+//        return default_max_expiration;
+//      }
+//    }
+//    return min_cache;
+//  }
 
   @Override
   public String type() {

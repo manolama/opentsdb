@@ -15,7 +15,6 @@
 package net.opentsdb.query.execution.cache;
 
 import net.opentsdb.core.BaseTSDBPlugin;
-import net.opentsdb.query.pojo.TimeSeriesQuery;
 
 /**
  * A class used to generate cache keys and expirations for a time series
@@ -24,27 +23,16 @@ import net.opentsdb.query.pojo.TimeSeriesQuery;
  * @since 3.0
  */
 public abstract class TimeSeriesCacheKeyGenerator extends BaseTSDBPlugin {
-
-  /**
-   * Generates a cache key based on the given query and whether or not to
-   * include the time.
-   * @param query A non-null query to generate a hash from.
-   * @param with_timestamps Whether or not to include times when generating
-   * the key.
-   * @return A cache key.
-   */
-  public abstract byte[] generate(final TimeSeriesQuery query, 
-                                  final boolean with_timestamps);
   
   /**
-   * Generates an array of cache keys based on the given query and time ranges 
+   * Generates an array of cache keys based on the given queryh has and time ranges 
    * and populates an array with expirations in milliseconds.
    * This is used for sliced queries where the same query is cut up into smaller
    * time slices.
    * <b>NOTE:</b> As an ugly hack we expect expirations[0] to contain the 
    * downsample interval in ms if present.
    * @param query_hash The hash of a query.
-   * @param interval An interval for the size of the cached block.
+   * @param interval An interval for the size of the cached segment.
    * @param time_ranges A non-null list of time ranges to generate keys from in
    * epoch seconds.
    * @param expirations An array of expiration timestamps the method will fill
@@ -55,16 +43,5 @@ public abstract class TimeSeriesCacheKeyGenerator extends BaseTSDBPlugin {
                                     final String interval,
                                     final int[] time_ranges,
                                     final long[] expirations);
-  
-  /**
-   * Generates an expiration duration (not timestamp) in milliseconds when the
-   * cache should expire this query result.
-   * @param query A query (if null, defaults are used).
-   * @param expiration An expiration in milliseconds. 0 == do not cache, returns
-   * 0. &lt; 0 returns expiration and nothing is calculated. &lt; 0 determines the
-   * cache expiration using the query and current timestamp.
-   * @return An expiration duration.
-   */
-  public abstract long expiration(final TimeSeriesQuery query, long expiration);
   
 }
