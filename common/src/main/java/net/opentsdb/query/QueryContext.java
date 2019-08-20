@@ -64,6 +64,13 @@ public interface QueryContext {
   public void close();
   
   /**
+   * Returns true if the pipeline is closed
+   * 
+   * @return
+   */
+  public boolean isClosed();
+  
+  /**
    * @return An optional stats collector for the query, may be null.
    */
   public QueryStats stats();

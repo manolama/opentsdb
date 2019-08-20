@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.time.temporal.ChronoUnit;
 import java.util.Enumeration;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 
 import javax.servlet.AsyncContext;
 import javax.servlet.AsyncEvent;
@@ -56,11 +58,13 @@ import net.opentsdb.query.serdes.SerdesOptions;
 import net.opentsdb.servlet.applications.OpenTSDBApplication;
 import net.opentsdb.servlet.exceptions.GenericExceptionMapper;
 import net.opentsdb.servlet.filter.AuthFilter;
+import net.opentsdb.servlet.resources.QueryRpc.RunTSDQuery;
 import net.opentsdb.servlet.sinks.ServletSinkConfig;
 import net.opentsdb.servlet.sinks.ServletSinkFactory;
 import net.opentsdb.stats.DefaultQueryStats;
 import net.opentsdb.stats.Span;
 import net.opentsdb.stats.StatsCollector.StatsTimer;
+import net.opentsdb.threadpools.TSDTask;
 import net.opentsdb.stats.Trace;
 import net.opentsdb.stats.Tracer;
 import net.opentsdb.utils.Bytes;
@@ -80,6 +84,28 @@ public class RawQueryRpc {
   /** Request key for the tracer. */
   public static final String TRACE_KEY = "TRACE";
   
+  class RunTSDQuery implements Runnable {
+
+    final Span query_span;
+    final AsyncContext async;
+    final SemanticQuery query;
+
+    final SemanticQueryContext context;
+
+    public RunTSDQuery(Span query_span, AsyncContext async, SemanticQuery query,
+        SemanticQueryContext context) {
+      this.query_span = query_span;
+      this.async = async;
+      this.query = query;
+      this.context = context;
+    }
+
+    @Override
+    public void run() {
+      asyncRun(query_span, async, query, context);
+    }
+  }
+  
   @POST
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
@@ -94,6 +120,11 @@ public class RawQueryRpc {
           .build();
     }
     
+    return handleQuery(servlet_config, request);
+  }
+  
+  private Response handleQuery(final ServletConfig servlet_config, final HttpServletRequest request)
+      throws IOException, InterruptedException, ExecutionException {
     Object obj = servlet_config.getServletContext()
         .getAttribute(OpenTSDBApplication.TSD_ATTRIBUTE);
     if (obj == null) {
@@ -168,10 +199,6 @@ public class RawQueryRpc {
                 .finish();
     }
     
-    final AsyncContext async = request.startAsync();
-    async.setTimeout((Integer) servlet_config.getServletContext()
-        .getAttribute(OpenTSDBApplication.ASYNC_TIMEOUT_ATTRIBUTE));
-    
     Map<String, String> log_headers = null;
     Enumeration<String> keys = request.getHeaderNames();
     while (keys.hasMoreElements()) {
@@ -211,6 +238,10 @@ public class RawQueryRpc {
           .build();
     }
     
+    final AsyncContext async = request.startAsync();
+    async.setTimeout((Integer) servlet_config.getServletContext()
+        .getAttribute(OpenTSDBApplication.ASYNC_TIMEOUT_ATTRIBUTE));
+    
     SemanticQueryContext context = (SemanticQueryContext) SemanticQueryContext.newBuilder()
         .setTSDB(tsdb)
         .setQuery(query)
@@ -234,6 +265,17 @@ public class RawQueryRpc {
       context.logDebug("Trace ID: " + trace.traceId());
     }
     
+    RunTSDQuery runTsdQuery = new RunTSDQuery(query_span, async, query, context);
+    
+    LOG.info("Creating async query");
+
+    tsdb.getQueryThreadPool().submit(runTsdQuery, null, TSDTask.QUERY).get();
+    
+    return null;
+  }
+
+  private void asyncRun(final Span query_span, final AsyncContext async, final SemanticQuery query,
+      SemanticQueryContext context) {
     class AsyncTimeout implements AsyncListener {
 
       @Override
@@ -293,7 +335,6 @@ public class RawQueryRpc {
         }
       }
     });
-    return null;
   }
   
 }

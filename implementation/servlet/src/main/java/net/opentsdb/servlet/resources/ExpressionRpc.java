@@ -20,6 +20,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 
 import javax.servlet.AsyncContext;
 import javax.servlet.AsyncEvent;
@@ -47,6 +49,7 @@ import net.opentsdb.auth.Authentication;
 import net.opentsdb.auth.AuthState.AuthStatus;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.exceptions.QueryExecutionException;
+import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.SemanticQueryContext;
 import net.opentsdb.query.TimeSeriesQuery;
@@ -55,6 +58,7 @@ import net.opentsdb.query.serdes.SerdesOptions;
 import net.opentsdb.servlet.applications.OpenTSDBApplication;
 import net.opentsdb.servlet.exceptions.GenericExceptionMapper;
 import net.opentsdb.servlet.filter.AuthFilter;
+import net.opentsdb.servlet.resources.RawQueryRpc.RunTSDQuery;
 import net.opentsdb.servlet.sinks.ServletSinkConfig;
 import net.opentsdb.servlet.sinks.ServletSinkFactory;
 import net.opentsdb.stats.DefaultQueryStats;
@@ -62,6 +66,7 @@ import net.opentsdb.stats.Span;
 import net.opentsdb.stats.Trace;
 import net.opentsdb.stats.Tracer;
 import net.opentsdb.stats.StatsCollector.StatsTimer;
+import net.opentsdb.threadpools.TSDTask;
 import net.opentsdb.utils.JSON;
 
 @Path("query/exp")
@@ -93,6 +98,33 @@ public class ExpressionRpc {
   public Response post(final @Context ServletConfig servlet_config, 
                        final @Context HttpServletRequest request/*,
                        final @Context HttpServletResponse response*/) throws Exception {
+    return handleQuery(servlet_config, request);
+  }
+
+  class RunTSDQuery implements Runnable {
+    final Trace trace;
+    final Span query_span;
+    final Span setup_span;
+    final AsyncContext async;
+
+    final SemanticQueryContext context;
+
+    public RunTSDQuery(Trace trace, Span query_span, Span setup_span, AsyncContext async,
+        SemanticQueryContext ctx) {
+      this.trace = trace;
+      this.query_span = query_span;
+      this.setup_span = setup_span;
+      this.async = async;
+      this.context = ctx;
+    }
+
+    @Override
+    public void run() {
+      asyncRun(trace, query_span, setup_span, async, context);
+    }
+  }
+  
+  private Response handleQuery(final ServletConfig servlet_config, final HttpServletRequest request) throws InterruptedException, ExecutionException {
     final Object stream = request.getAttribute("DATA");
     if (stream != null) {
       return Response.ok()
@@ -268,6 +300,18 @@ public class ExpressionRpc {
     tsdb.registerRunningQuery(Long.parseLong(request.getHeader(
         OpenTSDBApplication.INTERNAL_HASH_HEADER)), context);
     
+    RunTSDQuery runTsdQuery = new RunTSDQuery(trace, query_span, setup_span, async, context);
+    
+    LOG.info("Creating async query");
+
+    tsdb.getQueryThreadPool().submit(runTsdQuery, null, TSDTask.QUERY).get();
+    
+    return null;
+  }
+
+
+  private void asyncRun(final Trace trace, final Span query_span, final Span setup_span,
+      final AsyncContext async, SemanticQueryContext context) {
     class AsyncTimeout implements AsyncListener {
 
       @Override
@@ -337,7 +381,6 @@ public class ExpressionRpc {
         }
       }
     });
-    return null;
   }
   
 }
