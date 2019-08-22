@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017-2018  The OpenTSDB Authors.
+// Copyright (C) 2017-2019  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,10 +40,6 @@ import net.opentsdb.utils.DateTime;
  * blocks.</li>
  * </ul>
  * 
- * TODO - a log function
- * TODO - this needs to know about storage intervals for better expiration
- * calculations.
- * 
  * @since 3.0
  */
 public class DefaultTimeSeriesCacheKeyGenerator 
@@ -67,7 +63,7 @@ public class DefaultTimeSeriesCacheKeyGenerator
   public static final String INTERVAL_KEY = "tsd.query.cache.default_interval";
   public static final String DEFAULT_INTERVAL = "1m";
   
-  /** Default historical cautoff. 0 disables it. */
+  /** Default historical cutoff. 0 disables it. */
   public static final String HISTORICAL_CUTOFF_KEY = 
       "tsd.query.cache.historical_cutoff";
   public static final long DEFAULT_HISTORICAL_CUTOFF = 0;
@@ -175,102 +171,39 @@ public class DefaultTimeSeriesCacheKeyGenerator
       keys[i] = copy;
       
       // expiration
-      if (now - timestamps[i] > historical_cutoff) {
-        expirations[i] = default_max_expiration;
-      } else if (timestamps[i] + segment_interval > now) {
-        expirations[i] = ds_interval;
+      if (timestamps[i] >= now) {
+        expirations[i] = default_expiration;
       } else {
-        long delta = now - timestamps[i] + segment_interval;
-        delta /= (ds_interval / 1000);
-        if (delta == 0) {
+        long delta = now - timestamps[i];
+        if (historical_cutoff > 0 && delta > (historical_cutoff / 1000)) {
+          // we have an old segment we don't expect to update so just keep it as
+          // long as configured.
+          expirations[i] = default_max_expiration;
+        } else if (delta < (ds_interval / 1000)) {
+          // we're less than a full ds interval into the segment so we want to 
+          // cache even less.
+          expirations[i] = delta * 1000;
+        } else if (delta <= segment_interval) {
+          // "now" is within the current segment so we keep it only for a ds
+          // interval.
           expirations[i] = ds_interval;
         } else {
-          expirations[i] = ds_interval * delta;
+          // now we can backoff, but we need to account for the possibility 
+          // that this segment is adjacent to the "now" segment and may have 
+          // data that would be updated. So we'll subtract a segment worth of
+          // ds from the diff.
+          delta /= (ds_interval / 1000);
+          delta -= (segment_interval / (ds_interval / 1000));
+          expirations[i] = delta * ds_interval;
+        }
+        if (expirations[i] < default_expiration) {
+          expirations[i] = default_expiration;
         }
       }
     }
     return keys;
   }
-//  
-//  @Override
-//  public long expiration(final TimeSeriesQuery query, final long expiration) {
-//    if (expiration == 0) {
-//      return 0;
-//    }
-//    if (expiration > 0) {
-//      return expiration;
-//    }
-//    if (query == null) {
-//      return default_expiration;
-//    }
-//    
-//    final TimeStamp end = query.getTime().endTime();
-//    final long timestamp = DateTime.currentTimeMillis();
-//    
-//    // for data older than the cutoff, always return the max
-//    if (historical_cutoff > 0 && (timestamp - end.msEpoch() > historical_cutoff)) {
-//      return default_max_expiration;
-//    }
-//    
-//    final long interval;
-//    if (query.getMetrics().size() == 1 && 
-//        query.getMetrics().get(0).getDownsampler() != null) {
-//      // in this case we have a split query with one metric per query so
-//      // we can look to the metric's downsampler. If there were multiple
-//      // metrics then we can't really judge so we need to use the common
-//      // denominator.
-//      long ds_interval = DateTime.parseDuration(query.getMetrics().get(0).getDownsampler()
-//          .getInterval());
-//      if (ds_interval < 1) {
-//        interval = default_interval;
-//      } else {
-//        interval = ds_interval;
-//      }
-//    } else if (query.getTime().getDownsampler() != null) {
-//      long ds_interval = DateTime.parseDuration(query.getTime().getDownsampler()
-//          .getInterval());
-//      if (ds_interval < 1) {
-//        interval = default_interval;
-//      } else {
-//        interval = ds_interval;
-//      }
-//    } else {
-//      interval = default_interval;
-//    }
-//    
-//    long min_cache = ((timestamp - (timestamp % interval)) + interval) - timestamp;
-//    if (timestamp - end.msEpoch() < 0) {
-//      // this is the "now" block so only cache it for a tiny bit of time, till the
-//      // end of the interval.
-//      return min_cache;
-//    }
-//    
-//    final long delta = (timestamp - end.msEpoch());
-//    if (historical_cutoff > 0 && delta > historical_cutoff) {
-//      return default_max_expiration;
-//    }
-//    
-//    // use step or not
-//    if (historical_cutoff > 0 && step_interval > 0) {
-//      // step
-//      if (step_interval > delta) {
-//        // this is the adjacent block and we don't want to cache it for very
-//        // long as it may receive updates.
-//        return min_cache;
-//      }
-//      long step = ((delta / step_interval) * step_interval) / 
-//          (historical_cutoff / step_interval);
-//      return step;
-//    }
-//    
-//    if (historical_cutoff > 0) {
-//      if (delta > historical_cutoff) {
-//        return default_max_expiration;
-//      }
-//    }
-//    return min_cache;
-//  }
-
+  
   @Override
   public String type() {
     return TYPE;

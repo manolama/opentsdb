@@ -53,6 +53,7 @@ public class TestDefaultTimeSeriesCacheKeyGenerator {
   
   @Test
   public void ctor() throws Exception {
+    when(DateTime.parseDuration(anyString())).thenCallRealMethod();
     DefaultTimeSeriesCacheKeyGenerator generator = 
         new DefaultTimeSeriesCacheKeyGenerator();
     assertNull(generator.initialize(tsdb, null).join(1));
@@ -88,7 +89,7 @@ public class TestDefaultTimeSeriesCacheKeyGenerator {
         new DefaultTimeSeriesCacheKeyGenerator();
     generator.initialize(tsdb, null).join(1);
     
-    when(DateTime.currentTimeMillis()).thenReturn((long) ((1514764800L + 86400L) * 1000L));
+    when(DateTime.currentTimeMillis()).thenReturn((long) ((1514764800L + (86400L * 2)) * 1000L));
     long[] expirations = new long[] { 300000 };
     byte[][] keys = generator.generate(42L, 
         "1h", 
@@ -100,540 +101,160 @@ public class TestDefaultTimeSeriesCacheKeyGenerator {
         "1h".getBytes(Const.ASCII_CHARSET),
         Bytes.fromLong(42),
         Bytes.fromInt(1514764800)), keys[0]);
-    assertEquals(DefaultTimeSeriesCacheKeyGenerator.DEFAULT_MAX_EXPIRATION, 
+    assertEquals((86400L * 2) * 1000, 
         expirations[0]);
-    System.out.println(Arrays.toString(keys[0]));
     
-//    byte[] key = generator.generate(query, true);
-//    byte[] hash = Arrays.copyOfRange(key, 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length, key.length);
-//
-//    assertEquals(0, Bytes.memcmp(key, DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX, 
-//        0, DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length));
-//    assertArrayEquals(hash, timed_hash);
-//    
-//    key = generator.generate(query, false);
-//    hash = Arrays.copyOfRange(key, 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length, key.length);
-//    assertEquals(0, Bytes.memcmp(key, DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX, 
-//        0, DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length));
-//    assertArrayEquals(hash, timeless_hash);
-//    
-//    try {
-//      generator.generate(null, true);
-//      fail("Expected IllegalArgumentException");
-//    } catch (IllegalArgumentException e) { }
+    // now our query starts at the current time so we expire earlier.
+    when(DateTime.currentTimeMillis()).thenReturn((long) ((1514764800L + (300L * 2)) * 1000L));
+    expirations[0] = 300000;
+    keys = generator.generate(42L, 
+        "1h", 
+        new int[] { 1514764800 }, 
+        expirations);
+    assertEquals(1, keys.length);
+    assertEquals(600000, expirations[0]);
+    
+    // if the times match or the segment is for the future, expire it immediately
+    when(DateTime.currentTimeMillis()).thenReturn((long) ((1514764800L) * 1000L));
+    expirations[0] = 300000;
+    keys = generator.generate(42L, 
+        "1h", 
+        new int[] { 1514764800 }, 
+        expirations);
+    assertEquals(1, keys.length);
+    assertEquals(DefaultTimeSeriesCacheKeyGenerator.DEFAULT_EXPIRATION, expirations[0]);
+    
+    // future
+    when(DateTime.currentTimeMillis()).thenReturn((long) ((1514764800L - 900L) * 1000L));
+    expirations[0] = 300000;
+    keys = generator.generate(42L, 
+        "1h", 
+        new int[] { 1514764800 }, 
+        expirations);
+    assertEquals(1, keys.length);
+    assertEquals(DefaultTimeSeriesCacheKeyGenerator.DEFAULT_EXPIRATION, expirations[0]);
+    
+    // historical cutoff
+    when(DateTime.currentTimeMillis()).thenReturn((long) ((1514764800L + (86400L * 2)) * 1000L));
+    expirations[0] = 300000;
+    generator.historical_cutoff = 86400000L;
+    keys = generator.generate(42L, 
+        "1h", 
+        new int[] { 1514764800 }, 
+        expirations);
+    assertEquals(1, keys.length);
+    assertEquals(86400000L, expirations[0]);
   }
   
-//  @Test
-//  public void generateMulti() throws Exception {
-//    final DefaultTimeSeriesCacheKeyGenerator generator = 
-//        new DefaultTimeSeriesCacheKeyGenerator();
-//    generator.initialize(tsdb, null).join(1);
-//    
-//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    
-//    byte[] timeless_hash = Bytes.fromLong(query.buildTimelessHashCode().asLong());
-//    
-//    int[] time_ranges = new int[3];
-//    time_ranges[0] = 1493942400;
-//    time_ranges[1] = 1493946000;
-//    time_ranges[2] = 1493949600;
-//    
-//    byte[][] keys = generator.generate(query.buildTimelessHashCode().asLong(), time_ranges);
-//    assertEquals(3, keys.length);
-//    
-//    // prefix
-//    assertEquals(0, Bytes.memcmp(keys[0], 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX, 
-//        0, DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length));
-//    
-//    // hash
-//    byte[] hash = Arrays.copyOfRange(keys[0], 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length, 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length + timeless_hash.length);
-//    assertEquals(0, Bytes.memcmp(hash, timeless_hash));
-//    
-//    hash = Arrays.copyOfRange(keys[0], 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length + timeless_hash.length, 
-//        keys[0].length);
-//    assertEquals(0, Bytes.memcmp(hash, Bytes.fromInt(time_ranges[0])));
-//    
-//    // prefix
-//    assertEquals(0, Bytes.memcmp(keys[1], 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX, 
-//        0, DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length));
-//    
-//    // hash
-//    hash = Arrays.copyOfRange(keys[1], 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length, 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length + timeless_hash.length);
-//    assertEquals(0, Bytes.memcmp(hash, timeless_hash));
-//    
-//    hash = Arrays.copyOfRange(keys[1], 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length + timeless_hash.length, 
-//        keys[0].length);
-//    assertEquals(0, Bytes.memcmp(hash, Bytes.fromInt(time_ranges[1])));
-//    
-//    // prefix
-//    assertEquals(0, Bytes.memcmp(keys[2], 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX, 
-//        0, DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length));
-//    
-//    // hash
-//    hash = Arrays.copyOfRange(keys[2], 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length, 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length + timeless_hash.length);
-//    assertEquals(0, Bytes.memcmp(hash, timeless_hash));
-//    
-//    hash = Arrays.copyOfRange(keys[2], 
-//        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX.length + timeless_hash.length, 
-//        keys[0].length);
-//    assertEquals(0, Bytes.memcmp(hash, Bytes.fromInt(time_ranges[2])));
-//    
-//    try {
-//      generator.generate(query.buildTimelessHashCode().asLong(), null);
-//      fail("Expected IllegalArgumentException");
-//    } catch (IllegalArgumentException e) { }
-//    
-//    try {
-//      generator.generate(query.buildTimelessHashCode().asLong(), new int[0]);
-//      fail("Expected IllegalArgumentException");
-//    } catch (IllegalArgumentException e) { }
-//  }
-//    
-//  @Test
-//  public void expiration() throws Exception {
-//    PowerMockito.mockStatic(DateTime.class);
-//    PowerMockito.when(DateTime.parseDuration(anyString())).thenReturn(60000L);
-//    final DefaultTimeSeriesCacheKeyGenerator generator = 
-//        new DefaultTimeSeriesCacheKeyGenerator();
-//    generator.initialize(tsdb, null).join(1);
-//    
-//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago")
-//            .setDownsampler(Downsampler.newBuilder()
-//                .setAggregator("sum")
-//                .setInterval("1m")))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493514769084L);
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493514769000L);
-//    // 84 milliseconds difference.
-//    assertEquals(10916, generator.expiration(query, -1));
-//    
-//    // old but no cutoff provided
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493414769000L);
-//    assertEquals(10916, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493514769000L);
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(10916, generator.expiration(query, -1));
-//    
-//    // regular
-//    assertEquals(0, generator.expiration(query, 0));
-//    assertEquals(30000, generator.expiration(query, 30000));
-//    
-//    assertEquals(60000, generator.expiration(null, -1));
-//  }
-//  
-//  @Test
-//  public void expirationMetricDownsampler() throws Exception {
-//    PowerMockito.mockStatic(DateTime.class);
-//    PowerMockito.when(DateTime.parseDuration(anyString())).thenReturn(60000L);
-//    final DefaultTimeSeriesCacheKeyGenerator generator = 
-//        new DefaultTimeSeriesCacheKeyGenerator();
-//    generator.initialize(tsdb, null).join(1);
-//    
-//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user")
-//            .setDownsampler(Downsampler.newBuilder()
-//                .setAggregator("sum")
-//                .setInterval("1m")))
-//        .build();
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493514769084L);
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493514769000L);
-//    // 84 milliseconds difference.
-//    assertEquals(10916, generator.expiration(query, -1));
-//    
-//    // old but no cutoff provided
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493414769000L);
-//    assertEquals(10916, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493514769000L);
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(10916, generator.expiration(query, -1));
-//    
-//    // regular
-//    assertEquals(0, generator.expiration(query, 0));
-//    assertEquals(30000, generator.expiration(query, 30000));
-//    
-//    assertEquals(60000, generator.expiration(null, -1));
-//  }
-//  
-//  @Test
-//  public void expirationWithCutoff() throws Exception {
-//    PowerMockito.mockStatic(DateTime.class);
-//    PowerMockito.when(DateTime.parseDuration(anyString())).thenReturn(60000L);
-//    final DefaultTimeSeriesCacheKeyGenerator generator = 
-//        new DefaultTimeSeriesCacheKeyGenerator();
-//    generator.initialize(tsdb, null).join(1);
-//    tsdb.config.override(DefaultTimeSeriesCacheKeyGenerator.HISTORICAL_CUTOFF_KEY, 120000L);
-//    tsdb.config.override(DefaultTimeSeriesCacheKeyGenerator.MAX_EXPIRATION_KEY, 120000L);
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493514769084L);
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493514769000L);
-//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago")
-//            .setDownsampler(Downsampler.newBuilder()
-//                .setAggregator("sum")
-//                .setInterval("1m")))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    
-//    assertEquals(10916, generator.expiration(query, -1));
-//    
-//    // old so it's cached at the max
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493414769000L);
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago")
-//            .setDownsampler(Downsampler.newBuilder()
-//                .setAggregator("sum")
-//                .setInterval("1m")))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(120000, generator.expiration(query, -1));
-//  }
-//  
-//  @Test
-//  public void expirationDefaultsNoDS() throws Exception {
-//    final DefaultTimeSeriesCacheKeyGenerator generator = 
-//        new DefaultTimeSeriesCacheKeyGenerator();
-//    generator.initialize(tsdb, null).join(1);
-//    
-//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    PowerMockito.mockStatic(DateTime.class);
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493514769084L);
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493514769000L);
-//    assertEquals(10916, generator.expiration(query, -1));
-//    
-//    // old but no cutoff
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493414769000L);
-//    assertEquals(10916, generator.expiration(query, -1));
-//  }
-//  
-//  @Test
-//  public void expirationDefaultsDSDiffInterval() throws Exception {
-//    final DefaultTimeSeriesCacheKeyGenerator generator = 
-//        new DefaultTimeSeriesCacheKeyGenerator();
-//    generator.initialize(tsdb, null).join(1);
-//    
-//    PowerMockito.mockStatic(DateTime.class);
-//    PowerMockito.when(DateTime.parseDuration(anyString())).thenReturn(300000L);
-//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago")
-//            .setDownsampler(Downsampler.newBuilder()
-//                .setAggregator("sum")
-//                .setInterval("5m")))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493514769084L);
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493514769000L);
-//    assertEquals(130916, generator.expiration(query, -1));
-//    
-//    // old but no cutoff
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493414769000L);
-//    assertEquals(130916, generator.expiration(query, -1));
-//  }
-//  
-//  @Test
-//  public void expirationNoDSDiffInterval() throws Exception {
-//    final DefaultTimeSeriesCacheKeyGenerator generator = 
-//        new DefaultTimeSeriesCacheKeyGenerator();
-//    generator.initialize(tsdb, null).join(1);
-//    tsdb.config.override(DefaultTimeSeriesCacheKeyGenerator.INTERVAL_KEY, "5m");
-//    
-//    PowerMockito.mockStatic(DateTime.class);
-//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493514769084L);
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493514769000L);
-//    assertEquals(130916, generator.expiration(query, -1));
-//    
-//    // old but no cutoff
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493414769000L);
-//    assertEquals(130916, generator.expiration(query, -1));
-//  }
-//
-//  @Test
-//  public void expirationStepDown() throws Exception {
-//    final DefaultTimeSeriesCacheKeyGenerator generator = 
-//        new DefaultTimeSeriesCacheKeyGenerator();
-//    generator.initialize(tsdb, null).join(1);
-//    
-//    // 1 hour step interval
-//    // 6 hour historical cutoff
-//    tsdb.config.override(DefaultTimeSeriesCacheKeyGenerator.MAX_EXPIRATION_KEY, 86400000L);
-//    tsdb.config.override(DefaultTimeSeriesCacheKeyGenerator.HISTORICAL_CUTOFF_KEY, 21600000L);
-//    tsdb.config.override(DefaultTimeSeriesCacheKeyGenerator.STEP_INTERVAL_KEY, 3600000L);
-//    
-//    PowerMockito.mockStatic(DateTime.class);
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493514000000L); // Sun, 30 Apr 2017 01:00:00 GMT  BLOCK TIME
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493511663000L); //Sun, 30 Apr 2017 00:21:03 GMT 
-//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    
-//    // present block
-//    assertEquals(57000, generator.expiration(query, -1));
-//   
-//    // present block aligned
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493511660000L); //Sun, 30 Apr 2017 00:21:00 GMT 
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(60000, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493515260000L); //Sun, 30 Apr 2017 01:21:00 GMT adjacent block 1
-//      // isn't cached for long
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(60000, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493518860000L); // Sun, 30 Apr 2017 02:21:00 GMT  block 2
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(600000, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493522460000L); // Sun, 30 Apr 2017 03:21:00 GMT  block 3
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(1200000, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493529660000L); // Sun, 30 Apr 2017 05:21:00 GMT  block 5
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(2400000, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493533260000L); // Sun, 30 Apr 2017 06:21:00 GMT  block 6
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(3000000, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493536860000L); // Sun, 30 Apr 2017 07:21:00 GMT  block 7 hits max
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(86400000, generator.expiration(query, -1));
-//  }
-//  
-//  @Test
-//  public void expirationStepDownAligned() throws Exception {
-//    final DefaultTimeSeriesCacheKeyGenerator generator = 
-//        new DefaultTimeSeriesCacheKeyGenerator();
-//    generator.initialize(tsdb, null).join(1);
-//    // 1 hour step interval
-//    // 6 hour historical cutoff
-//    tsdb.config.override(DefaultTimeSeriesCacheKeyGenerator.MAX_EXPIRATION_KEY, 86400000L);
-//    tsdb.config.override(DefaultTimeSeriesCacheKeyGenerator.HISTORICAL_CUTOFF_KEY, 21600000L);
-//    tsdb.config.override(DefaultTimeSeriesCacheKeyGenerator.STEP_INTERVAL_KEY, 3600000L);
-//    
-//    PowerMockito.mockStatic(DateTime.class);
-//    PowerMockito.when(DateTime.parseDateTimeString(anyString(), anyString()))
-//      .thenReturn(1493514000000L); // Sun, 30 Apr 2017 01:00:00 GMT  BLOCK TIME
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//    .thenReturn(1493514000000L); //Sun, 30 Apr 2017 01:00:00 GMT 
-//    TimeSeriesQuery query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    
-//    // present block
-//    assertEquals(60000, generator.expiration(query, -1));
-//
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493517600000L); //Sun, 30 Apr 2017 02:00:00 GMT adjacent block 1
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(600000, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493521200000L); // Sun, 30 Apr 2017 03:00:00 GMT  block 2
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(1200000, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493528400000L); // Sun, 30 Apr 2017 05:00:00 GMT  block 4
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(2400000, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493532000000L); // Sun, 30 Apr 2017 06:00:00 GMT  block 5
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(3000000, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493535600000L); // Sun, 30 Apr 2017 07:00:00 GMT  block 6 
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(3600000, generator.expiration(query, -1));
-//    
-//    PowerMockito.when(DateTime.currentTimeMillis())
-//      .thenReturn(1493539200000L); // Sun, 30 Apr 2017 08:00:00 GMT  block 7 hits max 
-//    query = TimeSeriesQuery.newBuilder()
-//        .setTime(Timespan.newBuilder()
-//            .setStart("3h-ago")
-//            .setEnd("1h-ago"))
-//        .addMetric(Metric.newBuilder()
-//            .setMetric("sys.cpu.user"))
-//        .build();
-//    assertEquals(86400000, generator.expiration(query, -1));
-//  }
+  @Test
+  public void multipleSegments() throws Exception {
+    final DefaultTimeSeriesCacheKeyGenerator generator = 
+        new DefaultTimeSeriesCacheKeyGenerator();
+    generator.initialize(tsdb, null).join(1);
+    
+    when(DateTime.currentTimeMillis()).thenReturn((long) ((1514764800L + (86400L * 2)) * 1000L));
+    long[] expirations = new long[] { 300000, 0, 0, 0 };
+    byte[][] keys = generator.generate(42L, 
+        "1h", 
+        new int[] { 1514764800, 
+                    1514764800 + 3600, 
+                    1514764800 + (3600 * 2), 
+                    1514764800 + (3600 * 3) }, 
+        expirations);
+    assertEquals(4, keys.length);
+    assertArrayEquals(com.google.common.primitives.Bytes.concat(
+        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX, 
+        "1h".getBytes(Const.ASCII_CHARSET),
+        Bytes.fromLong(42),
+        Bytes.fromInt(1514764800)), keys[0]);
+    assertArrayEquals(com.google.common.primitives.Bytes.concat(
+        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX, 
+        "1h".getBytes(Const.ASCII_CHARSET),
+        Bytes.fromLong(42),
+        Bytes.fromInt(1514764800 + 3600)), keys[1]);
+    assertArrayEquals(com.google.common.primitives.Bytes.concat(
+        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX, 
+        "1h".getBytes(Const.ASCII_CHARSET),
+        Bytes.fromLong(42),
+        Bytes.fromInt(1514764800 + (3600 * 2))), keys[2]);
+    assertArrayEquals(com.google.common.primitives.Bytes.concat(
+        DefaultTimeSeriesCacheKeyGenerator.CACHE_PREFIX, 
+        "1h".getBytes(Const.ASCII_CHARSET),
+        Bytes.fromLong(42),
+        Bytes.fromInt(1514764800 + (3600 * 3))), keys[3]);
+    assertEquals((86400L * 2) * 1000, 
+        expirations[0]);
+    assertEquals(((86400L * 2) - 3600) * 1000, 
+        expirations[1]);
+    assertEquals(((86400L * 2) - (3600 * 2)) * 1000, 
+        expirations[2]);
+    assertEquals(((86400L * 2) - (3600 * 3)) * 1000, 
+        expirations[3]);
+    
+    // now our query starts at the current time so we expire earlier.
+    when(DateTime.currentTimeMillis()).thenReturn((long) ((1514764800L + (3600 * 3) + (300L * 2)) * 1000L));
+    expirations = new long[] { 300000, 0, 0, 0 };
+    keys = generator.generate(42L, 
+        "1h", 
+        new int[] { 1514764800, 
+                    1514764800 + 3600, 
+                    1514764800 + (3600 * 2), 
+                    1514764800 + (3600 * 3) }, 
+        expirations);
+    assertEquals(4, keys.length);
+    assertEquals(11400000, expirations[0]);
+    assertEquals(7800000, expirations[1]);
+    assertEquals(4200000,  expirations[2]);
+    assertEquals(600000, expirations[3]);
+    
+    // if the times match or the segment is for the future, expire it immediately
+    when(DateTime.currentTimeMillis()).thenReturn((long) ((1514764800L) * 1000L));
+    expirations = new long[] { 300000, 0, 0, 0 };
+    keys = generator.generate(42L, 
+        "1h", 
+        new int[] { 1514764800, 
+                    1514764800 + 3600, 
+                    1514764800 + (3600 * 2), 
+                    1514764800 + (3600 * 3) }, 
+        expirations);
+    assertEquals(4, keys.length);
+    assertEquals(DefaultTimeSeriesCacheKeyGenerator.DEFAULT_EXPIRATION, expirations[0]);
+    assertEquals(DefaultTimeSeriesCacheKeyGenerator.DEFAULT_EXPIRATION, expirations[1]);
+    assertEquals(DefaultTimeSeriesCacheKeyGenerator.DEFAULT_EXPIRATION, expirations[2]);
+    assertEquals(DefaultTimeSeriesCacheKeyGenerator.DEFAULT_EXPIRATION, expirations[3]);
+    
+    // future
+    when(DateTime.currentTimeMillis()).thenReturn((long) ((1514764800L - 900L) * 1000L));
+    expirations = new long[] { 300000, 0, 0, 0 };
+    keys = generator.generate(42L, 
+        "1h", 
+        new int[] { 1514764800, 
+                    1514764800 + 3600, 
+                    1514764800 + (3600 * 2), 
+                    1514764800 + (3600 * 3) }, 
+        expirations);
+    assertEquals(4, keys.length);
+    assertEquals(DefaultTimeSeriesCacheKeyGenerator.DEFAULT_EXPIRATION, expirations[0]);
+    assertEquals(DefaultTimeSeriesCacheKeyGenerator.DEFAULT_EXPIRATION, expirations[1]);
+    assertEquals(DefaultTimeSeriesCacheKeyGenerator.DEFAULT_EXPIRATION, expirations[2]);
+    assertEquals(DefaultTimeSeriesCacheKeyGenerator.DEFAULT_EXPIRATION, expirations[3]);
+    
+    // historical cutoff
+    when(DateTime.currentTimeMillis()).thenReturn((long) ((1514764800L + (86400L * 2)) * 1000L));
+    generator.historical_cutoff = 86400000L;
+    expirations = new long[] { 300000, 0, 0, 0 };
+    keys = generator.generate(42L, 
+        "1h", 
+        new int[] { 1514764800, 
+                    1514764800 + 3600, 
+                    1514764800 + (3600 * 2), 
+                    1514764800 + (3600 * 3) }, 
+        expirations);
+    assertEquals(4, keys.length);
+    assertEquals(86400000L, expirations[0]);
+    assertEquals(86400000L, expirations[1]);
+    assertEquals(86400000L,  expirations[2]);
+    assertEquals(86400000L, expirations[3]);
+  }
+  
 }
