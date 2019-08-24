@@ -400,7 +400,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         // TODO - implement
         // TODO - send in thread pool
         for (final QuerySink sink : sinks) {
-          sink.onNext(new CombinedResult(this, results, sinks, latch));
+          sink.onNext(new CombinedResult(this, results, sinks, latch, string_interval));
         }
       }
       

@@ -17,11 +17,8 @@ package net.opentsdb.query.execution.cache;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.fail;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.when;
-
-import java.util.Arrays;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -32,8 +29,6 @@ import org.powermock.modules.junit4.PowerMockRunner;
 
 import net.opentsdb.core.Const;
 import net.opentsdb.core.MockTSDB;
-import net.opentsdb.query.pojo.Downsampler;
-import net.opentsdb.query.pojo.Metric;
 import net.opentsdb.query.pojo.TimeSeriesQuery;
 import net.opentsdb.query.pojo.Timespan;
 import net.opentsdb.utils.Bytes;

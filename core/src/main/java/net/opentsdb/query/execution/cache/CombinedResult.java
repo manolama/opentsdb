@@ -22,6 +22,7 @@ import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.QuerySink;
 import net.opentsdb.rollup.RollupConfig;
+import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.Pair;
 
 public class CombinedResult implements QueryResult, TimeSpecification {
@@ -32,17 +33,23 @@ public class CombinedResult implements QueryResult, TimeSpecification {
   TimeSpecification spec;
   QueryNode node;
   String data_source;
+  
   final QueryPipelineContext context;
   final List<QuerySink> sinks;
   final AtomicInteger latch;
+  final int result_interval;
+  final ChronoUnit result_units;
   
   public CombinedResult(final QueryPipelineContext context,
                         final QueryResult[] results, 
                         final List<QuerySink> sinks, 
-                        final AtomicInteger latch) {
+                        final AtomicInteger latch,
+                        final String result_interval) {
     this.context = context;
     this.sinks = sinks;
     this.latch = latch;
+    this.result_interval = DateTime.getDurationInterval(result_interval);
+    result_units = DateTime.getDurationUnits(result_interval).equals("h") ? ChronoUnit.HOURS : ChronoUnit.DAYS;
     time_series = Maps.newHashMap();
     for (int i = 0; i < results.length; i++) {
       if (results[i] == null) {
@@ -191,4 +198,11 @@ public class CombinedResult implements QueryResult, TimeSpecification {
     spec.nextTimestamp(timestamp);
   }
 
+  int resultInterval() {
+    return result_interval;
+  }
+  
+  ChronoUnit resultUnits() {
+    return result_units;
+  }
 }
