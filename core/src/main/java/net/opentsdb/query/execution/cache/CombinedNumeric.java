@@ -20,31 +20,43 @@ public class CombinedNumeric implements TypedTimeSeriesIterator<NumericType> {
     System.out.println(" COMBINED NUMERIC WITH: " + series.size());
     this.series = series;
     iterator = (TypedTimeSeriesIterator<NumericType>) 
-        series.get(idx++).getValue().iterator(NumericType.TYPE).get();
-  }
-
-  @Override
-  public boolean hasNext() {
-    if (idx >= series.size()) {
-      return false;
-    }
-    // TODO - may need to skip some
-    return iterator.hasNext();
-  }
-
-  @Override
-  public TimeSeriesValue<NumericType> next() {
-    TimeSeriesValue<NumericType> value = iterator.next();
-    if (!iterator.hasNext()) {
-      if (idx < series.size()) {
-        // TODO - may need to skip some
+        series.get(idx).getValue().iterator(NumericType.TYPE).get();
+    while (idx < series.size()) {
+      if (iterator.hasNext()) {
+        break;
+      }
+      
+      series.get(idx).getValue().close();
+      if (++idx < series.size()) {
         iterator = (TypedTimeSeriesIterator<NumericType>) 
-            series.get(idx++).getValue().iterator(NumericType.TYPE).get();
+            series.get(idx).getValue().iterator(NumericType.TYPE).get();
       } else {
         iterator = null;
       }
     }
-    return value;
+  }
+
+  @Override
+  public boolean hasNext() {
+    while (idx < series.size()) {
+      if (iterator.hasNext()) {
+        return true;
+      }
+      series.get(idx).getValue().close();
+      System.out.println("   ADV TO: " + (idx + 1));
+      if (++idx < series.size()) {
+        iterator = (TypedTimeSeriesIterator<NumericType>) 
+            series.get(idx).getValue().iterator(NumericType.TYPE).get();
+      } else {
+        iterator = null;
+      }
+    }
+    return false;
+  }
+
+  @Override
+  public TimeSeriesValue<NumericType> next() {
+    return iterator.next();
   }
 
   @Override

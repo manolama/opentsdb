@@ -30,22 +30,45 @@ import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.utils.Pair;
 
+/**
+ * Handles splicing multiple cached arrays into one by allocating a new
+ * array of the proper length, filling with NaNs when necessary and running
+ * the copy in the ctor.
+ * TODO - other fills.
+ * 
+ * <b>NOTE:</b>
+ * This class assumes that all source arrays have the same length.
+ *
+ * @since 3.0
+ */
 public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>, 
     TimeSeriesValue<NumericArrayType>, NumericArrayType {
   
+  /** Write index into the array and used as the end. */
   protected int idx = 0;
+  
+  /** Whether or not the iterator was called. */
   protected boolean called = false;
+  
+  /** The two arrays, one of which will be null at any time. */
   protected long[] long_array;
   protected double[] double_array;
+  
+  /** A ref to the cache result. */
   protected final CombinedResult result;
   
+  /**
+   * Default ctor.
+   * @param result The non-null result.
+   * @param series The non-null list of series.
+   */
   CombinedArray(final CombinedResult result, 
                 final List<Pair<QueryResult, TimeSeries>> series) {
     this.result = result;
     final int array_length = (int) ((result.timeSpecification().end().epoch() - 
         result.timeSpecification().start().epoch()) /
         result.timeSpecification().interval().get(ChronoUnit.SECONDS));
-    System.out.println("          ARRAY LEN: " + array_length);
+    
     TimeStamp timestamp = result.timeSpecification().start().getCopy();
     timestamp.snapToPreviousInterval(result.resultInterval(), result.resultUnits());
     
@@ -53,8 +76,6 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
     long next_epoch = timestamp.epoch();
     for (int i = 0; i < series.size(); i++) {
       final TimeSpecification series_spec = series.get(i).getKey().timeSpecification();
-      System.out.println("  WORKING : " + series_spec.start().epoch() + "  EXPECT: " + next_epoch);
-      
       final TypedTimeSeriesIterator<NumericArrayType> iterator = 
           (TypedTimeSeriesIterator<NumericArrayType>) 
             series.get(i).getValue().iterator(NumericArrayType.TYPE).get();
@@ -62,7 +83,6 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
       
       while (next_epoch != series_spec.start().epoch()) {
         // fill
-        System.out.println("     [[[[[[ FILLING ]]]]]]  " + (result.timeSpecification().start().epoch() - next_epoch));
         if (double_array == null) {
           double_array = new double[array_length];
           Arrays.fill(double_array, Double.NaN);
@@ -77,25 +97,31 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
         
         // edge case if the query is not aligned to the cache interval
         if (result.timeSpecification().start().epoch() > next_epoch) {
-          System.out.println("HERE!");
-          idx += (((next_epoch + (series_spec.end().epoch() - series_spec.start().epoch())) - result.timeSpecification().start().epoch()) / interval_in_seconds);
+          idx += (((next_epoch + (series_spec.end().epoch() - 
+                series_spec.start().epoch())) - 
+                result.timeSpecification().start().epoch()) / 
+              interval_in_seconds);
         } else {
-          idx += ((series_spec.end().epoch() - series_spec.start().epoch()) / interval_in_seconds);
+          idx += ((series_spec.end().epoch() - series_spec.start().epoch()) / 
+              interval_in_seconds);
         }
-        System.out.println("    FILL IDX: " + idx);
         next_epoch += series_spec.end().epoch() - series_spec.start().epoch();
         if (next_epoch > result.timeSpecification().end().epoch()) {
           throw new IllegalStateException("Coding bug, please report this query.");
         }
       }
       
-      int start_offset = result.timeSpecification().start().epoch() > series_spec.start().epoch() ?
-          (int) (value.value().offset() + (result.timeSpecification().start().epoch() - series_spec.start().epoch()) / interval_in_seconds)
+      int start_offset = result.timeSpecification().start().epoch() > 
+          series_spec.start().epoch() ?
+          (int) (value.value().offset() + (result.timeSpecification().start().epoch() - 
+              series_spec.start().epoch()) / interval_in_seconds)
           : value.value().offset();
       int end = series_spec.end().compare(Op.GT, result.timeSpecification().end()) ?
-          (int) (value.value().end() - (series_spec.end().epoch() - result.timeSpecification().end().epoch()) / interval_in_seconds) - start_offset
+          (int) (value.value().end() - (series_spec.end().epoch() - 
+                result.timeSpecification().end().epoch()) / 
+              interval_in_seconds) - start_offset
           : value.value().end() - start_offset;
-      System.out.println(" [SO] " + start_offset + " [E] " + end);
+      
       // we have some data to write.
       if (value.value().isInteger()) {
         if (long_array == null && double_array == null) {
@@ -109,7 +135,8 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
           } else {
             // start with a long array
             long_array = new long[array_length];
-            System.arraycopy(value.value().longArray(), start_offset, long_array, idx, end);
+            System.arraycopy(value.value().longArray(), start_offset, 
+                long_array, idx, end);
             idx += end;
           }
         } else if (double_array != null) {
@@ -117,7 +144,8 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
             double_array[idx++] = value.value().longArray()[x];
           }
         } else {
-          System.arraycopy(value.value().longArray(), start_offset, long_array, idx, end);
+          System.arraycopy(value.value().longArray(), start_offset, 
+              long_array, idx, end);
           idx += end;
         }
       } else {
@@ -129,21 +157,25 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
             double_array[x] = long_array[x];
           }
         }
-        System.arraycopy(value.value().doubleArray(), start_offset, double_array, idx, end);
+        System.arraycopy(value.value().doubleArray(), start_offset, 
+            double_array, idx, end);
         idx += end;
       }
       series.get(i).getValue().close();
       next_epoch += series_spec.end().epoch() - series_spec.start().epoch();
-      System.out.println("     [EPOCH] " + next_epoch);
     }
     
     // adjust in case we were missing data at the end of the interval.
-    if (long_array != null) {
-      idx = long_array.length;
-    } else {
-      idx = double_array.length;
+    if (long_array != null && idx < long_array.length) {
+      // we missed some data at the end so we flip to Double and fill.
+      double_array = new double[array_length];
+      for (int i = 0; i < idx; i++) {
+        double_array[i] = long_array[i];
+      }
+      long_array = null;
+      Arrays.fill(double_array, idx, array_length, Double.NaN);
     }
-    System.out.println("DONE.........: " + idx);
+    idx = array_length;
   }
 
   @Override
