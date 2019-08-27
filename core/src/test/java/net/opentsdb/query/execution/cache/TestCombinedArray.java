@@ -21,7 +21,6 @@ import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
 import java.util.List;
 
 import org.junit.Test;

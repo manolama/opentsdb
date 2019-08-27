@@ -43,7 +43,7 @@ import net.opentsdb.query.cache.QueryCachePlugin.CachedQueryResult;
 import net.opentsdb.query.execution.cache.CombinedArray;
 import net.opentsdb.query.execution.cache.CombinedNumeric;
 import net.opentsdb.query.execution.cache.CombinedResult;
-import net.opentsdb.query.execution.cache.CombinedSummary;
+import net.opentsdb.query.execution.cache.CombinedAggregatedSummary;
 import net.opentsdb.query.execution.cache.DefaultTimeSeriesCacheKeyGenerator;
 import net.opentsdb.query.execution.cache.TimeSeriesCacheKeyGenerator;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
