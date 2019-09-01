@@ -73,7 +73,6 @@ public class CombinedSummary implements TypedTimeSeriesIterator<NumericSummaryTy
         return true;
       }
       series.get(idx).getValue().close();
-      System.out.println("   ADV TO: " + (idx + 1));
       if (++idx < series.size()) {
         iterator = (TypedTimeSeriesIterator<NumericSummaryType>) 
             series.get(idx).getValue().iterator(NumericSummaryType.TYPE).get();
