@@ -14,16 +14,12 @@
 // limitations under the License.
 package net.opentsdb.query.execution.cache;
 
-import java.util.List;
-
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericType;
-import net.opentsdb.query.QueryResult;
-import net.opentsdb.utils.Pair;
 
 /**
  * An iterator that handles combining multiple numeric type results from the 
@@ -33,8 +29,8 @@ import net.opentsdb.utils.Pair;
  */
 public class CombinedNumeric implements TypedTimeSeriesIterator<NumericType> {
   
-  /** The list of source data. */
-  private final List<Pair<QueryResult, TimeSeries>> series;
+  /** The array of source data. */
+  private final TimeSeries[] series;
   
   /** The current index into the series. */
   private int idx = 0;
@@ -48,39 +44,41 @@ public class CombinedNumeric implements TypedTimeSeriesIterator<NumericType> {
    * @param series The non-null result set.
    */
   CombinedNumeric(final CombinedResult result, 
-                  final List<Pair<QueryResult, TimeSeries>> series) {
+                  final TimeSeries[] series) {
     this.series = series;
-    iterator = (TypedTimeSeriesIterator<NumericType>) 
-        series.get(idx).getValue().iterator(NumericType.TYPE).get();
-    while (idx < series.size()) {
+    while (series[idx] != null && idx < series.length) {
+      iterator = (TypedTimeSeriesIterator<NumericType>) 
+          series[idx].iterator(NumericType.TYPE).get();
       if (iterator.hasNext()) {
         break;
       }
       
-      series.get(idx).getValue().close();
-      if (++idx < series.size()) {
-        iterator = (TypedTimeSeriesIterator<NumericType>) 
-            series.get(idx).getValue().iterator(NumericType.TYPE).get();
-      } else {
-        iterator = null;
-      }
+      series[idx].close();
+      iterator = null;
+      idx++;
     }
   }
 
   @Override
   public boolean hasNext() {
-    while (idx < series.size()) {
+    while (idx < series.length) {
+      if (series[idx] == null) {
+        idx++;
+        continue;
+      }
+      
+      if (iterator == null) {
+        iterator = (TypedTimeSeriesIterator<NumericType>) 
+            series[idx].iterator(NumericType.TYPE).get();
+      }
+      
       if (iterator.hasNext()) {
         return true;
       }
-      series.get(idx).getValue().close();
-      System.out.println("   ADV TO: " + (idx + 1));
-      if (++idx < series.size()) {
-        iterator = (TypedTimeSeriesIterator<NumericType>) 
-            series.get(idx).getValue().iterator(NumericType.TYPE).get();
-      } else {
-        iterator = null;
-      }
+      
+      series[idx].close();
+      iterator = null;
+      idx++;
     }
     return false;
   }

@@ -17,10 +17,7 @@ package net.opentsdb.query.execution.cache;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 
-import java.util.List;
-
 import org.junit.Test;
-import com.google.common.collect.Lists;
 
 import net.opentsdb.data.BaseTimeSeriesStringId;
 import net.opentsdb.data.MockTimeSeries;
@@ -30,7 +27,6 @@ import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.types.numeric.MutableNumericSummaryValue;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.query.QueryResult;
-import net.opentsdb.utils.Pair;
 
 public class TestCombinedSummary {
   private static final int BASE_TIME = 1546300800;
@@ -38,7 +34,7 @@ public class TestCombinedSummary {
   @Test
   public void noGaps() throws Exception {
     CombinedResult result = mock(CombinedResult.class);
-    List<Pair<QueryResult, TimeSeries>> rs = generateSeries(3, BASE_TIME, false);
+    TimeSeries[] rs = generateSeries(3, BASE_TIME, false);
     CombinedSummary iterator = new CombinedSummary(result, rs);
     
     int ts = BASE_TIME;
@@ -56,7 +52,7 @@ public class TestCombinedSummary {
   @Test
   public void gapAtStart() throws Exception {
     CombinedResult result = mock(CombinedResult.class);
-    List<Pair<QueryResult, TimeSeries>> rs = generateSeries(3, BASE_TIME + 86400, false);
+    TimeSeries[] rs = generateSeries(3, BASE_TIME + 86400, false);
     CombinedSummary iterator = new CombinedSummary(result, rs);
     
     int ts = BASE_TIME + 86400;
@@ -72,9 +68,28 @@ public class TestCombinedSummary {
   }
   
   @Test
+  public void twoGapsAtStart() throws Exception {
+    CombinedResult result = mock(CombinedResult.class);
+    TimeSeries[] rs = generateSeries(3, BASE_TIME + 86400, false);
+    rs[1] = null;
+    CombinedSummary iterator = new CombinedSummary(result, rs);
+    
+    int ts = BASE_TIME + (86400 * 2);
+    int want = 48;
+    while (iterator.hasNext()) {
+      TimeSeriesValue<NumericSummaryType> v = (TimeSeriesValue<NumericSummaryType>) iterator.next();
+      assertEquals(ts, v.timestamp().epoch());
+      assertEquals(want++, v.value().value(0).longValue());
+      assertEquals(1, v.value().value(1).longValue());
+      ts += 3600;
+    }
+    assertEquals(BASE_TIME + (86400 * 3), ts);
+  }
+  
+  @Test
   public void gapAtEnd() throws Exception {
     CombinedResult result = mock(CombinedResult.class);
-    List<Pair<QueryResult, TimeSeries>> rs = generateSeries(2, BASE_TIME, false);
+    TimeSeries[] rs = generateSeries(2, BASE_TIME, false);
     CombinedSummary iterator = new CombinedSummary(result, rs);
     
     int ts = BASE_TIME;
@@ -92,7 +107,7 @@ public class TestCombinedSummary {
   @Test
   public void gapInMiddle() throws Exception {
     CombinedResult result = mock(CombinedResult.class);
-    List<Pair<QueryResult, TimeSeries>> rs = generateSeries(3, BASE_TIME, true);
+    TimeSeries[] rs = generateSeries(3, BASE_TIME, true);
     CombinedSummary iterator = new CombinedSummary(result, rs);
     
     int ts = BASE_TIME;
@@ -111,10 +126,10 @@ public class TestCombinedSummary {
     assertEquals(BASE_TIME + (86400 * 3), ts);
   }
   
-  List<Pair<QueryResult, TimeSeries>> generateSeries(final int num_results, 
-                                                     final int start_timestamp,
-                                                     final boolean gaps) {
-    List<Pair<QueryResult, TimeSeries>> results = Lists.newArrayList();
+  TimeSeries[] generateSeries(final int num_results, 
+                              final int start_timestamp,
+                              final boolean gaps) {
+    TimeSeries[] series = new TimeSeries[num_results];
     int timestamp = BASE_TIME;
     int value = 0;
 
@@ -134,7 +149,7 @@ public class TestCombinedSummary {
         timestamp += 3600;
       }
 
-      results.add(new Pair<>(result, ts));
+      series[0] = ts;
     } else {
       timestamp += 86400;
       value += 24;
@@ -157,7 +172,7 @@ public class TestCombinedSummary {
         timestamp += 3600;
       }
 
-      results.add(new Pair<>(result, ts));
+      series[1] = ts;
     } else {
       timestamp += 86400;
       value += 24;
@@ -180,10 +195,10 @@ public class TestCombinedSummary {
         timestamp += 3600;
       }
 
-      results.add(new Pair<>(result, ts));
+      series[2] = ts;
     } else {
       timestamp += 86400;
     }
-    return results;
+    return series;
   }
 }

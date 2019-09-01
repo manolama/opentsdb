@@ -21,10 +21,8 @@ import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
 
 import org.junit.Test;
-import com.google.common.collect.Lists;
 
 import net.opentsdb.data.BaseTimeSeriesStringId;
 import net.opentsdb.data.MillisecondTimeStamp;
@@ -33,7 +31,6 @@ import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.types.numeric.NumericArrayTimeSeries;
 import net.opentsdb.query.QueryResult;
-import net.opentsdb.utils.Pair;
 
 public class TestCombinedArray {
   private static final int BASE_TIME = 1546300800;
@@ -49,7 +46,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateLongSeries(3, BASE_TIME, false);
+    TimeSeries[] rs = generateLongSeries(3, BASE_TIME, false, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME, iterator.timestamp().epoch());
@@ -74,7 +71,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(3, BASE_TIME, false);
+    TimeSeries[] rs = generateDoubleSeries(3, BASE_TIME, false, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME, iterator.timestamp().epoch());
@@ -103,7 +100,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateLongSeries(3, BASE_TIME + 3600, false);
+    TimeSeries[] rs = generateLongSeries(3, BASE_TIME + 3600, false, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME, iterator.timestamp().epoch());
@@ -132,7 +129,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(3, BASE_TIME + 3600, false);
+    TimeSeries[] rs = generateDoubleSeries(3, BASE_TIME + 3600, false, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME, iterator.timestamp().epoch());
@@ -161,7 +158,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateLongSeries(2, BASE_TIME, false);
+    TimeSeries[] rs = generateLongSeries(2, BASE_TIME, false, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME, iterator.timestamp().epoch());
@@ -190,7 +187,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(2, BASE_TIME, false);
+    TimeSeries[] rs = generateDoubleSeries(2, BASE_TIME, false, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME, iterator.timestamp().epoch());
@@ -219,7 +216,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateLongSeries(4, BASE_TIME, true);
+    TimeSeries[] rs = generateLongSeries(4, BASE_TIME, true, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME, iterator.timestamp().epoch());
@@ -248,7 +245,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(4, BASE_TIME, true);
+    TimeSeries[] rs = generateDoubleSeries(4, BASE_TIME, true, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME, iterator.timestamp().epoch());
@@ -277,8 +274,8 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(3, BASE_TIME, false);
-    rs.set(0, generateLongSeries(0, BASE_TIME));
+    TimeSeries[] rs = generateDoubleSeries(3, BASE_TIME, false, result);
+    rs[0] = generateLongSeries(0, BASE_TIME);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME, iterator.timestamp().epoch());
@@ -307,8 +304,8 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(3, BASE_TIME, false);
-    rs.set(1, generateLongSeries(60, BASE_TIME + 3600));
+    TimeSeries[] rs = generateDoubleSeries(3, BASE_TIME, false, result);
+    rs[1] = generateLongSeries(60, BASE_TIME + 3600);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME, iterator.timestamp().epoch());
@@ -337,8 +334,8 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(3, BASE_TIME, false);
-    rs.set(2, generateLongSeries(120, BASE_TIME + (3600 * 2)));
+    TimeSeries[] rs = generateDoubleSeries(3, BASE_TIME, false, result);
+    rs[2] = generateLongSeries(120, BASE_TIME + (3600 * 2));
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME, iterator.timestamp().epoch());
@@ -367,7 +364,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(3, BASE_TIME, false);
+    TimeSeries[] rs = generateDoubleSeries(3, BASE_TIME, false, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME + 300, iterator.timestamp().epoch());
@@ -397,7 +394,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(3, BASE_TIME + 3600, false);
+    TimeSeries[] rs = generateDoubleSeries(3, BASE_TIME + 3600, false, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME + 300, iterator.timestamp().epoch());
@@ -428,7 +425,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(2, BASE_TIME, false);
+    TimeSeries[] rs = generateDoubleSeries(2, BASE_TIME, false, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME + 300, iterator.timestamp().epoch());
@@ -459,7 +456,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(4, BASE_TIME, true);
+    TimeSeries[] rs = generateDoubleSeries(4, BASE_TIME, true, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME + 300, iterator.timestamp().epoch());
@@ -490,7 +487,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(1, BASE_TIME, false);
+    TimeSeries[] rs = generateDoubleSeries(1, BASE_TIME, false, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME + 300, iterator.timestamp().epoch());
@@ -520,7 +517,7 @@ public class TestCombinedArray {
     when(result.resultInterval()).thenReturn(1);
     when(result.resultUnits()).thenReturn(ChronoUnit.HOURS);
     
-    List<Pair<QueryResult, TimeSeries>> rs = generateDoubleSeries(3, BASE_TIME + (3600 * 2), false);
+    TimeSeries[] rs = generateDoubleSeries(3, BASE_TIME + (3600 * 2), false, result);
     CombinedArray iterator = new CombinedArray(result, rs);
     
     assertEquals(BASE_TIME + 300, iterator.timestamp().epoch());
@@ -539,16 +536,8 @@ public class TestCombinedArray {
     }
   }
   
-  Pair<QueryResult, TimeSeries> generateLongSeries(int first_val, 
-                                                   final int timestamp) {
-    QueryResult result = mock(QueryResult.class);
-    TimeSpecification time_spec = mock(TimeSpecification.class);
-    when(result.timeSpecification()).thenReturn(time_spec);
-    when(time_spec.start()).thenReturn(new SecondTimeStamp(timestamp));
-    when(time_spec.end()).thenReturn(new SecondTimeStamp(timestamp + 3600));
-    when(time_spec.interval()).thenReturn(Duration.ofSeconds(60));
-    when(time_spec.stringInterval()).thenReturn("1m");
-    
+  TimeSeries generateLongSeries(int first_val, 
+                                final int timestamp) {
     TimeSeries ts = new NumericArrayTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("a")
@@ -556,13 +545,15 @@ public class TestCombinedArray {
     for (int i = 0; i < 60; i++) {
       ((NumericArrayTimeSeries) ts).add(first_val++);
     }
-    return new Pair<>(result, ts);
+    return ts;
   }
   
-  List<Pair<QueryResult, TimeSeries>> generateDoubleSeries(final int num_results, 
-                                                           final int start_timestamp,
-                                                           final boolean gaps) {
-    List<Pair<QueryResult, TimeSeries>> results = Lists.newArrayList();
+  TimeSeries[] generateDoubleSeries(final int num_results, 
+                                    final int start_timestamp,
+                                    final boolean gaps,
+                                    final CombinedResult combined) {
+    TimeSeries[] series = new TimeSeries[num_results];
+    QueryResult[] results = new QueryResult[num_results];
     int timestamp = BASE_TIME;
     int value = 0;
     for (int i = 0; i < num_results; i++) {
@@ -580,6 +571,7 @@ public class TestCombinedArray {
       when(time_spec.end()).thenReturn(new SecondTimeStamp(timestamp + 3600));
       when(time_spec.interval()).thenReturn(Duration.ofSeconds(60));
       when(time_spec.stringInterval()).thenReturn("1m");
+      results[i] = result;
       
       TimeSeries ts = new NumericArrayTimeSeries(
           BaseTimeSeriesStringId.newBuilder()
@@ -593,18 +585,21 @@ public class TestCombinedArray {
           ((NumericArrayTimeSeries) ts).add(value++);
         }
       }
-      results.add(new Pair<>(result, ts));
+      series[i] = ts;
       
       timestamp += 3600;
     }
     
-    return results;
+    when(combined.results()).thenReturn(results);
+    return series;
   }
   
-  List<Pair<QueryResult, TimeSeries>> generateLongSeries(final int num_results, 
-                                                         final int start_timestamp,
-                                                         final boolean gaps) {
-    List<Pair<QueryResult, TimeSeries>> results = Lists.newArrayList();
+  TimeSeries[] generateLongSeries(final int num_results, 
+                                  final int start_timestamp,
+                                  final boolean gaps,
+                                  final CombinedResult combined) {
+    TimeSeries[] series = new TimeSeries[num_results];
+    QueryResult[] results = new QueryResult[num_results];
     int timestamp = BASE_TIME;
     int value = 0;
     for (int i = 0; i < num_results; i++) {
@@ -622,6 +617,7 @@ public class TestCombinedArray {
       when(time_spec.end()).thenReturn(new SecondTimeStamp(timestamp + 3600));
       when(time_spec.interval()).thenReturn(Duration.ofSeconds(60));
       when(time_spec.stringInterval()).thenReturn("1m");
+      results[i] = result;
       
       TimeSeries ts = new NumericArrayTimeSeries(
           BaseTimeSeriesStringId.newBuilder()
@@ -630,11 +626,12 @@ public class TestCombinedArray {
       for (int x = 0; x < 60; x++) {
         ((NumericArrayTimeSeries) ts).add(value++);
       }
-      results.add(new Pair<>(result, ts));
+      series[i] = ts;
       
       timestamp += 3600;
     }
     
-    return results;
+    when(combined.results()).thenReturn(results);
+    return series;
   }
 }

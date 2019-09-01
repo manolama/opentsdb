@@ -14,16 +14,12 @@
 // limitations under the License.
 package net.opentsdb.query.execution.cache;
 
-import java.util.List;
-
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
-import net.opentsdb.query.QueryResult;
-import net.opentsdb.utils.Pair;
 
 /**
  * A class for iterating over summarized cached result sets.
@@ -32,8 +28,8 @@ import net.opentsdb.utils.Pair;
  */
 public class CombinedSummary implements TypedTimeSeriesIterator<NumericSummaryType> {
 
-  /** The list of source data. */
-  private final List<Pair<QueryResult, TimeSeries>> series;
+  /** The array of source data. */
+  private final TimeSeries[] series;
   
   /** The current index into the series. */
   private int idx = 0;
@@ -47,38 +43,41 @@ public class CombinedSummary implements TypedTimeSeriesIterator<NumericSummaryTy
    * @param series The non-null series.
    */
   CombinedSummary(final CombinedResult result, 
-                  final List<Pair<QueryResult, TimeSeries>> series) {
+                  final TimeSeries[] series) {
     this.series = series;
-    iterator = (TypedTimeSeriesIterator<NumericSummaryType>) 
-        series.get(idx).getValue().iterator(NumericSummaryType.TYPE).get();
-    while (idx < series.size()) {
+    while (series[idx] != null && idx < series.length) {
+      iterator = (TypedTimeSeriesIterator<NumericSummaryType>) 
+          series[idx].iterator(NumericSummaryType.TYPE).get();
       if (iterator.hasNext()) {
         break;
       }
       
-      series.get(idx).getValue().close();
-      if (++idx < series.size()) {
-        iterator = (TypedTimeSeriesIterator<NumericSummaryType>) 
-            series.get(idx).getValue().iterator(NumericSummaryType.TYPE).get();
-      } else {
-        iterator = null;
-      }
+      series[idx].close();
+      iterator = null;
+      idx++;
     }
   }
   
   @Override
   public boolean hasNext() {
-    while (idx < series.size()) {
+    while (idx < series.length) {
+      if (series[idx] == null) {
+        idx++;
+        continue;
+      }
+      
+      if (iterator == null) {
+        iterator = (TypedTimeSeriesIterator<NumericSummaryType>) 
+            series[idx].iterator(NumericSummaryType.TYPE).get();
+      }
+      
       if (iterator.hasNext()) {
         return true;
       }
-      series.get(idx).getValue().close();
-      if (++idx < series.size()) {
-        iterator = (TypedTimeSeriesIterator<NumericSummaryType>) 
-            series.get(idx).getValue().iterator(NumericSummaryType.TYPE).get();
-      } else {
-        iterator = null;
-      }
+      
+      series[idx].close();
+      iterator = null;
+      idx++;
     }
     return false;
   }

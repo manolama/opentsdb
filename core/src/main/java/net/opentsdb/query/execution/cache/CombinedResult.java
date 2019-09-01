@@ -1,3 +1,17 @@
+// This file is part of OpenTSDB.
+// Copyright (C) 2019  The OpenTSDB Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package net.opentsdb.query.execution.cache;
 
 import java.time.ZoneId;
@@ -8,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
 
@@ -23,33 +38,94 @@ import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.QuerySink;
 import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.utils.DateTime;
-import net.opentsdb.utils.Pair;
 
+/**
+ * Result that splices together multiple cached or fresh results into a single
+ * view for upstream.
+ * 
+ * @since 3.0
+ */
 public class CombinedResult implements QueryResult, TimeSpecification {
 
-  Map<Long, TimeSeries> time_series;
-  TimeStamp spec_start;
-  TimeStamp spec_end;
-  TimeSpecification spec;
-  QueryNode node;
-  String data_source;
+  /** The non-null context. */
+  protected final QueryPipelineContext context;
   
-  final QueryPipelineContext context;
-  final List<QuerySink> sinks;
-  final AtomicInteger latch;
-  final int result_interval;
-  final ChronoUnit result_units;
+  /** The source results. */
+  protected final QueryResult[] results;
   
+  /** The sinks we'll deliver to. */
+  protected final List<QuerySink> sinks;
+  
+  /** The latch we'll count down on close. */
+  protected final AtomicInteger latch;
+  
+  /** The result interval, i.e. width of each result. */
+  protected final int result_interval;
+  
+  /** Parsed result units. */
+  protected final ChronoUnit result_units;
+  
+  /** Map of <id hash, time series> keyed time series we'll merge results into. */
+  protected final Map<Long, TimeSeries> time_series;
+  
+  /** The source node. */
+  protected final QueryNode<?> node;
+  
+  /** The data source name. */
+  protected final String data_source;
+  
+  /** Whether or not the query is aligned on hour boundaries. */
+  protected final boolean aligned;
+  
+  /** Time spec start when applicable. */
+  protected TimeStamp spec_start;
+  
+  /** Time spec end when applicable */
+  protected TimeStamp spec_end;
+  
+  /** A time spec reference. 
+   * TODO - see if this is invalidated on close of source. If so we may need
+   * a deep copy here. */
+  protected TimeSpecification spec;
+  
+  /** An optional rollup config. */
+  protected RollupConfig rollup_config;
+  
+  /** An optional error. */
+  protected String error;
+  
+  /** An optional exception. */
+  protected Throwable exception;
+  
+  /**
+   * Default ctor.
+   * <b>WARNING: We assume that every QueryResult has the same time spec (aside 
+   * from start and end times and rollup config and interval.
+   * @param context The non-null context we belong to.
+   * @param results The non-null array of results. May be empty.
+   * @param node The non-null source node.
+   * @param data_source The non-null and non-empty source name.
+   * @param sinks The non-null list of sinks.
+   * @param latch The overall latch decremented when this result is closed.
+   * @param result_interval The result interval, i.e. width of each result.
+   */
   public CombinedResult(final QueryPipelineContext context,
-                        final QueryResult[] results, 
+                        final QueryResult[] results,
+                        final QueryNode<?> node,
+                        final String data_source,
                         final List<QuerySink> sinks, 
                         final AtomicInteger latch,
                         final String result_interval) {
     this.context = context;
+    this.results = results;
+    this.node = node;
+    this.data_source = data_source;
     this.sinks = sinks;
     this.latch = latch;
     this.result_interval = DateTime.getDurationInterval(result_interval);
-    result_units = DateTime.getDurationUnits(result_interval).equals("h") ? ChronoUnit.HOURS : ChronoUnit.DAYS;
+    // TODO - if we have more in the future, handle the proper units.
+    result_units = DateTime.getDurationUnits(result_interval).equals("h") ? 
+        ChronoUnit.HOURS : ChronoUnit.DAYS;
     time_series = Maps.newHashMap();
     for (int i = 0; i < results.length; i++) {
       if (results[i] == null) {
@@ -66,29 +142,53 @@ public class CombinedResult implements QueryResult, TimeSpecification {
         while (spec_end.compare(Op.GT, context.query().endTime())) {
           spec_end.subtract(results[i].timeSpecification().interval());
         }
-        System.out.println("         SPEC START: " + spec_start.epoch() + "  END: " + spec_end.epoch() + "  DIFF: " + (spec_end.epoch() - spec_start.epoch()));
       }
       
-      node = results[i].source();
-      data_source = results[i].dataSource();
+      if (spec == null) {
+        spec = results[i].timeSpecification();
+      }
+      if (rollup_config == null) {
+        rollup_config = results[i].rollupConfig();
+      }
       
-      // TODO more time spec
-      spec = results[i].timeSpecification();
+      // if one or more contained an error we error out the whole shebang for 
+      // now.
+      if (!Strings.isNullOrEmpty(results[i].error()) || 
+          results[i].exception() != null) {
+        time_series.clear();
+        error = results[i].error();
+        exception = results[i].exception();
+        break;
+      }
       
       // TODO handle tip merge eventually
       for (final TimeSeries ts : results[i].timeSeries()) {
         final long hash = ts.id().buildHashCode();
-        System.out.println("      ID HASH: " + hash);
         TimeSeries combined = time_series.get(hash);
         if (combined == null) {
-          combined = new CombinedTimeSeries(this, results[i], ts);
+          combined = new CombinedTimeSeries(this, i, ts);
           time_series.put(hash, combined);
         } else {
-          ((CombinedTimeSeries) combined).series.add(new Pair<>(results[i], ts));
+          ((CombinedTimeSeries) combined).add(i, ts);
         }
       }
     }
-    System.out.println("        TOTAL RESULTS: " + time_series.size());
+    
+    // determine if we're aligned
+    long start = context.query().startTime().epoch();
+    start = start - (start % (result_units == ChronoUnit.HOURS ? 3600 : 86400));
+    long end = context.query().endTime().epoch();
+    end = end - (end % (result_units == ChronoUnit.HOURS ? 3600 : 86400));
+    if (spec == null) {
+      aligned = context.query().startTime().epoch() == start &&
+          context.query().endTime().epoch() == end;
+    } else {
+      // we can fudge it if we're within the downsample window
+      aligned = (context.query().startTime().epoch() - start < 
+            spec.interval().get(ChronoUnit.SECONDS)) &&
+          (context.query().endTime().epoch() - end < 
+              spec.interval().get(ChronoUnit.SECONDS));
+    }
   }
   
   @Override
@@ -103,14 +203,12 @@ public class CombinedResult implements QueryResult, TimeSpecification {
 
   @Override
   public String error() {
-    // TODO Auto-generated method stub
-    return null;
+    return error;
   }
 
   @Override
   public Throwable exception() {
-    // TODO Auto-generated method stub
-    return null;
+    return exception;
   }
 
   @Override
@@ -141,21 +239,17 @@ public class CombinedResult implements QueryResult, TimeSpecification {
 
   @Override
   public RollupConfig rollupConfig() {
-    // TODO Auto-generated method stub
-    return null;
+    return rollup_config;
   }
 
   @Override
   public void close() {
-    System.out.println("-------- CLOSING");
     if (latch.decrementAndGet() == 0) {
       for (final QuerySink sink : sinks) {
         sink.onComplete();
       }
     }
-//    for (final TimeSeries ts : time_series.values()) {
-//      ts.close();
-//    }
+    // TODO close results and series?
   }
 
   @Override
@@ -189,20 +283,33 @@ public class CombinedResult implements QueryResult, TimeSpecification {
   }
 
   @Override
-  public void updateTimestamp(int offset, TimeStamp timestamp) {
+  public void updateTimestamp(final int offset, final TimeStamp timestamp) {
     spec.updateTimestamp(offset, timestamp);
   }
 
   @Override
-  public void nextTimestamp(TimeStamp timestamp) {
+  public void nextTimestamp(final TimeStamp timestamp) {
     spec.nextTimestamp(timestamp);
   }
 
+  /** @return The source query results. */
+  QueryResult[] results() {
+    return results;
+  }
+  
+  /** @return Package private the interval number from the result interval, 
+   * e.g. "1" for "1h". */
   int resultInterval() {
     return result_interval;
   }
   
+  /** @return Package private to return the result interval units. */
   ChronoUnit resultUnits() {
     return result_units;
+  }
+
+  /** @return Whether or not the query is aligned on cache boundaries. */
+  boolean aligned() {
+    return aligned;
   }
 }

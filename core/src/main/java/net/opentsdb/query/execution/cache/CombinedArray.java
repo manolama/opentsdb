@@ -16,7 +16,6 @@ package net.opentsdb.query.execution.cache;
 
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
-import java.util.List;
 
 import com.google.common.reflect.TypeToken;
 
@@ -27,8 +26,6 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericArrayType;
-import net.opentsdb.query.QueryResult;
-import net.opentsdb.utils.Pair;
 
 /**
  * Handles splicing multiple cached arrays into one by allocating a new
@@ -63,7 +60,7 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
    * @param series The non-null list of series.
    */
   CombinedArray(final CombinedResult result, 
-                final List<Pair<QueryResult, TimeSeries>> series) {
+                final TimeSeries[] series) {
     this.result = result;
     final int array_length = (int) ((result.timeSpecification().end().epoch() - 
         result.timeSpecification().start().epoch()) /
@@ -74,11 +71,19 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
     
     final long interval_in_seconds = result.timeSpecification().interval().get(ChronoUnit.SECONDS);
     long next_epoch = timestamp.epoch();
-    for (int i = 0; i < series.size(); i++) {
-      final TimeSpecification series_spec = series.get(i).getKey().timeSpecification();
+    for (int i = 0; i < series.length; i++) {
+      if (series[i] == null) {
+        continue;
+      }
+      
+      final TimeSpecification series_spec = result.results()[i].timeSpecification();
       final TypedTimeSeriesIterator<NumericArrayType> iterator = 
           (TypedTimeSeriesIterator<NumericArrayType>) 
-            series.get(i).getValue().iterator(NumericArrayType.TYPE).get();
+            series[i].iterator(NumericArrayType.TYPE).get();
+      if (!iterator.hasNext()) {
+        continue;
+      }
+      
       final TimeSeriesValue<NumericArrayType> value = iterator.next();
       
       while (next_epoch != series_spec.start().epoch()) {
@@ -161,7 +166,7 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
             double_array, idx, end);
         idx += end;
       }
-      series.get(i).getValue().close();
+      series[i].close();
       next_epoch += series_spec.end().epoch() - series_spec.start().epoch();
     }
     
