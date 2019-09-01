@@ -43,9 +43,9 @@ import net.opentsdb.query.cache.QueryCachePlugin.CachedQueryResult;
 import net.opentsdb.query.execution.cache.CombinedArray;
 import net.opentsdb.query.execution.cache.CombinedNumeric;
 import net.opentsdb.query.execution.cache.CombinedResult;
-import net.opentsdb.query.execution.cache.CombinedAggregatedSummary;
 import net.opentsdb.query.execution.cache.DefaultTimeSeriesCacheKeyGenerator;
 import net.opentsdb.query.execution.cache.TimeSeriesCacheKeyGenerator;
+import net.opentsdb.query.execution.serdes.DummyQueryNode;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
 import net.opentsdb.query.processor.downsample.DownsampleFactory;
 import net.opentsdb.rollup.RollupConfig;
@@ -396,11 +396,12 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       }
       
       latch.set(sorted.size());
-      for (final QueryResult[] results : sorted.values()) {
+      for (final Entry<String, QueryResult[]> results : sorted.entrySet()) {
         // TODO - implement
         // TODO - send in thread pool
+        DummyQueryNode n = new DummyQueryNode(results.getKey());
         for (final QuerySink sink : sinks) {
-          sink.onNext(new CombinedResult(this, results, sinks, latch, string_interval));
+          sink.onNext(new CombinedResult(this, results.getValue(), n, results.getKey(), sinks, latch, string_interval));
         }
       }
       

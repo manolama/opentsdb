@@ -135,9 +135,8 @@ public class TestReadCacheQueryPipelineContext {
     when(TSDB.getRegistry().getPlugin(eq(TimeSeriesCacheKeyGenerator.class), anyString()))
       .thenReturn(keygen_plugin);
     
-    when(keygen_plugin.generate(anyLong(), anyString(), any(int[].class)))
+    when(keygen_plugin.generate(anyLong(), anyString(), any(int[].class), any(long[].class)))
       .thenAnswer(new Answer<byte[][]>() {
-
         @Override
         public byte[][] answer(InvocationOnMock invocation) throws Throwable {
           int[] slices = (int[]) invocation.getArguments()[2];
@@ -147,7 +146,6 @@ public class TestReadCacheQueryPipelineContext {
           }
           return keys;
         }
-        
       });
     
     PowerMockito.mockStatic(ReadCacheQueryPipelineContext.class);
@@ -194,7 +192,7 @@ public class TestReadCacheQueryPipelineContext {
       ts += ctx.interval_in_seconds;
     }
     verify(keygen_plugin, times(1)).generate(
-        query.buildHashCode().asLong(), "1h", ctx.slices);
+        query.buildHashCode().asLong(), "1h", ctx.slices, ctx.expirations);
     assertEquals(0, ctx.sinks.size());
   }
   
@@ -218,7 +216,7 @@ public class TestReadCacheQueryPipelineContext {
       ts += ctx.interval_in_seconds;
     }
     verify(keygen_plugin, times(1)).generate(
-        query.buildHashCode().asLong(), "1h", ctx.slices);
+        query.buildHashCode().asLong(), "1h", ctx.slices, ctx.expirations);
   }
   
   @Test
@@ -241,7 +239,7 @@ public class TestReadCacheQueryPipelineContext {
       ts += ctx.interval_in_seconds;
     }
     verify(keygen_plugin, times(1)).generate(
-        query.buildHashCode().asLong(), "1h", ctx.slices);
+        query.buildHashCode().asLong(), "1h", ctx.slices, ctx.expirations);
   }
   
   @Test
@@ -260,7 +258,7 @@ public class TestReadCacheQueryPipelineContext {
     assertEquals(1, ctx.slices.length);
     assertEquals(1514764800, ctx.slices[0]);
     verify(keygen_plugin, times(1)).generate(
-        query.buildHashCode().asLong(), "1d", ctx.slices);
+        query.buildHashCode().asLong(), "1d", ctx.slices, ctx.expirations);
   }
   
   @Test
@@ -274,7 +272,7 @@ public class TestReadCacheQueryPipelineContext {
     assertSame(keygen_plugin, ctx.key_gen);
     assertTrue(ctx.skip_cache);
     verify(keygen_plugin, never()).generate(
-        query.buildHashCode().asLong(), "1h", ctx.slices);
+        query.buildHashCode().asLong(), "1h", ctx.slices, ctx.expirations);
   }
   
   @Test
@@ -288,7 +286,7 @@ public class TestReadCacheQueryPipelineContext {
     assertSame(keygen_plugin, ctx.key_gen);
     assertTrue(ctx.skip_cache);
     verify(keygen_plugin, never()).generate(
-        query.buildHashCode().asLong(), "1h", ctx.slices);
+        query.buildHashCode().asLong(), "1h", ctx.slices, ctx.expirations);
   }
   
   @Test
@@ -311,7 +309,7 @@ public class TestReadCacheQueryPipelineContext {
       ts += ctx.interval_in_seconds;
     }
     verify(keygen_plugin, times(1)).generate(
-        query.buildHashCode().asLong(), "1h", ctx.slices);
+        query.buildHashCode().asLong(), "1h", ctx.slices, ctx.expirations);
   }
   
   @Test
@@ -334,7 +332,7 @@ public class TestReadCacheQueryPipelineContext {
       ts += ctx.interval_in_seconds;
     }
     verify(keygen_plugin, times(1)).generate(
-        query.buildHashCode().asLong(), "1d", ctx.slices);
+        query.buildHashCode().asLong(), "1d", ctx.slices, ctx.expirations);
   }
   
   @Test
@@ -385,7 +383,7 @@ public class TestReadCacheQueryPipelineContext {
       ts += ctx.interval_in_seconds;
     }
     verify(keygen_plugin, times(1)).generate(
-        query.buildHashCode().asLong(), "1d", ctx.slices);
+        query.buildHashCode().asLong(), "1d", ctx.slices, ctx.expirations);
   }
   
   @Test
@@ -427,7 +425,7 @@ public class TestReadCacheQueryPipelineContext {
     assertSame(keygen_plugin, ctx.key_gen);
     assertTrue(ctx.skip_cache);
     verify(keygen_plugin, never()).generate(
-        query.buildHashCode().asLong(), "1h", ctx.slices);
+        query.buildHashCode().asLong(), "1h", ctx.slices, ctx.expirations);
   }
   
   @Test
@@ -470,7 +468,7 @@ public class TestReadCacheQueryPipelineContext {
       ts += ctx.interval_in_seconds;
     }
     verify(keygen_plugin, times(1)).generate(
-        query.buildHashCode().asLong(), "1h", ctx.slices);
+        query.buildHashCode().asLong(), "1h", ctx.slices, ctx.expirations);
     assertEquals(1, ctx.sinks.size());
     assertSame(SINK, ctx.sinks.get(0));
   }
@@ -497,8 +495,7 @@ public class TestReadCacheQueryPipelineContext {
   
   @Test
   public void onCacheResultsGoodOld() throws Exception {
-    PowerMockito.mockStatic(DateTime.class);
-    when(DateTime.currentTimeMillis()).thenReturn(1514851200000L);
+    mockDateTime(1514851200000L);
     ReadCacheQueryPipelineContext ctx = new ReadCacheQueryPipelineContext(context,
         Lists.newArrayList(sink));
     ctx.initialize(null).join();
@@ -534,9 +531,7 @@ public class TestReadCacheQueryPipelineContext {
   @Test
   public void onCacheResultsGoodOneTipNotLast() throws Exception {
     setQuery(1514765700, 1514787300, "5m", false);
-    PowerMockito.mockStatic(DateTime.class);
-    when(DateTime.currentTimeMillis()).thenReturn(1514787360000L);
-    when(DateTime.parseDuration(anyString())).thenCallRealMethod();
+    mockDateTime(1514787360000L);
     ReadCacheQueryPipelineContext ctx = spy(new ReadCacheQueryPipelineContext(context,
         Lists.newArrayList(sink)));
     ctx.initialize(null).join();
@@ -586,9 +581,7 @@ public class TestReadCacheQueryPipelineContext {
   @Test
   public void onCacheResultsGoodOneTipLast() throws Exception {
     setQuery(1514765700, 1514787300, "5m", false);
-    PowerMockito.mockStatic(DateTime.class);
-    when(DateTime.currentTimeMillis()).thenReturn(1514787360000L);
-    when(DateTime.parseDuration(anyString())).thenCallRealMethod();
+    mockDateTime(1514787360000L);
     ReadCacheQueryPipelineContext ctx = spy(new ReadCacheQueryPipelineContext(context,
         Lists.newArrayList(sink)));
     ctx.initialize(null).join();
@@ -637,9 +630,7 @@ public class TestReadCacheQueryPipelineContext {
   @Test
   public void onCacheResultsGoodOneTipLastReadOnly() throws Exception {
     setQuery(1514765700, 1514787300, "5m", false, CacheMode.READONLY);
-    PowerMockito.mockStatic(DateTime.class);
-    when(DateTime.currentTimeMillis()).thenReturn(1514787360000L);
-    when(DateTime.parseDuration(anyString())).thenCallRealMethod();
+    mockDateTime(1514787360000L);
     ReadCacheQueryPipelineContext ctx = spy(new ReadCacheQueryPipelineContext(context,
         Lists.newArrayList(sink)));
     ctx.initialize(null).join();
@@ -688,9 +679,7 @@ public class TestReadCacheQueryPipelineContext {
   @Test
   public void onCacheResultsGoodTwoTipsNotLast() throws Exception {
     setQuery(1514765700, 1514787300, "5m", false);
-    PowerMockito.mockStatic(DateTime.class);
-    when(DateTime.currentTimeMillis()).thenReturn(1514786520000L);
-    when(DateTime.parseDuration(anyString())).thenCallRealMethod();
+    mockDateTime(1514786520000L);
     ReadCacheQueryPipelineContext ctx = spy(new ReadCacheQueryPipelineContext(context,
         Lists.newArrayList(sink)));
     ctx.initialize(null).join();
@@ -752,9 +741,7 @@ public class TestReadCacheQueryPipelineContext {
   @Test
   public void onCacheResultsGoodTwoTipsLast() throws Exception {
     setQuery(1514765700, 1514787300, "5m", false);
-    PowerMockito.mockStatic(DateTime.class);
-    when(DateTime.currentTimeMillis()).thenReturn(1514786520000L);
-    when(DateTime.parseDuration(anyString())).thenCallRealMethod();
+    mockDateTime(1514786520000L);
     ReadCacheQueryPipelineContext ctx = spy(new ReadCacheQueryPipelineContext(context,
         Lists.newArrayList(sink)));
     ctx.initialize(null).join();
@@ -815,9 +802,7 @@ public class TestReadCacheQueryPipelineContext {
   @Test
   public void onCacheResultsGoodTwoTipsLastResultInBetween() throws Exception {
     setQuery(1514765700, 1514787300, "5m", false);
-    PowerMockito.mockStatic(DateTime.class);
-    when(DateTime.currentTimeMillis()).thenReturn(1514786520000L);
-    when(DateTime.parseDuration(anyString())).thenCallRealMethod();
+    mockDateTime(1514786520000L);
     ReadCacheQueryPipelineContext ctx = spy(new ReadCacheQueryPipelineContext(context,
         Lists.newArrayList(sink)));
     ctx.initialize(null).join();
@@ -874,9 +859,7 @@ public class TestReadCacheQueryPipelineContext {
   @Test
   public void onCacheResultsGoodTwoTipsExceptionFromSubQuery() throws Exception {
     setQuery(1514765700, 1514787300, "5m", false);
-    PowerMockito.mockStatic(DateTime.class);
-    when(DateTime.currentTimeMillis()).thenReturn(1514786520000L);
-    when(DateTime.parseDuration(anyString())).thenCallRealMethod();
+    mockDateTime(1514786520000L);
     ReadCacheQueryPipelineContext ctx = spy(new ReadCacheQueryPipelineContext(context,
         Lists.newArrayList(sink)));
     ctx.initialize(null).join();
@@ -938,8 +921,7 @@ public class TestReadCacheQueryPipelineContext {
   
   @Test
   public void onCacheResultsGoodButOneFailed() throws Exception {
-    PowerMockito.mockStatic(DateTime.class);
-    when(DateTime.currentTimeMillis()).thenReturn(1514851200000L);
+    mockDateTime(1514851200000L);
     ReadCacheQueryPipelineContext ctx = new ReadCacheQueryPipelineContext(context,
         Lists.newArrayList(sink));
     ctx.initialize(null).join();
@@ -977,8 +959,7 @@ public class TestReadCacheQueryPipelineContext {
   
   @Test
   public void onCacheResultsBelowThresholdThenRecovers() throws Exception {
-    PowerMockito.mockStatic(DateTime.class);
-    when(DateTime.currentTimeMillis()).thenReturn(1514851200000L);
+    mockDateTime(1514851200000L);
     ReadCacheQueryPipelineContext ctx = new ReadCacheQueryPipelineContext(context,
         Lists.newArrayList(sink));
     ctx.initialize(null).join();
@@ -1025,8 +1006,7 @@ public class TestReadCacheQueryPipelineContext {
   
   @Test
   public void onCacheResultsBelowThresholdAtEnd() throws Exception {
-    PowerMockito.mockStatic(DateTime.class);
-    when(DateTime.currentTimeMillis()).thenReturn(1514851200000L);
+    mockDateTime(1514851200000L);
     ReadCacheQueryPipelineContext ctx = new ReadCacheQueryPipelineContext(context,
         Lists.newArrayList(sink));
     ctx.initialize(null).join();
@@ -1143,6 +1123,14 @@ public class TestReadCacheQueryPipelineContext {
     when(config.getId()).thenReturn(node_id);
     when(result.source()).thenReturn(node);
     return result;
+  }
+  
+  void mockDateTime(final long timestamp) {
+    PowerMockito.mockStatic(DateTime.class);
+    when(DateTime.currentTimeMillis()).thenReturn(timestamp);
+    when(DateTime.parseDuration(anyString())).thenCallRealMethod();
+    when(DateTime.getDurationInterval(anyString())).thenCallRealMethod();
+    when(DateTime.getDurationUnits(anyString())).thenCallRealMethod();
   }
   
   class MockQueryContext implements QueryContext {
@@ -1288,4 +1276,5 @@ public class TestReadCacheQueryPipelineContext {
       
     }
   }
+
 }
