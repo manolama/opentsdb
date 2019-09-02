@@ -264,7 +264,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       }
       
       if (ros == null) {
-        onCacheError(new RuntimeException("Whoops, got a result that wasn't in "
+        onCacheError(-1, new RuntimeException("Whoops, got a result that wasn't in "
             + "our keys? " + Arrays.toString(result.key())));
         return;
       }
@@ -315,12 +315,12 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         processResults();
       }
     } catch (Throwable t) {
-      onCacheError(t);
+      onCacheError(-1, t);
     }
   }
 
   @Override
-  public void onCacheError(final Throwable t) {
+  public void onCacheError(final int index, final Throwable t) {
     if (failed.compareAndSet(false, true)) {
       LOG.warn("Failure from cache", t);
       onError(t);

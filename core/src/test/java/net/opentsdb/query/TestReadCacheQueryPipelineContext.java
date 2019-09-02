@@ -488,8 +488,8 @@ public class TestReadCacheQueryPipelineContext {
     ReadCacheQueryPipelineContext ctx = new ReadCacheQueryPipelineContext(context,
         Lists.newArrayList(SINK));
     ctx.initialize(null).join();
-    ctx.onCacheError(new UnitTestException());
-    ctx.onCacheError(new UnitTestException());
+    ctx.onCacheError(-1, new UnitTestException());
+    ctx.onCacheError(-1, new UnitTestException());
     verify(SINK, times(1)).onError(any(UnitTestException.class));
   }
   
@@ -937,7 +937,7 @@ public class TestReadCacheQueryPipelineContext {
     assertEquals(4, ctx.latch.get());
     
     // whoops!
-    ctx.onCacheError(new UnitTestException());
+    ctx.onCacheError(-1, new UnitTestException());
     
     ctx.onCacheResult(buildFakeFullResult(ctx, 1));
     assertEquals(4, ctx.latch.get());
