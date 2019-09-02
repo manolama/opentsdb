@@ -49,13 +49,14 @@ public interface QueryCachePlugin {
   public static interface CacheQueryResults {
     public TimeStamp lastValueTimestamp();
     public byte[] key();
+    public int index();
     public Map<String, CachedQueryResult> results();
   }
   
   public static interface CacheCB {
     public void onCacheResult(final CacheQueryResults result);
     
-    public void onCacheError(final Throwable t);
+    public void onCacheError(final int index, final Throwable t);
     
   }
   
@@ -109,43 +110,43 @@ public interface QueryCachePlugin {
 //  public QueryExecution<byte[][]> fetch(final QueryContext context,
 //                                        final byte[][] keys,
 //                                        final Span upstream_span);
-  
-  /**
-   * Adds the given data to the cache using the given key. For expiring caches
-   * the expiration and units should be set, otherwise they can be 0 and null.
-   * @param key A non-null and non-empty key.
-   * @param data A potentially empty data (for negative caching).
-   * @param expiration A zero or positive integer indicating when the value
-   * should expire in the future.
-   * @param units The optional time units for the expiration.
-   * @param upstream_span An optional span for tracing.
-   * @throws IllegalStateException of the cache has not been initialized.
-   * @throws IllegalArgumentException if the key was null or empty.
-   */
-  public void cache(final byte[] key, 
-                    final byte[] data, 
-                    final long expiration, 
-                    final TimeUnit units,
-                    final Span upstream_span);
-  
-  /**
-   * Adds the given data to the cache using the keys. The key and data arrays
-   * must be the same length. For expiring caches, the expiration and units
-   * should be set, otherwise they can be 0 and null. 
-   * @param keys A non-null and non-empty array of non-null and non-empty keys.
-   * @param data A non-null and non-empty array of values matching the keys.
-   * @param expirations A non-null and non-empty array of zero or positive 
-   * integers indicating when the value should expire in the future.
-   * @param units The optional time units for the expirations.
-   * @param upstream_span An optional span for tracing.
-   * @throws IllegalStateException of the cache has not been initialized.
-   * @throws IllegalArgumentException if the keys were null or empty or the
-   * key and data arrays differed in length.
-   */
-  public void cache(final byte[][] keys, 
-                    final byte[][] data, 
-                    final long[] expirations, 
-                    final TimeUnit units,
-                    final Span upstream_span);
-  
+//  
+//  /**
+//   * Adds the given data to the cache using the given key. For expiring caches
+//   * the expiration and units should be set, otherwise they can be 0 and null.
+//   * @param key A non-null and non-empty key.
+//   * @param data A potentially empty data (for negative caching).
+//   * @param expiration A zero or positive integer indicating when the value
+//   * should expire in the future.
+//   * @param units The optional time units for the expiration.
+//   * @param upstream_span An optional span for tracing.
+//   * @throws IllegalStateException of the cache has not been initialized.
+//   * @throws IllegalArgumentException if the key was null or empty.
+//   */
+//  public void cache(final byte[] key, 
+//                    final byte[] data, 
+//                    final long expiration, 
+//                    final TimeUnit units,
+//                    final Span upstream_span);
+//  
+//  /**
+//   * Adds the given data to the cache using the keys. The key and data arrays
+//   * must be the same length. For expiring caches, the expiration and units
+//   * should be set, otherwise they can be 0 and null. 
+//   * @param keys A non-null and non-empty array of non-null and non-empty keys.
+//   * @param data A non-null and non-empty array of values matching the keys.
+//   * @param expirations A non-null and non-empty array of zero or positive 
+//   * integers indicating when the value should expire in the future.
+//   * @param units The optional time units for the expirations.
+//   * @param upstream_span An optional span for tracing.
+//   * @throws IllegalStateException of the cache has not been initialized.
+//   * @throws IllegalArgumentException if the keys were null or empty or the
+//   * key and data arrays differed in length.
+//   */
+//  public void cache(final byte[][] keys, 
+//                    final byte[][] data, 
+//                    final long[] expirations, 
+//                    final TimeUnit units,
+//                    final Span upstream_span);
+//  
 }

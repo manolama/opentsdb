@@ -11,7 +11,6 @@ public interface TimeSeriesCacheSerdes {
   public byte[] serialize(final Collection<QueryResult> results);
 
   public byte[][] serialize(final int[] timestamps, 
-                            final byte[][] keys,
                             final Collection<QueryResult> results);
   
   public Map<String, CachedQueryResult> deserialize(final byte[] data);

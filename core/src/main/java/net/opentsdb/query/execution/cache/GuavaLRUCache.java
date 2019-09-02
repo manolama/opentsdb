@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017  The OpenTSDB Authors.
+// Copyright (C) 2017-2019  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,15 +14,10 @@
 // limitations under the License.
 package net.opentsdb.query.execution.cache;
 
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Map.Entry;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -36,10 +31,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheStats;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.reflect.TypeToken;
-import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
 import io.netty.util.Timeout;
@@ -47,28 +38,13 @@ import io.netty.util.TimerTask;
 import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.DefaultTSDB;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.data.BaseTimeSeriesStringId;
-import net.opentsdb.data.SecondTimeStamp;
-import net.opentsdb.data.TimeSeries;
-import net.opentsdb.data.TimeSeriesDataType;
-import net.opentsdb.data.TimeSeriesId;
-import net.opentsdb.data.TimeSeriesStringId;
-import net.opentsdb.data.TimeSeriesValue;
-import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.TimeStamp;
-import net.opentsdb.data.TypedTimeSeriesIterator;
-import net.opentsdb.data.types.numeric.MutableNumericValue;
-import net.opentsdb.query.QueryContext;
-import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.cache.QueryCachePlugin;
-import net.opentsdb.query.execution.QueryExecution;
 import net.opentsdb.query.serdes.TimeSeriesCacheSerdes;
 import net.opentsdb.query.serdes.TimeSeriesCacheSerdesFactory;
-import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.stats.Span;
-import net.opentsdb.stats.TsdbTrace;
 import net.opentsdb.utils.Bytes.ByteArrayKey;
 import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.DateTime;
@@ -83,7 +59,9 @@ import net.opentsdb.utils.DateTime;
  * values in a tiny class that captures the insert timestamp and an expiration
  * time. In this manner we can imitate an expiring cache as well in that if a
  * value is queried after it's computed expiration time, it's kicked out of
- * the cache.
+ * the cache. If the expiration value is 0, the value will not be expired. If
+ * expiration is less than 0 it's not even cached.
+ * <p>
  * <b>Note:</b> This implementation is super basic so there is a race condition
  * during read and write that may blow out valid cache objects when:
  * <ol>
@@ -183,37 +161,35 @@ public class GuavaLRUCache extends BaseTSDBPlugin implements
   
   @Override
   public void fetch(final QueryPipelineContext context, 
-      final byte[][] keys, 
-      final CacheCB callback, 
-      final Span upstream_span) {
+                    final byte[][] keys, 
+                    final CacheCB callback, 
+                    final Span upstream_span) {
     for (int i = 0; i < keys.length; i++) {
       final ByteArrayKey cache_key = new ByteArrayKey(keys[i]);
-      ExpiringValue value = cache.getIfPresent(cache_key);
-      if (value != null) { 
-        if (value.expired()) {
-          // Note: there is a race condition here where a call to cache() can write
-          // an updated version of the same key with a newer expiration. Since this
-          // isn't a full, solid implementation of an expiring cache yet, this is
-          // a best-effort run and may invalidate new data.
-          cache.invalidate(cache_key);
-          expired.incrementAndGet();
-          value = null;
-        }
-      }
-      final ExpiringValue final_value = value;
-      
+      final ExpiringValue value = cache.getIfPresent(cache_key);
       
       class CQR implements CacheQueryResults {
         final byte[] key;
         final Map<String, CachedQueryResult> results;
+        final int idx;
+        
         CQR(final int idx) {
+          this.idx = idx;
           key = keys[idx];
-          if (final_value == null) {
+          if (value == null) {
             results = null;
-          } else if (final_value.value == null) {
+          } else if (value.expired()) {
+            // Note: there is a race condition here where a call to cache() can write
+            // an updated version of the same key with a newer expiration. Since this
+            // isn't a full, solid implementation of an expiring cache yet, this is
+            // a best-effort run and may invalidate new data.
+            cache.invalidate(cache_key);
+            expired.incrementAndGet();
+            results = null;
+          } else if (value.value == null) {
             results = Collections.emptyMap();
           } else {
-            results = serdes.deserialize(final_value.value);
+            results = serdes.deserialize(value.value);
           }
         }
         
@@ -222,6 +198,11 @@ public class GuavaLRUCache extends BaseTSDBPlugin implements
           return key;
         }
 
+        @Override
+        public int index() {
+          return idx;
+        }
+        
         @Override
         public Map<String, CachedQueryResult> results() {
           return results;
@@ -234,8 +215,13 @@ public class GuavaLRUCache extends BaseTSDBPlugin implements
         }
       }
       
-      callback.onCacheResult(new CQR(i));
-      
+      try {
+        callback.onCacheResult(new CQR(i));
+      } catch (Throwable t) {
+        LOG.error("Failed to deserialize or read from cache for key: " 
+            + Arrays.toString(keys[i]), t);
+        callback.onCacheError(i, t);
+      }
     }
   }
   
@@ -244,9 +230,37 @@ public class GuavaLRUCache extends BaseTSDBPlugin implements
                               final byte[] key, 
                               final long expiration,
                               final Collection<QueryResult> results) {
-    System.out.println(" [[[[[[[[ CACHING ]]]]]]: " + results);
-    cache(key, serdes.serialize(results), expiration, TimeUnit.MILLISECONDS, null);
-    return Deferred.fromResult(null);
+    if (key == null) {
+      return Deferred.fromError(new IllegalArgumentException(
+          "Key cannot be null."));
+    }
+    if (key.length < 1) {
+      return Deferred.fromError(new IllegalArgumentException(
+          "Key length must be at least 1 byte."));
+    }
+    if (expiration < 0) {
+      return Deferred.fromResult(null);
+    }
+
+    // best effort
+    try {
+      final byte[] data = serdes.serialize(results);
+      if (size.get() + (data == null ? 0  : data.length) >= size_limit) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Will not cache key [" + Bytes.pretty(key) 
+            + "] due to size limit.");
+        }
+        return Deferred.fromResult(null);
+      }
+      cache.put(new ByteArrayKey(key), 
+          new ExpiringValue(data, expiration, TimeUnit.MILLISECONDS));
+      if (data != null) {
+        size.addAndGet(data.length);
+      }
+      return Deferred.fromResult(null);
+    } catch (Exception e) {
+      return Deferred.fromError(e);
+    }
   }
   
   @Override
@@ -254,95 +268,62 @@ public class GuavaLRUCache extends BaseTSDBPlugin implements
                               final byte[][] keys,
                               final long[] expirations,
                               final Collection<QueryResult> results) {
-    System.out.println(" [[[[[[[[ SPLITTING AND CACHING ]]]]]]: " + results);
-    Arrays.fill(expirations, Long.MAX_VALUE);
-    cache(keys, serdes.serialize(timestamps, keys, results), expirations, TimeUnit.MILLISECONDS, null);
-    return null;
-  }
-  
-  @Override
-  public void cache(final byte[] key, 
-                    final byte[] data, 
-                    final long expiration, 
-                    final TimeUnit units,
-                    final Span upstream_span) {
-    if (cache == null) {
-      throw new IllegalStateException("Cache has not been initialized.");
-    }
-    if (key == null) {
-      throw new IllegalArgumentException("Key cannot be null.");
-    }
-    if (key.length < 1) {
-      throw new IllegalArgumentException("Key length must be at least 1 byte.");
-    }
-    if (expiration < 1) {
-      return;
-    }
-
-    // best effort
-    if (size.get() + (data == null ? 0  : data.length) >= size_limit) {
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Will not cache key [" + Bytes.pretty(key) 
-          + "] due to size limit.");
-      }
-      return;
-    }
-    cache.put(new ByteArrayKey(key), new ExpiringValue(data, expiration, units));
-    if (data != null) {
-      size.addAndGet(data.length);
-    }
-  }
-
-  @Override
-  public void cache(final byte[][] keys, 
-                    final byte[][] data, 
-                    final long[] expirations,
-                    final TimeUnit units,
-                    final Span upstream_span) {
-    if (cache == null) {
-      throw new IllegalStateException("Cache has not been initialized.");
+    if (timestamps == null) {
+      return Deferred.fromError(new IllegalArgumentException(
+          "Timestamps array cannot be null."));
     }
     if (keys == null) {
-      throw new IllegalArgumentException("Keys array cannot be null.");
+      return Deferred.fromError(new IllegalArgumentException(
+          "Keys array cannot be null."));
     }
-    if (data == null) {
-      throw new IllegalArgumentException("Data array cannot be null.");
-    }
-    if (keys.length != data.length) {
-      throw new IllegalArgumentException("Key and data arrays must be of the "
-          + "same length.");
+    if (results == null) {
+      return Deferred.fromError(new IllegalArgumentException(
+          "Results cannot be null."));
     }
     if (expirations == null) {
-      throw new IllegalArgumentException("Expirations cannot be null.");
+      return Deferred.fromError(new IllegalArgumentException(
+          "Expirations cannot be null."));
     }
-    if (expirations.length != data.length) {
-      throw new IllegalArgumentException("Expirations and data arrays must be "
-          + "of the same length.");
+    if (timestamps.length != keys.length) {
+      return Deferred.fromError(new IllegalArgumentException(
+          "Timestamps and keys arrays must be of the same length."));
     }
-    for (int i = 0; i < keys.length; i++) {
-      if (keys[i] == null) {
-        throw new IllegalArgumentException("Key at index " + i + " was null "
-            + "and cannot be.");
-      }
-      if (expirations[i] < 1) {
-        continue;
-      }
-      // best effort
-      if (size.get() + (data == null ? 0  : data.length) >= size_limit) {
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Will not cache key [" + Bytes.pretty(keys[i]) 
-            + "] due to size limit.");
+    if (expirations.length != keys.length) {
+      return Deferred.fromError(new IllegalArgumentException(
+          "Expirations and keys arrays must be of the same length."));
+    }
+    
+    try {
+      final byte[][] data = serdes.serialize(timestamps, results);
+      for (int i = 0; i < keys.length; i++) {
+        if (keys[i] == null) {
+          return Deferred.fromError(new IllegalArgumentException(
+              "Key at index " + i + " was null and cannot be."));
         }
-        continue;
+        if (expirations[i] < 0) {
+          continue;
+        }
+        
+        // best effort
+        if (size.get() + (data == null ? 0  : data.length) >= size_limit) {
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Will not cache key [" + Bytes.pretty(keys[i]) 
+              + "] due to size limit.");
+          }
+          continue;
+        }
+        cache.put(new ByteArrayKey(keys[i]), 
+            new ExpiringValue(data[i], expirations[i], TimeUnit.MILLISECONDS));
+        if (data[i] != null) {
+          size.addAndGet(data[i].length);
+        }
       }
-      cache.put(new ByteArrayKey(keys[i]), 
-          new ExpiringValue(data[i], Integer.MAX_VALUE/*expirations[i]*/, units));
-      if (data[i] != null) {
-        size.addAndGet(data[i].length);
-      }
+    } catch (Exception e) {
+      return Deferred.fromError(e);
     }
+    return Deferred.fromResult(null);
   }
-
+  
   @Override
   public String type() {
     return TYPE;
@@ -425,7 +406,7 @@ public class GuavaLRUCache extends BaseTSDBPlugin implements
     
     /** @return Whether or not the value has expired. */
     public boolean expired() {
-      return DateTime.nanoTime() > expires;
+      return expires == 0 ? false : DateTime.nanoTime() > expires;
     }
     
     @Override
@@ -483,11 +464,12 @@ public class GuavaLRUCache extends BaseTSDBPlugin implements
   
   void registerConfigs(final TSDB tsdb) {
     if (!tsdb.getConfig().hasProperty(getConfigKey(OBJECTS_LIMIT_KEY))) {
-      tsdb.getConfig().register(getConfigKey(OBJECTS_LIMIT_KEY), 1024, false, 
+      tsdb.getConfig().register(getConfigKey(OBJECTS_LIMIT_KEY), 
+          DEFAULT_MAX_OBJECTS, false, 
           "The maximum number of entries to have in the cache.");
     }
     if (!tsdb.getConfig().hasProperty(getConfigKey(SIZE_LIMIT_KEY))) {
-      tsdb.getConfig().register(getConfigKey(SIZE_LIMIT_KEY), 1024 * 16, false, 
+      tsdb.getConfig().register(getConfigKey(SIZE_LIMIT_KEY), DEFAULT_SIZE_LIMIT, false, 
           "The maximum number of bytes of data to main in the cache.");
     }
     if (!tsdb.getConfig().hasProperty(getConfigKey(SERDES_KEY))) {
