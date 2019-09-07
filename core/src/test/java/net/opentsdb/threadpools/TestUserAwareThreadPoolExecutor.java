@@ -16,6 +16,7 @@ package net.opentsdb.threadpools;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.Matchers.any;
@@ -23,6 +24,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.time.temporal.ChronoUnit;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -32,12 +34,15 @@ import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+import io.netty.util.Timer;
 import net.opentsdb.auth.AuthState;
 import net.opentsdb.configuration.Configuration;
 import net.opentsdb.configuration.UnitTestConfiguration;
 import net.opentsdb.core.Registry;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.query.QueryContext;
+import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.stats.StatsCollector.StatsTimer;
 import net.opentsdb.threadpools.UserAwareThreadPoolExecutor.QCFutureWrapper;
 import net.opentsdb.threadpools.UserAwareThreadPoolExecutor.QCRunnableWrapper;
 
@@ -49,6 +54,12 @@ public class TestUserAwareThreadPoolExecutor {
   @Before
   public void extracted() {
     tsdb = mock(TSDB.class);
+    Timer timer = mock(Timer.class);
+    when(tsdb.getMaintenanceTimer()).thenReturn(timer);
+    StatsCollector stats = mock(StatsCollector.class);
+    when(tsdb.getStatsCollector()).thenReturn(stats);
+    when(stats.startTimer(anyString(), any(ChronoUnit.class)))
+      .thenReturn(mock(StatsTimer.class));
     Registry registry = mock(Registry.class);
 
     Configuration config = UnitTestConfiguration.getConfiguration();
@@ -97,6 +108,162 @@ public class TestUserAwareThreadPoolExecutor {
   }
 
   @Test
+  public void addToQueryTaskTest() throws Exception {
+
+    UserAwareThreadPoolExecutor executor = new UserAwareThreadPoolExecutor();
+    executor.getCurrentExecutions().clear();
+    assertNull(executor.initialize(tsdb, null).join());
+
+    Runnable r = getRunnable();
+
+    QueryContext qctx = getQctx();
+    QCRunnableWrapper wrapper = executor.new QCRunnableWrapper(r, qctx, TSDTask.QUERY);
+
+    wrapper.run();
+
+    int size = executor.getCurrentTaskExecutions().get(TSDTask.QUERY).get();
+    assertEquals(size, 1);
+
+    size = executor.getCurrentExecutions().size();
+    assertEquals(size, 0);
+
+  }
+
+  @Test
+  public void addToQueryCloseTest() throws Exception {
+
+    UserAwareThreadPoolExecutor executor = new UserAwareThreadPoolExecutor();
+    executor.getCurrentExecutions().clear();
+    assertNull(executor.initialize(tsdb, null).join());
+
+    Runnable r = getRunnable();
+
+    QueryContext qctx = getQctx();
+    QCRunnableWrapper queryStart = executor.new QCRunnableWrapper(r, qctx, TSDTask.QUERY);
+    queryStart.run();
+
+    int size = executor.getCurrentTaskExecutions().get(TSDTask.QUERY).get();
+    assertEquals(size, 1);
+
+    QCRunnableWrapper closeTask = executor.new QCRunnableWrapper(r, qctx, TSDTask.QUERY_CLOSE);
+    closeTask.run();
+
+    size = executor.getCurrentTaskExecutions().get(TSDTask.QUERY).get();
+    assertEquals(size, 0);
+
+    size = executor.getCurrentExecutions().size();
+    assertEquals(size, 0);
+
+  }
+
+  @Test
+  public void addToQueryCloseWOQCtxTest() throws Exception {
+    
+    UserAwareThreadPoolExecutor executor = new UserAwareThreadPoolExecutor();
+    executor.getCurrentExecutions().clear();
+    assertNull(executor.initialize(tsdb, null).join());
+    
+    Runnable r = getRunnable();
+    
+    QueryContext qctx = getQctx();
+    QCRunnableWrapper queryStart = executor.new QCRunnableWrapper(r, qctx, TSDTask.QUERY);
+    queryStart.run();
+    
+    int size = executor.getCurrentTaskExecutions().get(TSDTask.QUERY).get();
+    assertEquals(size, 1);
+    
+    QCRunnableWrapper closeTask = executor.new QCRunnableWrapper(r, null, TSDTask.QUERY_CLOSE);
+    closeTask.run();
+    
+    size = executor.getCurrentTaskExecutions().get(TSDTask.QUERY).get();
+    assertEquals(size, 0);
+    
+    size = executor.getCurrentExecutions().size();
+    assertEquals(size, 0);
+    
+  }
+
+  @Test
+  public void addToQueryTaskTestCallable() throws Exception {
+
+    UserAwareThreadPoolExecutor executor = new UserAwareThreadPoolExecutor();
+    executor.getCurrentExecutions().clear();
+    assertNull(executor.initialize(tsdb, null).join());
+
+    Callable<Runnable> r = getCallable();
+
+    QueryContext qctx = getQctx();
+    QCFutureWrapper<Runnable> wrapper = executor.new QCFutureWrapper(r, qctx, TSDTask.QUERY);
+
+    wrapper.run();
+
+    int size = executor.getCurrentTaskExecutions().get(TSDTask.QUERY).get();
+    assertEquals(size, 1);
+
+    size = executor.getCurrentExecutions().size();
+    assertEquals(size, 0);
+
+  }
+
+  @Test
+  public void addToQueryQueryCloseCallable() throws Exception {
+
+    UserAwareThreadPoolExecutor executor = new UserAwareThreadPoolExecutor();
+    executor.getCurrentExecutions().clear();
+    assertNull(executor.initialize(tsdb, null).join());
+
+    Callable<Runnable> r = getCallable();
+
+    QueryContext qctx = getQctx();
+    QCFutureWrapper<Runnable> wrapper = executor.new QCFutureWrapper(r, qctx, TSDTask.QUERY);
+
+    wrapper.run();
+
+    int size = executor.getCurrentTaskExecutions().get(TSDTask.QUERY).get();
+    assertEquals(size, 1);
+
+    wrapper = executor.new QCFutureWrapper(r, qctx, TSDTask.QUERY_CLOSE);
+
+    wrapper.run();
+
+    size = executor.getCurrentTaskExecutions().get(TSDTask.QUERY).get();
+    assertEquals(size, 0);
+
+    size = executor.getCurrentExecutions().size();
+    assertEquals(size, 0);
+
+  }
+
+  @Test
+  public void addToQueryQueryCloseWOQCtxCallable() throws Exception {
+    
+    UserAwareThreadPoolExecutor executor = new UserAwareThreadPoolExecutor();
+    executor.getCurrentExecutions().clear();
+    assertNull(executor.initialize(tsdb, null).join());
+    
+    Callable<Runnable> r = getCallable();
+    
+    QueryContext qctx = getQctx();
+    QCFutureWrapper<Runnable> wrapper = executor.new QCFutureWrapper(r, qctx, TSDTask.QUERY);
+    
+    wrapper.run();
+    
+    int size = executor.getCurrentTaskExecutions().get(TSDTask.QUERY).get();
+    assertEquals(size, 1);
+    
+    wrapper = executor.new QCFutureWrapper(r, null, TSDTask.QUERY_CLOSE);
+    
+    wrapper.run();
+    
+    size = executor.getCurrentTaskExecutions().get(TSDTask.QUERY).get();
+    assertEquals(size, 0);
+    
+    size = executor.getCurrentExecutions().size();
+    assertEquals(size, 0);
+    
+  }
+
+  @Test
   public void addToStateTest() throws Exception {
 
     UserAwareThreadPoolExecutor executor = new UserAwareThreadPoolExecutor();
@@ -106,7 +273,7 @@ public class TestUserAwareThreadPoolExecutor {
     Runnable r = getRunnable();
 
     QueryContext qctx = getQctx();
-    QCRunnableWrapper wrapper = executor.new QCRunnableWrapper(r, qctx);
+    QCRunnableWrapper wrapper = executor.new QCRunnableWrapper(r, qctx, null);
 
     wrapper.run();
 
@@ -115,7 +282,7 @@ public class TestUserAwareThreadPoolExecutor {
     assertEquals(size, 1);
 
   }
-  
+
   @Test
   public void disableStateTest() throws Exception {
 
@@ -127,7 +294,7 @@ public class TestUserAwareThreadPoolExecutor {
     Runnable r = getRunnable();
 
     QueryContext qctx = getQctx();
-    QCRunnableWrapper wrapper = executor.new QCRunnableWrapper(r, qctx);
+    QCRunnableWrapper wrapper = executor.new QCRunnableWrapper(r, qctx, null);
 
     wrapper.run();
 
@@ -147,7 +314,7 @@ public class TestUserAwareThreadPoolExecutor {
     Runnable r = getRunnable();
 
     QueryContext qctx = getQctx();
-    QCRunnableWrapper wrapper = executor.new QCRunnableWrapper(r, qctx);
+    QCRunnableWrapper wrapper = executor.new QCRunnableWrapper(r, qctx, null);
 
     wrapper.run();
 
@@ -187,7 +354,7 @@ public class TestUserAwareThreadPoolExecutor {
 
     QueryContext qctx = getQctx();
     Callable<Runnable> task = getCallable();
-    QCFutureWrapper<Runnable> wrapper = executor.new QCFutureWrapper<Runnable>(task, qctx);
+    QCFutureWrapper<Runnable> wrapper = executor.new QCFutureWrapper<Runnable>(task, qctx, null);
 
     wrapper.run();
 
@@ -206,7 +373,7 @@ public class TestUserAwareThreadPoolExecutor {
 
     QueryContext qctx = getQctx();
     Callable<Runnable> task = getCallable();
-    QCFutureWrapper<Runnable> wrapper = executor.new QCFutureWrapper<Runnable>(task, qctx);
+    QCFutureWrapper<Runnable> wrapper = executor.new QCFutureWrapper<Runnable>(task, qctx, null);
 
     wrapper.run();
 

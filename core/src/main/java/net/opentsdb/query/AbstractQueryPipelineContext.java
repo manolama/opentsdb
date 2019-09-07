@@ -632,26 +632,18 @@ System.out.println("BASE SINK CONFIGS......... " + context.sinkConfigs() + "  AN
     
     @Override
     public void close() {
-      if (result.source().config() instanceof TimeSeriesDataSourceConfig ||
-          result.source().config().joins()) {
-        AtomicInteger cntr = countdowns.get(result.dataSource());
-        if (cntr == null) {
-          LOG.error("Unexpected result source, no counter for: " 
-              + result.dataSource());
-        } else {
-          cntr.decrementAndGet();
-        }
-      } else {
-        AtomicInteger cntr = countdowns.get(result.source().config().getId() + ":" 
-            + result.dataSource());
-        if (cntr == null) {
-          LOG.error("Unexpected result source, no counter for: " 
-              + result.source().config().getId() + ":" 
-              + result.dataSource(), new RuntimeException("Whoops: " + 
+      AtomicInteger cntr = countdowns.get(result.dataSource());
+      if (cntr == null) {
+        cntr = countdowns.get(result.source().config().getId() + ":" + result.dataSource());
+      }
+      
+      if (cntr == null ) {
+        LOG.error("Unexpected result source, no counter for: " 
+            + result.source().config().getId() + ":" 
+            + result.dataSource() + ". WANT: " + countdowns.keySet());
               System.identityHashCode(AbstractQueryPipelineContext.this.context)));
-        } else {
-          cntr.decrementAndGet();
-        }
+      } else {
+        cntr.decrementAndGet();
       }
       checkComplete();
       try {

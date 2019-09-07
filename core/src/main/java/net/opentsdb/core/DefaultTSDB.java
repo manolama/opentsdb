@@ -23,8 +23,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.collect.Maps;
@@ -80,6 +84,7 @@ import net.opentsdb.stats.BlackholeStatsCollector;
 //import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.threadpools.TSDBThreadPoolExecutor;
+import net.opentsdb.threadpools.TSDTask;
 
 /**
  * Thread-safe implementation of the TSDB client.
@@ -92,6 +97,8 @@ public class DefaultTSDB implements TSDB {
 
   public static final String MAINT_TIMER_KEY = "tsd.maintenance.frequency";
   public static final int MAINT_TIMER_DEFAULT = 60000;
+
+  private static ExecutorService executor = null;
   
 //  static final byte[] FAMILY = { 't' };
 //
@@ -340,6 +347,13 @@ public class DefaultTSDB implements TSDB {
           "Whether or not authentication is enabled and required for "
           + "any operations in OpenTSDB.");
     }
+    
+    // Used for tasks with super short running tasks.
+    // TODO: might have to size this queue
+    BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>();
+    // TODO: Need to check if it makes sense to make the threadpool size configurable
+    executor = new ThreadPoolExecutor(8, 8, 1L, TimeUnit.SECONDS, workQueue);
+    
   }
   
   /**
@@ -2043,9 +2057,25 @@ public class DefaultTSDB implements TSDB {
       }
     } catch (Throwable t) {
       LOG.error("Failed to close query: " + hash, t);
+    } finally {
+      // Sends a signal to the UserAwareThreadPoolExecutor to update the state for the query.
+      Runnable closeTask = new Runnable() {
+        @Override
+        public void run() {
+          LOG.debug("Closing the query with hash {}", hash);
+        }
+      };
+      this.query_pool.submit(closeTask, null, TSDTask.QUERY_CLOSE);
+
     }
     return true;
   }
+
+  @Override
+  public ExecutorService quickWorkPool() {
+    return executor;
+  }
+  
   
 //  // ------------------ //
 //  // Compaction helpers //

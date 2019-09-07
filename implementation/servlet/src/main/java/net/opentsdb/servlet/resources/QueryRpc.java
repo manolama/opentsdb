@@ -24,6 +24,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.servlet.AsyncContext;
@@ -71,12 +74,14 @@ import net.opentsdb.query.serdes.SerdesOptions;
 import net.opentsdb.servlet.applications.OpenTSDBApplication;
 import net.opentsdb.servlet.exceptions.GenericExceptionMapper;
 import net.opentsdb.servlet.filter.AuthFilter;
+import net.opentsdb.servlet.resources.RawQueryRpc.RunTSDQuery;
 import net.opentsdb.servlet.sinks.ServletSinkConfig;
 import net.opentsdb.servlet.sinks.ServletSinkFactory;
 import net.opentsdb.stats.DefaultQueryStats;
 import net.opentsdb.stats.Span;
 import net.opentsdb.stats.Trace;
 import net.opentsdb.stats.Tracer;
+import net.opentsdb.threadpools.TSDTask;
 import net.opentsdb.stats.StatsCollector.StatsTimer;
 import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.JSON;
@@ -113,6 +118,31 @@ final public class QueryRpc {
   private final AtomicLong query_exceptions = new AtomicLong();
   private final AtomicLong query_success = new AtomicLong();
   
+  class RunTSDQuery implements Runnable {
+    final Trace trace;
+    final Span query_span;
+    final Span setup_span;
+    final AsyncContext async;
+    final TimeSeriesQuery query;
+
+    final QueryContext context;
+
+    public RunTSDQuery(Trace trace, Span query_span, Span setup_span, AsyncContext async,
+        TimeSeriesQuery query, QueryContext ctx) {
+      this.trace = trace;
+      this.query_span = query_span;
+      this.setup_span = setup_span;
+      this.async = async;
+      this.query = query;
+      this.context = ctx;
+    }
+
+    @Override
+    public void run() {
+      asyncRun(trace, query_span, setup_span, async, context);
+    }
+  }
+
   /**
    * Handles POST requests for parsing TSDB v2 queries from JSON.
    * @param servlet_config The servlet config to fetch the TSDB from.
@@ -348,6 +378,17 @@ final public class QueryRpc {
     tsdb.registerRunningQuery(Long.parseLong(request.getHeader(
         OpenTSDBApplication.INTERNAL_HASH_HEADER)), ctx);
     
+    RunTSDQuery runTsdQuery = new RunTSDQuery(trace, query_span, setup_span, async, query, ctx);
+    
+    LOG.info("Creating async query");
+
+    tsdb.getQueryThreadPool().submit(runTsdQuery, null, TSDTask.QUERY);
+    
+    return null;
+  }
+
+  private void asyncRun(final Trace trace, final Span query_span, final Span setup_span,
+      final AsyncContext async, final QueryContext ctx) {
     class AsyncTimeout implements AsyncListener {
 
       @Override
@@ -416,7 +457,6 @@ final public class QueryRpc {
         }
       }
     });
-    return null;
   }
   
 //  /**

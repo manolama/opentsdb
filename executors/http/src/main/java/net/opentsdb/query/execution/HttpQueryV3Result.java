@@ -53,6 +53,7 @@ import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.execution.serdes.DummyQueryNode;
+import net.opentsdb.query.TimeSeriesDataSourceConfig;
 import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.utils.DateTime;
 
@@ -115,11 +116,16 @@ public class HttpQueryV3Result implements QueryResult {
     this.node = node;
     this.exception = exception;
     this.rollup_config = rollup_config;
-    if (exception == null) {
+    if (exception == null && root != null) {
       String temp = root.get("source").asText();
       data_source = temp.substring(temp.indexOf(":") + 1);
       if (this.node == null) {
         this.node = new DummyQueryNode(temp.substring(0, temp.indexOf(":")));
+      }
+      
+      TimeSeriesDataSourceConfig cfg = (TimeSeriesDataSourceConfig) node.config();
+      if (!cfg.getId().equals(cfg.getDataSourceId())) {
+        data_source = cfg.getDataSourceId();
       }
       
       JsonNode n = root.get("timeSpecification");
@@ -150,6 +156,7 @@ public class HttpQueryV3Result implements QueryResult {
       }
     } else {
       series = Collections.emptyList();
+      data_source = node.config().getId();
     }
     
   }
