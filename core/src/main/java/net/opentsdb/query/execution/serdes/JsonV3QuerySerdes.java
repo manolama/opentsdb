@@ -129,7 +129,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
   @Override
   public Deferred<Object> serialize(final QueryResult result,
                                     final Span span) {
-    System.out.println("   ****** SERIALIZING: " + result.getClass());
+    System.out.println("   ****** SERIALIZING: " + result.source().config().getId() + ":" + result.dataSource());
     if (result == null) {
       throw new IllegalArgumentException("Data may not be null.");
     }
@@ -198,7 +198,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           int idx = 0;
 
           boolean wasStatus = false;
-          boolean wasEvent =false;
+          boolean wasEvent = false;
           String namespace = null;
           if (opts.getParallelThreshold() > 0 &&
               result.timeSeries().size() > opts.getParallelThreshold()) {
@@ -235,6 +235,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
               json.writeRaw(set);
             }
           } else {
+            System.out.println("            TIME SERIES: " + result.timeSeries().size());
             for (final TimeSeries series :
               series != null ? series : result.timeSeries()) {
               serializeSeries(opts,
@@ -473,9 +474,11 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
     boolean was_event = false;
     boolean was_event_group = false;
     for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator : series.iterators()) {
-      System.out.println("[[ final series type: " + iterator.getType());
+      //System.out.println("                 [[ final series type: " + iterator.getType() + "  HAS NEXT: " + iterator.hasNext());
       while (iterator.hasNext()) {
         TimeSeriesValue<? extends TimeSeriesDataType> value = iterator.next();
+        System.out.println("               START: " + start.epoch() + "  VTS: " + value.timestamp().epoch() + " DELTA: " + 
+        (value.timestamp().epoch() - start.epoch()));
         if (iterator.getType() == StatusType.TYPE) {
           if (!was_status) {
             was_status = true;
@@ -496,18 +499,21 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           writeEventGroup((EventsGroupValue) value, json, id);
           wrote_values = true;
         } else {
-          while (value != null && value.timestamp().compare(Op.LT, start)) {
-            if (iterator.hasNext()) {
-              value = iterator.next();
-            } else {
-              value = null;
+          if (value.timestamp().epoch() != 0) {
+            // summaries can have a 0 timestamp since they cover the entire range
+            while (value != null && value.timestamp().compare(Op.LT, start)) {
+              if (iterator.hasNext()) {
+                value = iterator.next();
+              } else {
+                value = null;
+              }
             }
           }
 
           if (value == null) {
             continue;
           }
-          if (value.timestamp().compare(Op.LT, start) || value.timestamp().compare(Op.GT, end)) {
+          if (value.timestamp().epoch() != 0 && (value.timestamp().compare(Op.LT, start) || value.timestamp().compare(Op.GT, end))) {
             continue;
           }
 
@@ -768,7 +774,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       final JsonGenerator json,
       final QueryResult result,
       boolean wrote_values) throws IOException {
-
+System.out.println(" WRITING SUMMARy!!!!!!!!!!!!!!!!!");
     boolean wrote_type = false;
     if (result.timeSpecification() != null) {
       if (!(result.source() instanceof Summarizer)) {
