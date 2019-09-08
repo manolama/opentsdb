@@ -56,7 +56,9 @@ import net.opentsdb.query.cache.QueryCachePlugin.CachedQueryResult;
 import net.opentsdb.query.processor.summarizer.Summarizer;
 import net.opentsdb.query.serdes.TimeSeriesCacheSerdes;
 import net.opentsdb.query.serdes.TimeSeriesCacheSerdesFactory;
+import net.opentsdb.rollup.DefaultRollupConfig;
 import net.opentsdb.rollup.RollupConfig;
+import net.opentsdb.rollup.RollupInterval;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.JSON;
 
@@ -149,7 +151,25 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
       results = results.get("results");
       for (final JsonNode result : results) {
         System.out.println("       &&&&& READ RESULT: " + result);
-        CachedQueryResult r = new JsonV3Result(null, result, null);
+        
+        // TODO - UGLY TEMP!!
+        RollupConfig rollup_config = DefaultRollupConfig.newBuilder()
+            .addAggregationId("sum", 0)
+            .addAggregationId("count", 1)
+            .addAggregationId("max", 2)
+            .addAggregationId("min", 3)
+            .addAggregationId("avg", 5)
+            .addAggregationId("first", 6)
+            .addAggregationId("last", 7)
+            .addInterval(RollupInterval.builder()
+                .setInterval("sum")
+                .setTable("tsdb")
+                .setPreAggregationTable("tsdb")
+                .setInterval("1h")
+                .setRowSpan("1d"))
+            .build();
+        
+        CachedQueryResult r = new JsonV3Result(null, result, rollup_config);
         map.put(r.source().config().getId() + ":" + r.dataSource(), r);
       }
     } catch (IOException e) {
@@ -763,7 +783,7 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
   public class JsonV3Result implements CachedQueryResult {
 
     /** The node that owns us. */
-    private QueryNode node;
+    private final QueryNode node;
     
     /** The name of this data source. */
     private String data_source;
@@ -807,15 +827,15 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
                       final JsonNode root, 
                       final RollupConfig rollup_config,
                       final Exception exception) {
-      this.node = node;
+      //this.node = node;
+      String temp = root.get("source").asText();
+      data_source = temp.substring(temp.indexOf(":") + 1);
+      this.node = new DummyQueryNode(temp.substring(0, temp.indexOf(":")));
+      System.out.println("!!!!!!!! ID: " + this.node.config().getId() + "   DS: " + data_source);
+      
       this.exception = exception;
       this.rollup_config = rollup_config;
       if (exception == null) {
-        String temp = root.get("source").asText();
-        data_source = temp.substring(temp.indexOf(":") + 1);
-        if (this.node == null) {
-          this.node = new DummyQueryNode(temp.substring(0, temp.indexOf(":")));
-        }
         
         JsonNode n = root.get("timeSpecification");
         if (n != null && !n.isNull()) {

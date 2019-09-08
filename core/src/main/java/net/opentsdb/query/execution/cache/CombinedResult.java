@@ -244,11 +244,11 @@ public class CombinedResult implements QueryResult, TimeSpecification {
 
   @Override
   public void close() {
-    if (latch.decrementAndGet() == 0) {
-      for (final QuerySink sink : sinks) {
-        sink.onComplete();
-      }
-    }
+//    if (latch.decrementAndGet() == 0) {
+//      for (final QuerySink sink : sinks) {
+//        sink.onComplete();
+//      }
+//    }
     // TODO close results and series?
   }
 

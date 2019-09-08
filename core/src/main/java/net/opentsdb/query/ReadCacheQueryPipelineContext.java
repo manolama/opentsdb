@@ -536,12 +536,24 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       for (final Entry<String, QueryResult[]> results : sorted.entrySet()) {
         // TODO - implement
         // TODO - send in thread pool
-        DummyQueryNode n = new DummyQueryNode(results.getKey());
-        final QueryResult result = new CombinedResult(this, results.getValue(), n, results.getKey(), sinks, latch, string_interval);
-        QueryNode summarizer = summarizer_node_map != null ? summarizer_node_map.get(n.config().getId()) : null; 
+//        DummyQueryNode n = new DummyQueryNode(results.getKey());
+        QueryNode first_node = null;
+        String data_source = null;
+        for (int i = 0; i < results.getValue().length; i++) {
+          if (results.getValue()[i].source() != null) {
+            first_node = results.getValue()[i].source();
+            data_source = results.getValue()[i].dataSource();
+            break;
+          }
+        }
+        final QueryResult result = new CombinedResult(this, results.getValue(), first_node, data_source, sinks, latch, string_interval);
+        System.out.println("       CACHE ID: " + result.source().config().getId());
+        final QueryNode summarizer = summarizer_node_map != null ? summarizer_node_map.get(first_node.config().getId()) : null; 
         if (summarizer != null) {
+          System.out.println("     SENDING CACHE RESULT TO SUMMARIZER: " + summarizer.config().getId());
           summarizer.onNext(result);
         } else {
+          System.out.println("     SENDING CACHE RESULT TO AQPC");
           onNext(result);
 //        for (final QuerySink sink : sinks) {
 //          sink.onNext(new CombinedResult(this, results.getValue(), n, results.getKey(), sinks, latch, string_interval));
@@ -879,8 +891,9 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
   @Override
   protected boolean checkComplete() {
     if (super.checkComplete()) {
-      if (context.query().getCacheMode() == CacheMode.NORMAL ||
-          context.query().getCacheMode() == CacheMode.WRITEONLY) {
+      if (full_query_context != null && 
+          (context.query().getCacheMode() == CacheMode.NORMAL ||
+           context.query().getCacheMode() == CacheMode.WRITEONLY)) {
         context.tsdb().getQueryThreadPool().submit(new Runnable() {
           @Override
           public void run() {
@@ -901,6 +914,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
 //          sub_results.get(i).close();
 //        }
       }
+      return true;
     }
     for (Entry<String, AtomicInteger> entry : countdowns.entrySet()) {
       System.out.println(" COUNTDOWNS: " + entry.getKey() + ", " + entry.getValue().get());
