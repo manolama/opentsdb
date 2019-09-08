@@ -898,7 +898,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
           @Override
           public void run() {
             try {
-              System.out.println("CACHING: " + sub_results.get(0).source().config().getId());
+              //System.out.println("CACHING: " + sub_results.get(0).source().config().getId());
               cache.cache(slices, keys, expirations, sub_results);
             } catch (Throwable t) {
               LOG.error("Failed to cache the data", t);

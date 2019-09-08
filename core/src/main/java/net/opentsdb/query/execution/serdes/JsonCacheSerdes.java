@@ -74,6 +74,7 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
       json.writeStartArray();
       
       for (final QueryResult result : results) {
+        System.out.println("       CACHE SERializing: " + result.source().config().getId() + ":" + result.dataSource());
         // TODO make sure ids are strings.
         json.writeStartObject();
         json.writeStringField("source", result.source().config().getId() + ":" + result.dataSource());
@@ -238,7 +239,7 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
               wrote_values = true;
             }
           } else if (iterator.getType() == NumericArrayType.TYPE) {
-            if(writeNumericArray((TimeSeriesValue<NumericArrayType>) value, iterator, json, result, last_value, wrote_values)) {
+            if (writeNumericArray((TimeSeriesValue<NumericArrayType>) value, iterator, json, result, last_value, wrote_values)) {
               wrote_values = true;
             }
           }
@@ -279,49 +280,50 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
       final TimeStamp last_value,
       boolean wrote_values) throws IOException {
     boolean wrote_type = false;
-//    if (result.timeSpecification() != null) {
-//      // just the values
-//      TimeStamp ts = result.timeSpecification().start().getCopy();
-//      while (value != null) {
-//        if (!wrote_values) {
-//          json.writeStartObject();
-//          wrote_values = true;
-//        }
-//        if (!wrote_type) {
-//          json.writeArrayFieldStart("NumericType"); // yeah, it's numeric.
-//          wrote_type = true;
-//        }
-//
-//        if (value.value() == null) {
-//          json.writeNull();
-//        } else {
-//          if ((value).value().isInteger()) {
-//            json.writeNumber(
-//                (value).value().longValue());
-//            if (ts.compare(Op.GT, last_value)) {
-//              last_value.update(ts);
-//            }
-//          } else {
-//            json.writeNumber(
-//                (value).value().doubleValue());
-//            if (!Double.isNaN(value.value().doubleValue())) {
-//              if (ts.compare(Op.GT, last_value)) {
-//                last_value.update(ts);
-//              }
-//            }
-//          }
-//        }
-//
-//        if (iterator.hasNext()) {
-//          value = (TimeSeriesValue<NumericType>) iterator.next();
-//        } else {
-//          value = null;
-//        }
-//        ts.add(result.timeSpecification().interval());
-//      }
-//      json.writeEndArray();
-//      return wrote_type;
-//    }
+    System.out.println("            SERIALIZING NUMERIC: " + result.timeSpecification());
+    if (result.timeSpecification() != null) {
+      // just the values
+      TimeStamp ts = result.timeSpecification().start().getCopy();
+      while (value != null) {
+        if (!wrote_values) {
+          json.writeStartObject();
+          wrote_values = true;
+        }
+        if (!wrote_type) {
+          json.writeArrayFieldStart("NumericType"); // yeah, it's numeric.
+          wrote_type = true;
+        }
+
+        if (value.value() == null) {
+          json.writeNull();
+        } else {
+          if ((value).value().isInteger()) {
+            json.writeNumber(
+                (value).value().longValue());
+            if (ts.compare(Op.GT, last_value)) {
+              last_value.update(ts);
+            }
+          } else {
+            json.writeNumber(
+                (value).value().doubleValue());
+            if (!Double.isNaN(value.value().doubleValue())) {
+              if (ts.compare(Op.GT, last_value)) {
+                last_value.update(ts);
+              }
+            }
+          }
+        }
+
+        if (iterator.hasNext()) {
+          value = (TimeSeriesValue<NumericType>) iterator.next();
+        } else {
+          value = null;
+        }
+        ts.add(result.timeSpecification().interval());
+      }
+      json.writeEndArray();
+      return wrote_type;
+    }
 
     // timestamp and values
     boolean wrote_local = false;
@@ -1590,22 +1592,22 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
       json.writeStringField("source", result.source().config().getId() + ":" + result.dataSource());
       
       TimeStamp last_value = new SecondTimeStamp(0);
-//      if (result.timeSpecification() != null) {
-//        json.writeObjectFieldStart("timeSpecification");
-//        // TODO - ms, second, nanos, etc
-//        json.writeNumberField("start", start);
-//        json.writeNumberField("end", end);
-//        json.writeStringField("intervalISO", result.timeSpecification().interval() != null ?
-//            result.timeSpecification().interval().toString() : "null");
-//        json.writeStringField("interval", result.timeSpecification().stringInterval());
-//        //json.writeNumberField("intervalNumeric", result.timeSpecification().interval().get(result.timeSpecification().units()));
-//        if (result.timeSpecification().timezone() != null) {
-//          json.writeStringField("timeZone", result.timeSpecification().timezone().toString());
-//        }
-//        json.writeStringField("units", result.timeSpecification().units() != null ?
-//            result.timeSpecification().units().toString() : "null");
-//        json.writeEndObject();
-//      }
+      if (result.timeSpecification() != null) {
+        json.writeObjectFieldStart("timeSpecification");
+        // TODO - ms, second, nanos, etc
+        json.writeNumberField("start", start);
+        json.writeNumberField("end", end);
+        json.writeStringField("intervalISO", result.timeSpecification().interval() != null ?
+            result.timeSpecification().interval().toString() : "null");
+        json.writeStringField("interval", result.timeSpecification().stringInterval());
+        //json.writeNumberField("intervalNumeric", result.timeSpecification().interval().get(result.timeSpecification().units()));
+        if (result.timeSpecification().timezone() != null) {
+          json.writeStringField("timeZone", result.timeSpecification().timezone().toString());
+        }
+        json.writeStringField("units", result.timeSpecification().units() != null ?
+            result.timeSpecification().units().toString() : "null");
+        json.writeEndObject();
+      }
       
       // data
       json.writeArrayFieldStart("data");
