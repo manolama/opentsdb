@@ -288,6 +288,15 @@ public abstract class BaseQueryContext implements QueryContext {
   }
   
   /**
+   * Package private method to allow a pipeline context to reset the query with
+   * modifications.
+   * @param query The non-null query to set.
+   */
+  void resetQuery(final SemanticQuery query) {
+    this.query = query;
+  }
+  
+  /**
    * Simple pipeline implementation.
    */
   protected class LocalPipeline extends AbstractQueryPipelineContext {

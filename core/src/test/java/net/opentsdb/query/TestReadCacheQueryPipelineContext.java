@@ -993,7 +993,7 @@ public class TestReadCacheQueryPipelineContext {
     
     verify(sink, never()).onNext(any(QueryResult.class));
     assertTrue(TSDB.runnables.isEmpty());
-    assertNull(ctx.sub_context);
+    assertNull(ctx.full_query_context);
     
     ctx.results[4].onNext(mockResult("m1", "m1"));
     ctx.results[4].onComplete();
@@ -1036,10 +1036,10 @@ public class TestReadCacheQueryPipelineContext {
     
     verify(sink, never()).onNext(any(QueryResult.class));
     assertTrue(TSDB.runnables.isEmpty());
-    assertTrue(((MockQueryContext) ctx.sub_context).initialized);
-    assertTrue(((MockQueryContext) ctx.sub_context).fetched);
+    assertTrue(((MockQueryContext) ctx.full_query_context).initialized);
+    assertTrue(((MockQueryContext) ctx.full_query_context).fetched);
     
-    ((MockQueryContext) ctx.sub_context).sink.onNext(mockResult("m1", "m1"));
+    ((MockQueryContext) ctx.full_query_context).sink.onNext(mockResult("m1", "m1"));
     verify(sink, times(1)).onNext(any(QueryResult.class));
     
     // cleaned up

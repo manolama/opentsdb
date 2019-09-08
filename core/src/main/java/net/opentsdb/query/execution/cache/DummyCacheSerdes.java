@@ -293,7 +293,7 @@ public class DummyCacheSerdes extends BaseTSDBPlugin implements TimeSeriesCacheS
   }
 
   @Override
-  public byte[][] serialize(int[] timestamps, byte[][] keys,
+  public byte[][] serialize(int[] timestamps, 
       Collection<QueryResult> results) {
     // TODO Auto-generated method stub
     return null;

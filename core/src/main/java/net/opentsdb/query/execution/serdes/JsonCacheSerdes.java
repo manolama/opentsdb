@@ -28,7 +28,6 @@ import com.stumbleupon.async.Deferred;
 import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.BaseTimeSeriesStringId;
-import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.SecondTimeStamp;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
@@ -58,7 +57,6 @@ import net.opentsdb.query.processor.summarizer.Summarizer;
 import net.opentsdb.query.serdes.TimeSeriesCacheSerdes;
 import net.opentsdb.query.serdes.TimeSeriesCacheSerdesFactory;
 import net.opentsdb.rollup.RollupConfig;
-import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.JSON;
 
@@ -708,19 +706,19 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
     json.writeStringField("userId", eventsValue.userId());
     json.writeBooleanField("ongoing", eventsValue.ongoing());
     json.writeStringField("eventId", eventsValue.eventId());
-    if (eventsValue.parentId() != null) {
-      json.writeArrayFieldStart("parentId");
-      for (String p : eventsValue.parentId()) {
-        json.writeString(p);
-      }
-    }
-    json.writeEndArray();
-    if (eventsValue.childId() != null) {
-      json.writeArrayFieldStart("childId");
-      for (String c : eventsValue.childId()) {
-        json.writeString(c);
-      }
-    }
+//    if (eventsValue.parentId() != null) {
+//      json.writeArrayFieldStart("parentId");
+//      for (String p : eventsValue.parentId()) {
+//        json.writeString(p);
+//      }
+//    }
+//    json.writeEndArray();
+//    if (eventsValue.childId() != null) {
+//      json.writeArrayFieldStart("childId");
+//      for (String c : eventsValue.childId()) {
+//        json.writeString(c);
+//      }
+//    }
     json.writeEndArray();
 
     if (eventsValue.additionalProps() != null) {
@@ -1494,7 +1492,6 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
 
   @Override
   public byte[][] serialize(final int[] timestamps, 
-                            final byte[][] keys,
                             final Collection<QueryResult> results) {
     final byte[][] cache_data = new byte[timestamps.length][];
     QR[] serializers = new QR[results.size()];

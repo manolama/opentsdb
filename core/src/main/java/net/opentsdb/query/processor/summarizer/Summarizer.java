@@ -101,6 +101,7 @@ public class Summarizer extends AbstractQueryNode {
   
   @Override
   public void onNext(final QueryResult next) {
+    System.out.println("   [SUMMARIZER] Result: " + next.source().config().getId());
     if (next instanceof SummarizerSummarizedResult) {
       sendUpstream(next);
       return;

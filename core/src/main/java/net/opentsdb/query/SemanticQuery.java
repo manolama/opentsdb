@@ -319,8 +319,8 @@ public class SemanticQuery implements TimeSeriesQuery {
   
   public Builder toBuilder() {
     Builder builder = newBuilder();
-    builder.setStart(start)
-           .setEnd(end)
+    builder.setStart(start_ts != null ? Long.toString(start_ts.msEpoch()) : start)
+           .setEnd(end_ts != null ? Long.toString(end_ts.msEpoch()) : end)
            .setTimeZone(time_zone)
            .setMode(mode)
            .setExecutionGraph(Lists.newArrayList(execution_graph))

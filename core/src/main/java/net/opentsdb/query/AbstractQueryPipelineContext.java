@@ -390,6 +390,7 @@ public abstract class AbstractQueryPipelineContext implements
   
   @Override
   public void onNext(final QueryResult next) {
+    System.out.println("   [AQPC] SENDING NEXT: " + next.source().config().getId());
     final ResultWrapper wrapped = new ResultWrapper(next);
     for (final QuerySink sink : sinks) {
       try {
@@ -641,7 +642,6 @@ System.out.println("BASE SINK CONFIGS......... " + context.sinkConfigs() + "  AN
         LOG.error("Unexpected result source, no counter for: " 
             + result.source().config().getId() + ":" 
             + result.dataSource() + ". WANT: " + countdowns.keySet());
-              System.identityHashCode(AbstractQueryPipelineContext.this.context)));
       } else {
         cntr.decrementAndGet();
       }
