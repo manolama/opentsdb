@@ -849,7 +849,8 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         sub_results.add(next);
       }
       
-      final QueryNode summarizer = summarizer_node_map.get(next.source().config().getId());
+      final QueryNode summarizer = summarizer_node_map != null ? 
+          summarizer_node_map.get(next.source().config().getId()) : null;
       if (summarizer != null) {
         System.out.println("        ROUTING to summarizer: " + next.source().config().getId());
         summarizer.onNext(next);
@@ -857,16 +858,6 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         System.out.println("        ROUTING to AQPC: " + next.source().config().getId());
         ReadCacheQueryPipelineContext.this.onNext(next);
       }
-      // TODO - do we need to wrap this?
-      //ReadCacheQueryPipelineContext.this.onNext(next);
-//      for (final QuerySink sink : sinks) {
-//        try {
-//          sink.onNext(next);
-//        } catch (Throwable e) {
-//          LOG.error("Exception thrown passing results to sink: " + sink, e);
-//          // TODO - should we kill the query here?
-//        }
-//      }
     }
     
     @Override
@@ -1044,10 +1035,12 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       config_graph.addNode(config);
       configs.put(config.getId(), config);
     }
-    for (final QueryNode summarizer : summarizer_node_map.values()) {
-      configs.put(summarizer.config().getId(), summarizer.config());
-      for (final Object source : summarizer.config().getSources()) {
-        config_graph.putEdge(summarizer.config(), configs.get((String) source));
+    if (summarizer_node_map != null) {
+      for (final QueryNode summarizer : summarizer_node_map.values()) {
+        configs.put(summarizer.config().getId(), summarizer.config());
+        for (final Object source : summarizer.config().getSources()) {
+          config_graph.putEdge(summarizer.config(), configs.get((String) source));
+        }
       }
     }
     // next pass

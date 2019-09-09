@@ -1087,7 +1087,6 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
       public Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> iterator(
           final TypeToken<? extends TimeSeriesDataType> type) {
         // TODO - cleanup
-        System.out.println("        @@@@@@@@@@@@ WANT TYPE: " + type);
         if (types.contains(type)) {
           TypedTimeSeriesIterator<? extends TimeSeriesDataType> data = null;
           if (type == NumericType.TYPE) {
@@ -1619,8 +1618,6 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
           continue;
         }
         
-        System.out.println("          ts " + values[i].timestamp().epoch() + "  END: " + end);
-        
         // no data for this segment, skip it.
         if (values[i].timestamp().epoch() > end) {
           System.out.println("       timestamp > end");
@@ -1644,7 +1641,6 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
           continue;
         }
         
-        System.out.println("       TYPE: " + iterators[i].getType());
         boolean wrote_data = false;
         // got something to write!
         if (iterators[i].getType() == NumericType.TYPE) {
