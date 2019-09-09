@@ -6,14 +6,14 @@ import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
 
 import net.opentsdb.query.QueryResult;
-import net.opentsdb.query.QuerySegmenterFactory;
 
 /**
  * A simple factory for the protobuf serialization and caching functionality.
  *
  */
-public class PBufQuerySegmenterFactory extends BaseTSDBPlugin implements QuerySegmenterFactory {
-    public static final String TYPE = "PBufQuerySegmenterFactory";
+public class PBufTimeSeriesCacheSerdesFactory extends BaseTSDBPlugin 
+  implements TimeSeriesCacheSerdesFactory {
+    public static final String TYPE = "PBufTimeSeriesCacheSerdes";
 
     @Override
     public String type() {
@@ -27,11 +27,8 @@ public class PBufQuerySegmenterFactory extends BaseTSDBPlugin implements QuerySe
         return Deferred.fromResult(null);
     }
 
-    public PBufQuerySegmenter newSerializer(final QueryResult result, final SerdesOptions options) {
-        if (result == null) {
-            throw new IllegalArgumentException("Query Result to be cached cannot be null.");
-        }
-        return new PBufQuerySegmenter();
-//        return new PBufQuerySegmenter(result, options);
+    @Override
+    public TimeSeriesCacheSerdes getSerdes() {
+      return new PBufTimeSeriesCacheSerdes();
     }
 }

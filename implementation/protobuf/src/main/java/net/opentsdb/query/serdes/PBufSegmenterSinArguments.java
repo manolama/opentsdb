@@ -37,7 +37,7 @@ import java.util.*;
  */
 public class PBufSegmenterSinArguments implements QuerySegmenter, TimeSeriesCacheSerdes {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PBufQuerySegmenter.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PBufTimeSeriesCacheSerdes.class);
     final PBufSerdesFactory factory = new PBufSerdesFactory();
     public static final String TYPE = "PBufQuerySegmenter";
 

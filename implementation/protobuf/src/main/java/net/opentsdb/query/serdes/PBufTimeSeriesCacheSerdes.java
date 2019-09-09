@@ -18,6 +18,7 @@ import net.opentsdb.data.pbuf.QueryResultsListPB;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.exceptions.SerdesException;
 import net.opentsdb.query.*;
+import net.opentsdb.query.cache.QueryCachePlugin.CachedQueryResult;
 import net.opentsdb.data.pbuf.TimeSeriesDataPB.TimeSeriesData;
 
 import net.opentsdb.storage.schemas.tsdb1x.NumericCodec;
@@ -35,15 +36,15 @@ import java.util.*;
  * used to cache the fetched data into blocks.
  *
  */
-public class PBufQuerySegmenter implements QuerySegmenter, TimeSeriesCacheSerdes {
+public class PBufTimeSeriesCacheSerdes implements TimeSeriesCacheSerdes {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PBufQuerySegmenter.class);
-    final PBufSerdesFactory factory = new PBufSerdesFactory();
-    public static final String TYPE = "PBufQuerySegmenter";
-    private final QueryResult result;
-    private final SerdesOptions options;
-    private final QueryNode node;
-    private final QueryContext context;
+    private static final Logger LOG = LoggerFactory.getLogger(PBufTimeSeriesCacheSerdes.class);
+//    final PBufSerdesFactory factory = new PBufSerdesFactory();
+//    public static final String TYPE = "PBufQuerySegmenter";
+//    private final QueryResult result;
+//    private final SerdesOptions options;
+//    private final QueryNode node;
+//    private final QueryContext context;
 
     // store iterators so you don't have to re-iterate through the same elements
     private List<List<TypedTimeSeriesIterator<? extends TimeSeriesDataType>>> iterators;
@@ -55,8 +56,11 @@ public class PBufQuerySegmenter implements QuerySegmenter, TimeSeriesCacheSerdes
     // store list of original timeseries id's
     private List<TimeSeriesId> timeseriesIDs;
 
+    public PBufTimeSeriesCacheSerdes() {
+      
+    }
 
-    public PBufQuerySegmenter(final QueryResult result, final SerdesOptions options) {
+    public PBufTimeSeriesCacheSerdes(final QueryResult result, final SerdesOptions options) {
         if (result == null) {
             throw new IllegalArgumentException("Query Result to be cached cannot be null.");
         }
@@ -78,116 +82,14 @@ public class PBufQuerySegmenter implements QuerySegmenter, TimeSeriesCacheSerdes
             }
         }
     }
-
-
-    @Override
+    
     public List<QueryResult> segmentResult(final QueryResult result,
                                            final long blocksize) {
 
-        List<QueryResult> results = new ArrayList<>();
-
-//         slice result into multiple blocks and return
-
-        // calculate start and end bounds of TimeSeriesValues to determine cache blocks
-        long start = node.pipelineContext().query().startTime().epoch();
-        long end = node.pipelineContext().query().endTime().epoch();
-
-
-        for (long threshold = start + blocksize; threshold - blocksize <= end; threshold += blocksize) {
-
-            // for each timeseries, create a new version of the timeseries and versions of iterators,
-            // and for each iterator, iterate through and store the valid timeseriesvalues in the new iterators
-
-            // current QueryResultBuilder for this time block
-            QueryResultPB.QueryResult.Builder pbufBlockBuilder = QueryResultPB.QueryResult.newBuilder();
-
-            for (List<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> it : iterators) {
-                // create a TimeSeriesBuilder here, determine what ID to set
-                TimeSeriesPB.TimeSeries.Builder currentTsBuilder = TimeSeriesPB.TimeSeries.newBuilder();
-
-                for (TypedTimeSeriesIterator<? extends TimeSeriesDataType> curr : it) {
-
-                    TypedTimeSeriesIterator buildIterator = null;
-                    TimeSeriesData numericData = null;
-                    if (curr.getType().equals(NumericType.TYPE)) {
-                        numericData = convertNumericType(it, curr, threshold, blocksize);
-                        buildIterator = new PBufNumericIterator(numericData);
-                    }
-                    // test convertNumericSummaryType
-                    else if (curr.getType().equals(NumericSummaryType.TYPE)) {
-                        buildIterator = new PBufNumericSummaryIterator(convertNumericSummaryType(it, curr, threshold, blocksize));
-                    }
-
-                    // add the TypedTimeSeriesIterator to current currentTsBuilder
-                    if (buildIterator == null) {
-                        LOG.debug("Skipping serialization of unkown type: "
-                                + curr.getType());
-                    }
-                    else {
-                        final PBufIteratorSerdes serdes = factory.serdesForType(buildIterator.getType());
-                        if (serdes == null) {
-                            if (LOG.isDebugEnabled()) {
-                                LOG.debug("Skipping serialization of unknown type: "
-                                        + buildIterator.getType());
-                            }
-                            continue;
-                        }
-
-                        if (curr.getType().equals(NumericType.TYPE)) {
-                            ((PBufNumericTimeSeriesSerdes) serdes).serializeGivenTimes(currentTsBuilder, context, result, buildIterator,
-                                    numericData.getSegments(0).getStart(), numericData.getSegments(0).getEnd());
-//                            serdes.serialize(currentTsBuilder, context, options, result, buildIterator);
-
-                        }
-                        else {
-                            serdes.serialize(currentTsBuilder, context, result, buildIterator);
-                        }
-                    }
-                }
-
-                // set TimeSeries ID, will have to change this
-                currentTsBuilder.setId(PBufTimeSeriesId.newBuilder(
-                        timeseriesIDs.get(iterators.indexOf(it)))
-                        .build()
-                        .pbufID());
-
-                // add TimeSeriesBuilder to current pbufBlockBuilder
-                pbufBlockBuilder = pbufBlockBuilder.addTimeseries(currentTsBuilder.build());
-            }
-
-            // set datasource of PBufQueryResult
-            pbufBlockBuilder = pbufBlockBuilder.setDataSource(result.dataSource());
-
-            // TODO: setting timespecification to the default value (from result), will need to modify this
-//            TimeSpecification timespec = result.timeSpecification();
-
-//            if (timespec != null) {
-//                pbufBlockBuilder.setTimeSpecification(TimeSpecificationPB.TimeSpecification.newBuilder()
-//                        .setStart(TimeStampPB.TimeStamp.newBuilder()
-//                                .setEpoch(timespec.start().epoch())
-//                                .setNanos(timespec.start().nanos())
-//                                .setZoneId(timespec.start().timezone().toString())
-//                                .build())
-//                        .setEnd(TimeStampPB.TimeStamp.newBuilder()
-//                                .setEpoch(timespec.end().epoch())
-//                                .setNanos(timespec.end().nanos())
-//                                .setZoneId(timespec.end().timezone().toString())
-//                                .build())
-//                        .setTimeZone(timespec.timezone().toString())
-//                        .setInterval(timespec.stringInterval()));
-//            }
-
-            // convert queryresult to PBufQueryResult and add to total results list
-            results.add(new PBufQueryResult(factory, node, pbufBlockBuilder.build()));
-
-            if (resultExhausted()) {
-                return results;
-            }
-        }
-
-        return results;
+        
     }
 
+    @Override
     public byte[] serialize(Collection<QueryResult> results) {
 
         PBufSerdes serdes = new PBufSerdes(factory, context, new ByteArrayOutputStream());
@@ -199,7 +101,118 @@ public class PBufQuerySegmenter implements QuerySegmenter, TimeSeriesCacheSerdes
         return convertedResults.build().toByteArray();
     }
 
-    public Map<String, QueryResult> deserialize(final byte[] data) {
+    @Override
+    public byte[][] serialize(final int[] timestamps, 
+                              final Collection<QueryResult> results) {
+      final byte[][] cache_data = new byte[timestamps.length][];
+      final QueryResult[] array_results = new QueryResult[results.size()];
+      final Map<Long, TypedTimeSeriesIterator>[] iterators = new Map[results.size()];
+      int i = 0;
+      for (final QueryResult result : results) {
+        array_results[i++] = result;
+        Map<Long, TypedTimeSeriesIterator> map = Maps.newHashMap();
+        
+      }
+      
+      // calculate start and end bounds of TimeSeriesValues to determine cache blocks
+      for (final QueryResult result : results) {
+
+       // for each timeseries, create a new version of the timeseries and versions of iterators,
+       // and for each iterator, iterate through and store the valid timeseriesvalues in the new iterators
+
+       // current QueryResultBuilder for this time block
+       QueryResultPB.QueryResult.Builder pbufBlockBuilder = QueryResultPB.QueryResult.newBuilder();
+
+       for (List<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> it : iterators) {
+           // create a TimeSeriesBuilder here, determine what ID to set
+           TimeSeriesPB.TimeSeries.Builder currentTsBuilder = TimeSeriesPB.TimeSeries.newBuilder();
+
+           for (TypedTimeSeriesIterator<? extends TimeSeriesDataType> curr : it) {
+
+               TypedTimeSeriesIterator buildIterator = null;
+               TimeSeriesData numericData = null;
+               if (curr.getType().equals(NumericType.TYPE)) {
+                   numericData = convertNumericType(it, curr, threshold, blocksize);
+                   buildIterator = new PBufNumericIterator(numericData);
+               }
+               // test convertNumericSummaryType
+               else if (curr.getType().equals(NumericSummaryType.TYPE)) {
+                   buildIterator = new PBufNumericSummaryIterator(convertNumericSummaryType(it, curr, threshold, blocksize));
+               }
+
+               // add the TypedTimeSeriesIterator to current currentTsBuilder
+               if (buildIterator == null) {
+                   LOG.debug("Skipping serialization of unkown type: "
+                           + curr.getType());
+               }
+               else {
+                   final PBufIteratorSerdes serdes = factory.serdesForType(buildIterator.getType());
+                   if (serdes == null) {
+                       if (LOG.isDebugEnabled()) {
+                           LOG.debug("Skipping serialization of unknown type: "
+                                   + buildIterator.getType());
+                       }
+                       continue;
+                   }
+
+                   if (curr.getType().equals(NumericType.TYPE)) {
+                       ((PBufNumericTimeSeriesSerdes) serdes).serializeGivenTimes(currentTsBuilder, context, result, buildIterator,
+                               numericData.getSegments(0).getStart(), numericData.getSegments(0).getEnd());
+//                       serdes.serialize(currentTsBuilder, context, options, result, buildIterator);
+
+                   }
+                   else {
+                       serdes.serialize(currentTsBuilder, context, result, buildIterator);
+                   }
+               }
+           }
+
+           // set TimeSeries ID, will have to change this
+           currentTsBuilder.setId(PBufTimeSeriesId.newBuilder(
+                   timeseriesIDs.get(iterators.indexOf(it)))
+                   .build()
+                   .pbufID());
+
+           // add TimeSeriesBuilder to current pbufBlockBuilder
+           pbufBlockBuilder = pbufBlockBuilder.addTimeseries(currentTsBuilder.build());
+       }
+
+       // set datasource of PBufQueryResult
+       pbufBlockBuilder = pbufBlockBuilder.setDataSource(result.dataSource());
+
+       // TODO: setting timespecification to the default value (from result), will need to modify this
+//       TimeSpecification timespec = result.timeSpecification();
+
+//       if (timespec != null) {
+//           pbufBlockBuilder.setTimeSpecification(TimeSpecificationPB.TimeSpecification.newBuilder()
+//                   .setStart(TimeStampPB.TimeStamp.newBuilder()
+//                           .setEpoch(timespec.start().epoch())
+//                           .setNanos(timespec.start().nanos())
+//                           .setZoneId(timespec.start().timezone().toString())
+//                           .build())
+//                   .setEnd(TimeStampPB.TimeStamp.newBuilder()
+//                           .setEpoch(timespec.end().epoch())
+//                           .setNanos(timespec.end().nanos())
+//                           .setZoneId(timespec.end().timezone().toString())
+//                           .build())
+//                   .setTimeZone(timespec.timezone().toString())
+//                   .setInterval(timespec.stringInterval()));
+//       }
+
+       // convert queryresult to PBufQueryResult and add to total results list
+       results.add(new PBufQueryResult(factory, node, pbufBlockBuilder.build()));
+
+       if (resultExhausted()) {
+           return results;
+       }
+   }
+
+   return results;
+      return null;
+    }
+    
+    @Override
+    public Map<String, CachedQueryResult> deserialize(final byte[] data) {
         Map<String, QueryResult> results = new HashMap<>();
         try {
             QueryResultsListPB.QueryResultsList serializedResults = QueryResultsListPB.QueryResultsList.parseFrom(data);
