@@ -53,7 +53,7 @@ public class TestPBufTimeSeries {
     TSDB.registry = new DefaultRegistry(TSDB);
     ((DefaultRegistry) TSDB.registry).initialize(true);
   }
-  
+
   @Before
   public void before() throws Exception {
     factory = new PBufSerdesFactory();
@@ -118,7 +118,7 @@ public class TestPBufTimeSeries {
     TimeSeriesValue<NumericType> nv = (TimeSeriesValue<NumericType>) iterator.next();
     assertEquals(1525824000000L, nv.timestamp().msEpoch());
     assertEquals(42, nv.value().longValue());
-    
+
     iterator = time_series.iterator(NumericSummaryType.TYPE).get();
     TimeSeriesValue<NumericSummaryType> sv = 
         (TimeSeriesValue<NumericSummaryType>) iterator.next();

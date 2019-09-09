@@ -15,32 +15,17 @@
 syntax = "proto3";
 
 option java_package = "net.opentsdb.data.pbuf";
-option java_outer_classname = "QueryResultPB";
-
-import "TimeSeries.proto";
-import "TimeSpecification.proto";
+option java_outer_classname = "NumericArraySegmentPB";
 
 /*
- * A net.opentsdb.query.QueryResult implementation. 
+ * A numeric sequence of the net.opentsdb.data.types.NumericArrayType variety.
  */
-message QueryResult {
+message NumericArraySegment {
 
-  /* The list of time series objects. */
-  repeated TimeSeries timeseries = 1;
+  /* Long array representing Numeric Array data. */
+  repeated uint64 long_array = 1;
 
-  /* An ordinal into the Java ChronoUnit enum. */
-  uint32 resolution = 2;
-  
-  /* The sequence of the result in the orignal order. */
-  uint64 sequence_id = 3;
-  
-  /* The time spec, may be null. */
-  TimeSpecification time_specification = 4;
-  
-  /* The name of the data source. */
-  string data_source = 5;
+  /* Double array representing Numeric Array data. */
+  repeated double double_array = 2;
 
-  /* The id of the associated Query Node. */
-  string node_id = 6;
-  
 }

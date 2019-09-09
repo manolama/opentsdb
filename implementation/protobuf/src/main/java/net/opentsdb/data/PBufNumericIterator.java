@@ -16,6 +16,7 @@ package net.opentsdb.data;
 
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 
 import com.google.common.base.Strings;
 import com.google.common.reflect.TypeToken;
@@ -100,6 +101,10 @@ public class PBufNumericIterator implements TypedTimeSeriesIterator {
     return idx < data.length && segment_idx <= source.getSegmentsCount();
   }
 
+  public long getBaseTime() {
+    return base.epoch();
+  }
+
   @Override
   public TimeSeriesValue<NumericType> next() {
     for (int i = 0; i < offset.length; i++) {
@@ -182,7 +187,13 @@ public class PBufNumericIterator implements TypedTimeSeriesIterator {
           continue;
         }
         encode_on = (byte) parsed.getEncodedOn();
+        // TODO - Fix this hardcoding
         resolution = ChronoUnit.values()[parsed.getResolution()];
+        if (parsed.getResolution() == 2) {
+//          resolution = ChronoUnit.values()[2];
+          encode_on = 4;
+        }
+
         if (current == null) {
           current = base.getCopy(); // just needs to be initialized
         }

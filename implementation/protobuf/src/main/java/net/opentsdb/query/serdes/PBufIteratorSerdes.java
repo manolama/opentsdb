@@ -23,9 +23,9 @@ import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.pbuf.TimeSeriesDataPB.TimeSeriesData;
 import net.opentsdb.data.pbuf.TimeSeriesPB;
+import net.opentsdb.data.pbuf.TimeStampPB;
 import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.QueryResult;
-import net.opentsdb.query.serdes.SerdesOptions;
 
 /**
  * An interface for serial/deserializers with Protobuf messages. Each
@@ -51,7 +51,6 @@ public interface PBufIteratorSerdes {
    * 
    * @param ts_builder A non-null time series Protobuf builder to add to.
    * @param context A query context to pull info from.
-   * @param options A non-null serdes options to pull timestamps and other
    * configs from.
    * @param result The original query result.
    * @param iterator A non-null iterator.
@@ -59,9 +58,15 @@ public interface PBufIteratorSerdes {
    */
   public void serialize(final TimeSeriesPB.TimeSeries.Builder ts_builder, 
                         final QueryContext context, 
-                        final SerdesOptions options, 
                         final QueryResult result,
                         final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator);
+
+  public void serializeGivenTimes(final TimeSeriesPB.TimeSeries.Builder ts_builder,
+                        final QueryContext context,
+                        final QueryResult result,
+                        final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator,
+                        final TimeStampPB.TimeStamp first,
+                        final TimeStampPB.TimeStamp last);
   
   /**
    * Returns an iterator over the data serialized in the TimeSeriesData

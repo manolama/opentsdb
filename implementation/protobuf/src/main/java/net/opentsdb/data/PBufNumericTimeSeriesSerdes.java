@@ -62,10 +62,9 @@ public class PBufNumericTimeSeriesSerdes implements PBufIteratorSerdes {
   @Override
   public void serialize(final Builder ts_builder, 
                         final QueryContext context,
-                        final SerdesOptions options,
                         final QueryResult result,
                         final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator) {
-    ts_builder.addData(serialize(context, options, result, iterator));
+    ts_builder.addData(serialize(context, result, iterator));
   }
 
   @Override
@@ -76,31 +75,29 @@ public class PBufNumericTimeSeriesSerdes implements PBufIteratorSerdes {
   /**
    * Encodes the given iterator.
    * @param context A non-null query context.
-   * @param options Options, ignored.
    * @param result A non-null result.
    * @param iterator A non-null iterator.
    * @return A data protobuf object.
    */
   TimeSeriesData serialize(final QueryContext context,
-                           final SerdesOptions options,
                            final QueryResult result,
                            final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator) {
     final long span;
     switch(result.resolution()) {
     case NANOS:
     case MICROS:
-      long seconds = context.query().endTime().epoch() - 
+      long seconds = context.query().endTime().epoch() -
           context.query().startTime().epoch();
-      long ns = context.query().endTime().nanos() - 
+      long ns = context.query().endTime().nanos() -
           context.query().startTime().nanos();
       span = (seconds * 1000L * 1000L * 1000L) + ns;
       break;
     case MILLIS:
-      span = context.query().endTime().epoch() - 
+      span = context.query().endTime().epoch() -
           context.query().startTime().epoch();
       break;
     default:
-      span = context.query().endTime().epoch() - 
+      span = context.query().endTime().epoch() -
           context.query().startTime().epoch();
     }
     byte encode_on = NumericCodec.encodeOn(span, NumericCodec.LENGTH_MASK);
@@ -115,9 +112,9 @@ public class PBufNumericTimeSeriesSerdes implements PBufIteratorSerdes {
         if (value.timestamp().compare(Op.LT, context.query().startTime())) {
           continue;
         }
-        if (value.timestamp().compare(Op.GT, context.query().endTime())) {
-          break;
-        }
+//        if (value.timestamp().compare(Op.GT, context.query().endTime())) {
+//          break;
+//        }
         
         long current_offset = offset(context.query().startTime(), 
             value.timestamp(), result.resolution());
@@ -188,7 +185,140 @@ public class PBufNumericTimeSeriesSerdes implements PBufIteratorSerdes {
           .setData(Any.pack(ns)))
       .build();
   }
-  
+
+
+
+  public void serializeGivenTimes(final Builder ts_builder,
+                        final QueryContext context,
+                        final QueryResult result,
+                        final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator,
+                        final TimeStampPB.TimeStamp first,
+                        final TimeStampPB.TimeStamp last) {
+    ts_builder.addData(serializeGivenTimes(context, result, iterator, first, last));
+  }
+
+  /**
+   * Encodes the given iterator.
+   * @param context A non-null query context.
+   * @param result A non-null result.
+   * @param iterator A non-null iterator.
+   * @return A data protobuf object.
+   */
+  TimeSeriesData serializeGivenTimes(final QueryContext context,
+                           final QueryResult result,
+                           final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator,
+                           final TimeStampPB.TimeStamp first,
+                           final TimeStampPB.TimeStamp last) {
+    final long span;
+    switch(result.resolution()) {
+      case NANOS:
+      case MICROS:
+        long seconds = last.getEpoch() -
+                first.getEpoch();
+        long ns = last.getNanos() -
+                first.getNanos();
+        span = (seconds * 1000L * 1000L * 1000L) + ns;
+        break;
+      case MILLIS:
+        span = last.getEpoch() -
+                first.getEpoch();
+        break;
+      default:
+        span = last.getEpoch() -
+                first.getEpoch();
+    }
+    // TODO - fix hardcoding
+    byte encode_on = NumericCodec.encodeOn(span, NumericCodec.LENGTH_MASK);
+    if (result.resolution().equals(ChronoUnit.MILLIS)) {
+      encode_on = 4;
+    }
+
+    final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    long previous_offset = -1;
+    try {
+      while (iterator.hasNext()) {
+        @SuppressWarnings("unchecked")
+        final TimeSeriesValue<NumericType> value =
+                (TimeSeriesValue<NumericType>) iterator.next();
+        if (value.timestamp().compare(Op.LT, context.query().startTime())) {
+          continue;
+        }
+//        if (value.timestamp().compare(Op.GT, context.query().endTime())) {
+//          break;
+//        }
+
+        long current_offset = offset(first,
+                value.timestamp(), result.resolution());
+        if (current_offset == previous_offset) {
+          throw new SerdesException("With results set to a resolution of "
+                  + result.resolution() + " one or more data points with "
+                  + "duplicate timestamps would be written at offset: "
+                  + current_offset);
+        }
+        previous_offset = current_offset;
+        if (value.value() == null) {
+          // length of 0 + float flag == null value, so nothing following
+          final byte flags = NumericCodec.FLAG_FLOAT;
+          baos.write(Bytes.fromLong(
+                  (current_offset << NumericCodec.FLAG_BITS) | flags),
+                  8 - encode_on, encode_on);
+        } else if (value.value().isInteger()) {
+          final byte[] vle = NumericCodec.vleEncodeLong(
+                  value.value().longValue());
+          final byte flags = (byte) (vle.length - 1);
+          baos.write(Bytes.fromLong(
+                  (current_offset << NumericCodec.FLAG_BITS) | flags),
+                  8 - encode_on, encode_on);
+          baos.write(vle);
+        } else {
+          final double v = value.value().doubleValue();
+          final byte[] vle = NumericType.fitsInFloat(v) ?
+                  Bytes.fromInt(Float.floatToIntBits((float) v)) :
+                  Bytes.fromLong(Double.doubleToLongBits(v));
+          final byte flags = (byte) ((vle.length - 1) | NumericCodec.FLAG_FLOAT);
+          baos.write(Bytes.fromLong(
+                  (current_offset << NumericCodec.FLAG_BITS) | flags),
+                  8 - encode_on, encode_on);
+          baos.write(vle);
+        }
+      }
+    } catch (IOException e) {
+      throw new SerdesException("Unexppected exception serializing "
+              + "iterator: " + iterator, e);
+    }
+
+    final NumericSegment ns = NumericSegment.newBuilder()
+            .setEncodedOn(encode_on)
+            .setResolution(result.resolution().ordinal())
+            // TODO - can I wrap???
+            .setData(ByteString.copyFrom(baos.toByteArray()))
+            .build();
+
+    final TimeStampPB.TimeStamp.Builder start = TimeStampPB.TimeStamp.newBuilder()
+            .setEpoch(first.getEpoch())
+            .setNanos(first.getNanos());
+    if (first.getZoneId() != null) {
+      start.setZoneId(first.getZoneId());
+    }
+
+    final TimeStampPB.TimeStamp.Builder end = TimeStampPB.TimeStamp.newBuilder()
+            .setEpoch(last.getEpoch())
+            .setNanos(last.getNanos());
+    if (last.getZoneId() != null) {
+      end.setZoneId(last.getZoneId());
+    }
+
+    return TimeSeriesData.newBuilder()
+            .setType(NumericType.TYPE.getRawType().getName())
+            .addSegments(TimeSeriesDataSegment.newBuilder()
+                    .setStart(start)
+                    .setEnd(end)
+                    .setData(Any.pack(ns)))
+            .build();
+  }
+
+
+
   /**
    * Calculates the offset from the base timestamp at the right resolution.
    * @param base A non-null base time.
@@ -208,6 +338,24 @@ public class PBufNumericTimeSeriesSerdes implements PBufIteratorSerdes {
       return value.msEpoch() - base.msEpoch();
     default:
       return value.epoch() - base.epoch();
+    }
+  }
+
+  private long offset(final TimeStampPB.TimeStamp base,
+                      final TimeStamp value,
+                      final ChronoUnit resolution) {
+    final long seconds;
+    switch(resolution) {
+      case NANOS:
+      case MICROS:
+        seconds = value.epoch() - base.getEpoch();
+        return (seconds * 1000L * 1000L * 1000L) + (value.nanos() - base.getNanos());
+      case MILLIS:
+        seconds = value.epoch() - base.getEpoch();
+        return (seconds * 1000L);
+
+      default:
+        return value.epoch() - base.getEpoch();
     }
   }
 }

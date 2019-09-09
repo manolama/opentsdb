@@ -30,7 +30,6 @@ import net.opentsdb.exceptions.SerdesException;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.serdes.PBufSerdesFactory;
-import net.opentsdb.query.serdes.SerdesOptions;
 import net.opentsdb.rollup.RollupConfig;
 
 /**
@@ -59,12 +58,10 @@ public class PBufQueryResult implements QueryResult {
    * Default ctor.
    * @param factory A non-null factory.
    * @param node A non-null node that owns this data.
-   * @param options A non-null options object.
    * @param stream The input stream to parse.
    */
   public PBufQueryResult(final PBufSerdesFactory factory, 
                          final QueryNode node, 
-                         final SerdesOptions options, 
                          final InputStream stream) {
     this.factory = factory;
     this.node = node;
@@ -84,12 +81,10 @@ public class PBufQueryResult implements QueryResult {
    * Ctor from a result.
    * @param factory A non-null factory.
    * @param node A non-null node that owns this data.
-   * @param options A non-null options object.
    * @param result The non-null result to parse.
    */
   public PBufQueryResult(final PBufSerdesFactory factory, 
                          final QueryNode node, 
-                         final SerdesOptions options, 
                          final QueryResultPB.QueryResult result) {
     this.factory = factory;
     this.node = node;

@@ -60,10 +60,7 @@ public class PBufSerdes implements TimeSeriesSerdes {
   
   /** The query context we belong to. */
   protected final QueryContext context;
-  
-  /** The config. */
-  protected final SerdesOptions options;
-  
+
   /** The output stream for serialization. */
   protected final OutputStream output_stream;
   
@@ -74,12 +71,10 @@ public class PBufSerdes implements TimeSeriesSerdes {
    * Serialization ctor.
    * @param factory The non-null factory we came from.
    * @param context The non-null context to deal with.
-   * @param options The non-null options to pull from.
    * @param stream The output stream to write to.
    */
   public PBufSerdes(final PBufSerdesFactory factory,
                     final QueryContext context,
-                    final SerdesOptions options, 
                     final OutputStream stream) {
     if (factory == null) {
       throw new IllegalArgumentException("Factory cannot be null.");
@@ -87,13 +82,9 @@ public class PBufSerdes implements TimeSeriesSerdes {
     if (context == null) {
       throw new IllegalArgumentException("Context cannot be null.");
     }
-    if (options == null) {
-      throw new IllegalArgumentException("Options cannot be null.");
-    }
     // NOTE: Stream can be null if we're just calling serializeResult.
     this.factory = factory;
     this.context = context;
-    this.options = options;
     output_stream = stream;
     input_stream = null;
   }
@@ -123,7 +114,6 @@ public class PBufSerdes implements TimeSeriesSerdes {
     }
     this.factory = factory;
     this.context = context;
-    this.options = options;
     output_stream = null;
     input_stream = stream;
   }
@@ -190,7 +180,7 @@ public class PBufSerdes implements TimeSeriesSerdes {
     }
     final PBufQueryResult result;
     try {
-      result = new PBufQueryResult(factory, node, options, input_stream);
+      result = new PBufQueryResult(factory, node, input_stream);
       if (child != null) {
         child.setSuccessTags().finish();
       }
@@ -224,7 +214,9 @@ public class PBufSerdes implements TimeSeriesSerdes {
   public QueryResultPB.QueryResult serializeResult(final QueryResult result) {
     final QueryResultPB.QueryResult.Builder result_builder = 
         QueryResultPB.QueryResult.newBuilder()
-          .setDataSource(result.dataSource());
+          .setDataSource(result.dataSource())
+          .setNodeId(result.source().config().getId());
+
     if (result.timeSpecification() != null) {
       result_builder.setTimeSpecification(TimeSpecification.newBuilder()
           .setStart(TimeStamp.newBuilder()
@@ -255,7 +247,7 @@ public class PBufSerdes implements TimeSeriesSerdes {
           }
           continue;
         }
-        serdes.serialize(ts_builder, context, options, result, iterator);
+        serdes.serialize(ts_builder, context, result, iterator);
       }
       
       result_builder.addTimeseries(ts_builder);

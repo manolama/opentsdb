@@ -43,7 +43,7 @@ public class PBufTimeSeries implements TimeSeries {
   
   /** The protobuf time series. */
   private final TimeSeriesPB.TimeSeries time_series;
-  
+
   /** The wrapper around the protobuf time series ID. */
   private PBufTimeSeriesId id;
   
@@ -69,6 +69,7 @@ public class PBufTimeSeries implements TimeSeries {
     this.time_series = time_series;
     data = Maps.newHashMapWithExpectedSize(time_series.getDataCount());
     for (final TimeSeriesData data : time_series.getDataList()) {
+      System.out.println(tsdb.getRegistry().getType(data.getType()));
       final TypeToken<? extends TimeSeriesDataType> type = 
           tsdb.getRegistry().getType(data.getType());
       if (type == null) {

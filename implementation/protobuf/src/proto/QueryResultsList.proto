@@ -15,32 +15,16 @@
 syntax = "proto3";
 
 option java_package = "net.opentsdb.data.pbuf";
-option java_outer_classname = "QueryResultPB";
+option java_outer_classname = "QueryResultsListPB";
 
-import "TimeSeries.proto";
-import "TimeSpecification.proto";
+import "QueryResult.proto";
 
 /*
- * A net.opentsdb.query.QueryResult implementation. 
+ * A net.opentsdb.query.QueryResult implementation.
  */
-message QueryResult {
+message QueryResultsList {
 
-  /* The list of time series objects. */
-  repeated TimeSeries timeseries = 1;
+  /* The list of Query Result objects. */
+  repeated QueryResult results = 1;
 
-  /* An ordinal into the Java ChronoUnit enum. */
-  uint32 resolution = 2;
-  
-  /* The sequence of the result in the orignal order. */
-  uint64 sequence_id = 3;
-  
-  /* The time spec, may be null. */
-  TimeSpecification time_specification = 4;
-  
-  /* The name of the data source. */
-  string data_source = 5;
-
-  /* The id of the associated Query Node. */
-  string node_id = 6;
-  
 }

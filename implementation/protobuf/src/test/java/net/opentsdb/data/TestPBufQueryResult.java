@@ -47,7 +47,7 @@ public class TestPBufQueryResult {
     TSDB tsdb = mock(TSDB.class);
     QueryPipelineContext context = mock(QueryPipelineContext.class);
     when(context.tsdb()).thenReturn(tsdb);
-    
+
     QueryResult pbuf = QueryResult.newBuilder()
         .setResolution(2)
         .setSequenceId(42)

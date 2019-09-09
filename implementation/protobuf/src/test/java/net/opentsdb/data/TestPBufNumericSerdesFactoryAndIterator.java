@@ -49,550 +49,550 @@ import net.opentsdb.query.serdes.SerdesOptions;
 
 public class TestPBufNumericSerdesFactoryAndIterator {
 
-  private SemanticQuery query;
-  private SerdesOptions options;
-  private QueryContext ctx;
-  private QueryResult result;
-  private List<QueryNodeConfig> graph;
-  
-  @Before
-  public void before() throws Exception {
-    options = mock(SerdesOptions.class);
-    ctx = mock(QueryContext.class);
-    
-    graph = Lists.newArrayList(DefaultTimeSeriesDataSourceConfig.newBuilder()
-        .setMetric(MetricLiteralFilter.newBuilder()
-            .setMetric("sys.cpu.user")
-            .build())
-        .setId("m1")
-        .build());
-    
-    query = SemanticQuery.newBuilder()
-        .setStart("1525824000")
-        .setEnd("1525827600")
-        .setTimeZone("UTC")
-        .setMode(QueryMode.SINGLE)
-        .setExecutionGraph(graph)
-        .build();
-    when(ctx.query()).thenReturn(query);
+    private SemanticQuery query;
+    private SerdesOptions options;
+    private QueryContext ctx;
+    private QueryResult result;
+    private List<QueryNodeConfig> graph;
 
-    result = mock(QueryResult.class);
-    when(result.resolution()).thenReturn(ChronoUnit.SECONDS);
-  }
-  
-  @Test
-  public void serializeSeconds() throws Exception {
-    PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
-    
-    MockTimeSeries ts = new MockTimeSeries(
-        BaseTimeSeriesStringId.newBuilder()
-        .setMetric("metric.foo")
-        .addTags("host", "web01")
-        .build());
-    
-    MutableNumericValue v = new MutableNumericValue();
-    v.reset(new MillisecondTimeStamp(1525824000000L), 42);
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.reset(new MillisecondTimeStamp(1525824060000L), 25.6);
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.resetNull(new MillisecondTimeStamp(1525824120000L));
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.reset(new MillisecondTimeStamp(1525824180000L), Double.NaN);
-    ts.addValue(v);
-    
-    TimeSeriesData data = factory.serialize(ctx, options, result, 
-        ts.iterator(NumericType.TYPE).get());
-    
-    assertEquals(1, data.getSegmentsCount());
-    assertEquals(1525824000, data.getSegments(0).getStart().getEpoch());
-    assertEquals(0, data.getSegments(0).getStart().getNanos());
-    assertEquals("UTC", data.getSegments(0).getStart().getZoneId());
-    assertEquals(1525827600, data.getSegments(0).getEnd().getEpoch());
-    assertEquals(0, data.getSegments(0).getEnd().getNanos());
-    assertEquals("UTC", data.getSegments(0).getEnd().getZoneId());
-    assertTrue(data.getSegments(0).getData().is(NumericSegment.class));
-    
-    PBufNumericIterator iterator = new PBufNumericIterator(data);
-    assertTrue(iterator.hasNext());
-    
-    TimeSeriesValue<NumericType> value = iterator.next();
-    assertEquals(1525824000, value.timestamp().epoch());
-    assertEquals(42, value.value().longValue());
-    
-    value = iterator.next();
-    assertEquals(1525824060, value.timestamp().epoch());
-    assertEquals(25.6, value.value().doubleValue(), 0.001);
-    
-    value = iterator.next();
-    assertEquals(1525824120, value.timestamp().epoch());
-    assertNull(value.value());
-    
-    value = iterator.next();
-    assertEquals(1525824180, value.timestamp().epoch());
-    assertTrue(Double.isNaN(value.value().doubleValue()));
-    
-    assertFalse(iterator.hasNext());
-  }
-  
-  @Test
-  public void serializeMilliSeconds() throws Exception {
-    PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
-    when(result.resolution()).thenReturn(ChronoUnit.MILLIS);
-    
-    MockTimeSeries ts = new MockTimeSeries(
-        BaseTimeSeriesStringId.newBuilder()
-        .setMetric("metric.foo")
-        .addTags("host", "web01")
-        .build());
-    
-    MutableNumericValue v = new MutableNumericValue();
-    v.reset(new MillisecondTimeStamp(1525824000500L), 42);
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.reset(new MillisecondTimeStamp(1525824060250L), 25.6);
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.resetNull(new MillisecondTimeStamp(1525824120750L));
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.reset(new MillisecondTimeStamp(1525824180001L), Double.NaN);
-    ts.addValue(v);
-    
-    TimeSeriesData data = factory.serialize(ctx, options, result, 
-        ts.iterator(NumericType.TYPE).get());
-    assertEquals(1, data.getSegmentsCount());
-    assertEquals(1525824000, data.getSegments(0).getStart().getEpoch());
-    assertEquals(0, data.getSegments(0).getStart().getNanos());
-    assertEquals("UTC", data.getSegments(0).getStart().getZoneId());
-    assertEquals(1525827600, data.getSegments(0).getEnd().getEpoch());
-    assertEquals(0, data.getSegments(0).getEnd().getNanos());
-    assertEquals("UTC", data.getSegments(0).getEnd().getZoneId());
-    assertTrue(data.getSegments(0).getData().is(NumericSegment.class));
-    
-    PBufNumericIterator iterator = new PBufNumericIterator(data);
-    assertTrue(iterator.hasNext());
-    
-    TimeSeriesValue<NumericType> value = iterator.next();
-    assertEquals(1525824000500L, value.timestamp().msEpoch());
-    assertEquals(42, value.value().longValue());
-    
-    value = iterator.next();
-    assertEquals(1525824060250L, value.timestamp().msEpoch());
-    assertEquals(25.6, value.value().doubleValue(), 0.001);
-    
-    value = iterator.next();
-    assertEquals(1525824120750L, value.timestamp().msEpoch());
-    assertNull(value.value());
-    
-    value = iterator.next();
-    assertEquals(1525824180001L, value.timestamp().msEpoch());
-    assertTrue(Double.isNaN(value.value().doubleValue()));
-    
-    assertFalse(iterator.hasNext());
-  }
+    @Before
+    public void before() throws Exception {
+        options = mock(SerdesOptions.class);
+        ctx = mock(QueryContext.class);
 
-  @Test
-  public void serializeNanoSeconds() throws Exception {
-    PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
-    when(result.resolution()).thenReturn(ChronoUnit.NANOS);
-    final ZoneId tz = ZoneId.of("America/Denver");
-    
-    MockTimeSeries ts = new MockTimeSeries(
-        BaseTimeSeriesStringId.newBuilder()
-        .setMetric("metric.foo")
-        .addTags("host", "web01")
-        .build());
-    
-    MutableNumericValue v = new MutableNumericValue();
-    v.reset(new ZonedNanoTimeStamp(1525824000, 250, tz), 42);
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.reset(new ZonedNanoTimeStamp(1525824060, 123, tz), 25.6);
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.resetNull(new ZonedNanoTimeStamp(1525824120, 1234443, tz));
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.reset(new ZonedNanoTimeStamp(1525824180, 42, tz), Double.NaN);
-    ts.addValue(v);
-    
-    TimeSeriesData data = factory.serialize(ctx, options, result, 
-        ts.iterator(NumericType.TYPE).get());
-    assertEquals(1, data.getSegmentsCount());
-    assertEquals(1525824000, data.getSegments(0).getStart().getEpoch());
-    assertEquals(0, data.getSegments(0).getStart().getNanos());
-    assertEquals("UTC", data.getSegments(0).getStart().getZoneId());
-    assertEquals(1525827600, data.getSegments(0).getEnd().getEpoch());
-    assertEquals(0, data.getSegments(0).getEnd().getNanos());
-    assertEquals("UTC", data.getSegments(0).getEnd().getZoneId());
-    assertTrue(data.getSegments(0).getData().is(NumericSegment.class));
-    
-    PBufNumericIterator iterator = new PBufNumericIterator(data);
-    assertTrue(iterator.hasNext());
-    
-    TimeSeriesValue<NumericType> value = iterator.next();
-    assertEquals(1525824000L, value.timestamp().epoch());
-    assertEquals(250, value.timestamp().nanos());
-    assertEquals(42, value.value().longValue());
-    
-    value = iterator.next();
-    assertEquals(1525824060, value.timestamp().epoch());
-    assertEquals(123, value.timestamp().nanos());
-    assertEquals(25.6, value.value().doubleValue(), 0.001);
-    
-    value = iterator.next();
-    assertEquals(1525824120, value.timestamp().epoch());
-    assertEquals(1234443, value.timestamp().nanos());
-    assertNull(value.value());
-    
-    value = iterator.next();
-    assertEquals(1525824180, value.timestamp().epoch());
-    assertEquals(42, value.timestamp().nanos());
-    assertTrue(Double.isNaN(value.value().doubleValue()));
-    
-    assertFalse(iterator.hasNext());
-  }
-  
-  @Test
-  public void serializeAllNulls() throws Exception {
-    PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
-    
-    MockTimeSeries ts = new MockTimeSeries(
-        BaseTimeSeriesStringId.newBuilder()
-        .setMetric("metric.foo")
-        .addTags("host", "web01")
-        .build());
-    
-    MutableNumericValue v = new MutableNumericValue();
-    v.resetNull(new MillisecondTimeStamp(1525824000000L));
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.resetNull(new MillisecondTimeStamp(1525824060000L));
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.resetNull(new MillisecondTimeStamp(1525824120000L));
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.resetNull(new MillisecondTimeStamp(1525824180000L));
-    ts.addValue(v);
-    
-    TimeSeriesData data = factory.serialize(ctx, options, result, 
-        ts.iterator(NumericType.TYPE).get());
-    PBufNumericIterator iterator = new PBufNumericIterator(data);
-    long timestamp = 1525824000000L;
-    while(iterator.hasNext()) {
-      TimeSeriesValue<NumericType> value = iterator.next();
-      assertEquals(timestamp, value.timestamp().msEpoch());
-      assertNull(value.value());
-      timestamp += 60000;
-    }
-    assertEquals(1525824240000L, timestamp);
-  }
+        graph = Lists.newArrayList(DefaultTimeSeriesDataSourceConfig.newBuilder()
+                .setMetric(MetricLiteralFilter.newBuilder()
+                        .setMetric("sys.cpu.user")
+                        .build())
+                .setId("m1")
+                .build());
 
-  @Test
-  public void serializeResolutionScrewUp() throws Exception {
-    PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
-    when(result.resolution()).thenReturn(ChronoUnit.SECONDS);
-    
-    MockTimeSeries ts = new MockTimeSeries(
-        BaseTimeSeriesStringId.newBuilder()
-        .setMetric("metric.foo")
-        .addTags("host", "web01")
-        .build());
-    
-    MutableNumericValue v = new MutableNumericValue();
-    v.reset(new MillisecondTimeStamp(1525824000250L), 42);
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.reset(new MillisecondTimeStamp(1525824000500L), 25.6);
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.resetNull(new MillisecondTimeStamp(1525824000750L));
-    ts.addValue(v);
-    
-    v = new MutableNumericValue();
-    v.reset(new MillisecondTimeStamp(1525824180001L), Double.NaN);
-    ts.addValue(v);
-    
-    try {
-      factory.serialize(ctx, options, result, 
-          ts.iterator(NumericType.TYPE).get());
-      fail("Expected SerdesException");
-    } catch (SerdesException e) { }
-  }
-  
-  @Test
-  public void iteratorEmpty() throws Exception {
-    TimeSeriesData source = TimeSeriesData.newBuilder()
-        .build();
-    PBufNumericIterator iterator = new PBufNumericIterator(source);
-    assertFalse(iterator.hasNext());
-  }
-  
-  @Test
-  public void iteratorCtor() throws Exception {
-    try {
-      new PBufNumericIterator(null);
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) { }
-  }
-  
-  @Test
-  public void iteratorMultipleSegments() throws Exception {
-    PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
-    
-    MockTimeSeries ts = new MockTimeSeries(
-        BaseTimeSeriesStringId.newBuilder()
-        .setMetric("metric.foo")
-        .addTags("host", "web01")
-        .build());
-    
-    long time = 1525824000000L;
-    int integer = 0;
-    for (int i = 0; i < 6; i++) {
-      MutableNumericValue v = new MutableNumericValue();
-      v.reset(new MillisecondTimeStamp(time + (i * 600000)), integer++);
-      ts.addValue(v);
+        query = SemanticQuery.newBuilder()
+                .setStart("1525824000")
+                .setEnd("1525827600")
+                .setTimeZone("UTC")
+                .setMode(QueryMode.SINGLE)
+                .setExecutionGraph(graph)
+                .build();
+        when(ctx.query()).thenReturn(query);
+
+        result = mock(QueryResult.class);
+        when(result.resolution()).thenReturn(ChronoUnit.SECONDS);
     }
-    
-    TimeSeriesData data = factory.serialize(ctx, options, result, 
-        ts.iterator(NumericType.TYPE).get());
-    assertEquals(1, data.getSegmentsCount());
-    assertEquals(1525824000, data.getSegments(0).getStart().getEpoch());
-    assertEquals(0, data.getSegments(0).getStart().getNanos());
-    assertEquals("UTC", data.getSegments(0).getStart().getZoneId());
-    assertEquals(1525827600, data.getSegments(0).getEnd().getEpoch());
-    assertEquals(0, data.getSegments(0).getEnd().getNanos());
-    assertEquals("UTC", data.getSegments(0).getEnd().getZoneId());
-    assertTrue(data.getSegments(0).getData().is(NumericSegment.class));
-    
-    query = SemanticQuery.newBuilder()
-        .setStart("1525827600")
-        .setEnd("1525831200")
-        .setTimeZone("UTC")
-        .setMode(QueryMode.SINGLE)
-        .setExecutionGraph(graph)
-        .build();
-    when(ctx.query()).thenReturn(query);
-    
-    ts = new MockTimeSeries(
-        BaseTimeSeriesStringId.newBuilder()
-        .setMetric("metric.foo")
-        .addTags("host", "web01")
-        .build());
-    
-    time = 1525827600000L;
-    for (int i = 0; i < 6; i++) {
-      MutableNumericValue v = new MutableNumericValue();
-      v.reset(new MillisecondTimeStamp(time + (i * 600000)), integer++);
-      ts.addValue(v);
+
+    @Test
+    public void serializeSeconds() throws Exception {
+        PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
+
+        MockTimeSeries ts = new MockTimeSeries(
+                BaseTimeSeriesStringId.newBuilder()
+                        .setMetric("metric.foo")
+                        .addTags("host", "web01")
+                        .build());
+
+        MutableNumericValue v = new MutableNumericValue();
+        v.reset(new MillisecondTimeStamp(1525824000000L), 42);
+        ts.addValue(v);
+
+        v = new MutableNumericValue();
+        v.reset(new MillisecondTimeStamp(1525824060000L), 25.6);
+        ts.addValue(v);
+
+        v = new MutableNumericValue();
+        v.resetNull(new MillisecondTimeStamp(1525824120000L));
+        ts.addValue(v);
+
+        v = new MutableNumericValue();
+        v.reset(new MillisecondTimeStamp(1525824180000L), Double.NaN);
+        ts.addValue(v);
+
+        TimeSeriesData data = factory.serialize(ctx, options, result,
+                ts.iterator(NumericType.TYPE).get());
+
+        assertEquals(1, data.getSegmentsCount());
+        assertEquals(1525824000, data.getSegments(0).getStart().getEpoch());
+        assertEquals(0, data.getSegments(0).getStart().getNanos());
+        assertEquals("UTC", data.getSegments(0).getStart().getZoneId());
+        assertEquals(1525827600, data.getSegments(0).getEnd().getEpoch());
+        assertEquals(0, data.getSegments(0).getEnd().getNanos());
+        assertEquals("UTC", data.getSegments(0).getEnd().getZoneId());
+        assertTrue(data.getSegments(0).getData().is(NumericSegment.class));
+
+        PBufNumericIterator iterator = new PBufNumericIterator(data);
+        assertTrue(iterator.hasNext());
+
+        TimeSeriesValue<NumericType> value = iterator.next();
+        assertEquals(1525824000, value.timestamp().epoch());
+        assertEquals(42, value.value().longValue());
+
+        value = iterator.next();
+        assertEquals(1525824060, value.timestamp().epoch());
+        assertEquals(25.6, value.value().doubleValue(), 0.001);
+
+        value = iterator.next();
+        assertEquals(1525824120, value.timestamp().epoch());
+        assertNull(value.value());
+
+        value = iterator.next();
+        assertEquals(1525824180, value.timestamp().epoch());
+        assertTrue(Double.isNaN(value.value().doubleValue()));
+
+        assertFalse(iterator.hasNext());
     }
-    
-    TimeSeriesData.Builder builder = TimeSeriesData.newBuilder(data);
-    TimeSeriesData data2 = factory.serialize(ctx, options, result, 
-        ts.iterator(NumericType.TYPE).get());
-    builder.addSegments(data2.getSegments(0));
-    
-    query = SemanticQuery.newBuilder()
-        .setStart("1525831200")
-        .setEnd("1525834800")
-        .setTimeZone("UTC")
-        .setMode(QueryMode.SINGLE)
-        .setExecutionGraph(graph)
-        .build();
-    when(ctx.query()).thenReturn(query);
-    
-    ts = new MockTimeSeries(
-        BaseTimeSeriesStringId.newBuilder()
-        .setMetric("metric.foo")
-        .addTags("host", "web01")
-        .build());
-    
-    time = 1525831200000L;
-    for (int i = 0; i < 6; i++) {
-      MutableNumericValue v = new MutableNumericValue();
-      v.reset(new MillisecondTimeStamp(time + (i * 600000)), integer++);
-      ts.addValue(v);
+//
+//    @Test
+//    public void serializeMilliSeconds() throws Exception {
+//        PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
+//        when(result.resolution()).thenReturn(ChronoUnit.MILLIS);
+//
+//        MockTimeSeries ts = new MockTimeSeries(
+//                BaseTimeSeriesStringId.newBuilder()
+//                        .setMetric("metric.foo")
+//                        .addTags("host", "web01")
+//                        .build());
+//
+//        MutableNumericValue v = new MutableNumericValue();
+//        v.reset(new MillisecondTimeStamp(1525824000500L), 42);
+//        ts.addValue(v);
+//
+//        v = new MutableNumericValue();
+//        v.reset(new MillisecondTimeStamp(1525824060250L), 25.6);
+//        ts.addValue(v);
+//
+//        v = new MutableNumericValue();
+//        v.resetNull(new MillisecondTimeStamp(1525824120750L));
+//        ts.addValue(v);
+//
+//        v = new MutableNumericValue();
+//        v.reset(new MillisecondTimeStamp(1525824180001L), Double.NaN);
+//        ts.addValue(v);
+//
+//        TimeSeriesData data = factory.serialize(ctx, options, result,
+//                ts.iterator(NumericType.TYPE).get());
+//        assertEquals(1, data.getSegmentsCount());
+//        assertEquals(1525824000, data.getSegments(0).getStart().getEpoch());
+//        assertEquals(0, data.getSegments(0).getStart().getNanos());
+//        assertEquals("UTC", data.getSegments(0).getStart().getZoneId());
+//        assertEquals(1525827600, data.getSegments(0).getEnd().getEpoch());
+//        assertEquals(0, data.getSegments(0).getEnd().getNanos());
+//        assertEquals("UTC", data.getSegments(0).getEnd().getZoneId());
+//        assertTrue(data.getSegments(0).getData().is(NumericSegment.class));
+//
+//        PBufNumericIterator iterator = new PBufNumericIterator(data);
+//        assertTrue(iterator.hasNext());
+//
+//        TimeSeriesValue<NumericType> value = iterator.next();
+//        assertEquals(1525824000500L, value.timestamp().msEpoch());
+//        assertEquals(42, value.value().longValue());
+//
+//        value = iterator.next();
+//        assertEquals(1525824060250L, value.timestamp().msEpoch());
+//        assertEquals(25.6, value.value().doubleValue(), 0.001);
+//
+//        value = iterator.next();
+//        assertEquals(1525824120750L, value.timestamp().msEpoch());
+//        assertNull(value.value());
+//
+//        value = iterator.next();
+//        assertEquals(1525824180001L, value.timestamp().msEpoch());
+//        assertTrue(Double.isNaN(value.value().doubleValue()));
+//
+//        assertFalse(iterator.hasNext());
+//    }
+
+    @Test
+    public void serializeNanoSeconds() throws Exception {
+        PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
+        when(result.resolution()).thenReturn(ChronoUnit.NANOS);
+        final ZoneId tz = ZoneId.of("America/Denver");
+
+        MockTimeSeries ts = new MockTimeSeries(
+                BaseTimeSeriesStringId.newBuilder()
+                        .setMetric("metric.foo")
+                        .addTags("host", "web01")
+                        .build());
+
+        MutableNumericValue v = new MutableNumericValue();
+        v.reset(new ZonedNanoTimeStamp(1525824000, 250, tz), 42);
+        ts.addValue(v);
+
+        v = new MutableNumericValue();
+        v.reset(new ZonedNanoTimeStamp(1525824060, 123, tz), 25.6);
+        ts.addValue(v);
+
+        v = new MutableNumericValue();
+        v.resetNull(new ZonedNanoTimeStamp(1525824120, 1234443, tz));
+        ts.addValue(v);
+
+        v = new MutableNumericValue();
+        v.reset(new ZonedNanoTimeStamp(1525824180, 42, tz), Double.NaN);
+        ts.addValue(v);
+
+        TimeSeriesData data = factory.serialize(ctx, options, result,
+                ts.iterator(NumericType.TYPE).get());
+        assertEquals(1, data.getSegmentsCount());
+        assertEquals(1525824000, data.getSegments(0).getStart().getEpoch());
+        assertEquals(0, data.getSegments(0).getStart().getNanos());
+        assertEquals("UTC", data.getSegments(0).getStart().getZoneId());
+        assertEquals(1525827600, data.getSegments(0).getEnd().getEpoch());
+        assertEquals(0, data.getSegments(0).getEnd().getNanos());
+        assertEquals("UTC", data.getSegments(0).getEnd().getZoneId());
+        assertTrue(data.getSegments(0).getData().is(NumericSegment.class));
+
+        PBufNumericIterator iterator = new PBufNumericIterator(data);
+        assertTrue(iterator.hasNext());
+
+        TimeSeriesValue<NumericType> value = iterator.next();
+        assertEquals(1525824000L, value.timestamp().epoch());
+        assertEquals(250, value.timestamp().nanos());
+        assertEquals(42, value.value().longValue());
+
+        value = iterator.next();
+        assertEquals(1525824060, value.timestamp().epoch());
+        assertEquals(123, value.timestamp().nanos());
+        assertEquals(25.6, value.value().doubleValue(), 0.001);
+
+        value = iterator.next();
+        assertEquals(1525824120, value.timestamp().epoch());
+        assertEquals(1234443, value.timestamp().nanos());
+        assertNull(value.value());
+
+        value = iterator.next();
+        assertEquals(1525824180, value.timestamp().epoch());
+        assertEquals(42, value.timestamp().nanos());
+        assertTrue(Double.isNaN(value.value().doubleValue()));
+
+        assertFalse(iterator.hasNext());
     }
-    
-    data2 = factory.serialize(ctx, options, result, 
-        ts.iterator(NumericType.TYPE).get());
-    builder.addSegments(data2.getSegments(0));
-    
-    PBufNumericIterator iterator = new PBufNumericIterator(builder.build());
-    
-    time = 1525824000000L;
-    integer = 0;
-    while(iterator.hasNext()) {
-      TimeSeriesValue<NumericType> value = iterator.next();
-      assertEquals(time, value.timestamp().msEpoch());
-      assertEquals(integer++, value.value().longValue());
-      time += 600000;
+
+    @Test
+    public void serializeAllNulls() throws Exception {
+        PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
+
+        MockTimeSeries ts = new MockTimeSeries(
+                BaseTimeSeriesStringId.newBuilder()
+                        .setMetric("metric.foo")
+                        .addTags("host", "web01")
+                        .build());
+
+        MutableNumericValue v = new MutableNumericValue();
+        v.resetNull(new MillisecondTimeStamp(1525824000000L));
+        ts.addValue(v);
+
+        v = new MutableNumericValue();
+        v.resetNull(new MillisecondTimeStamp(1525824060000L));
+        ts.addValue(v);
+
+        v = new MutableNumericValue();
+        v.resetNull(new MillisecondTimeStamp(1525824120000L));
+        ts.addValue(v);
+
+        v = new MutableNumericValue();
+        v.resetNull(new MillisecondTimeStamp(1525824180000L));
+        ts.addValue(v);
+
+        TimeSeriesData data = factory.serialize(ctx, options, result,
+                ts.iterator(NumericType.TYPE).get());
+        PBufNumericIterator iterator = new PBufNumericIterator(data);
+        long timestamp = 1525824000000L;
+        while(iterator.hasNext()) {
+            TimeSeriesValue<NumericType> value = iterator.next();
+            assertEquals(timestamp, value.timestamp().msEpoch());
+            assertNull(value.value());
+            timestamp += 60000;
+        }
+        assertEquals(1525824240000L, timestamp);
     }
-    assertEquals(1525834800000L, time);
-  }
-  
-  @Test
-  public void iteratorMultipleSegmentsEmptyMiddle() throws Exception {
-    PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
-    
-    MockTimeSeries ts = new MockTimeSeries(
-        BaseTimeSeriesStringId.newBuilder()
-        .setMetric("metric.foo")
-        .addTags("host", "web01")
-        .build());
-    
-    long time = 1525824000000L;
-    int integer = 0;
-    for (int i = 0; i < 6; i++) {
-      MutableNumericValue v = new MutableNumericValue();
-      v.reset(new MillisecondTimeStamp(time + (i * 600000)), integer++);
-      ts.addValue(v);
+
+    @Test
+    public void serializeResolutionScrewUp() throws Exception {
+        PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
+        when(result.resolution()).thenReturn(ChronoUnit.SECONDS);
+
+        MockTimeSeries ts = new MockTimeSeries(
+                BaseTimeSeriesStringId.newBuilder()
+                        .setMetric("metric.foo")
+                        .addTags("host", "web01")
+                        .build());
+
+        MutableNumericValue v = new MutableNumericValue();
+        v.reset(new MillisecondTimeStamp(1525824000250L), 42);
+        ts.addValue(v);
+
+        v = new MutableNumericValue();
+        v.reset(new MillisecondTimeStamp(1525824000500L), 25.6);
+        ts.addValue(v);
+
+        v = new MutableNumericValue();
+        v.resetNull(new MillisecondTimeStamp(1525824000750L));
+        ts.addValue(v);
+
+        v = new MutableNumericValue();
+        v.reset(new MillisecondTimeStamp(1525824180001L), Double.NaN);
+        ts.addValue(v);
+
+        try {
+            factory.serialize(ctx, options, result,
+                    ts.iterator(NumericType.TYPE).get());
+            fail("Expected SerdesException");
+        } catch (SerdesException e) { }
     }
-    
-    TimeSeriesData data = factory.serialize(ctx, options, result, 
-        ts.iterator(NumericType.TYPE).get());
-    assertEquals(1, data.getSegmentsCount());
-    assertEquals(1525824000, data.getSegments(0).getStart().getEpoch());
-    assertEquals(0, data.getSegments(0).getStart().getNanos());
-    assertEquals("UTC", data.getSegments(0).getStart().getZoneId());
-    assertEquals(1525827600, data.getSegments(0).getEnd().getEpoch());
-    assertEquals(0, data.getSegments(0).getEnd().getNanos());
-    assertEquals("UTC", data.getSegments(0).getEnd().getZoneId());
-    assertTrue(data.getSegments(0).getData().is(NumericSegment.class));
-    
-    query = SemanticQuery.newBuilder()
-        .setStart("1525827600")
-        .setEnd("1525831200")
-        .setTimeZone("UTC")
-        .setMode(QueryMode.SINGLE)
-        .setExecutionGraph(graph)
-        .build();
-    when(ctx.query()).thenReturn(query);
-    
-    // no data!
-    
-    TimeSeriesData.Builder builder = TimeSeriesData.newBuilder(data);
-    TimeSeriesData data2 = factory.serialize(ctx, options, result, mock(TypedTimeSeriesIterator.class));
-    builder.addSegments(data2.getSegments(0));
-    
-    query = SemanticQuery.newBuilder()
-        .setStart("1525831200")
-        .setEnd("1525834800")
-        .setTimeZone("UTC")
-        .setMode(QueryMode.SINGLE)
-        .setExecutionGraph(graph)
-        .build();
-    when(ctx.query()).thenReturn(query);
-    
-    ts = new MockTimeSeries(
-        BaseTimeSeriesStringId.newBuilder()
-        .setMetric("metric.foo")
-        .addTags("host", "web01")
-        .build());
-    
-    time = 1525831200000L;
-    integer = 12;
-    for (int i = 0; i < 6; i++) {
-      MutableNumericValue v = new MutableNumericValue();
-      v.reset(new MillisecondTimeStamp(time + (i * 600000)), integer++);
-      ts.addValue(v);
+
+    @Test
+    public void iteratorEmpty() throws Exception {
+        TimeSeriesData source = TimeSeriesData.newBuilder()
+                .build();
+        PBufNumericIterator iterator = new PBufNumericIterator(source);
+        assertFalse(iterator.hasNext());
     }
-    
-    data2 = factory.serialize(ctx, options, result, 
-        ts.iterator(NumericType.TYPE).get());
-    builder.addSegments(data2.getSegments(0));
-    
-    PBufNumericIterator iterator = new PBufNumericIterator(builder.build());
-    
-    time = 1525824000000L;
-    integer = 0;
-    while(iterator.hasNext()) {
-      TimeSeriesValue<NumericType> value = iterator.next();
-      assertEquals(time, value.timestamp().msEpoch());
-      assertEquals(integer++, value.value().longValue());
-      if (value.timestamp().msEpoch() == 1525827000000L) {
+
+    @Test
+    public void iteratorCtor() throws Exception {
+        try {
+            new PBufNumericIterator(null);
+            fail("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException e) { }
+    }
+
+    @Test
+    public void iteratorMultipleSegments() throws Exception {
+        PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
+
+        MockTimeSeries ts = new MockTimeSeries(
+                BaseTimeSeriesStringId.newBuilder()
+                        .setMetric("metric.foo")
+                        .addTags("host", "web01")
+                        .build());
+
+        long time = 1525824000000L;
+        int integer = 0;
+        for (int i = 0; i < 6; i++) {
+            MutableNumericValue v = new MutableNumericValue();
+            v.reset(new MillisecondTimeStamp(time + (i * 600000)), integer++);
+            ts.addValue(v);
+        }
+
+        TimeSeriesData data = factory.serialize(ctx, options, result,
+                ts.iterator(NumericType.TYPE).get());
+        assertEquals(1, data.getSegmentsCount());
+        assertEquals(1525824000, data.getSegments(0).getStart().getEpoch());
+        assertEquals(0, data.getSegments(0).getStart().getNanos());
+        assertEquals("UTC", data.getSegments(0).getStart().getZoneId());
+        assertEquals(1525827600, data.getSegments(0).getEnd().getEpoch());
+        assertEquals(0, data.getSegments(0).getEnd().getNanos());
+        assertEquals("UTC", data.getSegments(0).getEnd().getZoneId());
+        assertTrue(data.getSegments(0).getData().is(NumericSegment.class));
+
+        query = SemanticQuery.newBuilder()
+                .setStart("1525827600")
+                .setEnd("1525831200")
+                .setTimeZone("UTC")
+                .setMode(QueryMode.SINGLE)
+                .setExecutionGraph(graph)
+                .build();
+        when(ctx.query()).thenReturn(query);
+
+        ts = new MockTimeSeries(
+                BaseTimeSeriesStringId.newBuilder()
+                        .setMetric("metric.foo")
+                        .addTags("host", "web01")
+                        .build());
+
+        time = 1525827600000L;
+        for (int i = 0; i < 6; i++) {
+            MutableNumericValue v = new MutableNumericValue();
+            v.reset(new MillisecondTimeStamp(time + (i * 600000)), integer++);
+            ts.addValue(v);
+        }
+
+        TimeSeriesData.Builder builder = TimeSeriesData.newBuilder(data);
+        TimeSeriesData data2 = factory.serialize(ctx, options, result,
+                ts.iterator(NumericType.TYPE).get());
+        builder.addSegments(data2.getSegments(0));
+
+        query = SemanticQuery.newBuilder()
+                .setStart("1525831200")
+                .setEnd("1525834800")
+                .setTimeZone("UTC")
+                .setMode(QueryMode.SINGLE)
+                .setExecutionGraph(graph)
+                .build();
+        when(ctx.query()).thenReturn(query);
+
+        ts = new MockTimeSeries(
+                BaseTimeSeriesStringId.newBuilder()
+                        .setMetric("metric.foo")
+                        .addTags("host", "web01")
+                        .build());
+
+        time = 1525831200000L;
+        for (int i = 0; i < 6; i++) {
+            MutableNumericValue v = new MutableNumericValue();
+            v.reset(new MillisecondTimeStamp(time + (i * 600000)), integer++);
+            ts.addValue(v);
+        }
+
+        data2 = factory.serialize(ctx, options, result,
+                ts.iterator(NumericType.TYPE).get());
+        builder.addSegments(data2.getSegments(0));
+
+        PBufNumericIterator iterator = new PBufNumericIterator(builder.build());
+
+        time = 1525824000000L;
+        integer = 0;
+        while(iterator.hasNext()) {
+            TimeSeriesValue<NumericType> value = iterator.next();
+            assertEquals(time, value.timestamp().msEpoch());
+            assertEquals(integer++, value.value().longValue());
+            time += 600000;
+        }
+        assertEquals(1525834800000L, time);
+    }
+
+    @Test
+    public void iteratorMultipleSegmentsEmptyMiddle() throws Exception {
+        PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
+
+        MockTimeSeries ts = new MockTimeSeries(
+                BaseTimeSeriesStringId.newBuilder()
+                        .setMetric("metric.foo")
+                        .addTags("host", "web01")
+                        .build());
+
+        long time = 1525824000000L;
+        int integer = 0;
+        for (int i = 0; i < 6; i++) {
+            MutableNumericValue v = new MutableNumericValue();
+            v.reset(new MillisecondTimeStamp(time + (i * 600000)), integer++);
+            ts.addValue(v);
+        }
+
+        TimeSeriesData data = factory.serialize(ctx, options, result,
+                ts.iterator(NumericType.TYPE).get());
+        assertEquals(1, data.getSegmentsCount());
+        assertEquals(1525824000, data.getSegments(0).getStart().getEpoch());
+        assertEquals(0, data.getSegments(0).getStart().getNanos());
+        assertEquals("UTC", data.getSegments(0).getStart().getZoneId());
+        assertEquals(1525827600, data.getSegments(0).getEnd().getEpoch());
+        assertEquals(0, data.getSegments(0).getEnd().getNanos());
+        assertEquals("UTC", data.getSegments(0).getEnd().getZoneId());
+        assertTrue(data.getSegments(0).getData().is(NumericSegment.class));
+
+        query = SemanticQuery.newBuilder()
+                .setStart("1525827600")
+                .setEnd("1525831200")
+                .setTimeZone("UTC")
+                .setMode(QueryMode.SINGLE)
+                .setExecutionGraph(graph)
+                .build();
+        when(ctx.query()).thenReturn(query);
+
+        // no data!
+
+        TimeSeriesData.Builder builder = TimeSeriesData.newBuilder(data);
+        TimeSeriesData data2 = factory.serialize(ctx, options, result, mock(TypedTimeSeriesIterator.class));
+        builder.addSegments(data2.getSegments(0));
+
+        query = SemanticQuery.newBuilder()
+                .setStart("1525831200")
+                .setEnd("1525834800")
+                .setTimeZone("UTC")
+                .setMode(QueryMode.SINGLE)
+                .setExecutionGraph(graph)
+                .build();
+        when(ctx.query()).thenReturn(query);
+
+        ts = new MockTimeSeries(
+                BaseTimeSeriesStringId.newBuilder()
+                        .setMetric("metric.foo")
+                        .addTags("host", "web01")
+                        .build());
+
         time = 1525831200000L;
         integer = 12;
-      } else {
-        time += 600000;
-      }
+        for (int i = 0; i < 6; i++) {
+            MutableNumericValue v = new MutableNumericValue();
+            v.reset(new MillisecondTimeStamp(time + (i * 600000)), integer++);
+            ts.addValue(v);
+        }
+
+        data2 = factory.serialize(ctx, options, result,
+                ts.iterator(NumericType.TYPE).get());
+        builder.addSegments(data2.getSegments(0));
+
+        PBufNumericIterator iterator = new PBufNumericIterator(builder.build());
+
+        time = 1525824000000L;
+        integer = 0;
+        while(iterator.hasNext()) {
+            TimeSeriesValue<NumericType> value = iterator.next();
+            assertEquals(time, value.timestamp().msEpoch());
+            assertEquals(integer++, value.value().longValue());
+            if (value.timestamp().msEpoch() == 1525827000000L) {
+                time = 1525831200000L;
+                integer = 12;
+            } else {
+                time += 600000;
+            }
+        }
+        assertEquals(1525834800000L, time);
     }
-    assertEquals(1525834800000L, time);
-  }
-  
-  @Test
-  public void iteratorMultipleSegmentsAllEmpty() throws Exception {
-    PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
-    
-    TimeSeriesData data = factory.serialize(ctx, options, result, mock(TypedTimeSeriesIterator.class));
-    assertEquals(1, data.getSegmentsCount());
-    assertEquals(1525824000, data.getSegments(0).getStart().getEpoch());
-    assertEquals(0, data.getSegments(0).getStart().getNanos());
-    assertEquals("UTC", data.getSegments(0).getStart().getZoneId());
-    assertEquals(1525827600, data.getSegments(0).getEnd().getEpoch());
-    assertEquals(0, data.getSegments(0).getEnd().getNanos());
-    assertEquals("UTC", data.getSegments(0).getEnd().getZoneId());
-    assertTrue(data.getSegments(0).getData().is(NumericSegment.class));
-    
-    query = SemanticQuery.newBuilder()
-        .setStart("1525827600")
-        .setEnd("1525831200")
-        .setTimeZone("UTC")
-        .setMode(QueryMode.SINGLE)
-        .setExecutionGraph(graph)
-        .build();
-    when(ctx.query()).thenReturn(query);
-    
-    // no data!
-    
-    TimeSeriesData.Builder builder = TimeSeriesData.newBuilder(data);
-    TimeSeriesData data2 = factory.serialize(ctx, options, result, mock(TypedTimeSeriesIterator.class));
-    builder.addSegments(data2.getSegments(0));
-    
-    query = SemanticQuery.newBuilder()
-        .setStart("1525831200")
-        .setEnd("1525834800")
-        .setTimeZone("UTC")
-        .setMode(QueryMode.SINGLE)
-        .setExecutionGraph(graph)
-        .build();
-    when(ctx.query()).thenReturn(query);
-    
-    // no data!
-    
-    data2 = factory.serialize(ctx, options, result, mock(TypedTimeSeriesIterator.class));
-    builder.addSegments(data2.getSegments(0));
-    
-    PBufNumericIterator iterator = new PBufNumericIterator(builder.build());
-    assertFalse(iterator.hasNext());
-  }
-  
-  @Test
-  public void iteratorWrongSegmentType() throws Exception {
-    TimeSeriesData source = TimeSeriesData.newBuilder()
-        .addSegments(TimeSeriesDataSegment.newBuilder())
-        .build();
-    try {
-      new PBufNumericIterator(source);
-      fail("Expected SerdesException");
-    } catch (SerdesException e) { }
-  }
+
+    @Test
+    public void iteratorMultipleSegmentsAllEmpty() throws Exception {
+        PBufNumericTimeSeriesSerdes factory = new PBufNumericTimeSeriesSerdes();
+
+        TimeSeriesData data = factory.serialize(ctx, options, result, mock(TypedTimeSeriesIterator.class));
+        assertEquals(1, data.getSegmentsCount());
+        assertEquals(1525824000, data.getSegments(0).getStart().getEpoch());
+        assertEquals(0, data.getSegments(0).getStart().getNanos());
+        assertEquals("UTC", data.getSegments(0).getStart().getZoneId());
+        assertEquals(1525827600, data.getSegments(0).getEnd().getEpoch());
+        assertEquals(0, data.getSegments(0).getEnd().getNanos());
+        assertEquals("UTC", data.getSegments(0).getEnd().getZoneId());
+        assertTrue(data.getSegments(0).getData().is(NumericSegment.class));
+
+        query = SemanticQuery.newBuilder()
+                .setStart("1525827600")
+                .setEnd("1525831200")
+                .setTimeZone("UTC")
+                .setMode(QueryMode.SINGLE)
+                .setExecutionGraph(graph)
+                .build();
+        when(ctx.query()).thenReturn(query);
+
+        // no data!
+
+        TimeSeriesData.Builder builder = TimeSeriesData.newBuilder(data);
+        TimeSeriesData data2 = factory.serialize(ctx, options, result, mock(TypedTimeSeriesIterator.class));
+        builder.addSegments(data2.getSegments(0));
+
+        query = SemanticQuery.newBuilder()
+                .setStart("1525831200")
+                .setEnd("1525834800")
+                .setTimeZone("UTC")
+                .setMode(QueryMode.SINGLE)
+                .setExecutionGraph(graph)
+                .build();
+        when(ctx.query()).thenReturn(query);
+
+        // no data!
+
+        data2 = factory.serialize(ctx, options, result, mock(TypedTimeSeriesIterator.class));
+        builder.addSegments(data2.getSegments(0));
+
+        PBufNumericIterator iterator = new PBufNumericIterator(builder.build());
+        assertFalse(iterator.hasNext());
+    }
+
+    @Test
+    public void iteratorWrongSegmentType() throws Exception {
+        TimeSeriesData source = TimeSeriesData.newBuilder()
+                .addSegments(TimeSeriesDataSegment.newBuilder())
+                .build();
+        try {
+            new PBufNumericIterator(source);
+            fail("Expected SerdesException");
+        } catch (SerdesException e) { }
+    }
 }
