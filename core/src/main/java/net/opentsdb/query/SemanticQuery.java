@@ -151,8 +151,7 @@ public class SemanticQuery implements TimeSeriesQuery {
     }
     
     mode = builder.mode;
-    cache_mode = builder.cache_mode == null ? CacheMode.NORMAL : 
-      builder.cache_mode;
+    cache_mode = builder.cache_mode;
     serdes_options = builder.serdes_config == null ? 
         Collections.emptyList() : builder.serdes_config;
     log_level = builder.log_level;
@@ -325,6 +324,7 @@ public class SemanticQuery implements TimeSeriesQuery {
            .setMode(mode)
            .setExecutionGraph(Lists.newArrayList(execution_graph))
            .setLogLevel(log_level)
+           .setCacheMode(cache_mode)
            .setSerdesConfigs(Lists.newArrayList(serdes_options));
     if (filters != null) {
       builder.setFilters(Lists.newArrayList(filters.values()));
@@ -545,8 +545,6 @@ public class SemanticQuery implements TimeSeriesQuery {
       } catch (JsonProcessingException e) {
         throw new IllegalStateException("Failed to parse query", e);
       }
-    } else {
-      builder.setCacheMode(CacheMode.NORMAL);
     }
     
     node = root.get("logLevel");

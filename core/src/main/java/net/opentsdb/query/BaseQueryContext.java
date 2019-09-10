@@ -190,7 +190,7 @@ public abstract class BaseQueryContext implements QueryContext {
           .addCallbackDeferring(new FilterCB());
     } else {
       System.out.println("-------- CACHE MODE: " + query.getCacheMode());
-      if (query.getCacheMode() == CacheMode.BYPASS) {
+      if (query.getCacheMode() == null || query.getCacheMode() == CacheMode.BYPASS) {
         pipeline = new LocalPipeline(BaseQueryContext.this, builder_sinks);
       } else {
         pipeline = new ReadCacheQueryPipelineContext(BaseQueryContext.this, builder_sinks);

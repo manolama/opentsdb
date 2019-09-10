@@ -212,7 +212,12 @@ public class RawQueryRpc {
       }
     }
     
-    final SemanticQuery query = query_builder.build();
+    SemanticQuery query = query_builder.build();
+    System.out.println("       CACHE MODE: " + query.getCacheMode());
+    if (tsdb.getQueryFilter() != null) {
+      query = (SemanticQuery) tsdb.getQueryFilter().filter(query, auth_state, log_headers);
+    }
+    
     LOG.info("Executing new query=" + JSON.serializeToString(
         ImmutableMap.<String, Object>builder()
         .put("headers", log_headers == null ? "null" : log_headers)

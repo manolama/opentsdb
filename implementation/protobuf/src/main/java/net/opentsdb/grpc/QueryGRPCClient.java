@@ -90,12 +90,13 @@ public class QueryGRPCClient extends AbstractQueryNode implements
   @Override
   public void onNext(final QueryResultPB.QueryResult next) {
     try {
-      final PBufQueryResult result = new PBufQueryResult(
-          factory.serdes_factory, 
-          this, 
-          null, 
-          next);
-      onNext(result);
+      // TODO
+//      final PBufQueryResult result = new PBufQueryResult(
+//          factory.serdes_factory, 
+//          this, 
+//          null, 
+//          next);
+//      onNext(result);
       completeUpstream(0, 0);
     } catch (Throwable t) {
       sendUpstream(t);

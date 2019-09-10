@@ -19,6 +19,7 @@ import java.util.concurrent.ExecutorService;
 import io.netty.util.Timer;
 import net.opentsdb.configuration.Configuration;
 import net.opentsdb.query.QueryContext;
+import net.opentsdb.query.QueryFilter;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.threadpools.TSDBThreadPoolExecutor;
 
@@ -65,6 +66,8 @@ public interface TSDB {
    * @return A non-null timer.
    */
   public Timer getQueryTimer();
+  
+  public QueryFilter getQueryFilter();
   
   /**
    * Adds a running query to the tracking map so we can clean up resources.

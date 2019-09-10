@@ -1644,7 +1644,7 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
         boolean wrote_data = false;
         // got something to write!
         if (iterators[i].getType() == NumericType.TYPE) {
-          if (false && result.timeSpecification() != null) {
+          if (result.timeSpecification() != null) {
             StringBuilder buf = new StringBuilder();
             int z = 0;
             long delta = (long) start - result.timeSpecification().start().epoch();
@@ -1714,42 +1714,42 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
           }
         } else if (iterators[i].getType() == NumericArrayType.TYPE) {
           // offset
-//          long delta = (long) start - result.timeSpecification().start().epoch();
-//          long interval = result.timeSpecification().interval().get(ChronoUnit.SECONDS);
-//          int offset = (int) (delta / interval);
-//          int array_ts = start;
-//          if (((NumericArrayType) values[i].value()).isInteger()) {
-//            long[] data = ((NumericArrayType) values[i].value()).longArray();
-//            wrote_data = true;
-//            json.writeStartObject();
-//            json.writeArrayFieldStart("NumericType");
-//            while (array_ts < end) {
-//              json.writeNumber(data[offset++]);
-//              array_ts += (int) interval;
-//            }
-//            json.writeEndArray();
-//          } else {
-//            double[] data = ((NumericArrayType) values[i].value()).doubleArray();
-//            StringBuilder buf = new StringBuilder();
-//            int z = 0;
-//            while (array_ts < end) {
-//              if (z++ > 0) {
-//                buf.append(",");
-//              }
-//              if (!Double.isNaN(data[offset])) {
-//                wrote_data = true;
-//              }
-//              buf.append(Double.toString(data[offset++]));
-//              array_ts += (int) interval;
-//            }
-//            
-//            if (wrote_data) {
-//              json.writeStartObject();
-//              json.writeArrayFieldStart("NumericType");
-//              json.writeRaw(buf.toString());
-//              json.writeEndArray();
-//            }
-//          }
+          long delta = (long) start - result.timeSpecification().start().epoch();
+          long interval = result.timeSpecification().interval().get(ChronoUnit.SECONDS);
+          int offset = (int) (delta / interval);
+          int array_ts = start;
+          if (((NumericArrayType) values[i].value()).isInteger()) {
+            long[] data = ((NumericArrayType) values[i].value()).longArray();
+            wrote_data = true;
+            json.writeStartObject();
+            json.writeArrayFieldStart("NumericType");
+            while (array_ts < end) {
+              json.writeNumber(data[offset++]);
+              array_ts += (int) interval;
+            }
+            json.writeEndArray();
+          } else {
+            double[] data = ((NumericArrayType) values[i].value()).doubleArray();
+            StringBuilder buf = new StringBuilder();
+            int z = 0;
+            while (array_ts < end) {
+              if (z++ > 0) {
+                buf.append(",");
+              }
+              if (!Double.isNaN(data[offset])) {
+                wrote_data = true;
+              }
+              buf.append(Double.toString(data[offset++]));
+              array_ts += (int) interval;
+            }
+            
+            if (wrote_data) {
+              json.writeStartObject();
+              json.writeArrayFieldStart("NumericType");
+              json.writeRaw(buf.toString());
+              json.writeEndArray();
+            }
+          }
         }
         
         if (wrote_data) {

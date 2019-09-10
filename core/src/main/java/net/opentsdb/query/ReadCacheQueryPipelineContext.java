@@ -421,6 +421,9 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
             .addErrback(new ErrorCB());
         }
       } else {
+        if (context.query().isTraceEnabled()) {
+          context.logTrace("Cache hit for timestamp: " + slices[idx]);
+        }
         if (okToRunMisses(hits.incrementAndGet())) {
           runCacheMissesAfterSatisfyingPercent();
         }
@@ -434,6 +437,9 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
             }
             if (query().isTraceEnabled()) {
               context.logTrace("Running sub query for interval at: " + slices[idx]);
+            }
+            if (context.query().isTraceEnabled()) {
+              context.logTrace("Querying for more recent data at timestamp: " + slices[idx]);
             }
             ros.sub_context = ros.sub_context = buildQuery(slices[idx], slices[idx] + interval_in_seconds, context, ros);
             ros.sub_context.initialize(null)
@@ -882,6 +888,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
   @Override
   protected boolean checkComplete() {
     if (super.checkComplete()) {
+      System.out.println("    FULLQC: " + full_query_context + "  CM: " + context.query().getCacheMode());
       if (full_query_context != null && 
           (context.query().getCacheMode() == CacheMode.NORMAL ||
            context.query().getCacheMode() == CacheMode.WRITEONLY)) {
@@ -889,7 +896,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
           @Override
           public void run() {
             try {
-              //System.out.println("CACHING: " + sub_results.get(0).source().config().getId());
+              System.out.println("CACHING: " + sub_results.get(0).source().config().getId());
               cache.cache(slices, keys, expirations, sub_results);
             } catch (Throwable t) {
               LOG.error("Failed to cache the data", t);

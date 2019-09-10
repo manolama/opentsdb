@@ -163,5 +163,7 @@ public class PBufQueryResult implements QueryResult {
     // no-op
   }
 
-
+  public TimeStamp lastValueTimeStamp() {
+    return new SecondTimeStamp(result.getLastValueTimestamp().getEpoch());
+  }
 }

@@ -229,8 +229,8 @@ public class CachingQueryExecutor extends BaseTSDBPlugin implements QuerySourceF
             class SerdesCB implements Callback<Object, Object> {
               @Override
               public Object call(Object arg) throws Exception {
-                plugin.cache(key, baos.toByteArray(), expiration, 
-                    TimeUnit.MILLISECONDS, null);
+//                plugin.cache(key, baos.toByteArray(), expiration, 
+//                    TimeUnit.MILLISECONDS, null);
                 return null;
               }
             }

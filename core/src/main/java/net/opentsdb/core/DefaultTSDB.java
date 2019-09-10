@@ -71,6 +71,7 @@ import net.opentsdb.utils.Threads;
 import net.opentsdb.auth.Authentication;
 import net.opentsdb.configuration.Configuration;
 import net.opentsdb.query.QueryContext;
+import net.opentsdb.query.QueryFilter;
 import net.opentsdb.query.pojo.TagVFilter;
 import net.opentsdb.stats.BlackholeStatsCollector;
 //import net.opentsdb.rollup.RollupConfig;
@@ -138,6 +139,8 @@ public class DefaultTSDB implements TSDB {
   
   /** Pool used for executing query tasks. */
   private TSDBThreadPoolExecutor query_pool;
+  
+  private QueryFilter query_filter;
   
   /** The map of running queries. */
   private final Map<Long, QueryContext> running_queries;
@@ -379,7 +382,7 @@ public class DefaultTSDB implements TSDB {
       public Object call(Object arg) throws Exception {
         
         query_pool = registry.getDefaultPlugin(TSDBThreadPoolExecutor.class);
-
+        query_filter = registry.getDefaultPlugin(QueryFilter.class);
         return null;
       }
     }
@@ -639,6 +642,11 @@ public class DefaultTSDB implements TSDB {
   @Override
   public StatsCollector getStatsCollector() {
     return stats_collector;
+  }
+  
+  @Override
+  public QueryFilter getQueryFilter() {
+    return query_filter;
   }
   
 //  /**

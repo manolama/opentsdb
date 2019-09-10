@@ -29,6 +29,6 @@ public class PBufTimeSeriesCacheSerdesFactory extends BaseTSDBPlugin
 
     @Override
     public TimeSeriesCacheSerdes getSerdes() {
-      return new PBufTimeSeriesCacheSerdes();
+      return new PBufTimeSeriesCacheSerdes(tsdb);
     }
 }

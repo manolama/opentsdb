@@ -19,6 +19,7 @@ option java_outer_classname = "QueryResultPB";
 
 import "TimeSeries.proto";
 import "TimeSpecification.proto";
+import "TimeStamp.proto";
 
 /*
  * A net.opentsdb.query.QueryResult implementation. 
@@ -43,4 +44,6 @@ message QueryResult {
   /* The id of the associated Query Node. */
   string node_id = 6;
   
+  /* The optional last timestamp value for the result for cacing. */
+  TimeStamp last_value_timestamp = 7;
 }
