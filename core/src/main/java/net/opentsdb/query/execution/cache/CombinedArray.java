@@ -16,16 +16,19 @@ package net.opentsdb.query.execution.cache;
 
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.Optional;
 
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.TimeSeries;
+import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericArrayType;
+import net.opentsdb.data.types.numeric.NumericType;
 
 /**
  * Handles splicing multiple cached arrays into one by allocating a new
@@ -77,15 +80,25 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
       }
       
       final TimeSpecification series_spec = result.results()[i].timeSpecification();
-      final TypedTimeSeriesIterator<NumericArrayType> iterator = 
-          (TypedTimeSeriesIterator<NumericArrayType>) 
-            series[i].iterator(NumericArrayType.TYPE).get();
+      // ok, so this is temporary and ugly cause we convert numerictype to arrays
+      // in serdes sometimes since we haven't implemented every agg as an array
+      // aggregator. So we can have arrays OR NumericTypes here.
+      Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> optional = 
+          series[i].iterator(NumericArrayType.TYPE);
+      if (!optional.isPresent()) {
+        optional = series[i].iterator(NumericType.TYPE);
+      }
+      if (!optional.isPresent()) {
+        System.out.println("WHOOPS! No iterator! LOG me.");
+      }
+      
+      final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator = 
+          (TypedTimeSeriesIterator<NumericArrayType>) optional.get();
       if (!iterator.hasNext()) {
         continue;
       }
       
-      final TimeSeriesValue<NumericArrayType> value = iterator.next();
-      
+      final TimeSeriesValue<? extends TimeSeriesDataType> v = iterator.next();
       while (next_epoch != series_spec.start().epoch()) {
         // fill
         if (double_array == null) {
@@ -116,56 +129,98 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
         }
       }
       
-      int start_offset = result.timeSpecification().start().epoch() > 
-          series_spec.start().epoch() ?
-          (int) (value.value().offset() + (result.timeSpecification().start().epoch() - 
-              series_spec.start().epoch()) / interval_in_seconds)
-          : value.value().offset();
-      int end = series_spec.end().compare(Op.GT, result.timeSpecification().end()) ?
-          (int) (value.value().end() - (series_spec.end().epoch() - 
-                result.timeSpecification().end().epoch()) / 
-              interval_in_seconds) - start_offset
-          : value.value().end() - start_offset;
-      
-      // we have some data to write.
-      if (value.value().isInteger()) {
-        if (long_array == null && double_array == null) {
-          if (start_offset > 0) {
-            // we're offset so we need to fill
-            double_array = new double[array_length];
-            Arrays.fill(double_array, Double.NaN);
+      if (iterator.getType() == NumericArrayType.TYPE) {
+        final TimeSeriesValue<NumericArrayType> value = (TimeSeriesValue<NumericArrayType>) v;
+        int start_offset = result.timeSpecification().start().epoch() > 
+            series_spec.start().epoch() ?
+            (int) (value.value().offset() + (result.timeSpecification().start().epoch() - 
+                series_spec.start().epoch()) / interval_in_seconds)
+            : value.value().offset();
+        int end = series_spec.end().compare(Op.GT, result.timeSpecification().end()) ?
+            (int) (value.value().end() - (series_spec.end().epoch() - 
+                  result.timeSpecification().end().epoch()) / 
+                interval_in_seconds) - start_offset
+            : value.value().end() - start_offset;
+        
+        // we have some data to write.
+        if (value.value().isInteger()) {
+          if (long_array == null && double_array == null) {
+            if (start_offset > 0) {
+              // we're offset so we need to fill
+              double_array = new double[array_length];
+              Arrays.fill(double_array, Double.NaN);
+              for (int x = start_offset; x < end; x++) {
+                double_array[idx++] = value.value().longArray()[x];
+              }
+            } else {
+              // start with a long array
+              long_array = new long[array_length];
+              System.arraycopy(value.value().longArray(), start_offset, 
+                  long_array, idx, end);
+              idx += end;
+            }
+          } else if (double_array != null) {
             for (int x = start_offset; x < end; x++) {
               double_array[idx++] = value.value().longArray()[x];
             }
           } else {
-            // start with a long array
-            long_array = new long[array_length];
             System.arraycopy(value.value().longArray(), start_offset, 
                 long_array, idx, end);
             idx += end;
           }
-        } else if (double_array != null) {
-          for (int x = start_offset; x < end; x++) {
-            double_array[idx++] = value.value().longArray()[x];
-          }
         } else {
-          System.arraycopy(value.value().longArray(), start_offset, 
-              long_array, idx, end);
+          if (double_array == null) {
+            // flip
+            double_array = new double[array_length];
+            Arrays.fill(double_array, Double.NaN);
+            for (int x = 0; x < idx; x++) {
+              double_array[x] = long_array[x];
+            }
+            long_array = null;
+          }
+          System.arraycopy(value.value().doubleArray(), start_offset, 
+              double_array, idx, end);
           idx += end;
         }
       } else {
-        if (double_array == null) {
-          // flip
-          double_array = new double[array_length];
-          Arrays.fill(double_array, Double.NaN);
-          for (int x = 0; x < idx; x++) {
-            double_array[x] = long_array[x];
+        TimeSeriesValue<NumericType> value = (TimeSeriesValue<NumericType>) v;
+        do {
+          if (value.value() == null) {
+            if (double_array == null) {
+              // flip
+              double_array = new double[array_length];
+              Arrays.fill(double_array, Double.NaN);
+              for (int x = 0; x < idx; x++) {
+                double_array[x] = long_array[x];
+              }
+              long_array = null;
+            }
+            idx++;
+          } else if (value.value().isInteger()) {
+            if (long_array == null) {
+              double_array[idx] = value.value().toDouble();
+            } else {
+              long_array[idx] = value.value().longValue();
+            }
+          } else {
+            if (double_array == null) {
+              // flip
+              double_array = new double[array_length];
+              Arrays.fill(double_array, Double.NaN);
+              for (int x = 0; x < idx; x++) {
+                double_array[x] = long_array[x];
+              }
+              long_array = null;
+            }
+            double_array[idx] = value.value().toDouble();
           }
-        }
-        System.arraycopy(value.value().doubleArray(), start_offset, 
-            double_array, idx, end);
-        idx += end;
+          
+          if (iterator.hasNext()) {
+            value = (TimeSeriesValue<NumericType>) iterator.next();
+          }
+        } while (iterator.hasNext());
       }
+      
       series[i].close();
       next_epoch += series_spec.end().epoch() - series_spec.start().epoch();
     }

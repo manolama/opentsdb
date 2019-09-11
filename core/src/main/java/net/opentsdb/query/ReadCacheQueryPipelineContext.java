@@ -369,6 +369,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
   public void fetchNext(final Span span) {
     hits = new AtomicInteger();
     latch = new AtomicInteger(slices.length);
+    System.out.println("    [INIT LATCH] " + latch.get());
     cache.fetch(this, keys, this, null);
   }
   
@@ -384,7 +385,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       for (int i = 0; i < keys.length; i++) {
         if (Bytes.memcmp(keys[i], result.key()) == 0) {
           synchronized (results) {
-            results[i] = new ResultOrSubQuery();
+            results[i] = new ResultOrSubQuery(i);
             results[i].key = result.key();
             if (result.results() != null && !result.results().isEmpty()) {
               results[i].map = Maps.newHashMapWithExpectedSize(result.results().size());
@@ -415,6 +416,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
           if (query().isTraceEnabled()) {
             context.logTrace("Running sub query for interval at: " + slices[idx]);
           }
+          latch.incrementAndGet();
           ros.sub_context = ros.sub_context = buildQuery(slices[idx], slices[idx] + interval_in_seconds, context, ros);
           ros.sub_context.initialize(null)
             .addCallback(new SubQueryCB(ros.sub_context))
@@ -431,7 +433,8 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
           System.out.println("     TIP QUERY but not at final latch");
           ros.map = null;
           if (okToRunMisses(hits.get())) {
-            latch.incrementAndGet();
+            int l = latch.incrementAndGet();
+            System.out.println("    [LATCH Cache result] " + l);
             if (LOG.isTraceEnabled()) {
               LOG.trace("Running sub query for interval at: " + slices[idx]);
             }
@@ -524,10 +527,11 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       // sort and merge
       Map<String, QueryResult[]> sorted = Maps.newHashMap();
       for (int i = 0; i < results.length; i++) {
-        if (results[i] == null) {
+        if (results[i] == null || results[i].map == null) {
           System.out.println("null at................... " + i);
           continue;
         }
+        
         for (final Entry<String, QueryResult> entry : results[i].map.entrySet()) {
           QueryResult[] qrs = sorted.get(entry.getKey());
           if (qrs == null) {
@@ -539,21 +543,30 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       }
       
       latch.set(sorted.size());
+      System.out.println("    [PROCESS LATCH] " + latch.get());
       for (final Entry<String, QueryResult[]> results : sorted.entrySet()) {
+        if (results.getValue() == null) {
+          System.out.println("   NULL result at " + results.getKey());
+          continue;
+        }
         // TODO - implement
         // TODO - send in thread pool
 //        DummyQueryNode n = new DummyQueryNode(results.getKey());
         QueryNode first_node = null;
         String data_source = null;
         for (int i = 0; i < results.getValue().length; i++) {
+          System.out.println("         WORKING RS: " + results.getValue()[i]);
           if (results.getValue()[i].source() != null) {
             first_node = results.getValue()[i].source();
             data_source = results.getValue()[i].dataSource();
             break;
           }
         }
+        
+        if (first_node == null) {
+          throw new IllegalStateException("Where's my node??");
+        }
         final QueryResult result = new CombinedResult(this, results.getValue(), first_node, data_source, sinks, latch, string_interval);
-        System.out.println("       CACHE ID: " + result.source().config().getId());
         final QueryNode summarizer = summarizer_node_map != null ? summarizer_node_map.get(first_node.config().getId()) : null; 
         if (summarizer != null) {
           System.out.println("     SENDING CACHE RESULT TO SUMMARIZER: " + summarizer.config().getId());
@@ -620,10 +633,15 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
   }
   
   class ResultOrSubQuery implements QuerySink {
+    final int idx;
     byte[] key;
     QueryContext sub_context;
     volatile Map<String, QueryResult> map = Maps.newConcurrentMap();
     AtomicBoolean complete = new AtomicBoolean();
+    
+    ResultOrSubQuery(final int idx) {
+      this.idx = idx;
+    }
     
     @Override
     public void onComplete() {
@@ -632,8 +650,10 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       }
       
       complete.compareAndSet(false, true);
-      if (latch.decrementAndGet() == 0) {
-        System.out.println("[[[[[[[[ COMPLETE!!! ]]]]]]] RUNNING");
+      final int ltch = latch.decrementAndGet();
+      System.out.println("         SUB QUERY ON COMPLETE latch: " + ltch + " on idx: " + idx);      
+      if (ltch == 0) {
+        System.out.println("[[[[[[[[ COMPLETE!!! ]]]]]]] RUNNING on idx: " + idx);
         processResults();
       }
     }
@@ -659,7 +679,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       if (next instanceof ResultWrapper) {
         ((ResultWrapper) next).closeWrapperOnly();
       }
-      System.out.println(" SET IT!!!!!!!!!");
+      System.out.println("       ON NEXT FOR SUB QUERY: " + idx + "  RESULT: " + next.source().config().getId());
     }
     
     @Override
@@ -721,7 +741,8 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         
         if (ros.sub_context == null && 
             (ros.map == null || ros.map.isEmpty())) {
-          latch.incrementAndGet();
+          int l = latch.incrementAndGet();
+          System.out.println("    [MISSES LATCH] " + l);
           ros.sub_context = buildQuery(slices[i], slices[i] + 
               interval_in_seconds, context, ros);
           ros.sub_context.initialize(null)
@@ -753,6 +774,10 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
   
   void cleanup() {
     for (int i = 0; i < results.length; i++) {
+      if (results[i] == null) {
+        continue;
+      }
+      
       if (results[i].map != null) {
         for (final QueryResult result : results[i].map.values()) {
           try {
@@ -912,11 +937,10 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
 //          sub_results.get(i).close();
 //        }
       }
+      System.out.println("  [RCQPC] COMPLETE!!!!!!!!!!!!!!!!!!");
       return true;
     }
-    for (Entry<String, AtomicInteger> entry : countdowns.entrySet()) {
-      System.out.println(" COUNTDOWNS: " + entry.getKey() + ", " + entry.getValue().get());
-    }
+    
     System.out.println("     NOT complete");
     return false;
 //    for (final AtomicInteger integer : countdowns.values()) {

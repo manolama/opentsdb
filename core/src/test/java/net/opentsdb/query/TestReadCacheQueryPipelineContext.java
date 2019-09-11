@@ -1047,11 +1047,18 @@ public class TestReadCacheQueryPipelineContext {
   }
   
   CacheQueryResults buildFakeFullResult(final ReadCacheQueryPipelineContext ctx,
-                                       final int idx) {
+                                        final int idx) {
     CacheQueryResults result = mock(CacheQueryResults.class);
     when(result.key()).thenReturn(ctx.keys[idx]);
     Map<String, CachedQueryResult> results = Maps.newHashMap();
-    results.put("m1:m1", mock(CachedQueryResult.class));
+    CachedQueryResult cqr = mock(CachedQueryResult.class);
+    results.put("m1:m1", cqr);
+    QueryNode node = mock(QueryNode.class);
+    QueryNodeConfig config = mock(QueryNodeConfig.class);
+    when(config.getId()).thenReturn("m1");
+    when(node.config()).thenReturn(config);
+    when(cqr.dataSource()).thenReturn("m1");
+    when(cqr.source()).thenReturn(node);
     when(result.results()).thenReturn(results);
     when(result.lastValueTimestamp()).thenReturn(new SecondTimeStamp(
         ctx.slices[idx] + ctx.interval_in_seconds));
@@ -1274,6 +1281,13 @@ public class TestReadCacheQueryPipelineContext {
     public void logTrace(QueryNode node, String log) {
       // TODO Auto-generated method stub
       
+    }
+
+    
+    @Override
+    public boolean isClosed() {
+      // TODO Auto-generated method stub
+      return false;
     }
   }
 

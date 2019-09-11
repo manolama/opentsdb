@@ -65,6 +65,25 @@ import net.opentsdb.utils.JSON;
 public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSerdesFactory {
   private static final Logger LOG = LoggerFactory.getLogger(JsonCacheSerdes.class);
   
+
+  // TODO - UGLY TEMP!!
+  static RollupConfig ROLLUP_CONFIG = DefaultRollupConfig.newBuilder()
+      .addAggregationId("sum", 0)
+      .addAggregationId("count", 1)
+      .addAggregationId("max", 2)
+      .addAggregationId("min", 3)
+      .addAggregationId("avg", 5)
+      .addAggregationId("first", 6)
+      .addAggregationId("last", 7)
+      .addInterval(RollupInterval.builder()
+          .setInterval("sum")
+          .setTable("tsdb")
+          .setPreAggregationTable("tsdb")
+          .setInterval("1h")
+          .setRowSpan("1d"))
+      .build();
+  
+  
   @Override
   public byte[] serialize(Collection<QueryResult> results) {
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -153,24 +172,7 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
       for (final JsonNode result : results) {
         System.out.println("       &&&&& READ RESULT: " + result);
         
-        // TODO - UGLY TEMP!!
-        RollupConfig rollup_config = DefaultRollupConfig.newBuilder()
-            .addAggregationId("sum", 0)
-            .addAggregationId("count", 1)
-            .addAggregationId("max", 2)
-            .addAggregationId("min", 3)
-            .addAggregationId("avg", 5)
-            .addAggregationId("first", 6)
-            .addAggregationId("last", 7)
-            .addInterval(RollupInterval.builder()
-                .setInterval("sum")
-                .setTable("tsdb")
-                .setPreAggregationTable("tsdb")
-                .setInterval("1h")
-                .setRowSpan("1d"))
-            .build();
-        
-        CachedQueryResult r = new JsonV3Result(null, result, rollup_config);
+        CachedQueryResult r = new JsonV3Result(null, result, ROLLUP_CONFIG);
         map.put(r.source().config().getId() + ":" + r.dataSource(), r);
       }
     } catch (IOException e) {

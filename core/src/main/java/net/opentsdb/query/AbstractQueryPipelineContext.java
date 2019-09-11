@@ -574,6 +574,7 @@ System.out.println("BASE SINK CONFIGS......... " + context.sinkConfigs() + "  AN
    * @return True if complete, false if not.
    */
   protected boolean checkComplete() {
+    System.out.println("   [AQPC] COUNTDOWNS: " + countdowns);
     for (final AtomicInteger integer : countdowns.values()) {
       if (integer.get() > 0) {
         return false;
@@ -583,6 +584,7 @@ System.out.println("BASE SINK CONFIGS......... " + context.sinkConfigs() + "  AN
     // done!
     for (final QuerySink sink : sinks) {
       try {
+        System.out.println("       [AQPC] Completing sink " + sink);
         sink.onComplete();
       } catch (Throwable t) {
         LOG.error("Failed to close sink: " + sink, t);
@@ -608,25 +610,17 @@ System.out.println("BASE SINK CONFIGS......... " + context.sinkConfigs() + "  AN
     }
     
     public void closeWrapperOnly() {
-      if (result.source().config() instanceof TimeSeriesDataSourceConfig ||
-          result.source().config().joins()) {
-        AtomicInteger cntr = countdowns.get(result.dataSource());
-        if (cntr == null) {
-          LOG.error("Unexpected result source, no counter for: " 
-              + result.dataSource());
-        } else {
-          cntr.decrementAndGet();
-        }
+      AtomicInteger cntr = countdowns.get(result.dataSource());
+      if (cntr == null) {
+        cntr = countdowns.get(result.source().config().getId() + ":" + result.dataSource());
+      }
+      
+      if (cntr == null ) {
+        LOG.error("Unexpected result source, no counter for: " 
+            + result.source().config().getId() + ":" 
+            + result.dataSource() + ". WANT: " + countdowns.keySet());
       } else {
-        AtomicInteger cntr = countdowns.get(result.source().config().getId() + ":" 
-            + result.dataSource());
-        if (cntr == null) {
-          LOG.error("Unexpected result source, no counter for: " 
-              + result.source().config().getId() + ":" 
-              + result.dataSource());
-        } else {
-          cntr.decrementAndGet();
-        }
+        cntr.decrementAndGet();
       }
       checkComplete();
     }
