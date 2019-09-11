@@ -170,8 +170,6 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
       JsonNode results = JSON.getMapper().readTree(data);
       results = results.get("results");
       for (final JsonNode result : results) {
-        System.out.println("       &&&&& READ RESULT: " + result);
-        
         CachedQueryResult r = new JsonV3Result(null, result, ROLLUP_CONFIG);
         map.put(r.source().config().getId() + ":" + r.dataSource(), r);
       }
@@ -194,7 +192,6 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
     boolean was_event = false;
     boolean was_event_group = false;
     for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator : series.iterators()) {
-      System.out.println("       ************* SERIES TYPE: " + iterator.getType());
       while (iterator.hasNext()) {
         TimeSeriesValue<? extends TimeSeriesDataType> value = iterator.next();
         if (iterator.getType() == StatusType.TYPE) {
@@ -282,7 +279,6 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
       final TimeStamp last_value,
       boolean wrote_values) throws IOException {
     boolean wrote_type = false;
-    System.out.println("            SERIALIZING NUMERIC: " + result.timeSpecification());
     if (result.timeSpecification() != null) {
       // just the values
       TimeStamp ts = result.timeSpecification().start().getCopy();
@@ -835,7 +831,6 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
       String temp = root.get("source").asText();
       data_source = temp.substring(temp.indexOf(":") + 1);
       this.node = new DummyQueryNode(temp.substring(0, temp.indexOf(":")));
-      System.out.println("!!!!!!!! ID: " + this.node.config().getId() + "   DS: " + data_source);
       
       this.exception = exception;
       this.rollup_config = rollup_config;
@@ -1062,7 +1057,6 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
             types.add(NumericType.TYPE);
           }
         }
-        System.out.println("                   types!!! " + types);
 
         temp = node.get("NumericSummaryType");
         if (temp != null && !temp.isNull()) {

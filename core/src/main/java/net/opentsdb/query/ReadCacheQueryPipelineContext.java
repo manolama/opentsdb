@@ -89,7 +89,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
   protected byte[][] keys;
   protected long[] expirations;
   protected ResultOrSubQuery[] results;
-  protected AtomicInteger latch;
+  protected AtomicInteger cache_latch;
   protected AtomicInteger hits;
   protected AtomicBoolean failed;
   protected QueryContext full_query_context;
@@ -368,8 +368,8 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
   @Override
   public void fetchNext(final Span span) {
     hits = new AtomicInteger();
-    latch = new AtomicInteger(slices.length);
-    System.out.println("    [INIT LATCH] " + latch.get());
+    cache_latch = new AtomicInteger(slices.length);
+    System.out.println("    [INIT LATCH] " + cache_latch.get());
     cache.fetch(this, keys, this, null);
   }
   
@@ -407,7 +407,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       }
       
       if (ros.map == null || ros.map.isEmpty()) {
-        System.out.println("  UH OH No hit!");
+        System.out.println("  UH OH No hit! Cache miss.");
         // TODO - configure the threshold
         if (okToRunMisses(hits.get())) {
           if (LOG.isTraceEnabled()) {
@@ -416,7 +416,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
           if (query().isTraceEnabled()) {
             context.logTrace("Running sub query for interval at: " + slices[idx]);
           }
-          latch.incrementAndGet();
+          //latch.incrementAndGet();
           ros.sub_context = ros.sub_context = buildQuery(slices[idx], slices[idx] + interval_in_seconds, context, ros);
           ros.sub_context.initialize(null)
             .addCallback(new SubQueryCB(ros.sub_context))
@@ -433,8 +433,8 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
           System.out.println("     TIP QUERY but not at final latch");
           ros.map = null;
           if (okToRunMisses(hits.get())) {
-            int l = latch.incrementAndGet();
-            System.out.println("    [LATCH Cache result] " + l);
+            //int l = latch.incrementAndGet();
+            //System.out.println("    [LATCH Cache result] " + l);
             if (LOG.isTraceEnabled()) {
               LOG.trace("Running sub query for interval at: " + slices[idx]);
             }
@@ -454,9 +454,10 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         }
       }
       
-      if (latch.decrementAndGet() == 0) {
+      if (cache_latch.decrementAndGet() == 0) {
         // all cache are in, see if we should send up or if we need to fire
         // sub queries.
+        System.out.println("      CACHE LATCH DONE, calling processResults()");
         processResults();
       }
     } catch (Throwable t) {
@@ -523,6 +524,8 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       }
     }
     
+    System.out.println("       [RCQPC] Got all the results in, sorting and returning.");
+    
     try {
       // sort and merge
       Map<String, QueryResult[]> sorted = Maps.newHashMap();
@@ -542,8 +545,8 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         }
       }
       
-      latch.set(sorted.size());
-      System.out.println("    [PROCESS LATCH] " + latch.get());
+      //latch.set(sorted.size());
+      //System.out.println("    [PROCESS LATCH] " + latch.get());
       for (final Entry<String, QueryResult[]> results : sorted.entrySet()) {
         if (results.getValue() == null) {
           System.out.println("   NULL result at " + results.getKey());
@@ -555,6 +558,11 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         QueryNode first_node = null;
         String data_source = null;
         for (int i = 0; i < results.getValue().length; i++) {
+          if (results.getValue()[i] == null) {
+            System.out.println("   NULL result at " + results.getKey() + " at idx: " + i);
+            continue;
+          }
+          
           System.out.println("         WORKING RS: " + results.getValue()[i]);
           if (results.getValue()[i].source() != null) {
             first_node = results.getValue()[i].source();
@@ -566,7 +574,11 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         if (first_node == null) {
           throw new IllegalStateException("Where's my node??");
         }
-        final QueryResult result = new CombinedResult(this, results.getValue(), first_node, data_source, sinks, latch, string_interval);
+        final QueryResult result = new CombinedResult(
+            this, 
+            results.getValue(), 
+            first_node, data_source, 
+            sinks, null, string_interval);
         final QueryNode summarizer = summarizer_node_map != null ? summarizer_node_map.get(first_node.config().getId()) : null; 
         if (summarizer != null) {
           System.out.println("     SENDING CACHE RESULT TO SUMMARIZER: " + summarizer.config().getId());
@@ -574,9 +586,6 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         } else {
           System.out.println("     SENDING CACHE RESULT TO AQPC");
           onNext(result);
-//        for (final QuerySink sink : sinks) {
-//          sink.onNext(new CombinedResult(this, results.getValue(), n, results.getKey(), sinks, latch, string_interval));
-//        }
         }
       }
       
@@ -650,10 +659,10 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       }
       
       complete.compareAndSet(false, true);
-      final int ltch = latch.decrementAndGet();
-      System.out.println("         SUB QUERY ON COMPLETE latch: " + ltch + " on idx: " + idx);      
-      if (ltch == 0) {
-        System.out.println("[[[[[[[[ COMPLETE!!! ]]]]]]] RUNNING on idx: " + idx);
+      //final int ltch = latch.decrementAndGet();
+      System.out.println("         SUB QUERY ON COMPLETE latch:  on idx: " + idx);      
+      if (rosqComplete()) {
+        System.out.println("     [RCQPC] Sub queries are done RUNNING on idx: " + idx);
         processResults();
       }
     }
@@ -741,8 +750,8 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         
         if (ros.sub_context == null && 
             (ros.map == null || ros.map.isEmpty())) {
-          int l = latch.incrementAndGet();
-          System.out.println("    [MISSES LATCH] " + l);
+          //int l = latch.incrementAndGet();
+          //System.out.println("    [MISSES LATCH] " + l);
           ros.sub_context = buildQuery(slices[i], slices[i] + 
               interval_in_seconds, context, ros);
           ros.sub_context.initialize(null)
@@ -908,6 +917,27 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       }
     }
     
+  }
+  
+  boolean rosqComplete() {
+    if (cache_latch.get() != 0) {
+      return false;
+    }
+    
+    int non_null = 0;
+    int complete = 0;
+    for (int i = 0; i < results.length; i++) {
+      if (results[i] == null) {
+        continue;
+      }
+      
+      non_null++;
+      if (results[i].complete.get()) {
+        complete++;
+      }
+    }
+    
+    return complete == non_null;
   }
   
   @Override

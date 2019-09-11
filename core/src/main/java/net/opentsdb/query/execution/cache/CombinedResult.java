@@ -57,7 +57,7 @@ public class CombinedResult implements QueryResult, TimeSpecification {
   protected final List<QuerySink> sinks;
   
   /** The latch we'll count down on close. */
-  protected final AtomicInteger latch;
+  //protected final AtomicInteger latch;
   
   /** The result interval, i.e. width of each result. */
   protected final int result_interval;
@@ -121,7 +121,7 @@ public class CombinedResult implements QueryResult, TimeSpecification {
     this.node = node;
     this.data_source = data_source;
     this.sinks = sinks;
-    this.latch = latch;
+    //this.latch = latch;
     this.result_interval = DateTime.getDurationInterval(result_interval);
     // TODO - if we have more in the future, handle the proper units.
     result_units = DateTime.getDurationUnits(result_interval).equals("h") ? 

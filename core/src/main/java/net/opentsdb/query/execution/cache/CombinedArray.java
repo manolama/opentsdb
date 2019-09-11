@@ -87,6 +87,7 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
           series[i].iterator(NumericArrayType.TYPE);
       if (!optional.isPresent()) {
         optional = series[i].iterator(NumericType.TYPE);
+        System.out.println("  @@@@@@@@ MISSING ARRAY BUT have numeric? " + optional.isPresent());
       }
       if (!optional.isPresent()) {
         System.out.println("WHOOPS! No iterator! LOG me.");
@@ -152,6 +153,7 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
               for (int x = start_offset; x < end; x++) {
                 double_array[idx++] = value.value().longArray()[x];
               }
+              long_array = null;
             } else {
               // start with a long array
               long_array = new long[array_length];
@@ -184,7 +186,22 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
         }
       } else {
         TimeSeriesValue<NumericType> value = (TimeSeriesValue<NumericType>) v;
+        // handle early cache expirations
+        while (value != null && value.timestamp().compare(Op.LT, result.timeSpecification().start())) {
+          if (iterator.hasNext()) {
+            value = (TimeSeriesValue<NumericType>) iterator.next(); 
+          } else {
+            value = null;
+          }
+        }
+        
         do {
+          if (value == null) {
+            // could happen if we fast-forwarded
+            break;
+          }
+          
+          System.out.println("           CAI: " + value);
           if (value.value() == null) {
             if (double_array == null) {
               // flip
@@ -198,9 +215,11 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
             idx++;
           } else if (value.value().isInteger()) {
             if (long_array == null) {
-              double_array[idx] = value.value().toDouble();
+              System.out.println("           CAI: as double");
+              double_array[idx++] = value.value().toDouble();
             } else {
-              long_array[idx] = value.value().longValue();
+              System.out.println("           CAI: as long");
+              long_array[idx++] = value.value().longValue();
             }
           } else {
             if (double_array == null) {
@@ -208,17 +227,23 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
               double_array = new double[array_length];
               Arrays.fill(double_array, Double.NaN);
               for (int x = 0; x < idx; x++) {
-                double_array[x] = long_array[x];
+                double_array[x++] = long_array[x];
               }
               long_array = null;
             }
-            double_array[idx] = value.value().toDouble();
+            System.out.println("           CAI: as double");
+            double_array[idx++] = value.value().toDouble();
           }
           
           if (iterator.hasNext()) {
             value = (TimeSeriesValue<NumericType>) iterator.next();
+            if (value.timestamp().compare(Op.GTE, result.timeSpecification().end())) {
+              value = null;
+            }
+          } else {
+            value = null;
           }
-        } while (iterator.hasNext());
+        } while (value != null);
       }
       
       series[i].close();

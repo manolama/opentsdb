@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
@@ -95,6 +96,8 @@ public abstract class AbstractQueryPipelineContext implements
   
   /** The map of IDs. We need to separate by type to avoid collisions. */
   protected Map<TypeToken<? extends TimeSeriesId>, Map<Long, TimeSeriesId>> ids;
+  
+  protected AtomicBoolean complete = new AtomicBoolean();
   
   /**
    * Default ctor.
@@ -581,14 +584,18 @@ System.out.println("BASE SINK CONFIGS......... " + context.sinkConfigs() + "  AN
       }
     }
     
-    // done!
-    for (final QuerySink sink : sinks) {
-      try {
-        System.out.println("       [AQPC] Completing sink " + sink);
-        sink.onComplete();
-      } catch (Throwable t) {
-        LOG.error("Failed to close sink: " + sink, t);
+    if (complete.compareAndSet(false, true)) {
+      // done!
+      for (final QuerySink sink : sinks) {
+        try {
+          System.out.println("       [AQPC] Completing sink " + sink);
+          sink.onComplete();
+        } catch (Throwable t) {
+          LOG.error("Failed to close sink: " + sink, t);
+        }
       }
+    } else {
+      LOG.warn("Called AQPC checkComplete twice when it was already completed.");
     }
     return true;
   }
