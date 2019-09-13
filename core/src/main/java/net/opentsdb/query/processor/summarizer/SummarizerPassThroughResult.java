@@ -96,6 +96,9 @@ public class SummarizerPassThroughResult extends BaseWrappedQueryResult {
      * @param source The non-null source to pull data from.
      */
     private SummarizerPassThroughTimeSeries(final TimeSeries source) {
+      if (source == null) {
+        throw new RuntimeException("WTF? Null source!!!");
+      }
       this.source = source;
     }
     

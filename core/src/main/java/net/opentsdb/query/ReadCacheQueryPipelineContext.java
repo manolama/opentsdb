@@ -288,9 +288,8 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       }
     }
     
-    if (summarizers.isEmpty()) {
-      // no-op
-    } else {
+    Set<String> old_serdes_filters = Sets.newHashSet();
+    if (!summarizers.isEmpty()) {
       SemanticQuery.Builder builder = ((SemanticQuery) context.query()).toBuilder();
       Set<String> new_serdes_filter = Sets.newHashSet();
       if (context.query().getSerdesConfigs() != null && 
@@ -307,6 +306,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         
         for (final SerdesOptions config : context.query().getSerdesConfigs()) {
           for (final String id : config.getFilter()) {
+            old_serdes_filters.add(id);
             if (!summarizers.containsKey(id)) {
               new_serdes_filter.add(id);
             }
@@ -331,12 +331,15 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       if (factory == null) {
         throw new IllegalStateException("No factory for summary??");
       }
+      System.out.println("   [RCQPC] new filters: " + new_serdes_filter);
+      System.out.println("   [RCQPC] old filters: " + old_serdes_filters);
       ArrayList<Deferred<Void>> deferreds = Lists.newArrayList();
       for (QueryNodeConfig config : summarizers.values()) {
         // pass through or not?
         boolean pass_through = false;
         for (final Object source : config.getSources()) {
-          if (new_serdes_filter.contains((String) source)) {
+          if (new_serdes_filter.contains((String) source) && old_serdes_filters.contains((String) source)) {
+            System.out.println("     PASS THROUGH DUE TO: " + source);
             pass_through = true;
             break;
           }
@@ -1125,7 +1128,14 @@ System.out.println("[RCQPC] CLOSING CONTEXT");
     Set<String> serdes_sources = Sets.newHashSet();
     for (final QueryNodeConfig root : roots) {
       System.out.println(" WORKING FROM ROOT: " + root.getId());
-      serdes_sources.addAll(computeSerializationSources(config_graph, root));
+      for (final String src : computeSerializationSources(config_graph, root)) {
+        if (src.contains(":")) {
+          serdes_sources.add(src);
+        } else {
+          serdes_sources.add(root.getId() + ":" + src);
+        }
+      }
+      //serdes_sources.addAll(computeSerializationSources(config_graph, root));
     }
     System.out.println(" SERDES SOURCES: " + serdes_sources);
     return serdes_sources;
@@ -1161,9 +1171,10 @@ System.out.println("[RCQPC] CLOSING CONTEXT");
             }
           }
         } else {
-          for (final String id : downstream_ids) {
-            ids.add(downstream.getId() + ":" + id);
-          }
+//          for (final String id : downstream_ids) {
+//            ids.add(downstream.getId() + ":" + id);
+//          }
+          ids.addAll(downstream_ids);
         }
       } else if (node instanceof MergerConfig) {
         ids.add(((MergerConfig) node).getDataSource());

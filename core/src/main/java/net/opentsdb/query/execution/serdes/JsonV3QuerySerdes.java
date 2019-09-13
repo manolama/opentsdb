@@ -605,7 +605,9 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           value = null;
         }
       }
-      json.writeEndArray();
+      if (wrote_type) {
+        json.writeEndArray();
+      }
       return wrote_type;
     }
 

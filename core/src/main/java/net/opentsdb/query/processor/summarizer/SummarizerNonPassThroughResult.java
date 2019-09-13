@@ -55,6 +55,9 @@ public class SummarizerNonPassThroughResult extends BaseWrappedQueryResult {
     this.node = node;
     series = Lists.newArrayList();
     for (final TimeSeries ts : results.timeSeries()) {
+      if (ts == null) {
+        throw new RuntimeException("NULL TS FROM: " + results + "  ID: " + results.source().config().getId() + ":" + results.dataSource());
+      }
       series.add(new SummarizerTimeSeries(ts));
     }
   }
@@ -87,6 +90,10 @@ public class SummarizerNonPassThroughResult extends BaseWrappedQueryResult {
      * @param source The non-null source to pull data from.
      */
     private SummarizerTimeSeries(final TimeSeries source) {
+      System.out.println("           [NPSTS] " +  source);
+      if (source == null) {
+        throw new RuntimeException("SOURCE IS NULL!!!");
+      }
       this.source = source;
     }
     
