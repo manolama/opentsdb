@@ -68,6 +68,7 @@ import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.stats.Span;
 import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.DateTime;
+import net.opentsdb.utils.JSON;
 
 public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext 
     implements CacheCB {
@@ -322,6 +323,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
             ));
         System.out.println(" ****** RESET QUERY and stripped summarizers.");
         ((BaseQueryContext) context).resetQuery(builder.build());
+        LOG.info("---------- TWEAKED QUERY: " + JSON.serializeToString(context.query()));
       }
       
       // now compute the DAG
@@ -515,6 +517,9 @@ System.out.println("[RCQPC] CLOSING CONTEXT");
                 slices[slices.length - 1] + interval_in_seconds, 
                 context, 
                 new FullQuerySink());
+            if (query().isTraceEnabled()) {
+              context.logTrace("Full query: " + JSON.serializeToString(full_query_context.query()));
+            }
             System.out.println("  FULL QUERY ID: " + System.identityHashCode(full_query_context));
             full_query_context.initialize(null)
                 .addCallback(new SubQueryCB(full_query_context))

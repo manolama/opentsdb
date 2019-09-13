@@ -97,6 +97,7 @@ public class SummarizerNonPassthroughNumericIterator implements QueryIterator {
     if (iterator != null) {
       has_next = iterator.hasNext();
       dp = new MutableNumericSummaryValue();
+      //dp.resetTimestamp(node.pipelineContext().query().startTime());
       sum = result.rollupConfig().getIdForAggregator("sum");
       count = result.rollupConfig().getIdForAggregator("count");
     } else {
@@ -118,7 +119,7 @@ public class SummarizerNonPassthroughNumericIterator implements QueryIterator {
       // TODO - handle multiple nexts
       final TimeSeriesValue<NumericArrayType> value = 
           (TimeSeriesValue<NumericArrayType>) iterator.next();
-      dp.resetTimestamp(value.timestamp());
+      //dp.resetTimestamp(value.timestamp());
       if (value.value() != null) {
         if (value.value().isInteger()) {
           long_values = value.value().longArray();
@@ -134,10 +135,10 @@ public class SummarizerNonPassthroughNumericIterator implements QueryIterator {
       while (iterator.hasNext()) {
         final TimeSeriesValue<NumericType> value = 
             (TimeSeriesValue<NumericType>) iterator.next();
-        if (!got_timestamp) {
-          dp.resetTimestamp(value.timestamp());
-          got_timestamp = true;
-        }
+//        if (!got_timestamp) {
+//          dp.resetTimestamp(value.timestamp());
+//          got_timestamp = true;
+//        }
         if (value.value() != null) {
           if (value.value().isInteger()) {
             store(value.value().longValue());
@@ -153,10 +154,10 @@ public class SummarizerNonPassthroughNumericIterator implements QueryIterator {
         final TimeSeriesValue<NumericSummaryType> value =
             (TimeSeriesValue<NumericSummaryType>) iterator.next();
 
-        if (!got_timestamp) {
-          dp.resetTimestamp(value.timestamp());
-          got_timestamp = true;
-        }
+//        if (!got_timestamp) {
+//          dp.resetTimestamp(value.timestamp());
+//          got_timestamp = true;
+//        }
 
         if (value.value() != null) {
           if (value.value().summariesAvailable().size() == 1) {
