@@ -245,6 +245,7 @@ public class GuavaLRUCache extends BaseTSDBPlugin implements
     // best effort
     try {
       final byte[] data = serdes.serialize(results);
+      
       if (size.get() + (data == null ? 0  : data.length) >= size_limit) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Will not cache key [" + Bytes.pretty(key) 

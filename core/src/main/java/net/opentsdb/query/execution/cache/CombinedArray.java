@@ -64,6 +64,7 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
    */
   CombinedArray(final CombinedResult result, 
                 final TimeSeries[] series) {
+    System.out.println("-------------------------- STARTING COMBINED ARRAY........");
     this.result = result;
     final int array_length = (int) ((result.timeSpecification().end().epoch() - 
         result.timeSpecification().start().epoch()) /
@@ -132,6 +133,9 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
       
       if (iterator.getType() == NumericArrayType.TYPE) {
         final TimeSeriesValue<NumericArrayType> value = (TimeSeriesValue<NumericArrayType>) v;
+        if (value.value() == null) {
+          System.out.println("      WTF?? NULL value from iterator?!?!?!?");
+        }
         int start_offset = result.timeSpecification().start().epoch() > 
             series_spec.start().epoch() ?
             (int) (value.value().offset() + (result.timeSpecification().start().epoch() - 
@@ -180,6 +184,13 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
             }
             long_array = null;
           }
+          if (idx + (end - start_offset) >= double_array.length) {
+            System.out.println("   ********** WARNING : BAD ENDING: " + (idx + end - start_offset));
+            end -= (idx + end - start_offset - double_array.length);
+          }
+          
+//          System.out.println("   V: " + Arrays.toString(value.value().doubleArray()) + "\n          sof: " + start_offset
+//              + "\n   DA: " + Arrays.toString(double_array) + "\n   IDX: " + idx + "  END: " + end + "  DestLen: " + double_array.length);
           System.arraycopy(value.value().doubleArray(), start_offset, 
               double_array, idx, end);
           idx += end;
@@ -201,7 +212,6 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
             break;
           }
           
-          System.out.println("           CAI: " + value);
           if (value.value() == null) {
             if (double_array == null) {
               // flip
@@ -215,11 +225,17 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
             idx++;
           } else if (value.value().isInteger()) {
             if (long_array == null) {
-              System.out.println("           CAI: as double");
-              double_array[idx++] = value.value().toDouble();
+              if (idx >= double_array.length) {
+                System.out.println("!!!!!!!!!!!! WTF!! IDX " + idx + " too big!!");
+              } else {
+                double_array[idx++] = value.value().toDouble();
+              }
             } else {
-              System.out.println("           CAI: as long");
+              if (idx >= long_array.length) {
+                System.out.println("!!!!!!!!!!!! WTF!! IDX " + idx + " too big!!");
+              } else {
               long_array[idx++] = value.value().longValue();
+              }
             }
           } else {
             if (double_array == null) {
@@ -231,13 +247,17 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
               }
               long_array = null;
             }
-            System.out.println("           CAI: as double");
+            if (idx >= double_array.length) {
+              System.out.println("!!!!!!!!!!!! WTF!! IDX " + idx + " too big!!");
+            } else {
             double_array[idx++] = value.value().toDouble();
+            }
           }
           
           if (iterator.hasNext()) {
             value = (TimeSeriesValue<NumericType>) iterator.next();
-            if (value.timestamp().compare(Op.GTE, result.timeSpecification().end())) {
+            if (value.timestamp().compare(Op.GTE, result.timeSpecification().end()) ||
+                value.timestamp().compare(Op.GTE, series_spec.end())) {
               value = null;
             }
           } else {

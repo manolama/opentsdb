@@ -65,6 +65,7 @@ public class SummarizerPassThroughResult extends BaseWrappedQueryResult {
   
   @Override
   public Collection<TimeSeries> timeSeries() {
+    System.out.println("             [SUMMARIZER PASS THROUGH RESULT SERIES] " + series.size());
     return series;
   }
   
@@ -160,6 +161,7 @@ public class SummarizerPassThroughResult extends BaseWrappedQueryResult {
           }
         }
       }
+      System.out.println("                 [STS] " + types + " FROM " + results.source().config().getId() + ":" + dataSource());
       return iterators;
     }
 

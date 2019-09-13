@@ -106,7 +106,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
     failed = new AtomicBoolean();
     current_time = DateTime.currentTimeMillis();
     //summarizer_sink = Lists.newArrayList((QueryNode) this);
-    System.out.println("      CACHE CTX ID: " + System.identityHashCode(context));
+    System.out.println("      [RCQPC: " + System.identityHashCode(this) + "]");
   }
   
   @Override
@@ -479,6 +479,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
   public void close() {
     cleanup();
     try {
+System.out.println("[RCQPC] CLOSING CONTEXT");
       super.close();
     } catch (Throwable t) {
       LOG.warn("failed to close super", t);
@@ -790,6 +791,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       if (results[i].map != null) {
         for (final QueryResult result : results[i].map.values()) {
           try {
+            System.out.println("   [RCQPC] CLOSING RESULT: " + result.source().config().getId());
             result.close();
           } catch (Throwable t) {
             LOG.warn("Failed to close result", t);
@@ -876,7 +878,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
     @Override
     public void onNext(final QueryResult next) {
       if (next.source() instanceof Summarizer) {
-        System.out.println("        ROUTING to AQPC: " + next.source().config().getId());
+        System.out.println("        ROUTING to AQPC: " + next.source().config().getId() + ":" + next.dataSource());
         ReadCacheQueryPipelineContext.this.onNext(next);
         return;
       }
@@ -892,10 +894,10 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       final QueryNode summarizer = summarizer_node_map != null ? 
           summarizer_node_map.get(next.source().config().getId()) : null;
       if (summarizer != null) {
-        System.out.println("        ROUTING to summarizer: " + next.source().config().getId());
+        System.out.println("        ROUTING to summarizer: " + next.source().config().getId() + ":" + next.dataSource());
         summarizer.onNext(next);
       } else {
-        System.out.println("        ROUTING to AQPC: " + next.source().config().getId());
+        System.out.println("        ROUTING to AQPC: " + next.source().config().getId() + ":" + next.dataSource());
         ReadCacheQueryPipelineContext.this.onNext(next);
       }
     }
@@ -1107,6 +1109,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
     // next pass
     for (final QueryNodeConfig config : context.query().getExecutionGraph()) {
       for (final Object source : config.getSources()) {
+        System.out.println("  LINK: " + config.getId() + " => " + source + "    CACHE: " + configs.get((String) source));
         config_graph.putEdge(config, configs.get((String) source));
       }
     }
@@ -1146,8 +1149,6 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
         if (downstream instanceof TimeSeriesDataSourceConfig) {
           ids.add(downstream.getId() + ":" 
               + ((TimeSeriesDataSourceConfig) downstream).getDataSourceId());
-        } else if (downstream.joins()) {
-          ids.addAll(downstream_ids);
         } else if (node instanceof SummarizerConfig &&
             ((SummarizerConfig) node).passThrough()) {
           System.out.println("                PASS THROUGH");

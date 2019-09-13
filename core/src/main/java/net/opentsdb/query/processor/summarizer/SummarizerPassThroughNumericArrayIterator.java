@@ -34,6 +34,8 @@ public class SummarizerPassThroughNumericArrayIterator implements QueryIterator 
     if (!iterator.hasNext()) {
       sts.fillEmpty();
     }
+    System.out.println("                      [SPTNAI] " + iterator.hasNext() + "  CLAZZ: " + iterator.getClass());
+    
   }
   
   @Override
@@ -52,6 +54,7 @@ public class SummarizerPassThroughNumericArrayIterator implements QueryIterator 
         sts.summarize(value.value().doubleArray(), value.value().offset(), value.value().end());
       }
     }
+    System.out.println("                      [SPTNAI] " + value);
     return value;
   }
   

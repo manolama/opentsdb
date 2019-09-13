@@ -67,6 +67,7 @@ public class CombinedResult implements QueryResult, TimeSpecification {
   
   /** Map of <id hash, time series> keyed time series we'll merge results into. */
   protected final Map<Long, TimeSeries> time_series;
+  // TODO - trove here since we don't need synchronicity.
   
   /** The source node. */
   protected final QueryNode<?> node;
@@ -164,6 +165,7 @@ public class CombinedResult implements QueryResult, TimeSpecification {
       // TODO handle tip merge eventually
       for (final TimeSeries ts : results[i].timeSeries()) {
         final long hash = ts.id().buildHashCode();
+        System.out.println("        [CR TS] " + hash + " => " + ts.id());
         TimeSeries combined = time_series.get(hash);
         if (combined == null) {
           combined = new CombinedTimeSeries(this, i, ts);

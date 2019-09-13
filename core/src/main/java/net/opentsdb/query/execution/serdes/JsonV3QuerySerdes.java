@@ -494,23 +494,23 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           writeEventGroup((EventsGroupValue) value, json, id);
           wrote_values = true;
         } else {
-          if (value.timestamp().epoch() != 0) {
-            // summaries can have a 0 timestamp since they cover the entire range
-            while (value != null && value.timestamp().compare(Op.LT, start)) {
-              if (iterator.hasNext()) {
-                value = iterator.next();
-              } else {
-                value = null;
-              }
-            }
-          }
+//          if (value.timestamp().epoch() != 0) {
+//            // summaries can have a 0 timestamp since they cover the entire range
+//            while (value != null && value.timestamp().compare(Op.LT, start)) {
+//              if (iterator.hasNext()) {
+//                value = iterator.next();
+//              } else {
+//                value = null;
+//              }
+//            }
+//          }
 
           if (value == null) {
             continue;
           }
-          if (value.timestamp().epoch() != 0 && (value.timestamp().compare(Op.LT, start) || value.timestamp().compare(Op.GT, end))) {
-            continue;
-          }
+//          if (value.timestamp().epoch() != 0 && (value.timestamp().compare(Op.LT, start) || value.timestamp().compare(Op.GT, end))) {
+//            continue;
+//          }
 
           if (iterator.getType() == NumericType.TYPE) {
             if (writeNumeric((TimeSeriesValue<NumericType>) value, options, iterator, json, result, wrote_values)) {

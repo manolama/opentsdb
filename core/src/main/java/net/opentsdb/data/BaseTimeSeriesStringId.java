@@ -235,12 +235,12 @@ public class BaseTimeSeriesStringId implements TimeSeriesStringId {
   @Override
   public long buildHashCode() {
     final StringBuilder buf = new StringBuilder();
-    if (alias != null) {
-      buf.append(alias);
-    }
+//    if (alias != null) {
+//      buf.append(alias);
+//    }
     buf.append(namespace);
     buf.append(metric);
-    if (tags != null) {
+    if (tags != null && !tags.isEmpty()) {
       final TreeMap<String, String> sorted = 
           new TreeMap<String, String>(tags);
       for (final Entry<String, String> pair : sorted.entrySet()) {
@@ -248,17 +248,21 @@ public class BaseTimeSeriesStringId implements TimeSeriesStringId {
         buf.append(pair.getValue());
       }
     }
-    if (aggregated_tags != null) {
-      for (final String t : aggregated_tags) {
+    if (aggregated_tags != null && !aggregated_tags.isEmpty()) {
+      List<String> sorted = Lists.newArrayList(aggregated_tags);
+      Collections.sort(sorted);
+      for (final String t : sorted) {
         buf.append(t);
       }
     }
-    if (disjoint_tags != null) {
-      for (final String t : disjoint_tags) {
+    if (disjoint_tags != null && !disjoint_tags.isEmpty()) {
+      List<String> sorted = Lists.newArrayList(disjoint_tags);
+      Collections.sort(sorted);
+      for (final String t : sorted) {
         buf.append(t);
       }
     }
-    if (unique_ids != null) {
+    if (unique_ids != null && !unique_ids.isEmpty()) {
       final List<String> sorted = Lists.newArrayList(unique_ids);
       Collections.sort(sorted);
       for (final String id : sorted) {

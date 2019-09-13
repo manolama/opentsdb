@@ -17,8 +17,10 @@ package net.opentsdb.query.execution.cache;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.TimeSeries;
@@ -46,6 +48,8 @@ public class CombinedTimeSeries implements TimeSeries {
   /** A reference to the first non-null series. */
   protected final TimeSeries ref_ts;
   
+  protected final Set<TypeToken<? extends TimeSeriesDataType>> types;
+  
   /**
    * Default ctor.
    * @param combined The non-null result set we're a part.
@@ -57,8 +61,14 @@ public class CombinedTimeSeries implements TimeSeries {
                      final TimeSeries ts) {
     this.combined = combined;
     series = new TimeSeries[combined.results().length];
+    types = Sets.newHashSet();
     series[index] = ts;
     ref_ts = ts;
+    types.addAll(ref_ts.types());
+    if (types.size() > 1 && types.contains(NumericArrayType.TYPE)) {
+      types.clear();
+      types.add(NumericArrayType.TYPE);
+    }
   }
   
   @Override
@@ -114,5 +124,10 @@ public class CombinedTimeSeries implements TimeSeries {
 
   void add(final int index, final TimeSeries ts) {
     series[index] = ts;
+    types.addAll(ts.types());
+    if (types.size() > 1 && types.contains(NumericArrayType.TYPE)) {
+      types.clear();
+      types.add(NumericArrayType.TYPE);
+    }
   }
 }

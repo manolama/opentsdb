@@ -116,6 +116,7 @@ public abstract class AbstractQueryPipelineContext implements
     finished_sources = Maps.newConcurrentMap();
     total_finished = new AtomicInteger();
     ids = Maps.newConcurrentMap();
+    System.out.println("      [AQPC: " + System.identityHashCode(this) + "]");
   }
   
   @Override
@@ -577,7 +578,7 @@ System.out.println("BASE SINK CONFIGS......... " + context.sinkConfigs() + "  AN
    * @return True if complete, false if not.
    */
   protected boolean checkComplete() {
-    System.out.println("   [AQPC] COUNTDOWNS: " + countdowns);
+    System.out.println("   [AQPC: " + System.identityHashCode(this) + "] COUNTDOWNS: " + countdowns);
     for (final AtomicInteger integer : countdowns.values()) {
       if (integer.get() > 0) {
         return false;

@@ -43,6 +43,7 @@ public class SummarizerPassThroughNumericIterator implements QueryIterator {
     } else {
       long_values = new long[8];
     }
+    System.out.println("           [SPTNI] " + iterator.hasNext());
   }
   
   @Override

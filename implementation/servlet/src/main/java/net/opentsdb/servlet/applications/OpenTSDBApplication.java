@@ -76,9 +76,9 @@ public class OpenTSDBApplication extends ResourceConfig {
       register(PutDataPointRpc.class);
       register(JMXResource.class);
       register(RegistryRpc.class);
+      register(new QueryExecutionExceptionMapper(false, 1024));
       register(GenericExceptionMapper.class);
       register(MetaRpc.class);
-      register(new QueryExecutionExceptionMapper(false, 1024));
       
       addProperties(ImmutableMap.of(
           "jersey.config.server.monitoring.statistics.mbeans.enabled", "true"));

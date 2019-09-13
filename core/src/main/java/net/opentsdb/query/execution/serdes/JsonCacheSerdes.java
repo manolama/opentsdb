@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAmount;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
@@ -90,7 +91,8 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
     JsonGenerator json;
     try {
       json = JSON.getFactory().createGenerator(baos);
-      json.writeStartArray();
+      json.writeStartObject();
+      json.writeArrayFieldStart("results");
       
       for (final QueryResult result : results) {
         System.out.println("       CACHE SERializing: " + result.source().config().getId() + ":" + result.dataSource());
@@ -153,12 +155,14 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
       }
       
       json.writeEndArray();
+      json.writeEndObject();
       json.close();
     } catch (IOException e1) {
       throw new RuntimeException("Failed to instantiate a JSON "
           + "generator", e1);
     }
-    System.out.println("           [SERIALIZED] " + new String(baos.toByteArray()));
+    
+    System.out.println("   SERDES: " + new String(baos.toByteArray()));
     
     return baos.toByteArray();
   }
@@ -1237,6 +1241,12 @@ public class JsonCacheSerdes implements TimeSeriesCacheSerdes, TimeSeriesCacheSe
               long_data[idx++] = node.asLong();
             }
           }
+        }
+        
+        if (long_data != null) {
+          System.out.println("         [ARR] " + Arrays.toString(long_data));
+        } else {
+          System.out.println("         [ARR] " + Arrays.toString(double_data));
         }
       }
       
