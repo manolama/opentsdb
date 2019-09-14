@@ -63,6 +63,7 @@ import net.opentsdb.query.processor.merge.MergerConfig;
 import net.opentsdb.query.processor.summarizer.Summarizer;
 import net.opentsdb.query.processor.summarizer.SummarizerConfig;
 import net.opentsdb.query.processor.summarizer.SummarizerFactory;
+import net.opentsdb.query.processor.topn.TopNConfig;
 import net.opentsdb.query.serdes.SerdesOptions;
 import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.stats.Span;
@@ -141,6 +142,12 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
     interval_in_seconds = 0;
     int ds_interval = Integer.MAX_VALUE;
     for (final QueryNodeConfig config : context.query().getExecutionGraph()) {
+      if (config instanceof TopNConfig) {
+        skip_cache = true;
+        LOG.warn("Skipping cache as we had a TOPN query.");
+        break;
+      }
+      
       final QueryNodeFactory factory = context.tsdb().getRegistry()
           .getQueryNodeFactory(DownsampleFactory.TYPE);
       if (factory == null) {
@@ -373,7 +380,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
   @Override
   public void fetchNext(final Span span) {
     hits = new AtomicInteger();
-    cache_latch = new AtomicInteger(slices.length);
+    cache_latch = new AtomicInteger(slices == null ? 1 : slices.length);
     System.out.println("    [INIT LATCH] " + cache_latch.get());
     cache.fetch(this, keys, this, null);
   }
@@ -791,6 +798,10 @@ System.out.println("[RCQPC] CLOSING CONTEXT");
   }
   
   void cleanup() {
+    if (results == null) {
+      return;
+    }
+    
     for (int i = 0; i < results.length; i++) {
       if (results[i] == null) {
         continue;

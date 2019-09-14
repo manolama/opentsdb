@@ -155,21 +155,37 @@ public class CombinedArray implements TypedTimeSeriesIterator<NumericArrayType>,
               double_array = new double[array_length];
               Arrays.fill(double_array, Double.NaN);
               for (int x = start_offset; x < end; x++) {
+                if (idx >= double_array.length) {
+                  System.out.println("   ********** WARNING : BAD ENDING: " + (idx));
+                  break;
+                }
                 double_array[idx++] = value.value().longArray()[x];
               }
               long_array = null;
             } else {
               // start with a long array
               long_array = new long[array_length];
+              if (idx + (end - start_offset) >= long_array.length) {
+                System.out.println("   ********** WARNING : BAD ENDING: " + (idx + end - start_offset));
+                end -= (idx + end - start_offset - long_array.length);
+              }
               System.arraycopy(value.value().longArray(), start_offset, 
                   long_array, idx, end);
               idx += end;
             }
           } else if (double_array != null) {
             for (int x = start_offset; x < end; x++) {
+              if (idx >= double_array.length) {
+                System.out.println("   ********** WARNING : BAD ENDING: " + (idx));
+                break;
+              }
               double_array[idx++] = value.value().longArray()[x];
             }
           } else {
+            if (idx + (end - start_offset) >= long_array.length) {
+              System.out.println("   ********** WARNING : BAD ENDING: " + (idx + end - start_offset));
+              end -= (idx + end - start_offset - long_array.length);
+            }
             System.arraycopy(value.value().longArray(), start_offset, 
                 long_array, idx, end);
             idx += end;
