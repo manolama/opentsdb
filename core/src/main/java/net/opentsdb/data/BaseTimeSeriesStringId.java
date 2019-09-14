@@ -88,7 +88,7 @@ public class BaseTimeSeriesStringId implements TimeSeriesStringId {
    * using UTF8.
    * @param builder A non-null builder.
    */
-  private BaseTimeSeriesStringId(final Builder builder) {
+  protected BaseTimeSeriesStringId(final Builder builder) {
     encoded = builder.encoded;
     alias = builder.alias;
     namespace = builder.namespace;
@@ -200,9 +200,9 @@ public class BaseTimeSeriesStringId implements TimeSeriesStringId {
     
     final TimeSeriesStringId id = (TimeSeriesStringId) o;
     
-    if (!Objects.equal(alias, id.alias())) {
-      return false;
-    }
+//    if (!Objects.equal(alias, id.alias())) {
+//      return false;
+//    }
     if (!Objects.equal(namespace(), id.namespace())) {
       return false;
     }

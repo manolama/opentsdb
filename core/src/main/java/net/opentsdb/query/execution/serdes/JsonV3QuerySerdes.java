@@ -190,7 +190,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
                 spec_start.snapToPreviousInterval(interval, u);
                 spec_start.add(result.timeSpecification().interval());
               }
-              LOG.info(" ---------------- FIXED START: " + spec_start);
             } else {
               spec_start = start;
             }
@@ -200,7 +199,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
               int interval = DateTime.getDurationInterval(result.timeSpecification().stringInterval());
               ChronoUnit u = DateTime.unitsToChronoUnit(DateTime.getDurationUnits(result.timeSpecification().stringInterval()));
               end.snapToPreviousInterval(interval, u);
-              LOG.info("--------------- FIXED spec.end: " + spec_end);
             } else {
               spec_end = end;
             }
@@ -609,7 +607,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       final TimeStamp start,
       final TimeStamp end,
       boolean wrote_values) throws IOException {
-    LOG.info("-------- WRITING NUMERIC TYPE");
     boolean wrote_type = false;
     if (result.timeSpecification() != null) {
       // just the values
@@ -831,7 +828,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       final TimeStamp start,
       final TimeStamp end,
       boolean wrote_values) throws IOException {
-    LOG.info("------- WRITTING SUMMARY: " + value.timestamp().epoch());
     boolean wrote_type = false;
     if (result.timeSpecification() != null) {
       if (!(result.source() instanceof Summarizer)) {
@@ -1003,17 +999,15 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
     if (!start.compare(Op.EQ, result.timeSpecification().start()) || 
         !end.compare(Op.EQ, result.timeSpecification().end())) {
       TimeStamp cur = result.timeSpecification().start().getCopy();
-      LOG.info(" ---------- ARRAY ADJUSTED to start and end timestamps " + cur.epoch() + " => ST: " + start.epoch());
       int idx = value.value().offset();
       while (idx < value.value().end() && cur.compare(Op.LT, start)) {
         idx++;
         cur.add(result.timeSpecification().interval());
       }
-      LOG.info("    idx: " + idx + "   END: " + value.value().end() + "  CUR: " + cur.epoch());
+      
       boolean wrote_type = false;
       for (; idx < value.value().end(); idx++) {
         if (cur.compare(Op.GTE, end)) {
-          LOG.info("     break at: " + cur.epoch() + "   END: " + end.epoch());
           break;
         }
         
@@ -1038,7 +1032,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       return wrote_type;
     }
     
-    LOG.info(" ---------- ARRAY AS NORMAL");
     // we can assume here that we have a time spec as we can't get arrays
     // without it.
     boolean wrote_type = false;

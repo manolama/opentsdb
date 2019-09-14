@@ -38,16 +38,7 @@ import net.opentsdb.data.TimeSeriesStringId;
  * 
  * @since 3.0
  */
-public class StringIdOverride implements TimeSeriesStringId {
-  
-  /** The source ID. */
-  private final TimeSeriesStringId id;
-  
-  /** The new alias. */
-  private final String alias;
-  
-  /** A cached hash code ID. */
-  protected volatile long cached_hash; 
+public class StringIdOverride extends BaseTimeSeriesStringId {
   
   /**
    * Default package private ctor.
@@ -55,149 +46,15 @@ public class StringIdOverride implements TimeSeriesStringId {
    * @param alias A non-null alias.
    */
   StringIdOverride(final TimeSeriesStringId id, final String alias) {
-    this.id = id;
-    this.alias = alias;
-  }
-  
-  @Override
-  public boolean encoded() {
-    return false;
-  }
-
-  @Override
-  public TypeToken<? extends TimeSeriesId> type() {
-    return id.type();
-  }
-  
-  @Override
-  public int compareTo(final TimeSeriesStringId o) {
-    return ComparisonChain.start()
-        .compare(Strings.nullToEmpty(alias), Strings.nullToEmpty(o.alias()))
-        .compare(Strings.nullToEmpty(id.namespace()), Strings.nullToEmpty(o.namespace()))
-        .compare(alias, o.metric())
-        .compare(id.tags(), o.tags(), BaseTimeSeriesStringId.STR_MAP_CMP)
-        .compare(id.aggregatedTags(), o.aggregatedTags(), 
-            Ordering.<String>natural().lexicographical().nullsFirst())
-        .compare(id.disjointTags(), o.disjointTags(), 
-            Ordering.<String>natural().lexicographical().nullsFirst())
-        .compare(id.uniqueIds(), o.uniqueIds(), 
-            Ordering.<String>natural().lexicographical().nullsFirst())
-        .result();
-  }
-
-  @Override
-  public boolean equals(final Object o) {
-    if (this == o)
-      return true;
-    if (o == null || !(o instanceof TimeSeriesStringId))
-      return false;
-    
-    final TimeSeriesStringId id = (TimeSeriesStringId) o;
-    
-    if (!Objects.equal(alias, id.alias())) {
-      return false;
-    }
-    if (!Objects.equal(namespace(), id.namespace())) {
-      return false;
-    }
-    if (!Objects.equal(metric(), id.metric())) {
-      return false;
-    }
-    if (!Objects.equal(tags(), id.tags())) {
-      return false;
-    }
-    if (!Objects.equal(aggregatedTags(), id.aggregatedTags())) {
-      return false;
-    }
-    if (!Objects.equal(disjointTags(), id.disjointTags())) {
-      return false;
-    }
-    if (!Objects.equal(uniqueIds(), id.uniqueIds())) {
-      return false;
-    }
-    return true;
-  }
-  
-  @Override
-  public int hashCode() {
-    if (cached_hash == 0) {
-      cached_hash = buildHashCode();
-    }
-    return Long.hashCode(cached_hash);
-  }
-  
-  @Override
-  public long buildHashCode() {
-    final StringBuilder buf = new StringBuilder();
-    if (alias != null) {
-      buf.append(alias);
-    }
-    buf.append(id.namespace());
-    buf.append(alias);
-    if (id.tags() != null) {
-      for (final Entry<String, String> pair : id.tags().entrySet()) {
-        buf.append(pair.getKey());
-        buf.append(pair.getValue());
-      }
-    }
-    if (id.aggregatedTags() != null) {
-      for (final String t : id.aggregatedTags()) {
-        buf.append(t);
-      }
-    }
-    if (id.disjointTags() != null) {
-      for (final String t : id.disjointTags()) {
-        buf.append(t);
-      }
-    }
-    if (id.uniqueIds() != null) {
-      final List<String> sorted = Lists.newArrayList(id.uniqueIds());
-      Collections.sort(sorted);
-      for (final String id : sorted) {
-        buf.append(id);
-      }
-    }
-    return LongHashFunction.xx_r39().hashChars(buf.toString());
-  }
-  
-  @Override
-  public String alias() {
-    return alias;
-  }
-
-  @Override
-  public String namespace() {
-    return id.namespace();
-  }
-
-  @Override
-  public String metric() {
-    return alias;
-  }
-
-  @Override
-  public Map<String, String> tags() {
-    return id.tags();
-  }
-
-  @Override
-  public List<String> aggregatedTags() {
-    return id.aggregatedTags();
-  }
-
-  @Override
-  public List<String> disjointTags() {
-    return id.disjointTags();
-  }
-
-  @Override
-  public Set<String> uniqueIds() {
-    return id.uniqueIds();
-  }
-
-  @Override
-  public long hits() {
-    return id.hits();
+    super(BaseTimeSeriesStringId.newBuilder()
+        .setAlias(alias)
+        .setNamespace(id.namespace())
+        .setMetric(id.metric())
+        .setTags(id.tags())
+        .setAggregatedTags(id.aggregatedTags())
+        .setDisjointTags(id.disjointTags())
+        .setUniqueId(id.uniqueIds())
+        .setHits(id.hits()));
   }
   
 }

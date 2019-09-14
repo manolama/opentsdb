@@ -20,7 +20,11 @@ import java.time.temporal.TemporalAmount;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
@@ -98,6 +102,8 @@ public class CombinedResult implements QueryResult, TimeSpecification {
   /** An optional exception. */
   protected Throwable exception;
   
+  static Map<Long, Map<Long, String>> LAST = Maps.newConcurrentMap();
+  
   /**
    * Default ctor.
    * <b>WARNING: We assume that every QueryResult has the same time spec (aside 
@@ -128,6 +134,8 @@ public class CombinedResult implements QueryResult, TimeSpecification {
     result_units = DateTime.getDurationUnits(result_interval).equals("h") ? 
         ChronoUnit.HOURS : ChronoUnit.DAYS;
     time_series = Maps.newHashMap();
+    Logger LOG = LoggerFactory.getLogger("CACHE");
+    LOG.info("        [CR TS] ------------------- START");
     for (int i = 0; i < results.length; i++) {
       if (results[i] == null) {
         continue;
@@ -165,7 +173,7 @@ public class CombinedResult implements QueryResult, TimeSpecification {
       // TODO handle tip merge eventually
       for (final TimeSeries ts : results[i].timeSeries()) {
         final long hash = ts.id().buildHashCode();
-        System.out.println("        [CR TS] " + hash + " => " + ts.id());
+        LOG.info("        [CR TS] " + hash + " => " + ts.id() + "  SRC: " + results[i].source().config().getId() + ":" + results[i].dataSource());
         TimeSeries combined = time_series.get(hash);
         if (combined == null) {
           combined = new CombinedTimeSeries(this, i, ts);
@@ -175,7 +183,37 @@ public class CombinedResult implements QueryResult, TimeSpecification {
         }
       }
     }
+    LOG.info("        [CR TS] ------------------- END total time series: " + time_series.size());
     
+    Map<Long, String> lst = LAST.get(context.query().buildHashCode().asLong());
+    if (lst == null) {
+      lst = Maps.newHashMap();
+      LAST.put(context.query().buildHashCode().asLong(), lst);
+      for (final TimeSeries ts : time_series.values()) {
+        lst.put(ts.id().buildHashCode(), ts.id().toString());
+      }
+    } else {
+      int err = 0;
+      if (lst.size() != time_series.size()) {
+        LOG.warn("DIFFERENT! Last: " + lst.size() + "  now it's " + time_series.size());
+        err++;
+      }
+      
+      for (final TimeSeries ts : time_series.values()) {
+        if (!lst.containsKey(ts.id().buildHashCode())) {
+          LOG.warn("*** DIFF NEW SERIES: " + ts.id().toString() + " => " + ts.id().buildHashCode());
+          err++;
+        }
+      }
+      
+      for (final Entry<Long, String> entry : lst.entrySet()) {
+        if (!time_series.containsKey(entry.getKey())) {
+          LOG.warn("*** NEW MISSING: " + entry.getValue() + " => " + entry.getKey());
+          err++;
+        }
+      }
+      LOG.info("[TSERRS]: " + err);
+    }
     // determine if we're aligned
     long start = context.query().startTime().epoch();
     start = start - (start % (result_units == ChronoUnit.HOURS ? 3600 : 86400));

@@ -379,8 +379,11 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
 
   @Override
   public void fetchNext(final Span span) {
+    if (skip_cache) {
+      throw new RuntimeException("We shouldn't be here as we're skipping the cache!!");
+    }
     hits = new AtomicInteger();
-    cache_latch = new AtomicInteger(slices == null ? 1 : slices.length);
+    cache_latch = new AtomicInteger(slices.length);
     System.out.println("    [INIT LATCH] " + cache_latch.get());
     cache.fetch(this, keys, this, null);
   }
@@ -746,13 +749,16 @@ System.out.println("[RCQPC] CLOSING CONTEXT");
   }
 
   void registerConfigs(final TSDB tsdb) {
-    if (!tsdb.getConfig().hasProperty(CACHE_PLUGIN_KEY)) {
-      tsdb.getConfig().register(CACHE_PLUGIN_KEY, null, true, 
-          "The ID of a cache plugin to use.");
-    }
-    if (!tsdb.getConfig().hasProperty(KEYGEN_PLUGIN_KEY)) {
-      tsdb.getConfig().register(KEYGEN_PLUGIN_KEY, null, true,
-          "The ID of a key generator plugin to use.");
+    // TODO - factory
+    synchronized (tsdb.getConfig()) {
+      if (!tsdb.getConfig().hasProperty(CACHE_PLUGIN_KEY)) {
+        tsdb.getConfig().register(CACHE_PLUGIN_KEY, null, true, 
+            "The ID of a cache plugin to use.");
+      }
+      if (!tsdb.getConfig().hasProperty(KEYGEN_PLUGIN_KEY)) {
+        tsdb.getConfig().register(KEYGEN_PLUGIN_KEY, null, true,
+            "The ID of a key generator plugin to use.");
+      }
     }
   }
   

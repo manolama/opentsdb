@@ -22,6 +22,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.reflect.TypeToken;
 import net.opentsdb.auth.AuthState;
 import net.opentsdb.common.Const;
@@ -149,6 +153,8 @@ public abstract class BaseQueryContext implements QueryContext {
   
   @Override
   public Deferred<Void> initialize(final Span span) {
+    Logger LOG = LoggerFactory.getLogger("CACHE");
+    LOG.info("-------- INIT CACHE --------");
     List<Deferred<Void>> initializations = null;
     if (query.getFilters() != null && !query.getFilters().isEmpty()) {
       initializations = Lists.newArrayListWithExpectedSize(
@@ -158,25 +164,30 @@ public abstract class BaseQueryContext implements QueryContext {
       }
     }
     
+    class CacheInitCB implements Callback<Deferred<Void>, Void> {
+      @Override
+      public Deferred<Void> call(final Void ignored) throws Exception {
+        LOG.info("--------- CACHE CB: " + ((ReadCacheQueryPipelineContext) pipeline).skipCache());
+        if (((ReadCacheQueryPipelineContext) pipeline).skipCache()) {
+          LOG.info("SKIPPING CACHE!!! BUILDING PIPLINE");
+          pipeline.close();
+          pipeline = new LocalPipeline(BaseQueryContext.this, builder_sinks);
+          return pipeline.initialize(local_span);
+        }
+        return Deferred.fromResult(null);
+      }
+    }
+    
     class FilterCB implements Callback<Deferred<Void>, Void> {
       @Override
       public Deferred<Void> call(final Void ignored) throws Exception {
-        System.out.println("-------- CACHE MODE: " + query.getCacheMode());
+        LOG.info("-------- CACHE MODE: " + query.getCacheMode());
         if (query.getCacheMode() == CacheMode.BYPASS) {
           pipeline = new LocalPipeline(BaseQueryContext.this, builder_sinks);
           return pipeline.initialize(local_span);
         }
         
-        class CacheInitCB implements Callback<Deferred<Void>, Void> {
-          @Override
-          public Deferred<Void> call(final Void ignored) throws Exception {
-            if (((ReadCacheQueryPipelineContext) pipeline).skipCache()) {
-              pipeline = new LocalPipeline(BaseQueryContext.this, builder_sinks);
-              return pipeline.initialize(local_span);
-            }
-            return Deferred.fromResult(null);
-          }
-        }
+        LOG.info("------ INITING CACHE CONTEXT");
         pipeline = new ReadCacheQueryPipelineContext(
             BaseQueryContext.this, builder_sinks);
         return pipeline.initialize(local_span)
@@ -192,10 +203,11 @@ public abstract class BaseQueryContext implements QueryContext {
       System.out.println("-------- CACHE MODE: " + query.getCacheMode());
       if (query.getCacheMode() == null || query.getCacheMode() == CacheMode.BYPASS) {
         pipeline = new LocalPipeline(BaseQueryContext.this, builder_sinks);
+        return pipeline.initialize(local_span);
       } else {
         pipeline = new ReadCacheQueryPipelineContext(BaseQueryContext.this, builder_sinks);
+        return pipeline.initialize(local_span).addCallbackDeferring(new CacheInitCB());
       }
-      return pipeline.initialize(local_span);
     }
   }
   
