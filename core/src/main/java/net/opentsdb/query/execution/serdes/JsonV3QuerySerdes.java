@@ -72,6 +72,7 @@ import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.exceptions.QueryExecutionException;
 import net.opentsdb.pools.StringBuilderPool;
 import net.opentsdb.pools.PooledObject;
+import net.opentsdb.query.AbstractQueryPipelineContext.ResultWrapper;
 import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
@@ -193,6 +194,10 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           final TimeStamp spec_start;
           final TimeStamp spec_end;
           
+          System.out.println("      ** RESULT: " + ((ResultWrapper) result).realResult());
+          System.out.println("      ** RESULT SPEC: " + result.timeSpecification());
+          System.out.println("      ** RESULT START: " + result.timeSpecification().start());
+          System.out.println("      ** RESULT END: " + result.timeSpecification().end());
           // serdes time spec if present
           if (result.timeSpecification() != null) {
             if (result.timeSpecification().start().compare(Op.LT, start)) {

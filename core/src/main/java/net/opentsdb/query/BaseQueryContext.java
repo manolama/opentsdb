@@ -315,7 +315,7 @@ public abstract class BaseQueryContext implements QueryContext {
    * Append the logs from a sub context to this one.
    * @param logs The list of logs to add.
    */
-  void appendLogs(final List<String> logs) {
+  public void appendLogs(final List<String> logs) {
     if (logs == null) {
       return;
     }

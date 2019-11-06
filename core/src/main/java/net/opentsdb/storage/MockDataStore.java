@@ -127,7 +127,8 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     this.id = id;
     
     if (LOG.isDebugEnabled()) {
-      LOG.debug("Intantiating mock data store with ID: " + this.id + "@" + System.identityHashCode(this));
+      LOG.debug("Intantiating mock data store with ID: " + this.id + "@" 
+          + System.identityHashCode(this));
     }
     
     database = Maps.newHashMap();

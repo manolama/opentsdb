@@ -360,6 +360,7 @@ public abstract class AbstractQueryPipelineContext implements
     context.tsdb().getQueryThreadPool().submit(new Runnable() {
       @Override
       public void run() {
+        System.out.println(" --------- RUNNIG query");
         if (context.mode() == QueryMode.SINGLE ||
             context.mode() == QueryMode.BOUNDED_SERVER_SYNC_STREAM || 
             context.mode() == QueryMode.CONTINOUS_SERVER_SYNC_STREAM ||
@@ -392,6 +393,7 @@ public abstract class AbstractQueryPipelineContext implements
         }
       }
     }, context);
+    System.out.println("SUmitted query to " + context.tsdb().getQueryThreadPool());
   }
   
   @Override
@@ -617,6 +619,10 @@ public abstract class AbstractQueryPipelineContext implements
     
     ResultWrapper(final QueryResult result) {
       super(result);
+    }
+    
+    public QueryResult realResult() {
+      return result;
     }
     
     @Override
