@@ -284,7 +284,7 @@ public class TestOlympicScoringBaseline {
   
   @Test
   public void predict() throws Exception {
-    when(node.predictionWidth()).thenReturn(3600L);
+    when(node.predictionIntervals()).thenReturn(60L);
     when(node.predictionInterval()).thenReturn(60L);
     when(node.predictionStart()).thenReturn(BASE_TIME + (3600 * 3));
     
@@ -347,7 +347,7 @@ public class TestOlympicScoringBaseline {
   
   @Test
   public void predictNoBaseline() throws Exception {
-    when(node.predictionWidth()).thenReturn(3600L);
+    when(node.predictionIntervals()).thenReturn(60L);
     when(node.predictionInterval()).thenReturn(60L);
     when(node.predictionStart()).thenReturn(BASE_TIME + (3600 * 3));
     

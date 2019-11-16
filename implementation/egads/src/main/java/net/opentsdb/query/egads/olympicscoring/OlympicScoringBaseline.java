@@ -87,8 +87,7 @@ public class OlympicScoringBaseline {
     
     final com.yahoo.egads.data.TimeSeries prediction = 
         new com.yahoo.egads.data.TimeSeries();
-    final double[] results = new double[(int) (node.predictionWidth() / 
-        node.predictionInterval())];
+    final double[] results = new double[(int) node.predictionIntervals()];
     
     // fill the prediction with nans at the proper timestamps
     long ts = node.predictionStart();

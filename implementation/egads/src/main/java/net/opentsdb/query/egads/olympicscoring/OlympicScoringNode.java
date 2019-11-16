@@ -63,6 +63,8 @@ import net.opentsdb.query.anomaly.PredictionCache;
 import net.opentsdb.query.egads.EgadsResult;
 import net.opentsdb.query.egads.EgadsTimeSeries;
 import net.opentsdb.query.egads.ThresholdEvaluator;
+import net.opentsdb.query.processor.downsample.DownsampleConfig;
+import net.opentsdb.query.processor.downsample.DownsampleFactory;
 import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.stats.Span;
 import net.opentsdb.utils.DateTime;
@@ -88,11 +90,11 @@ public class OlympicScoringNode extends AbstractQueryNode {
   long prediction_start;
   private EgadsResult prediction;
   private QueryResult current;
-  final TLongObjectMap<Baseline> join = new TLongObjectHashMap<Baseline>();
+  final TLongObjectMap<OlympicScoringBaseline> join = 
+      new TLongObjectHashMap<OlympicScoringBaseline>();
   final ChronoUnit model_units;
-  
-   long prediction_width;
-   long prediction_interval;
+  long prediction_intervals;
+  long prediction_interval;
   
   public OlympicScoringNode(final QueryNodeFactory factory,
                             final QueryPipelineContext context,
@@ -105,8 +107,47 @@ public class OlympicScoringNode extends AbstractQueryNode {
     jitter = jitter();
     jitter_duration = Duration.ofSeconds(jitter);
     failed = new AtomicBoolean();
-//    types = Sets.newHashSet();
-//    types.add(NumericArrayType.TYPE);
+    
+    long span = DateTime.parseDuration(config.getBaselinePeriod()) / 1000;
+    if (span < 86400) {
+      model_units = ChronoUnit.HOURS;
+    } else {
+      model_units = ChronoUnit.DAYS;
+    }
+    
+    // TODO - find the proper ds in graph in order
+    DownsampleConfig ds = null;
+    for (final QueryNodeConfig node : config.getBaselineQuery().getExecutionGraph()) {
+      if (node instanceof DownsampleConfig) {
+        ds = (DownsampleConfig) node;
+        break;
+      }
+    }
+    
+    if (ds == null) {
+      throw new IllegalStateException("Downsample can't be null.");
+    }
+    
+    final long delta = context.query().endTime().msEpoch() - 
+        context.query().startTime().msEpoch();
+    
+    if (ds.getInterval().equalsIgnoreCase("AUTO")) {
+      final QueryNodeFactory dsf = context.tsdb().getRegistry()
+          .getQueryNodeFactory(DownsampleFactory.TYPE);
+      if (dsf == null) {
+        LOG.error("Unable to find a factory for the downsampler.");
+      }
+      if (((DownsampleFactory) dsf).intervals() == null) {
+        LOG.error("No auto intervals for the downsampler.");
+      }
+      String interval = DownsampleFactory.getAutoInterval(delta, 
+          ((DownsampleFactory) factory).intervals(), null);
+      prediction_interval = DateTime.parseDuration(interval) / 1000;
+      prediction_intervals = delta / (prediction_interval * 1000);
+    } else {
+      prediction_interval = DateTime.parseDuration(ds.getInterval()) / 1000;
+      prediction_intervals = delta / (prediction_interval * 1000);
+    }
     
     final TimeStamp start = context.query().startTime().getCopy();
     final ChronoUnit duration = modelDuration();
@@ -116,12 +157,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
 //    }
     prediction_start = start.epoch();
  // TODO - make this configurable and flexible.
-    long span = DateTime.parseDuration(config.getBaselinePeriod()) / 1000;
-    if (span < 86400) {
-      model_units = ChronoUnit.HOURS;
-    } else {
-      model_units = ChronoUnit.DAYS;
-    }
+    
     System.out.println("  PRED START: " + prediction_start); // good is 11 now w/o jitter
   }
   
@@ -386,141 +422,6 @@ public class OlympicScoringNode extends AbstractQueryNode {
     }
   }
   
-  class Baseline {
-    final TimeSeriesId id;
-    volatile long last_ts;
-    volatile com.yahoo.egads.data.TimeSeries baseline = 
-        new com.yahoo.egads.data.TimeSeries();
-    
-    Baseline(final TimeSeriesId id) {
-      this.id = id;
-    }
-    
-    void append(TimeSeries series, QueryResult result) {
-      TypedTimeSeriesIterator<?> iterator = null;
-      Optional<TypedTimeSeriesIterator<?>> optional = 
-          series.iterator(NumericArrayType.TYPE);
-      if (optional.isPresent()) {
-        iterator = optional.get();
-      } else {
-        optional = series.iterator(NumericType.TYPE);
-        if (optional.isPresent()) {
-          iterator = optional.get();
-        }
-      }
-      
-      if (optional == null) {
-        throw new IllegalArgumentException("Whoops no baseline??");
-      }
-      
-      while (iterator.hasNext()) {
-        if (iterator.getType() == NumericArrayType.TYPE) {
-          final TimeSeriesValue<NumericArrayType> value = 
-              (TimeSeriesValue<NumericArrayType>) iterator.next();
-          System.out.println("   RESULT TIME SPEC: " + result.timeSpecification());
-          final TimeStamp ts = result.timeSpecification().start();
-          if (value.value().isInteger()) {
-            final long[] array = value.value().longArray();
-            for (int x = value.value().offset(); x < value.value().end(); x++) {
-              System.out.println("      BL: " + ts.epoch() + "  " + array[x]);
-              if (ts.epoch() > last_ts) {
-                try {
-                  baseline.append(ts.epoch(), array[x]);
-                } catch (Exception e) {
-                  // TODO Auto-generated catch block
-                  e.printStackTrace();
-                }
-                last_ts = ts.epoch();
-              }
-              ts.add(result.timeSpecification().interval());
-            }
-          } else {
-            final double[] array = value.value().doubleArray();
-            for (int x = value.value().offset(); x < value.value().end(); x++) {
-              // TODO  - ugg!! EGADs needs double precision!
-              if (Double.isNaN(array[x])) {
-                System.out.println("Skipped NaN...");
-                continue;
-              } else if (ts.epoch() <= last_ts) {
-                System.out.println("Skipped early...");
-                continue;
-              }
-              
-              //if (!Double.isNaN(array[x]) && ts.epoch() > last_ts) {
-                try {
-                  baseline.append(ts.epoch(), (float) array[x]);
-                } catch (Exception e) {
-                  // TODO Auto-generated catch block
-                  e.printStackTrace();
-                }
-                last_ts = ts.epoch();
-                System.out.println("      BL: " + ts.epoch() + "  " + array[x]);
-//              } else {
-//                System.out.println("skipped..");
-//              }
-              ts.add(result.timeSpecification().interval());
-            }
-          }
-        } else if (iterator.getType() == NumericType.TYPE) {
-          final TimeSeriesValue<NumericType> value = 
-              (TimeSeriesValue<NumericType>) iterator.next();
-          if (!Double.isNaN(value.value().toDouble()))
-          System.out.println("      BL: " + value.timestamp().epoch() + "  " + value.value().toDouble());
-          try {
-            baseline.append(value.timestamp().epoch(), (float) value.value().toDouble());
-          } catch (Exception e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-          }
-        }
-      }
-    }
-
-    TimeSeries predict() {
-      com.yahoo.egads.data.TimeSeries prediction = new com.yahoo.egads.data.TimeSeries();
-      double[] results;
-      // fill the prediction with nans at the proper timestamps
-      // TODO - capture the downsampler
-      long ts = prediction_start;
-      if (modelDuration() == ChronoUnit.HOURS) {
-        results = new double[60];
-      } else {
-        results = new double[1440];
-      }
-      for (int i = 0; i < (modelDuration() == ChronoUnit.HOURS ? 60 : 1440); i++) {
-        try {
-          prediction.append(ts, Float.NaN);
-        } catch (Exception e) {
-          // TODO Auto-generated catch block
-          e.printStackTrace();
-        }
-        ts += 60;
-      }
-      
-      // wrote the data to the baseline, now train it.
-      final OlympicModel2 tsmm = new OlympicModel2(properties);
-      try {
-        tsmm.train(baseline.data);
-        tsmm.predict(prediction.data);
-      } catch (Exception e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
-      }
-      System.out.println("    PRECITION: " + prediction.data);
-      
-      // trained, now populate the query result
-      final Iterator<com.yahoo.egads.data.TimeSeries.Entry> it = 
-          prediction.data.iterator();
-      int i = 0;
-      while (it.hasNext()) {
-        com.yahoo.egads.data.TimeSeries.Entry entry = it.next();
-        results[i++] = entry.value;
-      }
-      
-      return new EgadsTimeSeries(id, results, "prediction", "OlympicScoring", new SecondTimeStamp(prediction_start));
-    }
-  }
-  
   void runBaseline() {
     TypeToken<? extends TimeSeriesId> id_type = null;
     properties = new Properties();
@@ -559,10 +460,15 @@ public class OlympicScoringNode extends AbstractQueryNode {
      
     
     List<TimeSeries> computed = Lists.newArrayList();
-    TLongObjectIterator<Baseline> it = join.iterator();
+    TLongObjectIterator<OlympicScoringBaseline> it = join.iterator();
     while (it.hasNext()) {
       it.advance();
-      computed.add(it.value().predict());
+      TimeSeries ts = it.value().predict(properties);
+      if (ts != null) {
+        computed.add(ts);
+      } else {
+        System.out.println(" ------- NULL SERIES!");
+      }
     }
     TimeStamp start = new SecondTimeStamp(prediction_start);
     TimeStamp end = start.getCopy();
@@ -645,9 +551,9 @@ public class OlympicScoringNode extends AbstractQueryNode {
       for (final TimeSeries series : next.timeSeries()) {
         final long hash = series.id().buildHashCode();
         System.out.println("[" + idx + "]   RAW BASELINE HASH: " + hash);
-        Baseline baseline = join.get(hash);
+        OlympicScoringBaseline baseline = join.get(hash);
         if (baseline == null) {
-          baseline = new Baseline(series.id());
+          baseline = new OlympicScoringBaseline(OlympicScoringNode.this, series.id());
           join.put(hash, baseline);
         }
         baseline.append(series, next);
@@ -787,8 +693,8 @@ public class OlympicScoringNode extends AbstractQueryNode {
     return prediction_start;
   }
   
-  long predictionWidth() {
-    return prediction_width;
+  long predictionIntervals() {
+    return prediction_intervals;
   }
   
   long predictionInterval() {

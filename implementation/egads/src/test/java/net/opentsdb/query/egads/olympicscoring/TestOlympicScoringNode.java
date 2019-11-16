@@ -147,8 +147,6 @@ public class TestOlympicScoringNode {
             .build())
         .build();
     
-    
-    
     Object waity = new Object();
     class Sink implements QuerySink {
 
