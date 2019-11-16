@@ -89,6 +89,10 @@ public class OlympicScoringNode extends AbstractQueryNode {
   private EgadsResult prediction;
   private QueryResult current;
   final TLongObjectMap<Baseline> join = new TLongObjectHashMap<Baseline>();
+  final ChronoUnit model_units;
+  
+   long prediction_width;
+   long prediction_interval;
   
   public OlympicScoringNode(final QueryNodeFactory factory,
                             final QueryPipelineContext context,
@@ -111,6 +115,13 @@ public class OlympicScoringNode extends AbstractQueryNode {
 //      start.add(jitter_duration);
 //    }
     prediction_start = start.epoch();
+ // TODO - make this configurable and flexible.
+    long span = DateTime.parseDuration(config.getBaselinePeriod()) / 1000;
+    if (span < 86400) {
+      model_units = ChronoUnit.HOURS;
+    } else {
+      model_units = ChronoUnit.DAYS;
+    }
     System.out.println("  PRED START: " + prediction_start); // good is 11 now w/o jitter
   }
   
@@ -537,6 +548,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
      properties.setProperty("WINDOW_AGGREGATOR", 
          config.getBaselineAggregator().toUpperCase());
      properties.setProperty("MODEL_START", Long.toString(prediction_start));
+     properties.setProperty("ENABLE_WEIGHTING", "TRUE");
      properties.setProperty("AGGREGATOR",
          config.getBaselineAggregator().toUpperCase());
      properties.setProperty("NUM_TO_DROP_LOWEST", 
@@ -545,23 +557,6 @@ public class OlympicScoringNode extends AbstractQueryNode {
          Integer.toString(config.getExcludeMax()));
      properties.setProperty("PERIOD", modelDuration() == ChronoUnit.HOURS ? "3600" : "86400");
      
-    // does the baseline prediction
-//    final TLongObjectMap<TimeSeries[]> join = new TLongObjectHashMap<TimeSeries[]>();
-//    for (int i = 0; i < baseline_queries.length; i++) {
-//      if (id_type == null) {
-//        id_type = baseline_queries[i].result.idType();
-//      }
-//      
-//      for (final TimeSeries series : baseline_queries[i].result.timeSeries()) {
-//        final long hash = series.id().buildHashCode();
-//        TimeSeries[] set = join.get(hash);
-//        if (set == null) {
-//          set = new TimeSeries[baseline_queries.length];
-//          join.put(hash, set);
-//        }
-//        set[i] = series;
-//      }
-//    }
     
     List<TimeSeries> computed = Lists.newArrayList();
     TLongObjectIterator<Baseline> it = join.iterator();
@@ -785,13 +780,19 @@ public class OlympicScoringNode extends AbstractQueryNode {
   }
   
   ChronoUnit modelDuration() {
-    // TODO - make this configurable and flexible.
-    long span = DateTime.parseDuration(config.getBaselinePeriod()) / 1000;
-    if (span < 86400) {
-      return ChronoUnit.HOURS;
-    } else {
-      return ChronoUnit.DAYS;
-    }
+    return model_units;
+  }
+  
+  long predictionStart() {
+    return prediction_start;
+  }
+  
+  long predictionWidth() {
+    return prediction_width;
+  }
+  
+  long predictionInterval() {
+    return prediction_interval;
   }
   
   int jitter() {

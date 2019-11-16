@@ -28,6 +28,8 @@ import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.query.QueryResult;
 
 public class EgadsTimeSeries implements TimeSeries {
+  public static final String MODEL_TAG_KEY = "_anomalyModel";
+  
   protected final TimeSeriesId id;
   protected final TimeStamp timestamp;
   protected final long original_hash;
@@ -53,7 +55,7 @@ public class EgadsTimeSeries implements TimeSeries {
     if (string_id.tags() != null) {
       tags.putAll(string_id.tags());
     }
-    tags.put("_anomalyModel", model);
+    tags.put(MODEL_TAG_KEY, model);
     builder.setTags(tags);
     this.id = builder.build();
     this.results = results;
