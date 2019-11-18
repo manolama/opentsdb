@@ -189,7 +189,6 @@ public class OlympicScoringBaseline {
         }
         
         try {
-          System.out.println("ADD: " + ts.epoch() + "  " + array[x]);
           baseline.append(ts.epoch(), (float) array[x]);
         } catch (Exception e) {
           throw new RuntimeException(e);

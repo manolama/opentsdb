@@ -61,6 +61,7 @@ import net.opentsdb.query.SemanticQueryContext;
 import net.opentsdb.query.AbstractQueryPipelineContext.ResultWrapper;
 import net.opentsdb.query.anomaly.PredictionCache;
 import net.opentsdb.query.egads.EgadsResult;
+import net.opentsdb.query.egads.EgadsThresholdTimeSeries;
 import net.opentsdb.query.egads.EgadsTimeSeries;
 import net.opentsdb.query.egads.ThresholdEvaluator;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
@@ -200,28 +201,61 @@ public class OlympicScoringNode extends AbstractQueryNode {
   
   void run() {
     // Got baseline and current data, yay!
-    final TLongObjectMap<Pair<TimeSeries, TimeSeries>> map = 
-        new TLongObjectHashMap<Pair<TimeSeries, TimeSeries>>();
+    final TLongObjectMap<TimeSeries> map = new TLongObjectHashMap<TimeSeries>();
     
     for (final TimeSeries series : current.timeSeries()) {
       final long hash = series.id().buildHashCode();
-      map.put(hash, new Pair<>(series, null));
+      map.put(hash, series);
     }
     
-    for (final TimeSeries series : prediction.timeSeries()) {
+    int series_limit = prediction.timeSeries().size();
+    for (int i = 0; i < series_limit; i++) {
+      final TimeSeries series = prediction.timeSeries().get(i);
       final long hash = ((EgadsTimeSeries) series).originalHash();
-      Pair<TimeSeries, TimeSeries> pair = map.get(hash);
-      if (pair != null) {
-        pair.setValue(series);
+      TimeSeries cur = map.remove(hash);
+      if (cur != null) {
+        //runPair(cur, series);
+        final ThresholdEvaluator eval = new ThresholdEvaluator(
+            config.getUpperThreshold(),
+            config.isUpperIsScalar(),
+            config.getLowerThreshold(),
+            config.isLowerIsScalar(),
+            config.getSerializeThresholds() ? /* TODO */ 4096: 0,
+            cur,
+            current,
+            series,
+            prediction);
+        eval.evaluate();
+        if (eval.alerts() != null && !eval.alerts().isEmpty()) {
+          ((EgadsTimeSeries) series).addAlerts(eval.alerts());
+        }
+        
+        if (config.getSerializeThresholds()) {
+          prediction.timeSeries().add(new EgadsThresholdTimeSeries(
+              cur.id(), 
+              "upper", 
+              prediction.timeSpecification().start(), 
+              eval.upperThresholds(), 
+              eval.index()));
+          prediction.timeSeries().add(new EgadsThresholdTimeSeries(
+              cur.id(), 
+              "lower", 
+              prediction.timeSpecification().start(), 
+              eval.lowerThresholds(), 
+              eval.index()));
+        }
       }
     }
     
-    List<TimeSeries> time_series = Lists.newArrayList();
-    TLongObjectIterator<Pair<TimeSeries, TimeSeries>> iterator = map.iterator();
-    while (iterator.hasNext()) {
-      iterator.advance();
-      runPair(iterator.value());
-    }
+    // TODO - iteate through the final things in the map and push them out without
+    // predictions.
+    
+//    List<TimeSeries> time_series = Lists.newArrayList();
+//    TLongObjectIterator<Pair<TimeSeries, TimeSeries>> iterator = map.iterator();
+//    while (iterator.hasNext()) {
+//      iterator.advance();
+//      runPair(iterator.value());
+//    }
     
     if (config.getSerializeObserved()) {
       // yeah, ew, but it's an EgadsResult so we have an array list.
@@ -230,101 +264,101 @@ public class OlympicScoringNode extends AbstractQueryNode {
     sendUpstream(prediction);
   }
   
-  void runPair(final Pair<TimeSeries, TimeSeries> pair) {
-    if (pair.getValue() == null) {
-      return;
-    }
-    
-    Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> cur_op = 
-        pair.getKey().iterator(NumericArrayType.TYPE);
-    if (!cur_op.isPresent()) {
-      cur_op = pair.getKey().iterator(NumericType.TYPE);
-    }
-    if (!cur_op.isPresent()) {
-      LOG.warn("Nothing in current?!?!?!");
-      return;
-    }
-    
-    Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> pred_op = 
-        pair.getValue().iterator(NumericArrayType.TYPE);
-    if (!pred_op.isPresent()) {
-      pred_op = pair.getValue().iterator(NumericType.TYPE);
-    }
-    if (!pred_op.isPresent()) {
-      LOG.warn("Nothing in prediction?!?!?!");
-      return;
-    }
-    
-    ThresholdEvaluator eval;
-    TypedTimeSeriesIterator<? extends TimeSeriesDataType> cur_it = cur_op.get();
-    TypedTimeSeriesIterator<? extends TimeSeriesDataType> pred_it = pred_op.get();
-    final PredictIterator p;
-    if (pred_it.getType() == NumericType.TYPE) {
-      p = new NumPredIt(pred_it);
-    } else {
-      p = new ArrayPredIt(pred_it);
-    }
-    
-    List<AlertValue> results = Lists.newArrayList();
-    if (cur_it.hasNext()) {
-      if (cur_it.getType() == NumericType.TYPE) {
-        System.out.println("     CUR: NTYPE");
-        eval = new ThresholdEvaluator(
-            config.getUpperThreshold(),
-            config.isUpperIsScalar(),
-            config.getLowerThreshold(),
-            config.isLowerIsScalar(),
-            config.getSerializeThresholds() ? /* TODO */ 4096: 0);
-        while (cur_it.hasNext()) {
-          final TimeSeriesValue<NumericType> value = 
-              (TimeSeriesValue<NumericType>) cur_it.next();
-          // TODO - align data, etc.
-          System.out.println("         CUR: " + value.timestamp() + "  " + value.value().toDouble());
-          if (p.hasNext(value.timestamp())) {
-            AlertValue a = eval.eval(value.timestamp(), value.value().toDouble(), p.value());
-            if (a != null) {
-              results.add(a);
-            }
-          }
-        }
-      } else {
-        final TimeStamp ts = new SecondTimeStamp(prediction_start);
-        System.out.println("     PRED START: " + ts);
-        final TimeSeriesValue<NumericArrayType> value = 
-            (TimeSeriesValue<NumericArrayType>) cur_it.next();
-        eval = new ThresholdEvaluator(
-            config.getUpperThreshold(),
-            config.isUpperIsScalar(),
-            config.getLowerThreshold(),
-            config.isLowerIsScalar(),
-            config.getSerializeThresholds() ? value.value().end() : 0);
-        int idx = value.value().offset();
-        while (idx < value.value().end()) {
-          // TODO - align data, etc.
-          AlertValue a = null;
-          if (p.hasNext(ts)) {
-          if (value.value().isInteger()) {
-            a = eval.eval(ts, value.value().longArray()[idx], p.value()); 
-          } else {
-            a = eval.eval(ts, value.value().doubleArray()[idx], p.value());
-          }
-          
-          if (a != null) {
-            results.add(a);
-          }
-          }
-          idx++;
-          ts.add(Duration.ofSeconds(60));
-        }
-      }
-    }
-    
-    if (results != null) {
-      ((EgadsTimeSeries) pair.getValue()).addAlerts(results);
-    }
-    
-    return;
-  }
+//  void runPair(final TimeSeries current, final TimeSeries prediction) {
+//    if (prediction == null) {
+//      return;
+//    }
+//    
+//    Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> cur_op = 
+//        current.iterator(NumericArrayType.TYPE);
+//    if (!cur_op.isPresent()) {
+//      cur_op = current.iterator(NumericType.TYPE);
+//    }
+//    if (!cur_op.isPresent()) {
+//      LOG.warn("Nothing in current?!?!?!");
+//      return;
+//    }
+//    
+//    Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> pred_op = 
+//        prediction.iterator(NumericArrayType.TYPE);
+//    if (!pred_op.isPresent()) {
+//      pred_op = prediction.iterator(NumericType.TYPE);
+//    }
+//    if (!pred_op.isPresent()) {
+//      LOG.warn("Nothing in prediction?!?!?!");
+//      return;
+//    }
+//    
+//    ThresholdEvaluator eval;
+//    TypedTimeSeriesIterator<? extends TimeSeriesDataType> cur_it = cur_op.get();
+//    TypedTimeSeriesIterator<? extends TimeSeriesDataType> pred_it = pred_op.get();
+//    final PredictIterator p;
+//    if (pred_it.getType() == NumericType.TYPE) {
+//      p = new NumPredIt(pred_it);
+//    } else {
+//      p = new ArrayPredIt(pred_it);
+//    }
+//    
+//    List<AlertValue> results = Lists.newArrayList();
+//    if (cur_it.hasNext()) {
+//      if (cur_it.getType() == NumericType.TYPE) {
+//        System.out.println("     CUR: NTYPE");
+//        eval = new ThresholdEvaluator(
+//            config.getUpperThreshold(),
+//            config.isUpperIsScalar(),
+//            config.getLowerThreshold(),
+//            config.isLowerIsScalar(),
+//            config.getSerializeThresholds() ? /* TODO */ 4096: 0);
+//        while (cur_it.hasNext()) {
+//          final TimeSeriesValue<NumericType> value = 
+//              (TimeSeriesValue<NumericType>) cur_it.next();
+//          // TODO - align data, etc.
+//          System.out.println("         CUR: " + value.timestamp() + "  " + value.value().toDouble());
+//          if (p.hasNext(value.timestamp())) {
+//            AlertValue a = eval.eval(value.timestamp(), value.value().toDouble(), p.value());
+//            if (a != null) {
+//              results.add(a);
+//            }
+//          }
+//        }
+//      } else {
+//        final TimeStamp ts = new SecondTimeStamp(prediction_start);
+//        System.out.println("     PRED START: " + ts);
+//        final TimeSeriesValue<NumericArrayType> value = 
+//            (TimeSeriesValue<NumericArrayType>) cur_it.next();
+//        eval = new ThresholdEvaluator(
+//            config.getUpperThreshold(),
+//            config.isUpperIsScalar(),
+//            config.getLowerThreshold(),
+//            config.isLowerIsScalar(),
+//            config.getSerializeThresholds() ? value.value().end() : 0);
+//        int idx = value.value().offset();
+//        while (idx < value.value().end()) {
+//          // TODO - align data, etc.
+//          AlertValue a = null;
+//          if (p.hasNext(ts)) {
+//          if (value.value().isInteger()) {
+//            a = eval.eval(ts, value.value().longArray()[idx], p.value()); 
+//          } else {
+//            a = eval.eval(ts, value.value().doubleArray()[idx], p.value());
+//          }
+//          
+//          if (a != null) {
+//            results.add(a);
+//          }
+//          }
+//          idx++;
+//          ts.add(Duration.ofSeconds(60));
+//        }
+//      }
+//    }
+//    
+//    if (results != null) {
+//      ((EgadsTimeSeries) prediction).addAlerts(results);
+//    }
+//    
+//    return;
+//  }
   
   interface PredictIterator {
     boolean hasNext(final TimeStamp expected);
