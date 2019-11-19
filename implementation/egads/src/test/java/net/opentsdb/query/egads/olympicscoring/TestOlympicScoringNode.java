@@ -74,7 +74,7 @@ public class TestOlympicScoringNode {
       TSDB.config.register("MockDataStore.register.writer", true, false, "UT");
     }
     if (!TSDB.getConfig().hasProperty("MockDataStore.threadpool.enable")) {
-      TSDB.config.register("MockDataStore.threadpool.enable", true, false, "UT");
+      TSDB.config.register("MockDataStore.threadpool.enable", false, false, "UT");
     }
     
     MockDataStoreFactory factory = new MockDataStoreFactory();
@@ -170,15 +170,20 @@ public class TestOlympicScoringNode {
           }
           
           for (final TimeSeries ts : next.timeSeries()) {
-            System.out.println("[SERIES] " + ts.id());
+            System.out.println("[SERIES] " + ts.id() + "  HASH: [" + ts.id().buildHashCode() + "] TYPES: " + ts.types());
             for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> it : ts.iterators()) {
               System.out.println("      IT: " + it.getType());
               int x = 0;
+              StringBuilder buf = null;
               while (it.hasNext()) {
                 TimeSeriesValue<? extends TimeSeriesDataType> value = it.next();
                 
                 if (it.getType() == NumericArrayType.TYPE) {
                   TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) value;
+                  if (value.value() == null) {
+                    System.out.println("WTF? Null value at: " + v.timestamp());
+                    continue;
+                  }
                   if (v.value().isInteger()) {
                     System.out.println("   " + Arrays.toString(v.value().longArray()));
                   } else {
@@ -186,10 +191,18 @@ public class TestOlympicScoringNode {
                   }
                 } else if (it.getType() == NumericType.TYPE) {
                   TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) value;
+                  if (buf == null) {
+                    buf = new StringBuilder()
+                        .append("{");
+                  }
+                  if (x > 0) {
+                    buf.append(", ");
+                  }
+                  buf.append(v.value().toDouble());
                   //System.out.println(v.timestamp().epoch() + "  " + v.value().toDouble());
                 } else if (it.getType() == AlertType.TYPE) {
                   TimeSeriesValue<AlertType> v = (TimeSeriesValue<AlertType>) value;
-                  System.out.println("ALERT! " + v.timestamp().epoch() + "  " + v.value().message());
+                  System.out.println("   ALERT! " + v.timestamp().epoch() + "  " + v.value().message());
                 }
                 
                 x++;
@@ -199,6 +212,10 @@ public class TestOlympicScoringNode {
                 }
               }
               
+              if (buf != null) {
+                buf.append("}");
+                System.out.println("     " + buf.toString());
+              }
               System.out.println("   READ: " + x);
             }
           }

@@ -1,6 +1,7 @@
 package net.opentsdb.query.egads.olympicscoring;
 
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.Properties;
@@ -162,7 +163,7 @@ public class OlympicScoringBaseline {
       return;
     }
     
-    final TimeStamp ts = result.timeSpecification().start();
+    final TimeStamp ts = result.timeSpecification().start().getCopy();
     if (value.value().isInteger()) {
       final long[] array = value.value().longArray();
       for (int x = value.value().offset(); x < value.value().end(); x++) {

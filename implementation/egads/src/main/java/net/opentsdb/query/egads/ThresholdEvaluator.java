@@ -66,29 +66,29 @@ public class ThresholdEvaluator {
     this.prediction_result = prediction_result;
   }
   
-  public void evaluate() {
+  public boolean evaluate() {
     if (prediction == null) {
       // TODO - meh
-      return;
+      return false;
     }
     final Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> pred_op = 
         prediction.iterator(NumericArrayType.TYPE);
     if (!pred_op.isPresent()) {
       LOG.warn("No array iterator for prediction.");
-      return;
+      return false;
     }
     
     final TypedTimeSeriesIterator<? extends TimeSeriesDataType> pred_it = pred_op.get();
     if (!pred_it.hasNext()) {
       LOG.warn("No data in the prediction array.");
-      return;
+      return false;
     }
     
     final TimeSeriesValue<NumericArrayType> value = 
         (TimeSeriesValue<NumericArrayType>) pred_it.next();
     if (value.value() == null) {
       LOG.warn("Null value?");
-      return;
+      return false;
     }
     
     TypeToken<? extends TimeSeriesDataType> current_type = null;
@@ -103,21 +103,21 @@ public class ThresholdEvaluator {
     
     if (current_type == null) {
       LOG.warn("No type for current?");
-      return;
+      return false;
     }
     
     final Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> current_op =
         current.iterator(current_type);
     if (!current_op.isPresent()) {
       LOG.warn("No data for type: " + current_type + " in current?");
-      return;
+      return false;
     }
     
     final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator = 
         current_op.get();
     if (!iterator.hasNext()) {
       LOG.warn("No next type: " + current_type + " in current?");
-      return;
+      return false;
     }
     
     if (current_type == NumericType.TYPE) {
@@ -128,8 +128,9 @@ public class ThresholdEvaluator {
       runNumericSummaryType(iterator, value);
     } else {
       LOG.warn("Ummm, don't handle this type?");
-      return;
+      return false;
     }
+    return true;
   }
   
   void runNumericType(
@@ -246,18 +247,18 @@ public class ThresholdEvaluator {
       if (upper_is_scalar) {
         threshold = prediction + upper;
       } else {
-        threshold = prediction + (prediction * (upper / 100));
+        threshold = prediction + Math.abs((prediction * (upper / 100)));
       }
       if (upper_is_scalar && current > threshold) {
         result = AlertValue.newBuilder()
             .setDataPoint(current)
-            .setMessage("TEMP " + current + " is > " + threshold)
+            .setMessage("** TEMP " + current + " is > " + threshold)
             .setTimestamp(timestamp)
             .build();
       } else if (current > threshold) {
         result = AlertValue.newBuilder()
             .setDataPoint(current)
-            .setMessage("TEMP " + current + " is greater than " + threshold + " which is > than " + upper)
+            .setMessage("** TEMP " + current + " is greater than " + threshold + " which is > than " + upper + "%")
             .setTimestamp(timestamp)
             .build();
       }
@@ -277,14 +278,13 @@ public class ThresholdEvaluator {
       if (lower_is_scalar) {
         threshold = prediction - lower;
       } else {
-        threshold = prediction - (prediction * (lower / 100));
+        threshold = prediction - Math.abs((prediction * (lower / (double) 100)));
       }
-      System.out.println("TH: " + threshold + "  C: " + current);
       if (lower_is_scalar && current < threshold) {
         if (result == null) {
           result = AlertValue.newBuilder()
               .setDataPoint(current)
-              .setMessage("TEMP " + current + " is < " + threshold)
+              .setMessage("** TEMP " + current + " is < " + threshold)
               .setTimestamp(timestamp)
               .build();
         }
@@ -292,7 +292,7 @@ public class ThresholdEvaluator {
         if (result == null) {
           result = AlertValue.newBuilder()
               .setDataPoint(current)
-              .setMessage("TEMP " + current + " is less than " + threshold + " which is < than " + lower)
+              .setMessage("** TEMP " + current + " is less than " + threshold + " which is < than " + lower + "%")
               .setTimestamp(timestamp)
               .build();
         }

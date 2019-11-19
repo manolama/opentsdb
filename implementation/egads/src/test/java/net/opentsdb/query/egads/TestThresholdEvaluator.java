@@ -15,7 +15,8 @@ public class TestThresholdEvaluator {
   
   @Test
   public void evalUpperOnlyPercent() throws Exception {
-    ThresholdEvaluator evaluator = new ThresholdEvaluator(50, false, 0, false, 0);
+    ThresholdEvaluator evaluator = new ThresholdEvaluator(
+        50, false, 0, false, 0, null, null, null, null);
     
     assertNull(evaluator.eval(BASE_TIME, 100, 100));
     assertNull(evaluator.eval(BASE_TIME, 150, 100));
@@ -26,7 +27,8 @@ public class TestThresholdEvaluator {
     assertNull(evaluator.upperThresholds());
     assertNull(evaluator.lowerThresholds());
     
-    evaluator = new ThresholdEvaluator(50, false, 0, false, 4);
+    evaluator = new ThresholdEvaluator(
+        50, false, 0, false, 4, null, null, null, null);
     assertNull(evaluator.eval(BASE_TIME, 100, 100));
     assertNull(evaluator.eval(BASE_TIME, 150, 120.6));
     av = evaluator.eval(BASE_TIME, 151, 95.78);
@@ -40,7 +42,8 @@ public class TestThresholdEvaluator {
   
   @Test
   public void evalUpperOnlyScalar() throws Exception {
-    ThresholdEvaluator evaluator = new ThresholdEvaluator(100, true, 0, false, 0);
+    ThresholdEvaluator evaluator = new ThresholdEvaluator(
+        100, true, 0, false, 0, null, null, null, null);
     
     assertNull(evaluator.eval(BASE_TIME, 100, 100));
     assertNull(evaluator.eval(BASE_TIME, 200, 100));
@@ -51,7 +54,8 @@ public class TestThresholdEvaluator {
     assertNull(evaluator.upperThresholds());
     assertNull(evaluator.lowerThresholds());
     
-    evaluator = new ThresholdEvaluator(100, true, 0, false, 4);
+    evaluator = new ThresholdEvaluator(
+        100, true, 0, false, 4, null, null, null, null);
     assertNull(evaluator.eval(BASE_TIME, 100, 100));
     assertNull(evaluator.eval(BASE_TIME, 220.6, 120.6));
     av = evaluator.eval(BASE_TIME, 221, 95.78);
@@ -65,7 +69,8 @@ public class TestThresholdEvaluator {
   
   @Test
   public void evalLowerOnlyPercent() throws Exception {
-    ThresholdEvaluator evaluator = new ThresholdEvaluator(0, false, 50, false, 0);
+    ThresholdEvaluator evaluator = new ThresholdEvaluator(
+        0, false, 50, false, 0, null, null, null, null);
     
     assertNull(evaluator.eval(BASE_TIME, 100, 100));
     assertNull(evaluator.eval(BASE_TIME, 50, 100));
@@ -76,7 +81,8 @@ public class TestThresholdEvaluator {
     assertNull(evaluator.upperThresholds());
     assertNull(evaluator.lowerThresholds());
     
-    evaluator = new ThresholdEvaluator(0, false, 50, false, 4);
+    evaluator = new ThresholdEvaluator(
+        0, false, 50, false, 4, null, null, null, null);
     assertNull(evaluator.eval(BASE_TIME, 100, 100));
     assertNull(evaluator.eval(BASE_TIME, 70.6, 120.6));
     av = evaluator.eval(BASE_TIME, 45.77, 95.78);
@@ -90,7 +96,8 @@ public class TestThresholdEvaluator {
   
   @Test
   public void evalLowerOnlyScalar() throws Exception {
-    ThresholdEvaluator evaluator = new ThresholdEvaluator(0, false, 100, true, 0);
+    ThresholdEvaluator evaluator = new ThresholdEvaluator(
+        0, false, 100, true, 0, null, null, null, null);
     
     assertNull(evaluator.eval(BASE_TIME, 100, 100));
     assertNull(evaluator.eval(BASE_TIME, 0, 100));
@@ -101,7 +108,8 @@ public class TestThresholdEvaluator {
     assertNull(evaluator.upperThresholds());
     assertNull(evaluator.lowerThresholds());
     
-    evaluator = new ThresholdEvaluator(0, false, 100, true, 4);
+    evaluator = new ThresholdEvaluator(
+        0, false, 100, true, 4, null, null, null, null);
     assertNull(evaluator.eval(BASE_TIME, 100, 100));
     assertNull(evaluator.eval(BASE_TIME, 20.6, 120.6));
     av = evaluator.eval(BASE_TIME, -5, 95.78);
@@ -115,7 +123,8 @@ public class TestThresholdEvaluator {
 
   @Test
   public void evalBoth() throws Exception {
-    ThresholdEvaluator evaluator = new ThresholdEvaluator(50, false, 50, false, 0);
+    ThresholdEvaluator evaluator = new ThresholdEvaluator(
+        50, false, 50, false, 0, null, null, null, null);
     
     assertNull(evaluator.eval(BASE_TIME, 100, 100));
     assertNull(evaluator.eval(BASE_TIME, 150, 100));
@@ -128,7 +137,8 @@ public class TestThresholdEvaluator {
     assertNull(evaluator.upperThresholds());
     assertNull(evaluator.lowerThresholds());
     
-    evaluator = new ThresholdEvaluator(50, false, 50, false, 4);
+    evaluator = new ThresholdEvaluator(
+        50, false, 50, false, 4, null, null, null, null);
     assertNull(evaluator.eval(BASE_TIME, 100, 100));
     assertNull(evaluator.eval(BASE_TIME, 150, 120.6));
     av = evaluator.eval(BASE_TIME, 151, 95.78);
@@ -140,5 +150,36 @@ public class TestThresholdEvaluator {
     assertArrayEquals(new double[] { 150, 170.6, 145.78, 52.75 }, 
         evaluator.upperThresholds(), 0.001);
     assertArrayEquals(new double[] { 50, 70.6, 45.78, -47.25 }, evaluator.lowerThresholds(), 0.001);
+  }
+
+  @Test
+  public void evalBothSmallValues() throws Exception {
+    ThresholdEvaluator evaluator = new ThresholdEvaluator(
+        50.5, false, 50.5, false, 0, null, null, null, null);
+    
+    assertNull(evaluator.eval(BASE_TIME, 0.02, 0.023));
+    AlertValue av = evaluator.eval(BASE_TIME, 0.05, 0.023);
+    assertEquals(BASE_TIME.epoch(), av.timestamp().epoch());
+    assertEquals(0.05, av.dataPoint().doubleValue(), 0.001);
+    
+    av = evaluator.eval(BASE_TIME, 0.0023, 0.023);
+    assertEquals(BASE_TIME.epoch(), av.timestamp().epoch());
+    assertEquals(0.0023, av.dataPoint().doubleValue(), 0.001);
+    
+    assertNull(evaluator.eval(BASE_TIME, -0.049, -0.050));
+    av = evaluator.eval(BASE_TIME, -0.023, -0.050);
+    assertEquals(BASE_TIME.epoch(), av.timestamp().epoch());
+    assertEquals(-0.023, av.dataPoint().doubleValue(), 0.001);
+    
+    av = evaluator.eval(BASE_TIME, -0.0756, -0.050);
+    assertEquals(BASE_TIME.epoch(), av.timestamp().epoch());
+    assertEquals(-0.0756, av.dataPoint().doubleValue(), 0.001);
+    assertNull(evaluator.upperThresholds());
+    assertNull(evaluator.lowerThresholds());
+  }
+  
+  @Test
+  public void foo() throws Exception {
+    
   }
 }
