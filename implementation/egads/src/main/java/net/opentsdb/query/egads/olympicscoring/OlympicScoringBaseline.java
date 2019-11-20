@@ -198,6 +198,7 @@ public class OlympicScoringBaseline {
         ts.add(result.timeSpecification().interval());
       }
     }
+    LOG.info("       WROTE: " + (value.value().end() - value.value().offset()) + " Dps to baseline");
   }
   
   void processSummary(final TypedTimeSeriesIterator iterator) {

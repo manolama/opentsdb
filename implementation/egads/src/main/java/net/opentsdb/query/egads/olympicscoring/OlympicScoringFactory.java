@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
 import com.stumbleupon.async.Deferred;
 
+import net.opentsdb.core.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.SemanticQuery;
@@ -18,6 +19,8 @@ import net.opentsdb.query.interpolation.QueryInterpolatorFactory;
 
 public class OlympicScoringFactory extends BaseQueryNodeFactory<OlympicScoringConfig, OlympicScoringNode> {
   public static final String TYPE = "OlympicScoring";
+  public static final int TYPE_HASH = Const.HASH_FUNCTION().newHasher()
+      .putString(TYPE, Const.UTF8_CHARSET).hash().asInt();
 
   private TSDB tsdb;
   

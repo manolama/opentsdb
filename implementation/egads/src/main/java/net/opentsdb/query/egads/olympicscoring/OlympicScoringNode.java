@@ -69,6 +69,7 @@ import net.opentsdb.query.processor.downsample.DownsampleConfig;
 import net.opentsdb.query.processor.downsample.DownsampleFactory;
 import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.stats.Span;
+import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.JSON;
 import net.opentsdb.utils.Pair;
@@ -83,7 +84,6 @@ public class OlympicScoringNode extends AbstractQueryNode {
   
   private final OlympicScoringConfig config;
   private final PredictionCache cache;
-  private final byte[] cache_key;
   private final CountDownLatch latch;
   private final int jitter;
   private TemporalAmount jitter_duration;
@@ -138,16 +138,15 @@ public class OlympicScoringNode extends AbstractQueryNode {
     } else {
       ds_interval = ds.getInterval();
     }
+    cache = context.tsdb().getRegistry().getDefaultPlugin(PredictionCache.class); // PULL FROM FACTORY
+    prediction_interval = DateTime.parseDuration(ds_interval) / 1000;
     
     // set timings
     switch (config.getMode()) {
     case CONFIG:
       jitter = 0;
-      cache_key = null;
-      cache = null;
       model_units = null;
       prediction_start = context.query().startTime().epoch();
-      prediction_interval = DateTime.parseDuration(ds_interval) / 1000;
       prediction_intervals = query_time_span / (prediction_interval * 1000);
       break;
     case EVALUATE:
@@ -163,15 +162,12 @@ public class OlympicScoringNode extends AbstractQueryNode {
       
       jitter = jitter();
       jitter_duration = Duration.ofSeconds(jitter);
-      cache_key = null;
-      cache = null; // PULL FROM FACTORY
       
       final TimeStamp start = context.query().startTime().getCopy();
       final ChronoUnit duration = modelDuration();
       start.snapToPreviousInterval(1, duration);
       start.add(jitter_duration);
       prediction_start = start.epoch();
-      prediction_interval = model_units == ChronoUnit.HOURS ? 3600 : 86400;
       prediction_intervals = query_time_span / (prediction_interval * 1000);
       break;
     default:
@@ -327,7 +323,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
          Integer.toString(config.getExcludeMax()));
      properties.setProperty("PERIOD", 
          Long.toString(prediction_interval * prediction_intervals));
-    
+    System.out.println("PROPERTIES: " + properties);
      // TODO - parallelize
     List<TimeSeries> computed = Lists.newArrayList();
     TLongObjectIterator<OlympicScoringBaseline> it = join.iterator();
@@ -361,8 +357,10 @@ public class OlympicScoringNode extends AbstractQueryNode {
       if (result != null) {
         // TODO - wrap into the OSResult
         //prediction = result;
+        System.out.println(" &&&&&&& CACHE: Got result!!!");
         countdown();
       } else {
+        System.out.println(" &&&&&&& CACHE: missed result");
         fetchBaselineData();
       }
       
@@ -429,9 +427,6 @@ public class OlympicScoringNode extends AbstractQueryNode {
         if (baseline == null) {
           baseline = new OlympicScoringBaseline(OlympicScoringNode.this, series.id());
           join.put(hash, baseline);
-          System.out.println("      NEW Baseline: " + hash);
-        } else {
-          System.out.println("      Existing baseline: " + hash);
         }
         baseline.append(series, next);
       }
@@ -495,15 +490,15 @@ public class OlympicScoringNode extends AbstractQueryNode {
     baseline_queries = new BaselineQuery[config.getBaselineNumPeriods()];
     final TimeStamp start = new SecondTimeStamp(prediction_start);
     final TemporalAmount period = DateTime.parseDuration2(config.getBaselinePeriod());
+    System.out.println("      BASE PERIOD: " + period);
     // advance to the oldest time first
+    final TimeStamp end = context.query().endTime().getCopy();
     for (int i = 0; i < config.getBaselineNumPeriods(); i++) {
       start.subtract(period);
+      end.subtract(period);
     }
-    final TimeStamp end;
-    if (config.getMode() == ExecutionMode.CONFIG) {
-      end = context.query().endTime().getCopy();
-    } else {
-      end = start.getCopy();
+    if (config.getMode() != ExecutionMode.CONFIG) {
+      end.update(start);
       end.add(Duration.of(1, model_units));
     }
     
@@ -526,7 +521,12 @@ public class OlympicScoringNode extends AbstractQueryNode {
   
   byte[] generateCacheKey() {
     // TODO - include: jitter timestamp, full query hash, model ID
-    return null;
+    // hash of model ID, query hash, prediction timestamp w jitter
+    byte[] key = new byte[4 + 8 + 4];
+    Bytes.setInt(key, OlympicScoringFactory.TYPE_HASH, 0);
+    Bytes.setLong(key, context.query().buildHashCode().asLong(), 4);
+    Bytes.setInt(key, (int) prediction_start, 12); 
+    return key;
   }
   
   void countdown() {
@@ -538,9 +538,9 @@ public class OlympicScoringNode extends AbstractQueryNode {
   }
   
   QueryContext buildQuery(final int start, 
-                                 final int end, 
-                                 final QueryContext context, 
-                                 final QuerySink sink) {
+                          final int end, 
+                          final QueryContext context, 
+                          final QuerySink sink) {
     final SemanticQuery.Builder builder = config.getBaselineQuery()
         .toBuilder()
         // TODO - PADDING compute the padding
@@ -600,7 +600,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
           public Object call(final Void ignored) throws Exception {
             if (LOG.isTraceEnabled()) {
               LOG.trace("Successfully cached EGADs prediction at " 
-                  + Arrays.toString(cache_key));
+                  + Arrays.toString(generateCacheKey()));
             }
             return null;
           }
@@ -612,7 +612,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
         } else {
           expiration = 86400 * 2 * 1000;
         }
-        cache.cache(cache_key, expiration, result, null)
+        cache.cache(generateCacheKey(), expiration, result, null)
           .addCallback(new SuccessCB())
           .addErrback(new CacheErrorCB());
       }
