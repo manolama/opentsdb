@@ -1,7 +1,12 @@
 package net.opentsdb.query.egads.olympicscoring;
 
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayOutputStream;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -45,11 +50,15 @@ import net.opentsdb.query.QuerySinkCallback;
 import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.SemanticQueryContext;
 import net.opentsdb.query.anomaly.AnomalyConfig.ExecutionMode;
+import net.opentsdb.query.execution.serdes.JsonV3QuerySerdesOptions;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
 import net.opentsdb.query.filter.MetricLiteralFilter;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.pojo.FillPolicy;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
+import net.opentsdb.query.serdes.SerdesFactory;
+import net.opentsdb.query.serdes.SerdesOptions;
+import net.opentsdb.query.serdes.TimeSeriesSerdes;
 import net.opentsdb.storage.MockDataStoreFactory;
 import net.opentsdb.storage.WritableTimeSeriesDataStore;
 import net.opentsdb.storage.WritableTimeSeriesDataStoreFactory;
@@ -149,11 +158,27 @@ public class TestOlympicScoringNode {
     
     Object waity = new Object();
     class Sink implements QuerySink {
+      TimeSeriesSerdes serdes = null;
+      ByteArrayOutputStream baos;
 
+      Sink() {
+        baos = new ByteArrayOutputStream();
+        SerdesOptions options = JsonV3QuerySerdesOptions.newBuilder()
+            .setId("serdes")
+            .build();
+        final SerdesFactory factory = TSDB.getRegistry()
+            .getPlugin(SerdesFactory.class, options.getType());
+        QueryContext ctx = mock(QueryContext.class);
+        when(ctx.tsdb()).thenReturn(TSDB);
+        when(ctx.query()).thenReturn(egads_query);
+        serdes = factory.newInstance(ctx, options, baos);
+      }
+      
       @Override
       public void onComplete() {
         // TODO Auto-generated method stub
         System.out.println("DONE!!");
+        System.out.println(new String(baos.toByteArray()));
         synchronized (waity) {
           waity.notify();
         }
@@ -161,64 +186,66 @@ public class TestOlympicScoringNode {
 
       @Override
       public void onNext(QueryResult next) {
-        // TODO Auto-generated method stub
-        System.out.println("[RESULT]: " + next.source().config().getId() + ":" + next.dataSource());
         try {
-          if (next.timeSpecification() != null) {
-            System.out.println("     TIME SPEC: " + next.timeSpecification().start().epoch() + " " 
-                + next.timeSpecification().end().epoch());
-          }
-          
-          for (final TimeSeries ts : next.timeSeries()) {
-            System.out.println("[SERIES] " + ts.id() + "  HASH: [" + ts.id().buildHashCode() + "] TYPES: " + ts.types());
-            for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> it : ts.iterators()) {
-              System.out.println("      IT: " + it.getType());
-              int x = 0;
-              StringBuilder buf = null;
-              while (it.hasNext()) {
-                TimeSeriesValue<? extends TimeSeriesDataType> value = it.next();
-                
-                if (it.getType() == NumericArrayType.TYPE) {
-                  TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) value;
-                  if (value.value() == null) {
-                    System.out.println("WTF? Null value at: " + v.timestamp());
-                    continue;
-                  }
-                  if (v.value().isInteger()) {
-                    System.out.println("   " + Arrays.toString(v.value().longArray()));
-                  } else {
-                    System.out.println("   " + Arrays.toString(v.value().doubleArray()));
-                  }
-                } else if (it.getType() == NumericType.TYPE) {
-                  TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) value;
-                  if (buf == null) {
-                    buf = new StringBuilder()
-                        .append("{");
-                  }
-                  if (x > 0) {
-                    buf.append(", ");
-                  }
-                  buf.append(v.value().toDouble());
-                  //System.out.println(v.timestamp().epoch() + "  " + v.value().toDouble());
-                } else if (it.getType() == AlertType.TYPE) {
-                  TimeSeriesValue<AlertType> v = (TimeSeriesValue<AlertType>) value;
-                  System.out.println("   ALERT! " + v.timestamp().epoch() + "  " + v.value().message());
-                }
-                
-                x++;
-                if (x > 121) {
-                  System.out.println("WHOOP? " + x);
-                  return;
-                }
-              }
-              
-              if (buf != null) {
-                buf.append("}");
-                System.out.println("     " + buf.toString());
-              }
-              System.out.println("   READ: " + x);
-            }
-          }
+          serdes.serialize(next, null);
+        // TODO Auto-generated method stub
+//        System.out.println("[RESULT]: " + next.source().config().getId() + ":" + next.dataSource());
+//        try {
+//          if (next.timeSpecification() != null) {
+//            System.out.println("     TIME SPEC: " + next.timeSpecification().start().epoch() + " " 
+//                + next.timeSpecification().end().epoch());
+//          }
+//          
+//          for (final TimeSeries ts : next.timeSeries()) {
+//            System.out.println("[SERIES] " + ts.id() + "  HASH: [" + ts.id().buildHashCode() + "] TYPES: " + ts.types());
+//            for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> it : ts.iterators()) {
+//              System.out.println("      IT: " + it.getType());
+//              int x = 0;
+//              StringBuilder buf = null;
+//              while (it.hasNext()) {
+//                TimeSeriesValue<? extends TimeSeriesDataType> value = it.next();
+//                
+//                if (it.getType() == NumericArrayType.TYPE) {
+//                  TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) value;
+//                  if (value.value() == null) {
+//                    System.out.println("WTF? Null value at: " + v.timestamp());
+//                    continue;
+//                  }
+//                  if (v.value().isInteger()) {
+//                    System.out.println("   " + Arrays.toString(v.value().longArray()));
+//                  } else {
+//                    System.out.println("   " + Arrays.toString(v.value().doubleArray()));
+//                  }
+//                } else if (it.getType() == NumericType.TYPE) {
+//                  TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) value;
+//                  if (buf == null) {
+//                    buf = new StringBuilder()
+//                        .append("{");
+//                  }
+//                  if (x > 0) {
+//                    buf.append(", ");
+//                  }
+//                  buf.append(v.value().toDouble());
+//                  //System.out.println(v.timestamp().epoch() + "  " + v.value().toDouble());
+//                } else if (it.getType() == AlertType.TYPE) {
+//                  TimeSeriesValue<AlertType> v = (TimeSeriesValue<AlertType>) value;
+//                  System.out.println("   ALERT! " + v.timestamp().epoch() + "  " + v.value().message());
+//                }
+//                
+//                x++;
+//                if (x > 121) {
+//                  System.out.println("WHOOP? " + x);
+//                  return;
+//                }
+//              }
+//              
+//              if (buf != null) {
+//                buf.append("}");
+//                System.out.println("     " + buf.toString());
+//              }
+//              System.out.println("   READ: " + x);
+//            }
+//          }
         } catch (Exception e) {
           e.printStackTrace();
         } finally {

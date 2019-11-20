@@ -297,7 +297,6 @@ public class OlympicScoringNode extends AbstractQueryNode {
          Integer.toString(config.getExcludeMax()));
      properties.setProperty("PERIOD", modelDuration() == ChronoUnit.HOURS ? "3600" : "86400");
      
-    
     List<TimeSeries> computed = Lists.newArrayList();
     TLongObjectIterator<OlympicScoringBaseline> it = join.iterator();
     while (it.hasNext()) {

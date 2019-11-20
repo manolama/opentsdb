@@ -194,10 +194,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           final TimeStamp spec_start;
           final TimeStamp spec_end;
           
-//          System.out.println("      ** RESULT: " + ((ResultWrapper) result).realResult());
-//          System.out.println("      ** RESULT SPEC: " + result.timeSpecification());
-//          System.out.println("      ** RESULT START: " + result.timeSpecification().start());
-//          System.out.println("      ** RESULT END: " + result.timeSpecification().end());
           // serdes time spec if present
           if (result.timeSpecification() != null) {
             if (result.timeSpecification().start().compare(Op.LT, start)) {
@@ -258,6 +254,9 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
             for (int i = 0; i < tss.size(); i++) {
               TimeSeries ts = tss.get(i);
               pairs.add(new Pair<Integer, TimeSeries>(idx++, ts));
+              if (ts.id() == null) {
+                System.out.println("WWWWWWWWWWWWWWWTF: " + ts);
+              }
             }
 
             final List<String> sets =
@@ -586,7 +585,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
   
       if (wrote_values) {
         // serialize the ID
-        if(!was_status && !was_event) {
+        if (!was_status && !was_event) {
           json.writeStringField("metric", id.metric());
         }
         if (! was_event_group) {
