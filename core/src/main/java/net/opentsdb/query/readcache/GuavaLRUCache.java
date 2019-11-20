@@ -104,7 +104,7 @@ public class GuavaLRUCache extends BaseTSDBPlugin implements
   /** Default number of objects to maintain in the cache. */
   public static final int DEFAULT_MAX_OBJECTS = 1024;
   
-  /** A counter used to track how many butes are in the cache. */
+  /** A counter used to track how many bytes are in the cache. */
   private final AtomicLong size;
   
   /** A counter to track how many values have been expired out of the cache. */
@@ -461,6 +461,8 @@ public class GuavaLRUCache extends BaseTSDBPlugin implements
     } catch (Exception e) {
       LOG.error("Unexpected exception recording LRU stats", e);
     }
+    
+    // TODO - walk and purge expired entries.
     
     tsdb.getMaintenanceTimer().newTimeout(this, 
         tsdb.getConfig().getInt(DefaultTSDB.MAINT_TIMER_KEY), 

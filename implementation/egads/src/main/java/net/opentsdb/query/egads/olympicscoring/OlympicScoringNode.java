@@ -99,6 +99,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
   final ChronoUnit model_units;
   long prediction_intervals;
   long prediction_interval;
+  String ds_interval;
   
   public OlympicScoringNode(final QueryNodeFactory factory,
                             final QueryPipelineContext context,
@@ -121,7 +122,6 @@ public class OlympicScoringNode extends AbstractQueryNode {
       throw new IllegalStateException("Downsample can't be null.");
     }
     
-    String ds_interval;
     final long query_time_span = context.query().endTime().msEpoch() - 
         context.query().startTime().msEpoch();
     if (ds.getInterval().equalsIgnoreCase("AUTO")) {
@@ -152,6 +152,8 @@ public class OlympicScoringNode extends AbstractQueryNode {
       break;
     case EVALUATE:
     case PREDICT:
+      // TODO - for now, we need the query timespan to be 1h or 1day at the most as
+      // we'll build the model off the start time of the query.
       long baseline_span = DateTime.parseDuration(config.getBaselinePeriod()) / 1000;
       if (baseline_span < 86400) {
         model_units = ChronoUnit.HOURS;
@@ -169,15 +171,14 @@ public class OlympicScoringNode extends AbstractQueryNode {
       start.snapToPreviousInterval(1, duration);
       start.add(jitter_duration);
       prediction_start = start.epoch();
-      prediction_interval = model_units == ChronoUnit.HOURS ? 
-          3600 : 86400;
+      prediction_interval = model_units == ChronoUnit.HOURS ? 3600 : 86400;
       prediction_intervals = query_time_span / (prediction_interval * 1000);
       break;
     default:
       throw new IllegalStateException("Unhandled config mode: " + config.getMode());
     }
     
-    System.out.println("  PRED START: " + prediction_start); // good is 11 now w/o jitter
+    System.out.println("  PRED START: " + prediction_start); 
   }
   
   @Override
@@ -237,7 +238,6 @@ public class OlympicScoringNode extends AbstractQueryNode {
       final long hash = ((EgadsTimeSeries) series).originalHash();
       TimeSeries cur = map.remove(hash);
       if (cur != null) {
-        //runPair(cur, series);
         final ThresholdEvaluator eval = new ThresholdEvaluator(
             config.getUpperThreshold(),
             config.isUpperIsScalar(),
@@ -291,10 +291,12 @@ public class OlympicScoringNode extends AbstractQueryNode {
      properties.setProperty("TS_MODEL", "OlympicModel2"); // Model to be used
     //       properties.setProperty("INTERVAL", Integer.toString(
     //           DateTime.getDurationInterval(config.getTsdWindowSize())));
-     properties.setProperty("INTERVAL", "1");
+     int interval_count = DateTime.getDurationInterval(ds_interval);
+     properties.setProperty("INTERVAL", Integer.toString(interval_count));
     //       properties.setProperty("INTERVAL_UNITS", 
     //           DateTime.getDurationChronoUnits(config.getTsdWindowSize()).toString());
-     properties.setProperty("INTERVAL_UNITS", "MINUTES");
+     ChronoUnit ds_units = DateTime.unitsToChronoUnit(DateTime.getDurationUnits(ds_interval));
+     properties.setProperty("INTERVAL_UNITS", ds_units.toString());
      // TODO - pull from config
     //       properties.setProperty("WINDOW_SIZE", Integer.toString( 
     //           DateTime.getDurationInterval(modelSpan)));
@@ -310,7 +312,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
          DateTime.getDurationInterval(config.getBaselinePeriod())));
      properties.setProperty("WINDOW_DISTANCE_UNITS", 
          DateTime.unitsToChronoUnit(
-         DateTime.getDurationUnits(config.getBaselinePeriod())).toString());
+             DateTime.getDurationUnits(config.getBaselinePeriod())).toString());
      properties.setProperty("HISTORICAL_WINDOWS", Integer.toString(
          config.getBaselineNumPeriods()));
      properties.setProperty("WINDOW_AGGREGATOR", 
@@ -492,11 +494,6 @@ public class OlympicScoringNode extends AbstractQueryNode {
     System.out.println("------- FETCHING BASELINES");
     baseline_queries = new BaselineQuery[config.getBaselineNumPeriods()];
     final TimeStamp start = new SecondTimeStamp(prediction_start);
-//    final ChronoUnit duration = modelDuration();
-//    start.snapToPreviousInterval(1, duration);
-////    if (jitter > 0) {
-////      start.add(jitter_duration);
-////    }
     final TemporalAmount period = DateTime.parseDuration2(config.getBaselinePeriod());
     // advance to the oldest time first
     for (int i = 0; i < config.getBaselineNumPeriods(); i++) {
@@ -509,9 +506,6 @@ public class OlympicScoringNode extends AbstractQueryNode {
       end = start.getCopy();
       end.add(Duration.of(1, model_units));
     }
-    //end.add(duration == ChronoUnit.DAYS ? Duration.ofDays(1) : Duration.ofHours(1));
-//    baseline_start = start.epoch();
-//    System.out.println("      BASELINE EPOCH: " + baseline_start);
     
     // fire!
     for (int i = 0; i < config.getBaselineNumPeriods(); i++) {
@@ -523,9 +517,6 @@ public class OlympicScoringNode extends AbstractQueryNode {
                                      query);
       start.add(baseline_period);
       end.add(baseline_period);
-//      query.sub_context.initialize(null)
-//        .addCallback(new SubQueryCB(query.sub_context))
-//        .addErrback(new ErrorCB());
     }
 
     baseline_queries[0].sub_context.initialize(null)

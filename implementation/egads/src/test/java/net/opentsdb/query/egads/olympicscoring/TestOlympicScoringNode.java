@@ -51,12 +51,16 @@ import net.opentsdb.query.QuerySinkCallback;
 import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.SemanticQueryContext;
 import net.opentsdb.query.anomaly.AnomalyConfig.ExecutionMode;
+import net.opentsdb.query.anomaly.MemoryPredictionCache;
+import net.opentsdb.query.anomaly.PredictionCache;
 import net.opentsdb.query.execution.serdes.JsonV3QuerySerdesOptions;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
 import net.opentsdb.query.filter.MetricLiteralFilter;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.pojo.FillPolicy;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
+import net.opentsdb.query.readcache.JsonReadCacheSerdes;
+import net.opentsdb.query.readcache.ReadCacheSerdesFactory;
 import net.opentsdb.query.serdes.SerdesFactory;
 import net.opentsdb.query.serdes.SerdesOptions;
 import net.opentsdb.query.serdes.TimeSeriesSerdes;
@@ -94,6 +98,12 @@ public class TestOlympicScoringNode {
         TimeSeriesDataSourceFactory.class, null, (TSDBPlugin) factory);
     storeHourlyData();
     
+    ((DefaultRegistry) TSDB.registry).registerPlugin(
+        ReadCacheSerdesFactory.class, null, new JsonReadCacheSerdes());
+    MemoryPredictionCache cache = new MemoryPredictionCache();
+    cache.initialize(TSDB, null);
+    ((DefaultRegistry) TSDB.registry).registerPlugin(PredictionCache.class, null, cache);
+    
     INTERPOLATOR = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.PREFER_NEXT)
@@ -105,8 +115,8 @@ public class TestOlympicScoringNode {
   public void foo() throws Exception {
     
     SemanticQuery baseline_query = SemanticQuery.newBuilder()
-        .setStart(Integer.toString(BASE_TIME + (3600 * 11)))
-        .setEnd(Integer.toString(BASE_TIME + (3600 * 12)))
+        .setStart(Integer.toString(BASE_TIME + (3600 * 11) + 300))
+        .setEnd(Integer.toString(BASE_TIME + (3600 * 12) + 300))
         .setMode(QueryMode.SINGLE)
         .addExecutionGraphNode(DefaultTimeSeriesDataSourceConfig.newBuilder()
             .setMetric(MetricLiteralFilter.newBuilder()
@@ -125,8 +135,8 @@ public class TestOlympicScoringNode {
         .build();
     
     SemanticQuery egads_query = SemanticQuery.newBuilder()
-        .setStart(Integer.toString(BASE_TIME + (3600 * 11)))
-        .setEnd(Integer.toString(BASE_TIME + (3600 * 12)))
+        .setStart(Integer.toString(BASE_TIME + (3600 * 11) + 300))
+        .setEnd(Integer.toString(BASE_TIME + (3600 * 12) + 300))
         .setMode(QueryMode.SINGLE)
         .addExecutionGraphNode(DefaultTimeSeriesDataSourceConfig.newBuilder()
             .setMetric(MetricLiteralFilter.newBuilder()
