@@ -16,6 +16,7 @@ import org.junit.Test;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.stumbleupon.async.Callback;
 
 import net.opentsdb.configuration.Configuration;
 import net.opentsdb.configuration.ConfigurationEntrySchema;
@@ -178,7 +179,12 @@ public class TestOlympicScoringNode {
       public void onComplete() {
         // TODO Auto-generated method stub
         System.out.println("DONE!!");
-        System.out.println(new String(baos.toByteArray()));
+        try {
+          serdes.serializeComplete(null);
+          System.out.println("[JSON]: " + new String(baos.toByteArray()));
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
         synchronized (waity) {
           waity.notify();
         }
@@ -187,7 +193,21 @@ public class TestOlympicScoringNode {
       @Override
       public void onNext(QueryResult next) {
         try {
-          serdes.serialize(next, null);
+          serdes.serialize(next, null).addCallback(new Callback<Void, Object>() {
+            @Override
+            public Void call(Object arg) throws Exception {
+              next.close();
+              return null;
+            }
+          })
+          .addErrback(new Callback<Object, Exception>() {
+            @Override
+            public Void call(Exception arg) throws Exception {
+              arg.printStackTrace();
+              next.close();
+              return null;
+            }
+          });
         // TODO Auto-generated method stub
 //        System.out.println("[RESULT]: " + next.source().config().getId() + ":" + next.dataSource());
 //        try {
@@ -249,7 +269,7 @@ public class TestOlympicScoringNode {
         } catch (Exception e) {
           e.printStackTrace();
         } finally {
-          next.close();
+          //next.close();
         }
       }
 

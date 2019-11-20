@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import net.opentsdb.data.types.alert.AlertType;
 import net.opentsdb.data.types.event.EventGroupType;
 import net.opentsdb.data.types.event.EventsGroupValue;
 import net.opentsdb.data.types.status.StatusType;
@@ -254,9 +255,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
             for (int i = 0; i < tss.size(); i++) {
               TimeSeries ts = tss.get(i);
               pairs.add(new Pair<Integer, TimeSeries>(idx++, ts));
-              if (ts.id() == null) {
-                System.out.println("WWWWWWWWWWWWWWWTF: " + ts);
-              }
             }
 
             final List<String> sets =
@@ -535,12 +533,17 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
     boolean was_status = false;
     boolean was_event = false;
     boolean was_event_group = false;
-    for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator : series.iterators()) {
+    try {
+      for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator : series.iterators()) {
 
-      lock.writeLock().lock(); // since json is not thread safe and we need to form the json in order
-      try {
+        System.out.println("   SRC: " + series.getClass() + "   TYPE: " + iterator.getType());
+        lock.writeLock().lock(); // since json is not thread safe and we need to form the json in order
         while (iterator.hasNext()) {
           TimeSeriesValue<? extends TimeSeriesDataType> value = iterator.next();
+          if (value == null) {
+            continue;
+          }
+          
           if (iterator.getType() == StatusType.TYPE) {
             if (!was_status) {
               was_status = true;
@@ -560,10 +563,12 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
             json.writeStartObject();
             writeEventGroup((EventsGroupValue) value, json, id);
             wrote_values = true;
+          } else if (iterator.getType() == AlertType.TYPE) {
+            if (writeAlert((TimeSeriesValue<AlertType>) value, options, 
+                    iterator, json, result, start, end, wrote_values)) {
+                wrote_values = true;
+              }
           } else {
-            if (value == null) {
-              continue;
-            }
             if (iterator.getType() == NumericType.TYPE) {
               if (writeNumeric((TimeSeriesValue<NumericType>) value, options, 
                     iterator, json, result, start, end, wrote_values)) {
@@ -575,20 +580,22 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
                 wrote_values = true;
               }
             } else if (iterator.getType() == NumericArrayType.TYPE) {
-              if(writeNumericArray((TimeSeriesValue<NumericArrayType>) value, 
+              if (writeNumericArray((TimeSeriesValue<NumericArrayType>) value, 
                     options, iterator, json, result, start, end, wrote_values)) {
                 wrote_values = true;
               }
             }
           }
+        }
       }
-  
+      
       if (wrote_values) {
         // serialize the ID
         if (!was_status && !was_event) {
           json.writeStringField("metric", id.metric());
         }
-        if (! was_event_group) {
+        if (!was_event_group) {
+          
           json.writeObjectFieldStart("tags");
           for (final Entry<String, String> entry : id.tags().entrySet()) {
             json.writeStringField(entry.getKey(), entry.getValue());
@@ -618,7 +625,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       }
     } finally {
       lock.writeLock().unlock();
-    }
     }
   }
 
@@ -1188,6 +1194,55 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
     json.writeStringField("application", statusValue.application());
   }
 
+  private boolean writeAlert(
+      TimeSeriesValue<AlertType> value,
+      final JsonV3QuerySerdesOptions options,
+      final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator,
+      final JsonGenerator json,
+      final QueryResult result,
+      final TimeStamp start,
+      final TimeStamp end,
+      boolean wrote_values) throws IOException {
+    boolean wrote_type = false;
+    while (value != null) {
+      if (!wrote_type) {
+        json.writeObjectFieldStart("AlertType"); // yeah, it's numeric.
+        wrote_type = true;
+      }
+      
+      json.writeObjectFieldStart(Long.toString(value.timestamp().epoch()));
+      json.writeStringField("level", "UNKNOWN");
+      if (value.value().dataPoint() == null) {
+        json.writeNullField("value");
+      } else if (value.value().dataPoint().isInteger()) {
+        json.writeNumberField("value", value.value().dataPoint().longValue());
+      } else {
+        json.writeNumberField("value", value.value().dataPoint().doubleValue());
+      }
+      if (value.value().threshold() != null) {
+        if (value.value().threshold().isInteger()) {
+          json.writeNumberField("threshold", value.value().threshold().longValue());
+        } else {
+          json.writeNumberField("threshold", value.value().threshold().doubleValue());
+        }
+      }
+      json.writeStringField("type", value.value().thresholdType());
+      
+      json.writeEndObject();
+      
+      if (iterator.hasNext()) {
+        value = (TimeSeriesValue<AlertType>) iterator.next();
+      } else {
+        value = null;
+      }
+    }
+    
+    if (wrote_type) {
+      json.writeEndObject();
+    }
+    return wrote_type;
+  }
+  
   /**
    * Scratch class used to collect the serialized time series.
    */
