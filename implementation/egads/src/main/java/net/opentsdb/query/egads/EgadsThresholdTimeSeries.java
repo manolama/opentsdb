@@ -2,9 +2,11 @@ package net.opentsdb.query.egads;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.reflect.TypeToken;
 
@@ -29,7 +31,8 @@ public class EgadsThresholdTimeSeries implements TimeSeries {
                                   final String suffix,
                                   final TimeStamp timestamp,
                                   final double[] values, 
-                                  final int end_idx) {
+                                  final int end_idx,
+                                  final String model) {
     // TODO - handle byte IDs somehow.
     final TimeSeriesStringId string_id = (TimeSeriesStringId) id;
     BaseTimeSeriesStringId.Builder builder = BaseTimeSeriesStringId.newBuilder()
@@ -38,6 +41,12 @@ public class EgadsThresholdTimeSeries implements TimeSeries {
         .setMetric(string_id.metric() + "." + suffix)
         .setAggregatedTags(string_id.aggregatedTags())
         .setDisjointTags(string_id.disjointTags());
+    final Map<String, String> tags = Maps.newHashMap();
+    if (string_id.tags() != null) {
+      tags.putAll(string_id.tags());
+    }
+    tags.put(EgadsTimeSeries.MODEL_TAG_KEY, model);
+    builder.setTags(tags);
     this.id = builder.build();
     this.timestamp = timestamp;
     this.values = values;

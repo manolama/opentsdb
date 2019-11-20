@@ -245,7 +245,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           AtomicInteger ai = new AtomicInteger(0);
           AtomicBoolean wasStatus = new AtomicBoolean(false);
           StringBuilder namespace = new StringBuilder();
-
+LOG.info("------- SERIES: " + result.timeSeries().size());
           if (result.processInParallel()) {
             List<TimeSeries> tss = result.timeSeries();
             LOG.debug("Processing the iterators parallelly: " + tss.size());
@@ -535,8 +535,6 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
     boolean was_event_group = false;
     try {
       for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator : series.iterators()) {
-
-        System.out.println("   SRC: " + series.getClass() + "   TYPE: " + iterator.getType());
         lock.writeLock().lock(); // since json is not thread safe and we need to form the json in order
         while (iterator.hasNext()) {
           TimeSeriesValue<? extends TimeSeriesDataType> value = iterator.next();
@@ -1043,6 +1041,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       boolean wrote_values) throws IOException {
 
     if (value.value().end() < 1) {
+      LOG.warn("WTF? No data? in JSON!!");
       // no data
       return false;
     }
@@ -1079,6 +1078,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       if (wrote_type) {
         json.writeEndArray();
       }
+      LOG.info("     WROTE TYPE: " + wrote_type);
       return wrote_type;
     }
     
@@ -1101,6 +1101,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       }
     }
     json.writeEndArray();
+    LOG.info("     fall through WROTE TYPE: " + wrote_type);
     return wrote_type;
   }
 
@@ -1212,6 +1213,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       
       json.writeObjectFieldStart(Long.toString(value.timestamp().epoch()));
       json.writeStringField("level", "UNKNOWN");
+      json.writeStringField("message", value.value().message());
       if (value.value().dataPoint() == null) {
         json.writeNullField("value");
       } else if (value.value().dataPoint().isInteger()) {

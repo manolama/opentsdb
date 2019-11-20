@@ -81,12 +81,13 @@ public class OlympicScoringNode extends AbstractQueryNode {
       OlympicScoringNode.class);
   
   private final OlympicScoringConfig config;
-  private final BaselineQuery[] baseline_queries;
   private final PredictionCache cache;
+  private final byte[] cache_key;
   private final CountDownLatch latch;
   private final int jitter;
   private final TemporalAmount jitter_duration;
   protected final AtomicBoolean failed;
+  private BaselineQuery[] baseline_queries;
   Properties properties;
   long prediction_start;
   private EgadsResult prediction;
@@ -101,14 +102,29 @@ public class OlympicScoringNode extends AbstractQueryNode {
                             final QueryPipelineContext context,
                             final OlympicScoringConfig config) {
     super(factory, context);
-    cache = null; // PULL FROM FACTORY
+    
+    switch (config.getMode()) {
+    case CONFIG:
+      cache = null;
+      prediction_start = context.query().startTime().epoch();
+      break;
+    case EVALUATE:
+      cache = null; // PULL FROM FACTORY
+      
+      break;
+    case PREDICT:
+      cache = null; // PULL FROM FACTORY
+      break;
+    default:
+      cache = null;
+    }
+    
     this.config = config;
-    baseline_queries = new BaselineQuery[config.getBaselineNumPeriods()];
     latch = new CountDownLatch(2);
     jitter = jitter();
     jitter_duration = Duration.ofSeconds(jitter);
     failed = new AtomicBoolean();
-    
+    cache_key = null;
     long span = DateTime.parseDuration(config.getBaselinePeriod()) / 1000;
     if (span < 86400) {
       model_units = ChronoUnit.HOURS;
@@ -124,7 +140,6 @@ public class OlympicScoringNode extends AbstractQueryNode {
         break;
       }
     }
-    
     if (ds == null) {
       throw new IllegalStateException("Downsample can't be null.");
     }
@@ -157,6 +172,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
 //      start.add(jitter_duration);
 //    }
     prediction_start = start.epoch();
+    
  // TODO - make this configurable and flexible.
     
     System.out.println("  PRED START: " + prediction_start); // good is 11 now w/o jitter
@@ -194,6 +210,10 @@ public class OlympicScoringNode extends AbstractQueryNode {
 
   @Override
   public void onNext(final QueryResult next) {
+    LOG.info("GOT CURRENT: " + next.dataSource());
+    if (next.timeSpecification() != null) {
+      LOG.info("CUR START: " + next.timeSpecification().start().epoch());
+    }
     System.out.println("    GOT CURRENT: " + next.dataSource());
     current = next;
     countdown();
@@ -208,7 +228,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
       System.out.println("  CUR: " + hash);
       map.put(hash, series);
     }
-    
+    LOG.info("SER THRESHOLDS: " + config.getSerializeThresholds());
     int series_limit = prediction.timeSeries().size();
     for (int i = 0; i < series_limit; i++) {
       final TimeSeries series = prediction.timeSeries().get(i);
@@ -238,7 +258,8 @@ public class OlympicScoringNode extends AbstractQueryNode {
                 "upper", 
                 prediction.timeSpecification().start(), 
                 eval.upperThresholds(), 
-                eval.index()));
+                eval.index(),
+                OlympicScoringFactory.TYPE));
           }
           if (config.getLowerThreshold() != 0) {
             prediction.timeSeries().add(new EgadsThresholdTimeSeries(
@@ -246,13 +267,14 @@ public class OlympicScoringNode extends AbstractQueryNode {
                 "lower", 
                 prediction.timeSpecification().start(), 
                 eval.lowerThresholds(), 
-                eval.index()));
+                eval.index(),
+                OlympicScoringFactory.TYPE));
           }
         }
       }
     }
     
-    // TODO - iteate through the final things in the map and push them out without
+    // TODO - iterate through the final things in the map and push them out without
     // predictions.
     if (config.getSerializeObserved()) {
       // yeah, ew, but it's an EgadsResult so we have an array list.
@@ -296,7 +318,8 @@ public class OlympicScoringNode extends AbstractQueryNode {
      properties.setProperty("NUM_TO_DROP_HIGHEST", 
          Integer.toString(config.getExcludeMax()));
      properties.setProperty("PERIOD", modelDuration() == ChronoUnit.HOURS ? "3600" : "86400");
-     
+    
+     // TODO - parallelize
     List<TimeSeries> computed = Lists.newArrayList();
     TLongObjectIterator<OlympicScoringBaseline> it = join.iterator();
     while (it.hasNext()) {
@@ -312,6 +335,10 @@ public class OlympicScoringNode extends AbstractQueryNode {
     TimeStamp end = start.getCopy();
     end.add(modelDuration() == ChronoUnit.HOURS ? Duration.ofHours(1) : Duration.ofDays(1));
 
+    if (cache != null) {
+      // need's a clone as we may modify the list when we add thresholds, etc.
+      writeCache(new EgadsResult(this, start, end, Lists.newArrayList(computed), id_type));
+    }
     prediction = new EgadsResult(this, start, end, computed, id_type);
     countdown();
   }
@@ -456,6 +483,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
 
   void fetchBaselineData() {
     System.out.println("------- FETCHING BASELINES");
+    baseline_queries = new BaselineQuery[config.getBaselineNumPeriods()];
     final TimeStamp start = context.query().startTime().getCopy();
     final ChronoUnit duration = modelDuration();
     start.snapToPreviousInterval(1, duration);
@@ -550,5 +578,40 @@ public class OlympicScoringNode extends AbstractQueryNode {
       // 5m jitter on 15s
       return (int) Math.abs(context.query().buildHashCode().asLong() % 20) * 15;
     }
+  }
+  
+  void writeCache(final QueryResult result) {
+    context.tsdb().getQueryThreadPool().submit(new Runnable() {
+      public void run() {
+        class CacheErrorCB implements Callback<Object, Exception> {
+          @Override
+          public Object call(final Exception e) throws Exception {
+            LOG.warn("Failed to cache EGADs prediction", e);
+            return null;
+          }
+        }
+        
+        class SuccessCB implements Callback<Object, Void> {
+          @Override
+          public Object call(final Void ignored) throws Exception {
+            if (LOG.isTraceEnabled()) {
+              LOG.trace("Successfully cached EGADs prediction at " 
+                  + Arrays.toString(cache_key));
+            }
+            return null;
+          }
+        }
+        
+        final long expiration;
+        if (model_units == ChronoUnit.HOURS) {
+          expiration = 3600 * 2 * 1000;
+        } else {
+          expiration = 86400 * 2 * 1000;
+        }
+        cache.cache(cache_key, expiration, result, null)
+          .addCallback(new SuccessCB())
+          .addErrback(new CacheErrorCB());
+      }
+    });
   }
 }

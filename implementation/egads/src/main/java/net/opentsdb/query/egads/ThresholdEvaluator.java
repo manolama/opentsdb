@@ -181,19 +181,22 @@ public class ThresholdEvaluator {
         (TimeSeriesValue<NumericArrayType>) iterator.next();
     
     final TimeStamp ts = current_result.timeSpecification().start().getCopy();
+    int wrote = 0;
     for (int i = value.value().offset(); i < value.value().end(); i++) {
       if (ts.compare(Op.LT, prediction_result.timeSpecification().start())) {
+        ts.add(current_result.timeSpecification().interval());
         continue;
       }
       
       int idx = (int) ((ts.epoch() - prediction_base) / prediction_interval);
       if (idx + prediction.value().offset() >= prediction.value().end()) {
-        LOG.warn(idx + " beyond the prediction range.");
+        ts.add(current_result.timeSpecification().interval());
+        continue;
       }
       
-      AlertValue av = eval(ts, 
-          (value.value().isInteger() ? (double) value.value().longArray()[idx] :
-            value.value().doubleArray()[idx]), 
+      final AlertValue av = eval(ts, 
+          (value.value().isInteger() ? (double) value.value().longArray()[i] :
+            value.value().doubleArray()[i]), 
           (prediction.value().isInteger() ? (double) prediction.value().longArray()[idx] :
             prediction.value().doubleArray()[idx]));
       if (av != null) {
@@ -204,7 +207,9 @@ public class ThresholdEvaluator {
       }
       
       ts.add(current_result.timeSpecification().interval());
+      wrote++;
     }
+    LOG.info("WROTE: " + wrote + " for " + current.id());
   }
   
   void runNumericSummaryType(

@@ -28,47 +28,17 @@ public class OlympicScoringFactory extends BaseQueryNodeFactory<OlympicScoringCo
   }
   
   @Override
-  public OlympicScoringConfig parseConfig(ObjectMapper mapper, TSDB tsdb,
-      JsonNode node) {
+  public OlympicScoringConfig parseConfig(final ObjectMapper mapper, 
+                                          final TSDB tsdb,
+                                          final JsonNode node) {
     Builder builder = new Builder();
+    Builder.parseConfig(mapper, tsdb, node, builder);
+    
     JsonNode n = node.get("baselineQuery");
     if (n != null && !n.isNull()) {
       builder.setBaselineQuery(SemanticQuery.parse(tsdb, n).build());
     }
-    
-    n = node.get("id");
-    if (n != null) {
-      builder.setId(n.asText());
-    }
-    
-    n = node.get("sources");
-    if (n != null && !n.isNull()) {
-      try {
-        builder.setSources(mapper.treeToValue(n, List.class));
-      } catch (JsonProcessingException e) {
-        throw new IllegalArgumentException("Failed to parse json", e);
-      }
-    }
-    
-    n = node.get("interpolatorConfigs");
-    for (final JsonNode config : n) {
-      JsonNode type_json = config.get("type");
-      final QueryInterpolatorFactory factory = tsdb.getRegistry().getPlugin(
-          QueryInterpolatorFactory.class, 
-          type_json == null || type_json.isNull() ? 
-             null : type_json.asText());
-      if (factory == null) {
-        throw new IllegalArgumentException("Unable to find an "
-            + "interpolator factory for: " + 
-            (type_json == null || type_json.isNull() ? "Default" :
-             type_json.asText()));
-      }
-      
-      final QueryInterpolatorConfig interpolator_config = 
-          factory.parseConfig(mapper, tsdb, config);
-      builder.addInterpolatorConfig(interpolator_config);
-    }
-    
+     
     n = node.get("baselinePeriod");
     if (n != null && !n.isNull()) {
       builder.setBaselinePeriod(n.asText());
@@ -113,7 +83,6 @@ public class OlympicScoringFactory extends BaseQueryNodeFactory<OlympicScoringCo
     if (n != null && !n.isNull()) {
       builder.setLowerIsScalar(n.asBoolean());
     }
-    
     
     return builder.build();
   }

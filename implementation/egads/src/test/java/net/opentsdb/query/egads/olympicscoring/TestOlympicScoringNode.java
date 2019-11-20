@@ -63,6 +63,7 @@ import net.opentsdb.query.serdes.TimeSeriesSerdes;
 import net.opentsdb.storage.MockDataStoreFactory;
 import net.opentsdb.storage.WritableTimeSeriesDataStore;
 import net.opentsdb.storage.WritableTimeSeriesDataStoreFactory;
+import net.opentsdb.utils.JSON;
 
 public class TestOlympicScoringNode {
 
@@ -156,6 +157,7 @@ public class TestOlympicScoringNode {
             .setId("egads")
             .build())
         .build();
+    System.out.println(JSON.serializeToString(egads_query));
     
     Object waity = new Object();
     class Sink implements QuerySink {
@@ -188,6 +190,7 @@ public class TestOlympicScoringNode {
         synchronized (waity) {
           waity.notify();
         }
+        System.out.println("--------- DONE with waity ----------");
       }
 
       @Override
