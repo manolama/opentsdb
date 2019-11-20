@@ -11,11 +11,15 @@ public class AlertValue implements AlertType, TimeSeriesValue<AlertType> {
   private TimeStamp timestamp;
   private MutableNumericType data_point;
   private String message;
+  private MutableNumericType threshold;
+  private String threshold_type;
   
   protected AlertValue(final Builder builder) {
     timestamp = builder.timestamp;
     data_point = builder.data_point;
     message = builder.message;
+    threshold = builder.threshold;
+    threshold_type = builder.threshold_type;
   }
   
   @Override
@@ -28,6 +32,16 @@ public class AlertValue implements AlertType, TimeSeriesValue<AlertType> {
     return data_point;
   }
 
+  @Override
+  public NumericType threshold() {
+    return threshold;
+  }
+  
+  @Override
+  public String thresholdType() {
+    return threshold_type;
+  }
+  
   @Override
   public TypeToken<AlertType> type() {
     return AlertType.TYPE;
@@ -51,6 +65,8 @@ public class AlertValue implements AlertType, TimeSeriesValue<AlertType> {
     private TimeStamp timestamp;
     private MutableNumericType data_point;
     private String message;
+    private MutableNumericType threshold;
+    private String threshold_type;
     
     public Builder setTimestamp(final TimeStamp timestamp) {
       this.timestamp = timestamp.getCopy();
@@ -74,6 +90,21 @@ public class AlertValue implements AlertType, TimeSeriesValue<AlertType> {
     
     public Builder setMessage(final String message) {
       this.message = message;
+      return this;
+    }
+    
+    public Builder setThreshold(final long value) {
+      threshold = new MutableNumericType(value);
+      return this;
+    }
+    
+    public Builder setThreshold(final double value) {
+      threshold = new MutableNumericType(value);
+      return this;
+    }
+    
+    public Builder setThresholdType(final String threshold_type) {
+      this.threshold_type = threshold_type;
       return this;
     }
     

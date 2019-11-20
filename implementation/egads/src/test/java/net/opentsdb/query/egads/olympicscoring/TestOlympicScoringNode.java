@@ -162,7 +162,7 @@ public class TestOlympicScoringNode {
       @Override
       public void onNext(QueryResult next) {
         // TODO Auto-generated method stub
-        System.out.println("WOOT! NEXT: " + next.dataSource());
+        System.out.println("[RESULT]: " + next.source().config().getId() + ":" + next.dataSource());
         try {
           if (next.timeSpecification() != null) {
             System.out.println("     TIME SPEC: " + next.timeSpecification().start().epoch() + " " 

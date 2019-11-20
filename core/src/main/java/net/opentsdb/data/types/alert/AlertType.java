@@ -19,4 +19,7 @@ public interface AlertType extends TimeSeriesDataType<AlertType>{
   
   public NumericType dataPoint();
   
+  public NumericType threshold();
+  
+  public String thresholdType();
 }

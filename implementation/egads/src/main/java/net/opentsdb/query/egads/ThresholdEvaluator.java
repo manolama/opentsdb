@@ -25,6 +25,9 @@ import net.opentsdb.query.QueryResult;
 public class ThresholdEvaluator {
   static final Logger LOG = LoggerFactory.getLogger(ThresholdEvaluator.class);
   
+  public static final String UPPER = "upper";
+  public static final String LOWER = "lower";
+  
   private final double upper;
   private final boolean upper_is_scalar;
   private final double lower;
@@ -69,8 +72,10 @@ public class ThresholdEvaluator {
   public boolean evaluate() {
     if (prediction == null) {
       // TODO - meh
+      LOG.warn("Prediction was null.");
       return false;
     }
+    
     final Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> pred_op = 
         prediction.iterator(NumericArrayType.TYPE);
     if (!pred_op.isPresent()) {
@@ -254,12 +259,16 @@ public class ThresholdEvaluator {
             .setDataPoint(current)
             .setMessage("** TEMP " + current + " is > " + threshold)
             .setTimestamp(timestamp)
+            .setThreshold(threshold)
+            .setThresholdType(UPPER)
             .build();
       } else if (current > threshold) {
         result = AlertValue.newBuilder()
             .setDataPoint(current)
             .setMessage("** TEMP " + current + " is greater than " + threshold + " which is > than " + upper + "%")
             .setTimestamp(timestamp)
+            .setThreshold(threshold)
+            .setThresholdType(UPPER)
             .build();
       }
       
@@ -286,6 +295,8 @@ public class ThresholdEvaluator {
               .setDataPoint(current)
               .setMessage("** TEMP " + current + " is < " + threshold)
               .setTimestamp(timestamp)
+              .setThreshold(threshold)
+              .setThresholdType(LOWER)
               .build();
         }
       } else if (current < threshold) {
@@ -294,6 +305,8 @@ public class ThresholdEvaluator {
               .setDataPoint(current)
               .setMessage("** TEMP " + current + " is less than " + threshold + " which is < than " + lower + "%")
               .setTimestamp(timestamp)
+              .setThreshold(threshold)
+              .setThresholdType(LOWER)
               .build();
         }
       }
