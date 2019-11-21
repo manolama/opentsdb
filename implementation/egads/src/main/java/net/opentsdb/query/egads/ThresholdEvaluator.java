@@ -1,6 +1,7 @@
 package net.opentsdb.query.egads;
 
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -60,6 +61,8 @@ public class ThresholdEvaluator {
       this.report_thresholds = true;
       upper_thresholds = new double[report_len];
       lower_thresholds = new double[report_len];
+      Arrays.fill(upper_thresholds, Double.NaN);
+      Arrays.fill(lower_thresholds, Double.NaN);
     } else {
       this.report_thresholds = false;
     }
@@ -160,7 +163,8 @@ public class ThresholdEvaluator {
       
       AlertValue av = eval(value.timestamp(), value.value().toDouble(), 
           (prediction.value().isInteger() ? (double) prediction.value().longArray()[idx] :
-            prediction.value().doubleArray()[idx]));
+            prediction.value().doubleArray()[idx]),
+          idx);
       if (av != null) {
         if (alerts == null) {
           alerts = Lists.newArrayList();
@@ -183,7 +187,6 @@ public class ThresholdEvaluator {
     final TimeStamp ts = current_result.timeSpecification().start().getCopy();
     int wrote = 0;
     for (int i = value.value().offset(); i < value.value().end(); i++) {
-      System.out.println("        EVAL CUR: " + i);
       if (ts.compare(Op.LT, prediction_result.timeSpecification().start())) {
         System.out.println("  EARLY: " + ts.epoch() + " vs.  " + prediction_result.timeSpecification().start().epoch());
         ts.add(current_result.timeSpecification().interval());
@@ -196,12 +199,14 @@ public class ThresholdEvaluator {
         ts.add(current_result.timeSpecification().interval());
         continue;
       }
+      System.out.println("        EVAL CUR: " + idx);
       
       final AlertValue av = eval(ts, 
           (value.value().isInteger() ? (double) value.value().longArray()[i] :
             value.value().doubleArray()[i]), 
           (prediction.value().isInteger() ? (double) prediction.value().longArray()[idx] :
-            prediction.value().doubleArray()[idx]));
+            prediction.value().doubleArray()[idx]),
+          idx);
       if (av != null) {
         if (alerts == null) {
           alerts = Lists.newArrayList();
@@ -241,7 +246,8 @@ public class ThresholdEvaluator {
       }
       AlertValue av = eval(value.timestamp(), value.value().value(summary).toDouble(), 
           (prediction.value().isInteger() ? (double) prediction.value().longArray()[idx] :
-            prediction.value().doubleArray()[idx]));
+            prediction.value().doubleArray()[idx]),
+          idx);
       if (av != null) {
         if (alerts == null) {
           alerts = Lists.newArrayList();
@@ -253,7 +259,8 @@ public class ThresholdEvaluator {
   
   public AlertValue eval(final TimeStamp timestamp, 
                          final double current, 
-                         final double prediction) {
+                         final double prediction,
+                         final int threshold_idx) {
     AlertValue result = null;
     if (upper != 0) {
       final double threshold;
@@ -281,12 +288,15 @@ public class ThresholdEvaluator {
       }
       
       if (report_thresholds) {
-        if (idx >= upper_thresholds.length) {
+        if (threshold_idx >= upper_thresholds.length) {
           throw new IllegalStateException("Attempted to write too many upper "
               + "thresholds [" + idx + "]. Make sure to set the report_len "
                   + "properly in the ctor.");
         }
-        upper_thresholds[idx] = prediction + upper;
+        upper_thresholds[threshold_idx] = prediction + upper;
+        if (threshold_idx > idx) {
+          idx = threshold_idx;
+        }
       }
     }
     
@@ -319,12 +329,15 @@ public class ThresholdEvaluator {
         }
       }
       if (report_thresholds) {
-        if (idx >= lower_thresholds.length) {
+        if (threshold_idx >= lower_thresholds.length) {
           throw new IllegalStateException("Attempted to write too many lower "
               + "thresholds [" + idx + "]. Make sure to set the report_len "
               + "properly in the ctor.");
         }
-        lower_thresholds[idx] = prediction - lower;
+        lower_thresholds[threshold_idx] = prediction - lower;
+        if (threshold_idx > idx) {
+          idx = threshold_idx;
+        }
       }
     }
     idx++;

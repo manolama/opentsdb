@@ -64,6 +64,7 @@ import net.opentsdb.query.anomaly.AnomalyConfig.ExecutionMode;
 import net.opentsdb.query.egads.EgadsResult;
 import net.opentsdb.query.egads.EgadsThresholdTimeSeries;
 import net.opentsdb.query.egads.EgadsTimeSeries;
+import net.opentsdb.query.egads.EvalResult;
 import net.opentsdb.query.egads.ThresholdEvaluator;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
 import net.opentsdb.query.processor.downsample.DownsampleFactory;
@@ -86,7 +87,6 @@ public class OlympicScoringNode extends AbstractQueryNode {
   private final PredictionCache cache;
   private final CountDownLatch latch;
   private final int jitter;
-  private TemporalAmount jitter_duration;
   protected final AtomicBoolean failed;
   private BaselineQuery[] baseline_queries;
   private final TemporalAmount baseline_period;
@@ -161,7 +161,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
       }
       
       jitter = jitter();
-      jitter_duration = Duration.ofSeconds(jitter);
+      TemporalAmount jitter_duration = Duration.ofSeconds(jitter);
       
       final TimeStamp start = context.query().startTime().getCopy();
       final ChronoUnit duration = modelDuration();
@@ -170,6 +170,10 @@ public class OlympicScoringNode extends AbstractQueryNode {
       // now snap to ds interval
       start.snapToPreviousInterval(DateTime.getDurationInterval(ds_interval), 
           DateTime.unitsToChronoUnit(DateTime.getDurationUnits(ds_interval)));
+      if (start.compare(Op.GT, context.query().startTime())) {
+        start.subtract(model_units == ChronoUnit.HOURS ? 
+            Duration.ofHours(1) : Duration.ofDays(1));
+      }
       
       prediction_start = start.epoch();
       prediction_intervals = (model_units == 
@@ -283,9 +287,13 @@ public class OlympicScoringNode extends AbstractQueryNode {
     // predictions.
     if (config.getSerializeObserved()) {
       // yeah, ew, but it's an EgadsResult so we have an array list.
-      prediction.timeSeries().addAll(current.timeSeries());
+      //prediction.timeSeries().addAll(current.timeSeries());
+      final EvalResult rs = new EvalResult(this, current);
+      rs.addPredictionsAndThresholds(prediction);
+      sendUpstream(rs);
+    } else {
+      sendUpstream(prediction);
     }
-    sendUpstream(prediction);
   }
   
   void runBaseline() {
