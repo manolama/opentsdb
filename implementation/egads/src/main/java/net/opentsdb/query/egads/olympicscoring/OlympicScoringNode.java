@@ -167,14 +167,21 @@ public class OlympicScoringNode extends AbstractQueryNode {
       final ChronoUnit duration = modelDuration();
       start.snapToPreviousInterval(1, duration);
       start.add(jitter_duration);
+      // now snap to ds interval
+      start.snapToPreviousInterval(DateTime.getDurationInterval(ds_interval), 
+          DateTime.unitsToChronoUnit(DateTime.getDurationUnits(ds_interval)));
+      
       prediction_start = start.epoch();
-      prediction_intervals = query_time_span / (prediction_interval * 1000);
+      prediction_intervals = (model_units == 
+          ChronoUnit.HOURS ? 3600 : 86400) * 1000 / (prediction_interval * 1000);
       break;
     default:
       throw new IllegalStateException("Unhandled config mode: " + config.getMode());
     }
     
-    System.out.println("  PRED START: " + prediction_start); 
+    System.out.println("  PRED START: " + prediction_start);
+    System.out.println("  PRED INTERVAL: " + prediction_interval);
+    System.out.println("  PRED INTERVALS: " + prediction_intervals);
   }
   
   @Override

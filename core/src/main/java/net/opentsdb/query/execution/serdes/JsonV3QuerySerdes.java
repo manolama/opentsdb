@@ -534,6 +534,7 @@ LOG.info("------- SERIES: " + result.timeSeries().size());
     boolean was_event = false;
     boolean was_event_group = false;
     try {
+      System.out.println("      SERIALIZIN: " + series.id());
       for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator : series.iterators()) {
         lock.writeLock().lock(); // since json is not thread safe and we need to form the json in order
         while (iterator.hasNext()) {
@@ -1054,7 +1055,8 @@ LOG.info("------- SERIES: " + result.timeSeries().size());
         cur.add(result.timeSpecification().interval());
       }
 
-       boolean wrote_type = false;
+      System.out.println("     START TS: " + cur.epoch() + " idx: " + idx + "  " + value.value().end());
+      boolean wrote_type = false;
       for (; idx < value.value().end(); idx++) {
         if (cur.compare(Op.GTE, end)) {
           break;

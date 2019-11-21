@@ -183,13 +183,16 @@ public class ThresholdEvaluator {
     final TimeStamp ts = current_result.timeSpecification().start().getCopy();
     int wrote = 0;
     for (int i = value.value().offset(); i < value.value().end(); i++) {
+      System.out.println("        EVAL CUR: " + i);
       if (ts.compare(Op.LT, prediction_result.timeSpecification().start())) {
+        System.out.println("  EARLY: " + ts.epoch() + " vs.  " + prediction_result.timeSpecification().start().epoch());
         ts.add(current_result.timeSpecification().interval());
         continue;
       }
       
       int idx = (int) ((ts.epoch() - prediction_base) / prediction_interval);
       if (idx + prediction.value().offset() >= prediction.value().end()) {
+        System.out.println("  BAD IDX: " + idx + " ");
         ts.add(current_result.timeSpecification().interval());
         continue;
       }
