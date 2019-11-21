@@ -46,6 +46,7 @@ import net.opentsdb.data.types.alert.AlertTypeList;
 import net.opentsdb.data.types.alert.AlertValue;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.exceptions.QueryExecutionException;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.BaseQueryContext;
 import net.opentsdb.query.QueryContext;
@@ -59,6 +60,8 @@ import net.opentsdb.query.QuerySinkCallback;
 import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.SemanticQueryContext;
 import net.opentsdb.query.AbstractQueryPipelineContext.ResultWrapper;
+import net.opentsdb.query.anomaly.AnomalyPredictionState;
+import net.opentsdb.query.anomaly.AnomalyPredictionState.State;
 import net.opentsdb.query.anomaly.PredictionCache;
 import net.opentsdb.query.anomaly.AnomalyConfig.ExecutionMode;
 import net.opentsdb.query.egads.EgadsResult;
@@ -88,6 +91,8 @@ public class OlympicScoringNode extends AbstractQueryNode {
   private final CountDownLatch latch;
   private final int jitter;
   protected final AtomicBoolean failed;
+  protected final AtomicBoolean building_prediction;
+  protected volatile boolean cache_hit;
   private BaselineQuery[] baseline_queries;
   private final TemporalAmount baseline_period;
   Properties properties;
@@ -97,6 +102,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
   final TLongObjectMap<OlympicScoringBaseline> join = 
       new TLongObjectHashMap<OlympicScoringBaseline>();
   final ChronoUnit model_units;
+  final byte[] cache_key;
   long prediction_intervals;
   long prediction_interval;
   String ds_interval;
@@ -108,6 +114,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
     this.config = config;
     latch = new CountDownLatch(2);
     failed = new AtomicBoolean();
+    building_prediction = new AtomicBoolean();
     baseline_period = DateTime.parseDuration2(config.getBaselinePeriod());
     
     // TODO - find the proper ds in graph in order
@@ -138,7 +145,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
     } else {
       ds_interval = ds.getInterval();
     }
-    cache = context.tsdb().getRegistry().getDefaultPlugin(PredictionCache.class); // PULL FROM FACTORY
+    cache = ((OlympicScoringFactory) factory).cache();
     prediction_interval = DateTime.parseDuration(ds_interval) / 1000;
     
     // set timings
@@ -148,6 +155,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
       model_units = null;
       prediction_start = context.query().startTime().epoch();
       prediction_intervals = query_time_span / (prediction_interval * 1000);
+      cache_key = null;
       break;
     case EVALUATE:
     case PREDICT:
@@ -160,7 +168,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
         model_units = ChronoUnit.DAYS;
       }
       
-      jitter = jitter();
+      jitter = ((OlympicScoringFactory) factory).jitter(context.query(), model_units);
       TemporalAmount jitter_duration = Duration.ofSeconds(jitter);
       
       final TimeStamp start = context.query().startTime().getCopy();
@@ -178,6 +186,9 @@ public class OlympicScoringNode extends AbstractQueryNode {
       prediction_start = start.epoch();
       prediction_intervals = (model_units == 
           ChronoUnit.HOURS ? 3600 : 86400) * 1000 / (prediction_interval * 1000);
+      
+      cache_key = ((OlympicScoringFactory) factory)
+          .generateCacheKey(context.query(), (int) prediction_start);
       break;
     default:
       throw new IllegalStateException("Unhandled config mode: " + config.getMode());
@@ -195,7 +206,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
       public Void call(final Void arg) throws Exception {
         // trigger the cache lookup.
         if (cache != null) {
-          cache.fetch(pipelineContext(), generateCacheKey(), null)
+          cache.fetch(pipelineContext(), cache_key, null)
             .addCallback(new CacheCB())
             .addErrback(new CacheErrCB());
         } else {
@@ -373,6 +384,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
         // TODO - wrap into the OSResult
         //prediction = result;
         System.out.println(" &&&&&&& CACHE: Got result!!!");
+        cache_hit = true;
         countdown();
       } else {
         System.out.println(" &&&&&&& CACHE: missed result");
@@ -433,6 +445,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
     @Override
     public void onNext(final QueryResult next) {
       System.out.println(" SUB QUERY " + idx + " NEXT " + next.dataSource());
+      updateState(State.RUNNING, null);
       // TODO filter, for now assume one result
       
       for (final TimeSeries series : next.timeSeries()) {
@@ -445,7 +458,8 @@ public class OlympicScoringNode extends AbstractQueryNode {
         }
         baseline.append(series, next);
       }
-      
+      // TODO - do we want to update before and after or either/or?
+      updateState(State.RUNNING, null);
       next.close();
     }
 
@@ -460,7 +474,11 @@ public class OlympicScoringNode extends AbstractQueryNode {
     public void onError(final Throwable t) {
       if (failed.compareAndSet(false, true)) {
         LOG.error("OOOPS on sub query: " + idx + " " + t.getMessage());
-        OlympicScoringNode.this.onError(t);
+        if (t instanceof Exception) {
+          handleError((Exception) t, true);
+        } else {
+          handleError(new RuntimeException(t), true);
+        }
       } else {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Failure in baseline query after initial failure", t);
@@ -502,6 +520,11 @@ public class OlympicScoringNode extends AbstractQueryNode {
 
   void fetchBaselineData() {
     System.out.println("------- FETCHING BASELINES");
+    // see we should actually start by checking the state cache.
+    if (!startPrediction()) {
+      return;
+    }
+    
     baseline_queries = new BaselineQuery[config.getBaselineNumPeriods()];
     final TimeStamp start = new SecondTimeStamp(prediction_start);
     final TemporalAmount period = DateTime.parseDuration2(config.getBaselinePeriod());
@@ -534,15 +557,15 @@ public class OlympicScoringNode extends AbstractQueryNode {
       .addErrback(new ErrorCB());
   }
   
-  byte[] generateCacheKey() {
-    // TODO - include: jitter timestamp, full query hash, model ID
-    // hash of model ID, query hash, prediction timestamp w jitter
-    byte[] key = new byte[4 + 8 + 4];
-    Bytes.setInt(key, OlympicScoringFactory.TYPE_HASH, 0);
-    Bytes.setLong(key, context.query().buildHashCode().asLong(), 4);
-    Bytes.setInt(key, (int) prediction_start, 12); 
-    return key;
-  }
+//  byte[] generateCacheKey() {
+//    // TODO - include: jitter timestamp, full query hash, model ID
+//    // hash of model ID, query hash, prediction timestamp w jitter
+//    byte[] key = new byte[4 + 8 + 4];
+//    Bytes.setInt(key, OlympicScoringFactory.TYPE_HASH, 0);
+//    Bytes.setLong(key, context.query().buildHashCode().asLong(), 4);
+//    Bytes.setInt(key, (int) prediction_start, 12); 
+//    return key;
+//  }
   
   void countdown() {
     latch.countDown();
@@ -589,19 +612,15 @@ public class OlympicScoringNode extends AbstractQueryNode {
     return prediction_interval;
   }
   
-  int jitter() {
-    if (modelDuration() == ChronoUnit.DAYS) {
-      // 1 hour jitter on 1m
-      return (int) Math.abs(context.query().buildHashCode().asLong() % 59) * 60;
-    } else {
-      // 5m jitter on 15s
-      return (int) Math.abs(context.query().buildHashCode().asLong() % 20) * 15;
-    }
-  }
-  
   void writeCache(final QueryResult result) {
+    if (cache_hit || cache == null) {
+      return;
+    }
+    System.out.println("********** WRITING CACHE!!");
+    
     context.tsdb().getQueryThreadPool().submit(new Runnable() {
       public void run() {
+        System.out.println("********** WRITING CACHE!!  Finally in the runnable.");
         class CacheErrorCB implements Callback<Object, Exception> {
           @Override
           public Object call(final Exception e) throws Exception {
@@ -615,8 +634,9 @@ public class OlympicScoringNode extends AbstractQueryNode {
           public Object call(final Void ignored) throws Exception {
             if (LOG.isTraceEnabled()) {
               LOG.trace("Successfully cached EGADs prediction at " 
-                  + Arrays.toString(generateCacheKey()));
+                  + Arrays.toString(cache_key));
             }
+            updateState(State.COMPLETE, null);
             return null;
           }
         }
@@ -627,10 +647,102 @@ public class OlympicScoringNode extends AbstractQueryNode {
         } else {
           expiration = 86400 * 2 * 1000;
         }
-        cache.cache(generateCacheKey(), expiration, result, null)
+        cache.cache(cache_key, expiration, result, null)
           .addCallback(new SuccessCB())
           .addErrback(new CacheErrorCB());
       }
     });
+  }
+
+  void handleError(final Exception e, final boolean update_state) {
+    if (!failed.compareAndSet(false, true)) {
+      sendUpstream(e);
+      if (update_state) {
+        updateState(State.ERROR, e);
+      }
+    } else {
+      LOG.warn("Exception after failure", e);
+    }
+  }
+  
+  boolean startPrediction() {
+    if (cache == null) {
+      return true;
+    }
+    
+    AnomalyPredictionState state = cache.getState(cache_key);
+    if (state == null) {
+      state = new AnomalyPredictionState();
+      state.host = ((OlympicScoringFactory) factory).hostName();
+      state.hash = context.query().buildHashCode().asLong();
+      state.startTime = state.lastUpdateTime = DateTime.currentTimeMillis() / 1000;
+      state.state = State.RUNNING;
+      
+      cache.setState(cache_key, state, 300_000); // TODO config
+      
+      AnomalyPredictionState present = cache.getState(cache_key);
+      if (!state.equals(present)) {
+        if (present == null) {
+          handleError(new QueryExecutionException("Failed to set the prediction state."
+              + "Retry later for prediction start [" + prediction_start + "] and key " 
+              + Arrays.toString(cache_key) + " State: " + JSON.serializeToString(state), 424),
+              false);
+        } else if (present.state == State.COMPLETE) {
+          // TODO - handle infinite loops here, we need to inc a volatile and
+          // fail if we hit too many retries.
+          cache.fetch(pipelineContext(), cache_key, null)
+            .addCallback(new CacheCB())
+            .addErrback(new CacheErrCB());
+          
+        } else if (present.state == State.RUNNING) {
+          handleError(new QueryExecutionException("Lost a race building "
+              + "prediction for prediction start [" + prediction_start + "] and key " 
+              + Arrays.toString(cache_key) + " State: " + JSON.serializeToString(present), 423),
+              false);
+        } else {
+          handleError(new QueryExecutionException("Unexpected exception or error state."
+              + "Retry later for prediction start [" + prediction_start + "] and key " 
+              + Arrays.toString(cache_key) + " State: " + JSON.serializeToString(state), 424),
+              false);
+        }
+        return false;
+      } else {
+        if (LOG.isTraceEnabled()) {
+          LOG.trace("Successfully wrote prediction state.");
+        }
+        return true;
+      }
+    } else if (state.state == State.COMPLETE) {
+      // TODO - handle infinite loops here, we need to inc a volatile and
+      // fail if we hit too many retries.
+      cache.fetch(pipelineContext(), cache_key, null)
+        .addCallback(new CacheCB())
+        .addErrback(new CacheErrCB());
+      
+    } else if (state.state == State.RUNNING) {
+      handleError(new QueryExecutionException("Lost a race building "
+          + "prediction for prediction start [" + prediction_start + "] and key " 
+          + Arrays.toString(cache_key) + " State: " + JSON.serializeToString(state), 423),
+          false);
+    } else {
+      handleError(new QueryExecutionException("Unexpected exception or error state."
+          + "Retry later for prediction start [" + prediction_start + "] and key " 
+          + Arrays.toString(cache_key) + " State: " + JSON.serializeToString(state), 424),
+          false);
+    }
+    return false;
+  }
+
+  void updateState(final State new_state, final Exception e) {
+    AnomalyPredictionState state = cache.getState(cache_key);
+    if (state == null) {
+      LOG.error("No state found. Maybe we need to stop?");
+      return;
+    }
+    
+    state.state = new_state;
+    state.lastUpdateTime = DateTime.currentTimeMillis() / 1000;
+    state.exception = e == null ? "" : e.getMessage();
+    cache.setState(cache_key, state, 300_000); // TODO config  
   }
 }

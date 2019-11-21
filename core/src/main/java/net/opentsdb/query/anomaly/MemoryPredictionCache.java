@@ -102,6 +102,7 @@ public class MemoryPredictionCache extends BaseTSDBPlugin implements PredictionC
       final byte[] data = serdes.serialize(Lists.newArrayList(results));
       cache.put(new ByteArrayKey(key), 
           new ExpiringValue(data, expiration, TimeUnit.MILLISECONDS));
+      System.out.println(" !!!!!!!!!!!!!! WROTE CACHE?");
       return Deferred.fromResult(null);
     } catch (Exception e) {
       return Deferred.fromError(e);
@@ -136,6 +137,7 @@ public class MemoryPredictionCache extends BaseTSDBPlugin implements PredictionC
     byte[] data = JSON.serializeToBytes(state);
     cache.put(new ByteArrayKey(prefixed_key), 
         new ExpiringValue(data, expiration, TimeUnit.MILLISECONDS));
+    System.out.println("  ####### SET STATE: " + state);
   }
 
   @Override

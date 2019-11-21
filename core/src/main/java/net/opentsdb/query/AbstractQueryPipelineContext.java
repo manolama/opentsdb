@@ -393,7 +393,6 @@ public abstract class AbstractQueryPipelineContext implements
         }
       }
     }, context);
-    System.out.println("SUmitted query to " + context.tsdb().getQueryThreadPool());
   }
   
   @Override

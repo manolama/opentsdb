@@ -45,6 +45,7 @@ import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.DefaultTimeSeriesDataSourceConfig;
 import net.opentsdb.query.QueryContext;
 import net.opentsdb.query.QueryMode;
+import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.QuerySink;
 import net.opentsdb.query.QuerySinkCallback;
@@ -58,6 +59,7 @@ import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
 import net.opentsdb.query.filter.MetricLiteralFilter;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.pojo.FillPolicy;
+import net.opentsdb.query.processor.ProcessorFactory;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
 import net.opentsdb.query.readcache.JsonReadCacheSerdes;
 import net.opentsdb.query.readcache.ReadCacheSerdesFactory;
@@ -104,6 +106,9 @@ public class TestOlympicScoringNode {
     cache.initialize(TSDB, null);
     ((DefaultRegistry) TSDB.registry).registerPlugin(PredictionCache.class, null, cache);
     
+    OlympicScoringFactory f = (OlympicScoringFactory) TSDB.registry.getPlugin(ProcessorFactory.class, OlympicScoringFactory.TYPE);
+    f.setCache(cache);
+    
     INTERPOLATOR = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)
         .setRealFillPolicy(FillWithRealPolicy.PREFER_NEXT)
@@ -134,7 +139,7 @@ public class TestOlympicScoringNode {
             .build())
         .build();
     
-    SemanticQuery egads_query = SemanticQuery.newBuilder()
+    final SemanticQuery egads_query = SemanticQuery.newBuilder()
         .setStart(Integer.toString(BASE_TIME + (3600 * 11) + 300))
         //.setEnd(Integer.toString(BASE_TIME + (3600 * 12) + 300))
         .setEnd(Integer.toString(BASE_TIME + (3600 * 11) + 600))
@@ -176,6 +181,7 @@ public class TestOlympicScoringNode {
         .build();
     System.out.println(JSON.serializeToString(egads_query));
     
+    boolean[] flag = new boolean[1];
     Object waity = new Object();
     class Sink implements QuerySink {
       TimeSeriesSerdes serdes = null;
@@ -204,10 +210,45 @@ public class TestOlympicScoringNode {
         } catch (Exception e) {
           e.printStackTrace();
         }
-        synchronized (waity) {
-          waity.notify();
+        
+        if (flag[0]) {
+          synchronized (waity) {
+            waity.notify();
+          }
+          System.out.println("--------- DONE with waity ----------");
+        } else {
+          flag[0] = true;
+          System.out.println("------------ RUNNING NEXT QUERY!!!!!!!----------");
+          try {
+            Thread.sleep(1000);
+          } catch (InterruptedException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+          }
+          SemanticQuery q = egads_query.toBuilder()
+              .setStart(Integer.toString(BASE_TIME + (3600 * 11) + 360))
+              //.setEnd(Integer.toString(BASE_TIME + (3600 * 12) + 300))
+              .setEnd(Integer.toString(BASE_TIME + (3600 * 11) + 660))
+              .build();
+          QueryContext ctx = SemanticQueryContext.newBuilder()
+              .setTSDB(TSDB)
+              .addSink(new Sink())
+              .setQuery(q)
+              //.setQuery(baseline_query)
+              .setMode(QueryMode.SINGLE)
+              .build();
+          try {
+            ctx.initialize(null).join();
+          } catch (InterruptedException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+          } catch (Exception e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+          }
+          System.out.println("  INITIALIZED. now fetching next");
+          ctx.fetchNext(null);
         }
-        System.out.println("--------- DONE with waity ----------");
       }
 
       @Override
