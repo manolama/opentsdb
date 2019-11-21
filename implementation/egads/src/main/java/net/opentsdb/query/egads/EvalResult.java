@@ -37,13 +37,22 @@ public class EvalResult implements QueryResult {
     series = Lists.newArrayList(original_result.timeSeries());
   }
   
-  public void addPredictionsAndThresholds(final QueryResult result) {
-    for (final TimeSeries ts : result.timeSeries()) {
-      if (ts.types().contains(NumericArrayType.TYPE)) {
-        series.add(new AlignedArrayTimeSeries(ts, result));
-      } else {
-        series.add(ts);
-      }
+//  public void addPredictionsAndThresholds(final QueryResult result) {
+//    for (final TimeSeries ts : result.timeSeries()) {
+//      if (ts.types().contains(NumericArrayType.TYPE)) {
+//        series.add(new AlignedArrayTimeSeries(ts, result));
+//      } else {
+//        series.add(ts);
+//      }
+//    }
+//  }
+  
+  public void addPredictionsAndThresholds(final TimeSeries ts, final QueryResult result) {
+    if (ts.types().contains(NumericArrayType.TYPE)) {
+      System.out.println("       ALIGNING FOR: " + ts.id());
+      series.add(new AlignedArrayTimeSeries(ts, result));
+    } else {
+      series.add(ts);
     }
   }
   
@@ -197,6 +206,9 @@ public class EvalResult implements QueryResult {
         start_idx = i;
         end_idx = x;
         has_next = end_idx > start_idx;
+        
+        
+        System.out.println(" ***** ALIGNMENT: " + start_idx + "  " + end_idx + "  FOR: " + source.id());
       }
       
       @Override

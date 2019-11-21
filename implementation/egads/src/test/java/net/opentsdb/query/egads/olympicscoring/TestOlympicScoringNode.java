@@ -173,11 +173,11 @@ public class TestOlympicScoringNode {
             .addSource("ds")
             .setId("egads")
             .build())
-        .addSerdesConfig(JsonV3QuerySerdesOptions.newBuilder()
-            .setId("foo")
-            .addFilter("egads")
-            .addFilter("ds")
-            .build())
+//        .addSerdesConfig(JsonV3QuerySerdesOptions.newBuilder()
+//            .setId("foo")
+//            .addFilter("egads")
+//            .addFilter("ds")
+//            .build())
         .build();
     System.out.println(JSON.serializeToString(egads_query));
     
@@ -218,7 +218,7 @@ public class TestOlympicScoringNode {
           System.out.println("--------- DONE with waity ----------");
         } else {
           flag[0] = true;
-          System.out.println("------------ RUNNING NEXT QUERY!!!!!!!----------");
+          System.out.println("------------ RUNNING NEXT QUERY!!!!!!!----------------------------------------------");
           try {
             Thread.sleep(1000);
           } catch (InterruptedException e) {

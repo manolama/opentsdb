@@ -29,6 +29,7 @@ import com.yahoo.egads.models.tsmm.OlympicModel2;
 import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.map.TLongObjectMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
+import net.opentsdb.common.Const;
 import net.opentsdb.data.BaseTimeSeriesStringId;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.SecondTimeStamp;
@@ -68,6 +69,7 @@ import net.opentsdb.query.egads.EgadsResult;
 import net.opentsdb.query.egads.EgadsThresholdTimeSeries;
 import net.opentsdb.query.egads.EgadsTimeSeries;
 import net.opentsdb.query.egads.EvalResult;
+import net.opentsdb.query.egads.PredictionTimeSeries;
 import net.opentsdb.query.egads.ThresholdEvaluator;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
 import net.opentsdb.query.processor.downsample.DownsampleFactory;
@@ -251,11 +253,19 @@ public class OlympicScoringNode extends AbstractQueryNode {
     }
     LOG.info("SER THRESHOLDS: " + config.getSerializeThresholds());
     int series_limit = prediction.timeSeries().size();
+    final QueryResult result;
+    if (config.getMode() == ExecutionMode.EVALUATE && config.getSerializeObserved()) {
+      result = new EvalResult(this, current);
+    } else {
+      List<TimeSeries> series = config.getSerializeObserved() ? 
+          Lists.newArrayList(current.timeSeries()) : Lists.newArrayList();
+      result = new EgadsResult(this, current.timeSpecification().start(), 
+          current.timeSpecification().end(), series, Const.TS_STRING_ID);
+    }
+    
     for (int i = 0; i < series_limit; i++) {
       final TimeSeries series = prediction.timeSeries().get(i);
-      final long hash = series instanceof EgadsTimeSeries ? 
-          ((EgadsTimeSeries) series).originalHash() : 
-            series.id().buildHashCode();
+      final long hash = series.id().buildHashCode();
       TimeSeries cur = map.remove(hash);
       if (cur != null) {
         final ThresholdEvaluator eval = new ThresholdEvaluator(
@@ -269,28 +279,55 @@ public class OlympicScoringNode extends AbstractQueryNode {
             series,
             prediction);
         eval.evaluate();
+        //final EgadsTimeSeries egads_ts = new EgadsTimeSeries(series);
+        
+        final PredictionTimeSeries pred_ts = new PredictionTimeSeries(series,
+            "prediction", OlympicScoringFactory.TYPE);
         if (eval.alerts() != null && !eval.alerts().isEmpty()) {
-          ((EgadsTimeSeries) series).addAlerts(eval.alerts());
+          pred_ts.addAlerts(eval.alerts());
+        }
+        System.out.println("          PRED TS TYPES: " + pred_ts.types());
+        
+        // TODO - ew, don't assume even though we wrote the two above. Make an
+        // interface to add em.
+        if (result instanceof EvalResult) {
+          ((EvalResult) result).addPredictionsAndThresholds(pred_ts, prediction);
+        } else {
+          result.timeSeries().add(pred_ts);
         }
         
         if (config.getSerializeThresholds()) {
           if (config.getUpperThreshold() != 0) {
-            prediction.timeSeries().add(new EgadsThresholdTimeSeries(
+            // TODO - ew, don't assume even though we wrote the two above. Make an
+            // interface to add em.
+            final TimeSeries ts = new EgadsThresholdTimeSeries(
                 cur.id(), 
                 "upper", 
                 prediction.timeSpecification().start(), 
                 eval.upperThresholds(), 
                 eval.index(),
-                OlympicScoringFactory.TYPE));
+                OlympicScoringFactory.TYPE);
+            if (result instanceof EvalResult) {
+              ((EvalResult) result).addPredictionsAndThresholds(ts, prediction);
+            } else {
+              result.timeSeries().add(ts);
+            }
           }
           if (config.getLowerThreshold() != 0) {
-            prediction.timeSeries().add(new EgadsThresholdTimeSeries(
+            // TODO - ew, don't assume even though we wrote the two above. Make an
+            // interface to add em.
+            final TimeSeries ts = new EgadsThresholdTimeSeries(
                 cur.id(), 
                 "lower", 
                 prediction.timeSpecification().start(), 
                 eval.lowerThresholds(), 
                 eval.index(),
-                OlympicScoringFactory.TYPE));
+                OlympicScoringFactory.TYPE);
+            if (result instanceof EvalResult) {
+              ((EvalResult) result).addPredictionsAndThresholds(ts, prediction);
+            } else {
+              result.timeSeries().add(ts);
+            }
           }
         }
       }
@@ -298,15 +335,16 @@ public class OlympicScoringNode extends AbstractQueryNode {
     
     // TODO - iterate through the final things in the map and push them out without
     // predictions.
-    if (config.getSerializeObserved()) {
-      // yeah, ew, but it's an EgadsResult so we have an array list.
-      //prediction.timeSeries().addAll(current.timeSeries());
-      final EvalResult rs = new EvalResult(this, current);
-      rs.addPredictionsAndThresholds(prediction);
-      sendUpstream(rs);
-    } else {
-      sendUpstream(prediction);
-    }
+    sendUpstream(result);
+//    if (config.getSerializeObserved()) {
+//      // yeah, ew, but it's an EgadsResult so we have an array list.
+//      //prediction.timeSeries().addAll(current.timeSeries());
+//      final EvalResult rs = new EvalResult(this, current);
+//      rs.addPredictionsAndThresholds(prediction);
+//      sendUpstream(rs);
+//    } else {
+//      sendUpstream(prediction);
+//    }
   }
   
   void runBaseline() {

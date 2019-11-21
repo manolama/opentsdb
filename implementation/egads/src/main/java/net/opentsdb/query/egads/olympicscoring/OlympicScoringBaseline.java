@@ -24,6 +24,7 @@ import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.egads.EgadsTimeSeries;
+import net.opentsdb.query.egads.PredictionTimeSeries;
 
 public class OlympicScoringBaseline {
   public static final String MODEL_TAG_VALUE = "OlympicScoring";
@@ -126,11 +127,8 @@ public class OlympicScoringBaseline {
       ts += node.predictionInterval();
     }
     
-    return new EgadsTimeSeries(id, 
-                               results, 
-                               "prediction", 
-                               MODEL_TAG_VALUE, 
-                               new SecondTimeStamp(node.prediction_start));
+    return new PredictionTimeSeries(id, results, 
+        new SecondTimeStamp(node.prediction_start));
   }
 
   void processNumeric(final TypedTimeSeriesIterator iterator) {

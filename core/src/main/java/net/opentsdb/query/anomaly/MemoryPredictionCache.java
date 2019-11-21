@@ -91,7 +91,7 @@ public class MemoryPredictionCache extends BaseTSDBPlugin implements PredictionC
           break;
         }
       }
-      return Deferred.fromResult(new CachedPredictionResult(result));
+      return Deferred.fromResult(result);
     }
   }
 

@@ -199,7 +199,7 @@ public class ThresholdEvaluator {
         ts.add(current_result.timeSpecification().interval());
         continue;
       }
-      System.out.println("        EVAL CUR: " + idx);
+      System.out.println("        EVAL CUR: " + idx  + "  CUR TS: " + ts.epoch() + "  PR: " + prediction_result.timeSpecification().start().epoch());
       
       final AlertValue av = eval(ts, 
           (value.value().isInteger() ? (double) value.value().longArray()[i] :
