@@ -97,7 +97,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
   private final TemporalAmount baseline_period;
   Properties properties;
   long prediction_start;
-  private EgadsResult prediction;
+  private QueryResult prediction;
   private QueryResult current;
   final TLongObjectMap<OlympicScoringBaseline> join = 
       new TLongObjectHashMap<OlympicScoringBaseline>();
@@ -253,7 +253,9 @@ public class OlympicScoringNode extends AbstractQueryNode {
     int series_limit = prediction.timeSeries().size();
     for (int i = 0; i < series_limit; i++) {
       final TimeSeries series = prediction.timeSeries().get(i);
-      final long hash = ((EgadsTimeSeries) series).originalHash();
+      final long hash = series instanceof EgadsTimeSeries ? 
+          ((EgadsTimeSeries) series).originalHash() : 
+            series.id().buildHashCode();
       TimeSeries cur = map.remove(hash);
       if (cur != null) {
         final ThresholdEvaluator eval = new ThresholdEvaluator(
@@ -383,7 +385,8 @@ public class OlympicScoringNode extends AbstractQueryNode {
       if (result != null) {
         // TODO - wrap into the OSResult
         //prediction = result;
-        System.out.println(" &&&&&&& CACHE: Got result!!!");
+        System.out.println(" &&&&&&& CACHE: Got result!!! " + result);
+        prediction = result;
         cache_hit = true;
         countdown();
       } else {

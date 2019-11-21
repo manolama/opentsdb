@@ -91,7 +91,7 @@ public class MemoryPredictionCache extends BaseTSDBPlugin implements PredictionC
           break;
         }
       }
-      return Deferred.fromResult(result);
+      return Deferred.fromResult(new CachedPredictionResult(result));
     }
   }
 
@@ -102,7 +102,7 @@ public class MemoryPredictionCache extends BaseTSDBPlugin implements PredictionC
       final byte[] data = serdes.serialize(Lists.newArrayList(results));
       cache.put(new ByteArrayKey(key), 
           new ExpiringValue(data, expiration, TimeUnit.MILLISECONDS));
-      System.out.println(" !!!!!!!!!!!!!! WROTE CACHE?");
+      System.out.println(" !!!!!!!!!!!!!! WROTE CACHE? " + new String(data));
       return Deferred.fromResult(null);
     } catch (Exception e) {
       return Deferred.fromError(e);
