@@ -14,14 +14,16 @@
 // limitations under the License.
 package net.opentsdb.query.egads.olympicscoring;
 
-import java.util.List;
-
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.anomaly.BaseAnomalyConfig;
 
+/**
+ * TODO ------- SUPER IMPORTANT!!! EQUALS AND HASH
+ *
+ */
 public class OlympicScoringConfig extends BaseAnomalyConfig {
   
   private final SemanticQuery baseline_query;
@@ -30,9 +32,11 @@ public class OlympicScoringConfig extends BaseAnomalyConfig {
   private final String baseline_aggregator;
   private final int exclude_max;
   private final int exclude_min;
-  private final double upper_threshold;
+  private final double upper_threshold_bad;
+  private final double upper_threshold_warn;
   private final boolean upper_is_scalar;
-  private final double lower_threshold;
+  private final double lower_threshold_bad;
+  private final double lower_threshold_warn;
   private final boolean lower_is_scalar;
   
   protected OlympicScoringConfig(final Builder builder) {
@@ -43,9 +47,11 @@ public class OlympicScoringConfig extends BaseAnomalyConfig {
     baseline_aggregator = builder.baselineAggregator;
     exclude_max = builder.excludeMax;
     exclude_min = builder.excludeMin;
-    upper_threshold = builder.upperThreshold;
+    upper_threshold_bad = builder.upperThresholdBad;
+    upper_threshold_warn = builder.upperThresholdWarn;
     upper_is_scalar = builder.upperIsScalar;
-    lower_threshold = builder.lowerThreshold;
+    lower_threshold_bad = builder.lowerThresholdBad;
+    lower_threshold_warn = builder.lowerThresholdWarn;
     lower_is_scalar = builder.lowerIsScalar;
   }
   
@@ -73,16 +79,24 @@ public class OlympicScoringConfig extends BaseAnomalyConfig {
     return exclude_min;
   }
 
-  public double getUpperThreshold() {
-    return upper_threshold;
+  public double getUpperThresholdBad() {
+    return upper_threshold_bad;
+  }
+  
+  public double getUpperThresholdWarn() {
+    return upper_threshold_warn;
   }
 
   public boolean isUpperIsScalar() {
     return upper_is_scalar;
   }
 
-  public double getLowerThreshold() {
-    return lower_threshold;
+  public double getLowerThresholdBad() {
+    return lower_threshold_bad;
+  }
+  
+  public double getLowerThresholdWarn() {
+    return lower_threshold_warn;
   }
 
   public boolean isLowerIsScalar() {
@@ -116,7 +130,8 @@ public class OlympicScoringConfig extends BaseAnomalyConfig {
   }
   
   @JsonIgnoreProperties(ignoreUnknown = true)
-  public static class Builder extends BaseAnomalyConfig.Builder<Builder, OlympicScoringConfig> {
+  public static class Builder extends BaseAnomalyConfig.Builder<
+      Builder, OlympicScoringConfig> {
     @JsonProperty
     private SemanticQuery baselineQuery;
     @JsonProperty
@@ -130,11 +145,15 @@ public class OlympicScoringConfig extends BaseAnomalyConfig {
     @JsonProperty
     private int excludeMin;
     @JsonProperty
-    private double upperThreshold;
+    private double upperThresholdBad;
+    @JsonProperty
+    private double upperThresholdWarn;
     @JsonProperty
     private boolean upperIsScalar;
     @JsonProperty
-    private double lowerThreshold;
+    private double lowerThresholdBad;
+    @JsonProperty
+    private double lowerThresholdWarn;
     @JsonProperty
     private boolean lowerIsScalar;
     
@@ -172,8 +191,13 @@ public class OlympicScoringConfig extends BaseAnomalyConfig {
       return this;
     }
     
-    public Builder setUpperThreshold(final double upper_threshold) {
-      upperThreshold = upper_threshold;
+    public Builder setUpperThresholdBad(final double upper_threshold) {
+      upperThresholdBad = upper_threshold;
+      return this;
+    }
+    
+    public Builder setUpperThresholdWarn(final double upper_threshold) {
+      upperThresholdWarn = upper_threshold;
       return this;
     }
     
@@ -182,8 +206,13 @@ public class OlympicScoringConfig extends BaseAnomalyConfig {
       return this;
     }
     
-    public Builder setLowerThreshold(final double lower_treshold) {
-      lowerThreshold = lower_treshold;
+    public Builder setLowerThresholdBad(final double lower_treshold) {
+      lowerThresholdBad = lower_treshold;
+      return this;
+    }
+    
+    public Builder setLowerThresholdWarn(final double lower_treshold) {
+      lowerThresholdWarn = lower_treshold;
       return this;
     }
     

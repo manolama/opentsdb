@@ -523,53 +523,51 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
     
     lock.writeLock().lock(); // since json is not thread safe and we need to form the json in order
     try {
-    final ByteArrayOutputStream baos;
-    if (json == null) {
-      baos = new ByteArrayOutputStream();
-      json = JSON.getFactory().createGenerator(baos);
-    } else {
-      baos = null;
-    }
-
-    boolean wrote_values = false;
-    boolean was_status = false;
-    boolean was_event = false;
-    boolean was_event_group = false;
- 
-    for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator : series.iterators()) {
-      while (iterator.hasNext()) {
-        LOG.info("                 NEXT...");
-        TimeSeriesValue<? extends TimeSeriesDataType> value = iterator.next();
-        if (value == null) {
-          continue;
-        }
-        
-        if (iterator.getType() == StatusType.TYPE) {
-          if (!was_status) {
-            was_status = true;
+      final ByteArrayOutputStream baos;
+      if (json == null) {
+        baos = new ByteArrayOutputStream();
+        json = JSON.getFactory().createGenerator(baos);
+      } else {
+        baos = null;
+      }
+  
+      boolean wrote_values = false;
+      boolean was_status = false;
+      boolean was_event = false;
+      boolean was_event_group = false;
+   
+      for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator : series.iterators()) {
+        while (iterator.hasNext()) {
+          TimeSeriesValue<? extends TimeSeriesDataType> value = iterator.next();
+          if (value == null) {
+            continue;
           }
-          json.writeStartObject();
-          writeStatus((StatusValue) value, json);
-          wrote_values = true;
-        } else if (iterator.getType() == EventType.TYPE) {
-          was_event = true;
-          json.writeStartObject();
-          json.writeObjectFieldStart("EventsType");
-          writeEvents((EventsValue) value, json);
-          json.writeEndObject();
-          wrote_values = true;
-        } else if (iterator.getType() == EventGroupType.TYPE) {
-          was_event_group = true;
-          json.writeStartObject();
-          writeEventGroup((EventsGroupValue) value, json, id);
-          wrote_values = true;
-        } else if (iterator.getType() == AlertType.TYPE) {
-          if (writeAlert((TimeSeriesValue<AlertType>) value, options, 
+          
+          if (iterator.getType() == StatusType.TYPE) {
+            if (!was_status) {
+              was_status = true;
+            }
+            json.writeStartObject();
+            writeStatus((StatusValue) value, json);
+            wrote_values = true;
+          } else if (iterator.getType() == EventType.TYPE) {
+            was_event = true;
+            json.writeStartObject();
+            json.writeObjectFieldStart("EventsType");
+            writeEvents((EventsValue) value, json);
+            json.writeEndObject();
+            wrote_values = true;
+          } else if (iterator.getType() == EventGroupType.TYPE) {
+            was_event_group = true;
+            json.writeStartObject();
+            writeEventGroup((EventsGroupValue) value, json, id);
+            wrote_values = true;
+          } else if (iterator.getType() == AlertType.TYPE) {
+            if (writeAlert((TimeSeriesValue<AlertType>) value, options, 
                   iterator, json, result, start, end, wrote_values)) {
               wrote_values = true;
             }
-        } else {
-          if (iterator.getType() == NumericType.TYPE) {
+          } else if (iterator.getType() == NumericType.TYPE) {
             if (writeNumeric((TimeSeriesValue<NumericType>) value, options, 
                   iterator, json, result, start, end, wrote_values)) {
               wrote_values = true;
@@ -587,42 +585,41 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           }
         }
       }
-    }
-    
-    if (wrote_values) {
-      // serialize the ID
-      if (!was_status && !was_event) {
-        json.writeStringField("metric", id.metric());
-      }
-      if (!was_event_group) {
-        
-        json.writeObjectFieldStart("tags");
-        for (final Entry<String, String> entry : id.tags().entrySet()) {
-          json.writeStringField(entry.getKey(), entry.getValue());
+      
+      if (wrote_values) {
+        // serialize the ID
+        if (!was_status && !was_event) {
+          json.writeStringField("metric", id.metric());
+        }
+        if (!was_event_group) {
+          
+          json.writeObjectFieldStart("tags");
+          for (final Entry<String, String> entry : id.tags().entrySet()) {
+            json.writeStringField(entry.getKey(), entry.getValue());
+          }
+          json.writeEndObject();
+        }
+        if (was_event || was_event_group) {
+          json.writeNumberField("hits", id.hits());
+        } else {
+          json.writeArrayFieldStart("aggregateTags");
+          for (final String tag : id.aggregatedTags()) {
+            json.writeString(tag);
+          }
+          json.writeEndArray();
         }
         json.writeEndObject();
       }
-      if (was_event || was_event_group) {
-        json.writeNumberField("hits", id.hits());
-      } else {
-        json.writeArrayFieldStart("aggregateTags");
-        for (final String tag : id.aggregatedTags()) {
-          json.writeString(tag);
+  
+      if (baos != null) {
+        json.close();
+        synchronized(sets) {
+          sets.add(new String(baos.toByteArray(), Const.UTF8_CHARSET));
         }
-        json.writeEndArray();
-      }
-      json.writeEndObject();
-    }
-
-    if (baos != null) {
-      json.close();
-      synchronized(sets) {
-        sets.add(new String(baos.toByteArray(), Const.UTF8_CHARSET));
-      }
-      baos.close();
-    } else {
-      json.flush();
-    } 
+        baos.close();
+      } else {
+        json.flush();
+      } 
     } catch (Throwable t) {
       LOG.error("WTF?", t);
     } finally {
@@ -1102,7 +1099,9 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
         json.writeNumber(value.value().doubleArray()[i]);
       }
     }
-    json.writeEndArray();
+    if (wrote_type) {
+      json.writeEndArray();
+    }
     return wrote_type;
   }
 
@@ -1213,7 +1212,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       }
       
       json.writeObjectFieldStart(Long.toString(value.timestamp().epoch()));
-      json.writeStringField("level", "UNKNOWN");
+      json.writeStringField("level", value.value().state().toString());
       json.writeStringField("message", value.value().message());
       if (value.value().dataPoint() == null) {
         json.writeNullField("value");

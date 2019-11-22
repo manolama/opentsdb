@@ -1,3 +1,4 @@
+
 package net.opentsdb.query.egads;
 
 import java.time.temporal.ChronoUnit;
@@ -18,6 +19,7 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.alert.AlertValue;
+import net.opentsdb.data.types.alert.AlertType.State;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
@@ -26,12 +28,16 @@ import net.opentsdb.query.QueryResult;
 public class ThresholdEvaluator {
   static final Logger LOG = LoggerFactory.getLogger(ThresholdEvaluator.class);
   
-  public static final String UPPER = "upper";
-  public static final String LOWER = "lower";
+  public static final String UPPER_BAD = "upperBad";
+  public static final String UPPER_WARN = "upperWarn";
+  public static final String LOWER_BAD = "lowerBad";
+  public static final String LOWER_WARN = "lowerWarn";
   
-  private final double upper;
+  private final double upper_bad;
+  private final double upper_warn;
   private final boolean upper_is_scalar;
-  private final double lower;
+  private final double lower_bad;
+  private final double lower_warn;
   private final boolean lower_is_scalar;
   private final boolean report_thresholds;
   private final TimeSeries current;
@@ -40,29 +46,47 @@ public class ThresholdEvaluator {
   private final QueryResult prediction_result;
   
   private int idx;
-  private double[] upper_thresholds;
-  private double[] lower_thresholds;
+  private double[] upper_bad_thresholds;
+  private double[] upper_warn_thresholds;
+  private double[] lower_bad_thresholds;
+  private double[] lower_warn_thresholds;
   private List<AlertValue> alerts;
   
-  public ThresholdEvaluator(final double upper, 
+  public ThresholdEvaluator(final double upper_bad,
+                            final double upper_warn, 
                             final boolean upper_is_scalar,
-                            final double lower, 
+                            final double lower_bad,
+                            final double lower_warn,
                             final boolean lower_is_scalar, 
                             final int report_len,
                             final TimeSeries current,
                             final QueryResult current_result,
                             final TimeSeries prediction,
                             final QueryResult prediction_result) {
-    this.upper = upper;
+    this.upper_bad = upper_bad;
+    this.upper_warn = upper_warn;
     this.upper_is_scalar = upper_is_scalar;
-    this.lower = lower;
+    this.lower_bad = lower_bad;
+    this.lower_warn = lower_warn;
     this.lower_is_scalar = lower_is_scalar;
     if (report_len > 0) {
       this.report_thresholds = true;
-      upper_thresholds = new double[report_len];
-      lower_thresholds = new double[report_len];
-      Arrays.fill(upper_thresholds, Double.NaN);
-      Arrays.fill(lower_thresholds, Double.NaN);
+      if (upper_bad != 0) {
+        upper_bad_thresholds = new double[report_len];
+        Arrays.fill(upper_bad_thresholds, Double.NaN);
+      }
+      if (upper_warn != 0) {
+        upper_warn_thresholds = new double[report_len];
+        Arrays.fill(upper_warn_thresholds, Double.NaN);
+      }
+      if (lower_bad != 0) {
+        lower_bad_thresholds = new double[report_len];
+        Arrays.fill(lower_bad_thresholds, Double.NaN);
+      }
+      if (lower_warn != 0) {
+        lower_warn_thresholds = new double[report_len];
+        Arrays.fill(lower_warn_thresholds, Double.NaN);
+      }
     } else {
       this.report_thresholds = false;
     }
@@ -262,94 +286,190 @@ public class ThresholdEvaluator {
                          final double prediction,
                          final int threshold_idx) {
     AlertValue result = null;
-    if (upper != 0) {
+    if (upper_bad != 0) {
       final double threshold;
       if (upper_is_scalar) {
-        threshold = prediction + upper;
+        threshold = prediction + upper_bad;
       } else {
-        threshold = prediction + Math.abs((prediction * (upper / 100)));
+        threshold = prediction + Math.abs((prediction * (upper_bad / 100)));
       }
       if (upper_is_scalar && current > threshold) {
         result = AlertValue.newBuilder()
+            .setState(State.BAD)
             .setDataPoint(current)
             .setMessage("** TEMP " + current + " is > " + threshold)
             .setTimestamp(timestamp)
             .setThreshold(threshold)
-            .setThresholdType(UPPER)
+            .setThresholdType(UPPER_BAD)
             .build();
       } else if (current > threshold) {
         result = AlertValue.newBuilder()
+            .setState(State.BAD)
             .setDataPoint(current)
-            .setMessage("** TEMP " + current + " is greater than " + threshold + " which is > than " + upper + "%")
+            .setMessage("** TEMP " + current + " is greater than " + threshold + " which is > than " + upper_bad + "%")
             .setTimestamp(timestamp)
             .setThreshold(threshold)
-            .setThresholdType(UPPER)
+            .setThresholdType(UPPER_BAD)
             .build();
       }
       
       if (report_thresholds) {
-        if (threshold_idx >= upper_thresholds.length) {
+        if (threshold_idx >= upper_bad_thresholds.length) {
           throw new IllegalStateException("Attempted to write too many upper "
               + "thresholds [" + idx + "]. Make sure to set the report_len "
                   + "properly in the ctor.");
         }
-        upper_thresholds[threshold_idx] = prediction + upper;
+        upper_bad_thresholds[threshold_idx] = threshold;
         if (threshold_idx > idx) {
           idx = threshold_idx;
         }
       }
     }
     
-    if (lower != 0) {
+    if (upper_warn != 0) {
       final double threshold;
-      if (lower_is_scalar) {
-        threshold = prediction - lower;
+      if (upper_is_scalar) {
+        threshold = prediction + upper_warn;
       } else {
-        threshold = prediction - Math.abs((prediction * (lower / (double) 100)));
+        threshold = prediction + Math.abs((prediction * (upper_warn / 100)));
       }
-      if (lower_is_scalar && current < threshold) {
-        if (result == null) {
-          result = AlertValue.newBuilder()
-              .setDataPoint(current)
-              .setMessage("** TEMP " + current + " is < " + threshold)
-              .setTimestamp(timestamp)
-              .setThreshold(threshold)
-              .setThresholdType(LOWER)
-              .build();
-        }
-      } else if (current < threshold) {
-        if (result == null) {
-          result = AlertValue.newBuilder()
-              .setDataPoint(current)
-              .setMessage("** TEMP " + current + " is less than " + threshold + " which is < than " + lower + "%")
-              .setTimestamp(timestamp)
-              .setThreshold(threshold)
-              .setThresholdType(LOWER)
-              .build();
-        }
+      if (upper_is_scalar && current > threshold) {
+        result = AlertValue.newBuilder()
+            .setState(State.WARN)
+            .setDataPoint(current)
+            .setMessage("** TEMP " + current + " is > " + threshold)
+            .setTimestamp(timestamp)
+            .setThreshold(threshold)
+            .setThresholdType(UPPER_WARN)
+            .build();
+      } else if (current > threshold) {
+        result = AlertValue.newBuilder()
+            .setState(State.WARN)
+            .setDataPoint(current)
+            .setMessage("** TEMP " + current + " is greater than " + threshold + " which is > than " + upper_warn + "%")
+            .setTimestamp(timestamp)
+            .setThreshold(threshold)
+            .setThresholdType(UPPER_WARN)
+            .build();
       }
+      
       if (report_thresholds) {
-        if (threshold_idx >= lower_thresholds.length) {
-          throw new IllegalStateException("Attempted to write too many lower "
+        if (threshold_idx >= upper_warn_thresholds.length) {
+          throw new IllegalStateException("Attempted to write too many upper "
               + "thresholds [" + idx + "]. Make sure to set the report_len "
-              + "properly in the ctor.");
+                  + "properly in the ctor.");
         }
-        lower_thresholds[threshold_idx] = prediction - lower;
+        upper_warn_thresholds[threshold_idx] = threshold;
         if (threshold_idx > idx) {
           idx = threshold_idx;
         }
       }
     }
+    
+    if (lower_bad != 0) {
+      final double threshold;
+      if (lower_is_scalar) {
+        threshold = prediction - lower_bad;
+      } else {
+        threshold = prediction - Math.abs((prediction * (lower_bad / (double) 100)));
+      }
+      if (lower_is_scalar && current < threshold) {
+        if (result == null) {
+          result = AlertValue.newBuilder()
+              .setState(State.BAD)
+              .setDataPoint(current)
+              .setMessage("** TEMP " + current + " is < " + threshold)
+              .setTimestamp(timestamp)
+              .setThreshold(threshold)
+              .setThresholdType(LOWER_BAD)
+              .build();
+        }
+      } else if (current < threshold) {
+        if (result == null) {
+          result = AlertValue.newBuilder()
+              .setState(State.BAD)
+              .setDataPoint(current)
+              .setMessage("** TEMP " + current + " is less than " + threshold + " which is < than " + lower_bad + "%")
+              .setTimestamp(timestamp)
+              .setThreshold(threshold)
+              .setThresholdType(LOWER_BAD)
+              .build();
+        }
+      }
+      if (report_thresholds) {
+        if (threshold_idx >= lower_bad_thresholds.length) {
+          throw new IllegalStateException("Attempted to write too many lower "
+              + "thresholds [" + idx + "]. Make sure to set the report_len "
+              + "properly in the ctor.");
+        }
+        lower_bad_thresholds[threshold_idx] = threshold;
+        if (threshold_idx > idx) {
+          idx = threshold_idx;
+        }
+      }
+    }
+    
+    if (lower_warn != 0) {
+      final double threshold;
+      if (lower_is_scalar) {
+        threshold = prediction - lower_warn;
+      } else {
+        threshold = prediction - Math.abs((prediction * (lower_warn / (double) 100)));
+      }
+      if (lower_is_scalar && current < threshold) {
+        if (result == null) {
+          result = AlertValue.newBuilder()
+              .setState(State.WARN)
+              .setDataPoint(current)
+              .setMessage("** TEMP " + current + " is < " + threshold)
+              .setTimestamp(timestamp)
+              .setThreshold(threshold)
+              .setThresholdType(LOWER_WARN)
+              .build();
+        }
+      } else if (current < threshold) {
+        if (result == null) {
+          result = AlertValue.newBuilder()
+              .setState(State.WARN)
+              .setDataPoint(current)
+              .setMessage("** TEMP " + current + " is less than " + threshold + " which is < than " + lower_warn + "%")
+              .setTimestamp(timestamp)
+              .setThreshold(threshold)
+              .setThresholdType(LOWER_WARN)
+              .build();
+        }
+      }
+      if (report_thresholds) {
+        if (threshold_idx >= lower_warn_thresholds.length) {
+          throw new IllegalStateException("Attempted to write too many lower "
+              + "thresholds [" + idx + "]. Make sure to set the report_len "
+              + "properly in the ctor.");
+        }
+        lower_bad_thresholds[threshold_idx] = threshold;
+        if (threshold_idx > idx) {
+          idx = threshold_idx;
+        }
+      }
+    }
+    
     idx++;
     return result;
   }
   
-  public double[] upperThresholds() {
-    return upper_thresholds;
+  public double[] upperBadThresholds() {
+    return upper_bad_thresholds;
   }
   
-  public double[] lowerThresholds() {
-    return lower_thresholds;
+  public double[] upperWarnThresholds() {
+    return upper_warn_thresholds;
+  }
+  
+  public double[] lowerBadThresholds() {
+    return lower_bad_thresholds;
+  }
+  
+  public double[] lowerWarnThresholds() {
+    return lower_warn_thresholds;
   }
   
   public int index() {

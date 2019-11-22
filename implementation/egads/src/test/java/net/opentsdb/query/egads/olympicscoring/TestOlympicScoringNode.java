@@ -177,7 +177,7 @@ public class TestOlympicScoringNode {
             .setBaselineQuery(baseline_query)
             .setSerializeObserved(true)
             .setSerializeThresholds(true)
-            .setLowerThreshold(100)
+            .setLowerThresholdBad(100)
             //.setUpperThreshold(100)
             //.setMode(ExecutionMode.CONFIG)
             .setMode(ExecutionMode.EVALUATE)

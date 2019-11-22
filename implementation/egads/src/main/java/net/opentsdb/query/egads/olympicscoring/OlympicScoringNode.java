@@ -272,9 +272,11 @@ public class OlympicScoringNode extends AbstractQueryNode {
       TimeSeries cur = map.remove(hash);
       if (cur != null) {
         final ThresholdEvaluator eval = new ThresholdEvaluator(
-            config.getUpperThreshold(),
+            config.getUpperThresholdBad(),
+            config.getUpperThresholdWarn(),
             config.isUpperIsScalar(),
-            config.getLowerThreshold(),
+            config.getLowerThresholdBad(),
+            config.getLowerThresholdWarn(),
             config.isLowerIsScalar(),
             config.getSerializeThresholds() ? /* TODO */ 4096: 0,
             cur,
@@ -300,14 +302,14 @@ public class OlympicScoringNode extends AbstractQueryNode {
         }
         
         if (config.getSerializeThresholds()) {
-          if (config.getUpperThreshold() != 0) {
+          if (config.getUpperThresholdBad() != 0) {
             // TODO - ew, don't assume even though we wrote the two above. Make an
             // interface to add em.
             final TimeSeries ts = new EgadsThresholdTimeSeries(
                 cur.id(), 
-                "upper", 
+                "upperBad", 
                 prediction.timeSpecification().start(), 
-                eval.upperThresholds(), 
+                eval.upperBadThresholds(), 
                 eval.index(),
                 OlympicScoringFactory.TYPE);
             if (result instanceof EvalResult) {
@@ -316,14 +318,46 @@ public class OlympicScoringNode extends AbstractQueryNode {
               result.timeSeries().add(ts);
             }
           }
-          if (config.getLowerThreshold() != 0) {
+          if (config.getUpperThresholdWarn() != 0) {
             // TODO - ew, don't assume even though we wrote the two above. Make an
             // interface to add em.
             final TimeSeries ts = new EgadsThresholdTimeSeries(
                 cur.id(), 
-                "lower", 
+                "upperWarn", 
                 prediction.timeSpecification().start(), 
-                eval.lowerThresholds(), 
+                eval.upperWarnThresholds(), 
+                eval.index(),
+                OlympicScoringFactory.TYPE);
+            if (result instanceof EvalResult) {
+              ((EvalResult) result).addPredictionsAndThresholds(ts, prediction);
+            } else {
+              result.timeSeries().add(ts);
+            }
+          }
+          if (config.getLowerThresholdBad() != 0) {
+            // TODO - ew, don't assume even though we wrote the two above. Make an
+            // interface to add em.
+            final TimeSeries ts = new EgadsThresholdTimeSeries(
+                cur.id(), 
+                "lowerBad", 
+                prediction.timeSpecification().start(), 
+                eval.lowerBadThresholds(), 
+                eval.index(),
+                OlympicScoringFactory.TYPE);
+            if (result instanceof EvalResult) {
+              ((EvalResult) result).addPredictionsAndThresholds(ts, prediction);
+            } else {
+              result.timeSeries().add(ts);
+            }
+          }
+          if (config.getLowerThresholdWarn() != 0) {
+            // TODO - ew, don't assume even though we wrote the two above. Make an
+            // interface to add em.
+            final TimeSeries ts = new EgadsThresholdTimeSeries(
+                cur.id(), 
+                "lowerWarn", 
+                prediction.timeSpecification().start(), 
+                eval.lowerWarnThresholds(), 
                 eval.index(),
                 OlympicScoringFactory.TYPE);
             if (result instanceof EvalResult) {

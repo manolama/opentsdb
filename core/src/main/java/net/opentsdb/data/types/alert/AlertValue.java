@@ -8,6 +8,7 @@ import net.opentsdb.data.types.numeric.MutableNumericType;
 import net.opentsdb.data.types.numeric.NumericType;
 
 public class AlertValue implements AlertType, TimeSeriesValue<AlertType> {
+  private State state;
   private TimeStamp timestamp;
   private MutableNumericType data_point;
   private String message;
@@ -15,11 +16,17 @@ public class AlertValue implements AlertType, TimeSeriesValue<AlertType> {
   private String threshold_type;
   
   protected AlertValue(final Builder builder) {
+    state = builder.state;
     timestamp = builder.timestamp;
     data_point = builder.data_point;
     message = builder.message;
     threshold = builder.threshold;
     threshold_type = builder.threshold_type;
+  }
+  
+  @Override
+  public State state() {
+    return state;
   }
   
   @Override
@@ -62,11 +69,17 @@ public class AlertValue implements AlertType, TimeSeriesValue<AlertType> {
   }
   
   public static class Builder {
+    private State state;
     private TimeStamp timestamp;
     private MutableNumericType data_point;
     private String message;
     private MutableNumericType threshold;
     private String threshold_type;
+    
+    public Builder setState(final State state) {
+      this.state = state;
+      return this;
+    }
     
     public Builder setTimestamp(final TimeStamp timestamp) {
       this.timestamp = timestamp.getCopy();

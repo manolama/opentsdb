@@ -6,12 +6,10 @@ import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAmount;
 import java.util.Arrays;
-import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
@@ -38,8 +36,6 @@ import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.JSON;
 import net.opentsdb.query.egads.olympicscoring.OlympicScoringConfig.Builder;
-import net.opentsdb.query.interpolation.QueryInterpolatorConfig;
-import net.opentsdb.query.interpolation.QueryInterpolatorFactory;
 import net.opentsdb.query.plan.QueryPlanner;
 
 public class OlympicScoringFactory extends BaseQueryNodeFactory<OlympicScoringConfig, OlympicScoringNode> {
@@ -96,9 +92,14 @@ public class OlympicScoringFactory extends BaseQueryNodeFactory<OlympicScoringCo
       builder.setExcludeMin(n.asInt());
     }
     
-    n = node.get("upperThreshold");
+    n = node.get("upperThresholdBad");
     if (n != null && !n.isNull()) {
-      builder.setUpperThreshold(n.asDouble());
+      builder.setUpperThresholdBad(n.asDouble());
+    }
+    
+    n = node.get("upperThresholdWarn");
+    if (n != null && !n.isNull()) {
+      builder.setUpperThresholdWarn(n.asDouble());
     }
     
     n = node.get("upperIsScalar");
@@ -106,9 +107,14 @@ public class OlympicScoringFactory extends BaseQueryNodeFactory<OlympicScoringCo
       builder.setUpperIsScalar(n.asBoolean());
     }
     
-    n = node.get("lowerThreshold");
+    n = node.get("lowerThresholdBad");
     if (n != null && !n.isNull()) {
-      builder.setLowerThreshold(n.asDouble());
+      builder.setLowerThresholdBad(n.asDouble());
+    }
+    
+    n = node.get("lowerThresholdWarn");
+    if (n != null && !n.isNull()) {
+      builder.setLowerThresholdWarn(n.asDouble());
     }
     
     n = node.get("lowerIsScalar");

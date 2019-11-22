@@ -15,6 +15,15 @@ public interface AlertType extends TimeSeriesDataType<AlertType>{
   public static final Set<TypeToken<? extends TimeSeriesDataType>> TYPES = 
       Sets.newHashSet(TYPE);
   
+  public static enum State {
+    BAD,
+    WARN,
+    OK,
+    RECOVER
+  }
+  
+  public State state();
+  
   public String message();
   
   public NumericType dataPoint();
