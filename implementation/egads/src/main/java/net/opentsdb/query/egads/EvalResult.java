@@ -108,7 +108,7 @@ public class EvalResult implements QueryResult {
 
   @Override
   public boolean processInParallel() {
-    return true;
+    return false;
   }
   
   class AlignedArrayTimeSeries implements TimeSeries {

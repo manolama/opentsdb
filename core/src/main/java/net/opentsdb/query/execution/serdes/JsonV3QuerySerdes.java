@@ -522,8 +522,8 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
         final QueryResult result) throws IOException {
     
     lock.writeLock().lock(); // since json is not thread safe and we need to form the json in order
+    ByteArrayOutputStream baos = null;
     try {
-      final ByteArrayOutputStream baos;
       if (json == null) {
         baos = new ByteArrayOutputStream();
         json = JSON.getFactory().createGenerator(baos);
@@ -613,8 +613,8 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
         json.flush();
       } 
     } catch (Throwable t) {
-      LOG.error("WTF?: " + 
-          stream.toString(), t);
+      LOG.error("WTF?: CUR VAL " + json.getCurrentValue() + "  CUR NAME: " + json.getOutputContext().getCurrentName()
+          + "  " + new String(((ByteArrayOutputStream) stream).toByteArray()), t);
     } finally {
       lock.writeLock().unlock();
     }
