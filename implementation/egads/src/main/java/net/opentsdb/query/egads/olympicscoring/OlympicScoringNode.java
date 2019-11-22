@@ -742,11 +742,12 @@ public class OlympicScoringNode extends AbstractQueryNode {
     
     context.tsdb().getQueryThreadPool().submit(new Runnable() {
       public void run() {
-        System.out.println("********** WRITING CACHE!!  Finally in the runnable.");
+        LOG.info("********** WRITING CACHE!!  Finally in the runnable.");
         class CacheErrorCB implements Callback<Object, Exception> {
           @Override
           public Object call(final Exception e) throws Exception {
             LOG.warn("Failed to cache EGADs prediction", e);
+            clearState();
             return null;
           }
         }
@@ -869,5 +870,12 @@ public class OlympicScoringNode extends AbstractQueryNode {
     state.lastUpdateTime = DateTime.currentTimeMillis() / 1000;
     state.exception = e == null ? "" : e.getMessage();
     cache.setState(cache_key, state, 300_000); // TODO config  
+  }
+  
+  void clearState() {
+    if (cache == null || config.getMode() == ExecutionMode.CONFIG) {
+      return;
+    }
+    cache.delete(cache_key);
   }
 }
