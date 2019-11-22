@@ -20,17 +20,20 @@ import net.opentsdb.rollup.RollupConfig;
 
 public class EgadsResult implements QueryResult, TimeSpecification {
   private final QueryNode node;
+  private final String data_source;
   private final TimeStamp start;
   private final TimeStamp end;
   private final List<TimeSeries> series;
   private final TypeToken<? extends TimeSeriesId> id_type;
 
   public EgadsResult(final QueryNode node, 
+                     final String data_source,
                      final TimeStamp start, 
                      final TimeStamp end, 
                      final List<TimeSeries> series,
                      final TypeToken<? extends TimeSeriesId> id_type) {
     this.node = node;
+    this.data_source = data_source;
     this.start = start;
     this.end = end;
     this.series = series;
@@ -70,8 +73,7 @@ public class EgadsResult implements QueryResult, TimeSpecification {
 
   @Override
   public String dataSource() {
-    // TODO - figure it out
-    return "m1";
+    return data_source;
   }
 
   @Override

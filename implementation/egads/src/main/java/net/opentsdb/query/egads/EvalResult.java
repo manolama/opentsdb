@@ -9,6 +9,8 @@ import java.util.Optional;
 
 import javax.swing.text.html.HTMLDocument.Iterator;
 
+import org.jfree.util.Log;
+
 import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
 
@@ -203,8 +205,16 @@ public class EvalResult implements QueryResult {
           ts.add(original_result.timeSpecification().interval());
         }
         
+        if (value.value().isInteger()&& x > value.value().longArray().length) {
+          Log.error("WTF? x " + x + " was longer than the array: " + value.value().longArray().length);
+          x = value.value().longArray().length;
+        } else if (x > value.value().doubleArray().length) {
+          Log.error("WTF? x " + x + " was longer than the array: " + value.value().doubleArray().length);
+          x = value.value().doubleArray().length;
+        }
+        
         start_idx = i;
-        end_idx = x;
+        end_idx = Math.min(x, value.value().end());
         has_next = end_idx > start_idx;
         
         

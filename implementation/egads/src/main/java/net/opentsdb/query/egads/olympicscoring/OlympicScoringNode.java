@@ -99,8 +99,8 @@ public class OlympicScoringNode extends AbstractQueryNode {
   private final TemporalAmount baseline_period;
   Properties properties;
   long prediction_start;
-  private QueryResult prediction;
-  private QueryResult current;
+  private volatile QueryResult prediction;
+  private volatile QueryResult current;
   final TLongObjectMap<OlympicScoringBaseline> join = 
       new TLongObjectHashMap<OlympicScoringBaseline>();
   final ChronoUnit model_units;
@@ -158,6 +158,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
       prediction_start = context.query().startTime().epoch();
       prediction_intervals = query_time_span / (prediction_interval * 1000);
       cache_key = null;
+      LOG.info("CONFIG Set cache key to: " + Bytes.pretty(cache_key));
       break;
     case EVALUATE:
     case PREDICT:
@@ -191,6 +192,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
       
       cache_key = ((OlympicScoringFactory) factory)
           .generateCacheKey(context.query(), (int) prediction_start);
+      LOG.info("Set cache key to: " + Bytes.pretty(cache_key));
       break;
     default:
       throw new IllegalStateException("Unhandled config mode: " + config.getMode());
@@ -207,7 +209,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
       @Override
       public Void call(final Void arg) throws Exception {
         // trigger the cache lookup.
-        if (cache != null) {
+        if (cache != null && config.getMode() != ExecutionMode.CONFIG) {
           cache.fetch(pipelineContext(), cache_key, null)
             .addCallback(new CacheCB())
             .addErrback(new CacheErrCB());
@@ -243,6 +245,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
   }
   
   void run() {
+    System.out.println("       CACHE KEY: " + Arrays.toString(cache_key));
     // Got baseline and current data, yay!
     final TLongObjectMap<TimeSeries> map = new TLongObjectHashMap<TimeSeries>();
     
@@ -259,7 +262,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
     } else {
       List<TimeSeries> series = config.getSerializeObserved() ? 
           Lists.newArrayList(current.timeSeries()) : Lists.newArrayList();
-      result = new EgadsResult(this, current.timeSpecification().start(), 
+      result = new EgadsResult(this, current.dataSource(), current.timeSpecification().start(), 
           current.timeSpecification().end(), series, Const.TS_STRING_ID);
     }
     
@@ -408,9 +411,9 @@ public class OlympicScoringNode extends AbstractQueryNode {
 
     if (cache != null) {
       // need's a clone as we may modify the list when we add thresholds, etc.
-      writeCache(new EgadsResult(this, start, end, Lists.newArrayList(computed), id_type));
+      writeCache(new EgadsResult(this, current.dataSource(), start, end, Lists.newArrayList(computed), id_type));
     }
-    prediction = new EgadsResult(this, start, end, computed, id_type);
+    prediction = new EgadsResult(this, current.dataSource(), start, end, computed, id_type);
     countdown();
   }
   
@@ -424,11 +427,13 @@ public class OlympicScoringNode extends AbstractQueryNode {
         // TODO - wrap into the OSResult
         //prediction = result;
         System.out.println(" &&&&&&& CACHE: Got result!!! " + result);
+        context.queryContext().logDebug("Prediction cache hit for query.");
         prediction = result;
         cache_hit = true;
         countdown();
       } else {
         System.out.println(" &&&&&&& CACHE: missed result");
+        context.queryContext().logDebug("Prediction cache miss for query.");
         fetchBaselineData();
       }
       
@@ -707,7 +712,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
   }
   
   boolean startPrediction() {
-    if (cache == null) {
+    if (cache == null || config.getMode() == ExecutionMode.CONFIG) {
       return true;
     }
     
@@ -775,6 +780,9 @@ public class OlympicScoringNode extends AbstractQueryNode {
   }
 
   void updateState(final State new_state, final Exception e) {
+    if (cache == null || config.getMode() == ExecutionMode.CONFIG) {
+      return;
+    }
     AnomalyPredictionState state = cache.getState(cache_key);
     if (state == null) {
       LOG.error("No state found. Maybe we need to stop?");

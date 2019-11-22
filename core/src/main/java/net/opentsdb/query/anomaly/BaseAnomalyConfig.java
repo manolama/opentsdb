@@ -72,6 +72,11 @@ public abstract class BaseAnomalyConfig
         builder.setId(n.asText());
       }
       
+      n = node.get("mode");
+      if (n != null && !n.isNull()) {
+        builder.setMode(ExecutionMode.valueOf(n.asText()));
+      }
+      
       n = node.get("sources");
       if (n != null && !n.isNull()) {
         try {

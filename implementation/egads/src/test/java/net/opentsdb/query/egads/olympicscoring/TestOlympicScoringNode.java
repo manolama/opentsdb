@@ -52,6 +52,8 @@ import net.opentsdb.query.QuerySinkCallback;
 import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.SemanticQueryContext;
 import net.opentsdb.query.anomaly.AnomalyConfig.ExecutionMode;
+import net.opentsdb.query.anomaly.AnomalyPredictionState.State;
+import net.opentsdb.query.anomaly.AnomalyPredictionState;
 import net.opentsdb.query.anomaly.MemoryPredictionCache;
 import net.opentsdb.query.anomaly.PredictionCache;
 import net.opentsdb.query.execution.serdes.JsonV3QuerySerdesOptions;
@@ -69,6 +71,7 @@ import net.opentsdb.query.serdes.TimeSeriesSerdes;
 import net.opentsdb.storage.MockDataStoreFactory;
 import net.opentsdb.storage.WritableTimeSeriesDataStore;
 import net.opentsdb.storage.WritableTimeSeriesDataStoreFactory;
+import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.JSON;
 
 public class TestOlympicScoringNode {
@@ -108,6 +111,15 @@ public class TestOlympicScoringNode {
     
     OlympicScoringFactory f = (OlympicScoringFactory) TSDB.registry.getPlugin(ProcessorFactory.class, OlympicScoringFactory.TYPE);
     f.setCache(cache);
+    
+//    byte[] ck = new byte[] { 54, 75, 38, -45, 109, -48, 104, -124, -3, -50, 94, 33, 92, 43, 72, -88 };
+//    AnomalyPredictionState state = new AnomalyPredictionState();
+//    state.host = "localhost";
+//    state.hash = 1L;
+//    state.startTime = state.lastUpdateTime = DateTime.currentTimeMillis() / 1000;
+//    state.state = State.RUNNING;
+//    cache.setState(ck, state, 100000000);
+    
     
     INTERPOLATOR = (NumericInterpolatorConfig) NumericInterpolatorConfig.newBuilder()
         .setFillPolicy(FillPolicy.NOT_A_NUMBER)

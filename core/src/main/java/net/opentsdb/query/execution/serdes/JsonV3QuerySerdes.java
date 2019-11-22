@@ -245,7 +245,7 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
           AtomicInteger ai = new AtomicInteger(0);
           AtomicBoolean wasStatus = new AtomicBoolean(false);
           StringBuilder namespace = new StringBuilder();
-LOG.info("------- SERIES: " + result.timeSeries().size());
+          
           if (result.processInParallel()) {
             List<TimeSeries> tss = result.timeSeries();
             LOG.debug("Processing the iterators parallelly: " + tss.size());
@@ -318,11 +318,11 @@ LOG.info("------- SERIES: " + result.timeSeries().size());
           }
 
           json.writeEndObject();
-        } catch (Exception e) {
-          LOG.error("Unexpected exception", e);
+        } catch (Throwable t) {
+          LOG.error("Unexpected exception", t);
           return Deferred.fromError(new QueryExecutionException(
               "Unexpected exception "
-              + "serializing: " + result, 500, e));
+              + "serializing: " + result, 500, t));
         }
         
         json.close();
@@ -520,7 +520,9 @@ LOG.info("------- SERIES: " + result.timeSeries().size());
         final TimeStamp start,
         final TimeStamp end,
         final QueryResult result) throws IOException {
-
+    
+    lock.writeLock().lock(); // since json is not thread safe and we need to form the json in order
+    try {
     final ByteArrayOutputStream baos;
     if (json == null) {
       baos = new ByteArrayOutputStream();
@@ -533,95 +535,96 @@ LOG.info("------- SERIES: " + result.timeSeries().size());
     boolean was_status = false;
     boolean was_event = false;
     boolean was_event_group = false;
-    try {
-      System.out.println("      SERIALIZIN: " + series.id());
-      for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator : series.iterators()) {
-        lock.writeLock().lock(); // since json is not thread safe and we need to form the json in order
-        while (iterator.hasNext()) {
-          TimeSeriesValue<? extends TimeSeriesDataType> value = iterator.next();
-          if (value == null) {
-            continue;
+ 
+    for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator : series.iterators()) {
+      while (iterator.hasNext()) {
+        LOG.info("                 NEXT...");
+        TimeSeriesValue<? extends TimeSeriesDataType> value = iterator.next();
+        if (value == null) {
+          continue;
+        }
+        
+        if (iterator.getType() == StatusType.TYPE) {
+          if (!was_status) {
+            was_status = true;
           }
-          
-          if (iterator.getType() == StatusType.TYPE) {
-            if (!was_status) {
-              was_status = true;
+          json.writeStartObject();
+          writeStatus((StatusValue) value, json);
+          wrote_values = true;
+        } else if (iterator.getType() == EventType.TYPE) {
+          was_event = true;
+          json.writeStartObject();
+          json.writeObjectFieldStart("EventsType");
+          writeEvents((EventsValue) value, json);
+          json.writeEndObject();
+          wrote_values = true;
+        } else if (iterator.getType() == EventGroupType.TYPE) {
+          was_event_group = true;
+          json.writeStartObject();
+          writeEventGroup((EventsGroupValue) value, json, id);
+          wrote_values = true;
+        } else if (iterator.getType() == AlertType.TYPE) {
+          if (writeAlert((TimeSeriesValue<AlertType>) value, options, 
+                  iterator, json, result, start, end, wrote_values)) {
+              wrote_values = true;
             }
-            json.writeStartObject();
-            writeStatus((StatusValue) value, json);
-            wrote_values = true;
-          } else if (iterator.getType() == EventType.TYPE) {
-            was_event = true;
-            json.writeStartObject();
-            json.writeObjectFieldStart("EventsType");
-            writeEvents((EventsValue) value, json);
-            json.writeEndObject();
-            wrote_values = true;
-          } else if (iterator.getType() == EventGroupType.TYPE) {
-            was_event_group = true;
-            json.writeStartObject();
-            writeEventGroup((EventsGroupValue) value, json, id);
-            wrote_values = true;
-          } else if (iterator.getType() == AlertType.TYPE) {
-            if (writeAlert((TimeSeriesValue<AlertType>) value, options, 
-                    iterator, json, result, start, end, wrote_values)) {
-                wrote_values = true;
-              }
-          } else {
-            if (iterator.getType() == NumericType.TYPE) {
-              if (writeNumeric((TimeSeriesValue<NumericType>) value, options, 
-                    iterator, json, result, start, end, wrote_values)) {
-                wrote_values = true;
-              }
-            } else if (iterator.getType() == NumericSummaryType.TYPE) {
-              if (writeNumericSummary(value, options, iterator, json, result, 
-                    start, end, wrote_values)) {
-                wrote_values = true;
-              }
-            } else if (iterator.getType() == NumericArrayType.TYPE) {
-              if (writeNumericArray((TimeSeriesValue<NumericArrayType>) value, 
-                    options, iterator, json, result, start, end, wrote_values)) {
-                wrote_values = true;
-              }
+        } else {
+          if (iterator.getType() == NumericType.TYPE) {
+            if (writeNumeric((TimeSeriesValue<NumericType>) value, options, 
+                  iterator, json, result, start, end, wrote_values)) {
+              wrote_values = true;
+            }
+          } else if (iterator.getType() == NumericSummaryType.TYPE) {
+            if (writeNumericSummary(value, options, iterator, json, result, 
+                  start, end, wrote_values)) {
+              wrote_values = true;
+            }
+          } else if (iterator.getType() == NumericArrayType.TYPE) {
+            if (writeNumericArray((TimeSeriesValue<NumericArrayType>) value, 
+                  options, iterator, json, result, start, end, wrote_values)) {
+              wrote_values = true;
             }
           }
         }
       }
-      
-      if (wrote_values) {
-        // serialize the ID
-        if (!was_status && !was_event) {
-          json.writeStringField("metric", id.metric());
-        }
-        if (!was_event_group) {
-          
-          json.writeObjectFieldStart("tags");
-          for (final Entry<String, String> entry : id.tags().entrySet()) {
-            json.writeStringField(entry.getKey(), entry.getValue());
-          }
-          json.writeEndObject();
-        }
-        if (was_event || was_event_group) {
-          json.writeNumberField("hits", id.hits());
-        } else {
-          json.writeArrayFieldStart("aggregateTags");
-          for (final String tag : id.aggregatedTags()) {
-            json.writeString(tag);
-          }
-          json.writeEndArray();
+    }
+    
+    if (wrote_values) {
+      // serialize the ID
+      if (!was_status && !was_event) {
+        json.writeStringField("metric", id.metric());
+      }
+      if (!was_event_group) {
+        
+        json.writeObjectFieldStart("tags");
+        for (final Entry<String, String> entry : id.tags().entrySet()) {
+          json.writeStringField(entry.getKey(), entry.getValue());
         }
         json.writeEndObject();
       }
-  
-      if (baos != null) {
-        json.close();
-        synchronized(sets) {
-          sets.add(new String(baos.toByteArray(), Const.UTF8_CHARSET));
-        }
-        baos.close();
+      if (was_event || was_event_group) {
+        json.writeNumberField("hits", id.hits());
       } else {
-        json.flush();
+        json.writeArrayFieldStart("aggregateTags");
+        for (final String tag : id.aggregatedTags()) {
+          json.writeString(tag);
+        }
+        json.writeEndArray();
       }
+      json.writeEndObject();
+    }
+
+    if (baos != null) {
+      json.close();
+      synchronized(sets) {
+        sets.add(new String(baos.toByteArray(), Const.UTF8_CHARSET));
+      }
+      baos.close();
+    } else {
+      json.flush();
+    } 
+    } catch (Throwable t) {
+      LOG.error("WTF?", t);
     } finally {
       lock.writeLock().unlock();
     }
@@ -1042,7 +1045,6 @@ LOG.info("------- SERIES: " + result.timeSeries().size());
       boolean wrote_values) throws IOException {
 
     if (value.value().end() < 1) {
-      LOG.warn("WTF? No data? in JSON!!");
       // no data
       return false;
     }
@@ -1055,7 +1057,6 @@ LOG.info("------- SERIES: " + result.timeSeries().size());
         cur.add(result.timeSpecification().interval());
       }
 
-      System.out.println("     START TS: " + cur.epoch() + " idx: " + idx + "  " + value.value().end());
       boolean wrote_type = false;
       for (; idx < value.value().end(); idx++) {
         if (cur.compare(Op.GTE, end)) {
@@ -1080,7 +1081,6 @@ LOG.info("------- SERIES: " + result.timeSeries().size());
       if (wrote_type) {
         json.writeEndArray();
       }
-      LOG.info("     WROTE TYPE: " + wrote_type);
       return wrote_type;
     }
     
@@ -1103,7 +1103,6 @@ LOG.info("------- SERIES: " + result.timeSeries().size());
       }
     }
     json.writeEndArray();
-    LOG.info("     fall through WROTE TYPE: " + wrote_type);
     return wrote_type;
   }
 

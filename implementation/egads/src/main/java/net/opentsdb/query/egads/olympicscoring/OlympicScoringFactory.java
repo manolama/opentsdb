@@ -50,7 +50,7 @@ public class OlympicScoringFactory extends BaseQueryNodeFactory<OlympicScoringCo
       .putString(TYPE, Const.UTF8_CHARSET).hash().asInt();
 
   private TSDB tsdb;
-  private PredictionCache cache;
+  private volatile PredictionCache cache;
   private String host_name;
   
   @Override
@@ -123,6 +123,18 @@ public class OlympicScoringFactory extends BaseQueryNodeFactory<OlympicScoringCo
   public void setupGraph(final QueryPipelineContext context, 
                          final OlympicScoringConfig config, 
                          final QueryPlanner planner) {
+    // UGG!!! initialization order issue.
+    if (cache == null) {
+      synchronized (this) {
+        if (cache == null) {
+          cache = tsdb.getRegistry().getDefaultPlugin(PredictionCache.class); // PULL FROM FACTORY
+          LOG.info("EGADS Cache: " + cache);
+        }
+      }
+    }
+    if (config.getMode() == null) {
+      throw new RuntimeException("MODE can't be null!!");
+    }
     if (cache == null || config.getMode() == ExecutionMode.CONFIG) {
       return;
     }
@@ -156,6 +168,7 @@ public class OlympicScoringFactory extends BaseQueryNodeFactory<OlympicScoringCo
     this.id = Strings.isNullOrEmpty(id) ? TYPE : id;
     this.tsdb = tsdb;
     cache = tsdb.getRegistry().getDefaultPlugin(PredictionCache.class); // PULL FROM FACTORY
+    LOG.info("EGADS Cache: " + cache);
     try {
       host_name = InetAddress.getLocalHost().getHostName();
     } catch (UnknownHostException e) {
