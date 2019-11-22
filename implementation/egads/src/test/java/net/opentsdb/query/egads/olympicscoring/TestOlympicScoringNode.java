@@ -101,7 +101,9 @@ public class TestOlympicScoringNode {
     factory.initialize(TSDB, null).join(30000);
     ((DefaultRegistry) TSDB.registry).registerPlugin(
         TimeSeriesDataSourceFactory.class, null, (TSDBPlugin) factory);
-    storeHourlyData();
+    
+    storeWeeklyData();
+    //storeHourlyData();
     
     ((DefaultRegistry) TSDB.registry).registerPlugin(
         ReadCacheSerdesFactory.class, null, new JsonReadCacheSerdes());
@@ -378,6 +380,220 @@ public class TestOlympicScoringNode {
     System.out.println("---- EXIT ----");
   }
   
+  @Test
+  public void weekly() throws Exception {
+    //storeWeeklyData();
+    SemanticQuery baseline_query = SemanticQuery.newBuilder()
+        .setStart(Integer.toString(1545090600))
+        .setEnd(Integer.toString(1545091200))
+        .setMode(QueryMode.SINGLE)
+        .addExecutionGraphNode(DefaultTimeSeriesDataSourceConfig.newBuilder()
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric(HOULRY_METRIC)
+                .build())
+            .setId("m1")
+            .build())
+        .addExecutionGraphNode(DownsampleConfig.newBuilder()
+            .setInterval("1m")
+            .setAggregator("avg")
+            .setFill(true)
+            .addInterpolatorConfig(INTERPOLATOR)
+            .addSource("m1")
+            .setId("ds")
+            .build())
+        .build();
+    
+    final SemanticQuery egads_query = SemanticQuery.newBuilder()
+        .setStart(Integer.toString(BASE_TIME - 300))
+        .setEnd(Integer.toString(BASE_TIME))
+        .setMode(QueryMode.SINGLE)
+        .addExecutionGraphNode(DefaultTimeSeriesDataSourceConfig.newBuilder()
+            .setMetric(MetricLiteralFilter.newBuilder()
+                .setMetric(HOULRY_METRIC)
+                .build())
+            .setId("m1")
+            .build())
+        .addExecutionGraphNode(DownsampleConfig.newBuilder()
+            .setInterval("1m")
+            .setAggregator("avg")
+            .setFill(true)
+            .addInterpolatorConfig(INTERPOLATOR)
+            .addSource("m1")
+            .setId("ds")
+            .build())
+        .addExecutionGraphNode(OlympicScoringConfig.newBuilder()
+            .setBaselinePeriod("1w")
+            .setBaselineNumPeriods(2)
+            .setBaselineAggregator("avg")
+            .setBaselineQuery(baseline_query)
+//            .setSerializeObserved(true)
+//            .setSerializeThresholds(true)
+            .setLowerThresholdBad(100)
+            //.setUpperThreshold(100)
+            .setMode(ExecutionMode.CONFIG)
+            //.setMode(ExecutionMode.EVALUATE)
+            .addInterpolatorConfig(INTERPOLATOR)
+            .addSource("ds")
+            .setId("egads")
+            .build())
+//        .addSerdesConfig(JsonV3QuerySerdesOptions.newBuilder()
+//            .setId("foo")
+//            .addFilter("egads")
+//            .addFilter("ds")
+//            .build())
+        .build();
+    //System.out.println(JSON.serializeToString(egads_query));
+    
+    Object waity = new Object();
+    class Sink implements QuerySink {
+      TimeSeriesSerdes serdes = null;
+      ByteArrayOutputStream baos;
+
+      Sink() {
+        baos = new ByteArrayOutputStream();
+        SerdesOptions options = JsonV3QuerySerdesOptions.newBuilder()
+            .setId("serdes")
+            .build();
+        final SerdesFactory factory = TSDB.getRegistry()
+            .getPlugin(SerdesFactory.class, options.getType());
+        QueryContext ctx = mock(QueryContext.class);
+        when(ctx.tsdb()).thenReturn(TSDB);
+        when(ctx.query()).thenReturn(egads_query);
+        serdes = factory.newInstance(ctx, options, baos);
+      }
+      
+      @Override
+      public void onComplete() {
+        // TODO Auto-generated method stub
+        System.out.println("DONE!!");
+        try {
+          serdes.serializeComplete(null);
+          System.out.println("[JSON]: " + new String(baos.toByteArray()));
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+        
+        synchronized (waity) {
+          waity.notify();
+        }
+        System.out.println("--------- DONE with waity ----------");
+      }
+
+      @Override
+      public void onNext(QueryResult next) {
+        try {
+          serdes.serialize(next, null).addCallback(new Callback<Void, Object>() {
+            @Override
+            public Void call(Object arg) throws Exception {
+              next.close();
+              return null;
+            }
+          })
+          .addErrback(new Callback<Object, Exception>() {
+            @Override
+            public Void call(Exception arg) throws Exception {
+              arg.printStackTrace();
+              next.close();
+              return null;
+            }
+          });
+        // TODO Auto-generated method stub
+//        System.out.println("[RESULT]: " + next.source().config().getId() + ":" + next.dataSource());
+//        try {
+//          if (next.timeSpecification() != null) {
+//            System.out.println("     TIME SPEC: " + next.timeSpecification().start().epoch() + " " 
+//                + next.timeSpecification().end().epoch());
+//          }
+//          
+//          for (final TimeSeries ts : next.timeSeries()) {
+//            System.out.println("[SERIES] " + ts.id() + "  HASH: [" + ts.id().buildHashCode() + "] TYPES: " + ts.types());
+//            for (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> it : ts.iterators()) {
+//              System.out.println("      IT: " + it.getType());
+//              int x = 0;
+//              StringBuilder buf = null;
+//              while (it.hasNext()) {
+//                TimeSeriesValue<? extends TimeSeriesDataType> value = it.next();
+//                
+//                if (it.getType() == NumericArrayType.TYPE) {
+//                  TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) value;
+//                  if (value.value() == null) {
+//                    System.out.println("WTF? Null value at: " + v.timestamp());
+//                    continue;
+//                  }
+//                  if (v.value().isInteger()) {
+//                    System.out.println("   " + Arrays.toString(v.value().longArray()));
+//                  } else {
+//                    System.out.println("   " + Arrays.toString(v.value().doubleArray()));
+//                  }
+//                } else if (it.getType() == NumericType.TYPE) {
+//                  TimeSeriesValue<NumericType> v = (TimeSeriesValue<NumericType>) value;
+//                  if (buf == null) {
+//                    buf = new StringBuilder()
+//                        .append("{");
+//                  }
+//                  if (x > 0) {
+//                    buf.append(", ");
+//                  }
+//                  buf.append(v.value().toDouble());
+//                  //System.out.println(v.timestamp().epoch() + "  " + v.value().toDouble());
+//                } else if (it.getType() == AlertType.TYPE) {
+//                  TimeSeriesValue<AlertType> v = (TimeSeriesValue<AlertType>) value;
+//                  System.out.println("   ALERT! " + v.timestamp().epoch() + "  " + v.value().message());
+//                }
+//                
+//                x++;
+//                if (x > 121) {
+//                  System.out.println("WHOOP? " + x);
+//                  return;
+//                }
+//              }
+//              
+//              if (buf != null) {
+//                buf.append("}");
+//                System.out.println("     " + buf.toString());
+//              }
+//              System.out.println("   READ: " + x);
+//            }
+//          }
+        } catch (Exception e) {
+          e.printStackTrace();
+        } finally {
+          //next.close();
+        }
+      }
+
+      @Override
+      public void onNext(PartialTimeSeries next, QuerySinkCallback callback) {
+        // TODO Auto-generated method stub
+        
+      }
+
+      @Override
+      public void onError(Throwable t) {
+        // TODO Auto-generated method stub
+        t.printStackTrace();
+        waity.notify();
+      }
+      
+    }
+    
+    QueryContext ctx = SemanticQueryContext.newBuilder()
+        .setTSDB(TSDB)
+        .addSink(new Sink())
+        .setQuery(egads_query)
+        //.setQuery(baseline_query)
+        //.setMode(QueryMode.SINGLE)
+        .build();
+    ctx.initialize(null).join();
+    System.out.println("  INITIALIZED. now fetching next");
+    ctx.fetchNext(null);
+    
+    synchronized (waity) {
+      waity.wait(10000);
+    }
+    System.out.println("---- EXIT ----");
+  }
+  
   static void storeHourlyData() throws Exception {
     WritableTimeSeriesDataStoreFactory factory = TSDB.getRegistry().getDefaultPlugin(WritableTimeSeriesDataStoreFactory.class);
     WritableTimeSeriesDataStore store = factory.newStoreInstance(TSDB, null);
@@ -414,5 +630,38 @@ public class TestOlympicScoringNode {
       }
     }
     System.out.println(" ------ WROTE TO " + System.identityHashCode(store) + " STORE!  " + wrote);
+  }
+  
+  static void storeWeeklyData() throws Exception {
+    WritableTimeSeriesDataStoreFactory factory = TSDB.getRegistry().getDefaultPlugin(WritableTimeSeriesDataStoreFactory.class);
+    WritableTimeSeriesDataStore store = factory.newStoreInstance(TSDB, null);
+    
+    TimeSeriesDatumStringId id_a = BaseTimeSeriesDatumStringId.newBuilder()
+        .setMetric(HOULRY_METRIC)
+        .addTags(TAGK_STRING, TAGV_A_STRING)
+        .build();
+    TimeSeriesDatumStringId id_b = BaseTimeSeriesDatumStringId.newBuilder()
+        .setMetric(HOULRY_METRIC)
+        .addTags(TAGK_STRING, TAGV_B_STRING)
+        .build();
+    
+    int ts = BASE_TIME - (86400 * 16);
+    System.out.println("         WRITE START: " + ts);
+    int wrote = 0;
+    while (ts <= BASE_TIME) {
+      for (int i = 0; i < 60; i++) {
+        double value = Math.sin((ts % 3600) / 10);
+        
+        MutableNumericValue v = 
+            new MutableNumericValue(new SecondTimeStamp(ts), value);
+        store.write(null, TimeSeriesDatum.wrap(id_a, v), null).join();
+                
+        v = new MutableNumericValue(new SecondTimeStamp(ts), value * 10);
+        store.write(null, TimeSeriesDatum.wrap(id_b, v), null).join();
+        ts += 60;
+        wrote++;
+      }
+    }
+    System.out.println(" ------ WROTE " + wrote + " dps! ending at " + ts);
   }
 }

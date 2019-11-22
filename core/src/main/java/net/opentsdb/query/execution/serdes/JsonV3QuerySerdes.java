@@ -563,25 +563,17 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
             writeEventGroup((EventsGroupValue) value, json, id);
             wrote_values = true;
           } else if (iterator.getType() == AlertType.TYPE) {
-            if (writeAlert((TimeSeriesValue<AlertType>) value, options, 
-                  iterator, json, result, start, end, wrote_values)) {
-              wrote_values = true;
-            }
+            wrote_values |= writeAlert((TimeSeriesValue<AlertType>) value, options, 
+                  iterator, json, result, start, end, wrote_values);
           } else if (iterator.getType() == NumericType.TYPE) {
-            if (writeNumeric((TimeSeriesValue<NumericType>) value, options, 
-                  iterator, json, result, start, end, wrote_values)) {
-              wrote_values = true;
-            }
+            wrote_values |= writeNumeric((TimeSeriesValue<NumericType>) value, options, 
+                  iterator, json, result, start, end, wrote_values);
           } else if (iterator.getType() == NumericSummaryType.TYPE) {
-            if (writeNumericSummary(value, options, iterator, json, result, 
-                  start, end, wrote_values)) {
-              wrote_values = true;
-            }
+            wrote_values |= writeNumericSummary(value, options, iterator, json, result, 
+                  start, end, wrote_values);
           } else if (iterator.getType() == NumericArrayType.TYPE) {
-            if (writeNumericArray((TimeSeriesValue<NumericArrayType>) value, 
-                  options, iterator, json, result, start, end, wrote_values)) {
-              wrote_values = true;
-            }
+            wrote_values |= writeNumericArray((TimeSeriesValue<NumericArrayType>) value, 
+                  options, iterator, json, result, start, end, wrote_values);
           }
         }
       }
@@ -1041,10 +1033,11 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
       final TimeStamp end,
       boolean wrote_values) throws IOException {
 
-    if (value.value().end() < 1) {
+    if (value.value().end() <= value.value().offset()) {
       // no data
       return false;
     }
+    
     if (!start.compare(Op.EQ, result.timeSpecification().start()) || 
         !end.compare(Op.EQ, result.timeSpecification().end())) {
       TimeStamp cur = result.timeSpecification().start().getCopy();

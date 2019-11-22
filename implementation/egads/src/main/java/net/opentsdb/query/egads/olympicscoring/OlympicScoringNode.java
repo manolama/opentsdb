@@ -51,6 +51,7 @@ import net.opentsdb.exceptions.QueryExecutionException;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.BaseQueryContext;
 import net.opentsdb.query.QueryContext;
+import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryNodeFactory;
@@ -81,8 +82,11 @@ import net.opentsdb.utils.JSON;
 import net.opentsdb.utils.Pair;
 
 /**
- * NOTE: Prediction and cached prediction maintains original metric IDs.
+ * TODO - tons of stuff!
+ * See that we stay open long enough to finish building
+ * in predict mode, just return.
  *
+ * HANDLE empty baseline and current
  */
 public class OlympicScoringNode extends AbstractQueryNode {
   private static final Logger LOG = LoggerFactory.getLogger(
@@ -108,6 +112,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
   long prediction_intervals;
   long prediction_interval;
   String ds_interval;
+  volatile String data_source;
   
   public OlympicScoringNode(final QueryNodeFactory factory,
                             final QueryPipelineContext context,
@@ -240,6 +245,13 @@ public class OlympicScoringNode extends AbstractQueryNode {
       LOG.info("CUR START: " + next.timeSpecification().start().epoch());
     }
     System.out.println("    GOT CURRENT: " + next.dataSource());
+    if (data_source == null || !data_source.equals(next.dataSource())) {
+      synchronized (this) {
+        if (data_source == null || !data_source.equals(next.dataSource())) {
+          data_source = next.dataSource();
+        }
+      }
+    }
     current = next;
     countdown();
   }
@@ -257,14 +269,15 @@ public class OlympicScoringNode extends AbstractQueryNode {
     LOG.info("SER THRESHOLDS: " + config.getSerializeThresholds());
     int series_limit = prediction.timeSeries().size();
     final QueryResult result;
-    if (config.getMode() == ExecutionMode.EVALUATE && config.getSerializeObserved()) {
-      result = new EvalResult(this, current);
-    } else {
-      List<TimeSeries> series = config.getSerializeObserved() ? 
-          Lists.newArrayList(current.timeSeries()) : Lists.newArrayList();
-      result = new EgadsResult(this, current.dataSource(), current.timeSpecification().start(), 
-          current.timeSpecification().end(), series, Const.TS_STRING_ID);
-    }
+    result = new EvalResult(this, current, config.getSerializeObserved());
+//    if (config.getMode() == ExecutionMode.EVALUATE && config.getSerializeObserved()) {
+//      result = new EvalResult(this, current);
+//    } else {
+//      List<TimeSeries> series = config.getSerializeObserved() ? 
+//          Lists.newArrayList(current.timeSeries()) : Lists.newArrayList();
+//      result = new EgadsResult(this, current.dataSource(), current.timeSpecification().start(), 
+//          current.timeSpecification().end(), series, Const.TS_STRING_ID);
+//    }
     
     for (int i = 0; i < series_limit; i++) {
       final TimeSeries series = prediction.timeSeries().get(i);
@@ -426,7 +439,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
          Integer.toString(config.getExcludeMax()));
      properties.setProperty("PERIOD", 
          Long.toString(prediction_interval * prediction_intervals));
-    System.out.println("PROPERTIES: " + properties);
+    LOG.info("PROPERTIES: " + properties);
      // TODO - parallelize
     List<TimeSeries> computed = Lists.newArrayList();
     TLongObjectIterator<OlympicScoringBaseline> it = join.iterator();
@@ -443,11 +456,11 @@ public class OlympicScoringNode extends AbstractQueryNode {
     TimeStamp end = start.getCopy();
     end.add(modelDuration() == ChronoUnit.HOURS ? Duration.ofHours(1) : Duration.ofDays(1));
 
-    if (cache != null) {
+    if (cache != null && config.getMode() != ExecutionMode.CONFIG) {
       // need's a clone as we may modify the list when we add thresholds, etc.
-      writeCache(new EgadsResult(this, current.dataSource(), start, end, Lists.newArrayList(computed), id_type));
+      writeCache(new EgadsResult(this, data_source, start, end, Lists.newArrayList(computed), id_type));
     }
-    prediction = new EgadsResult(this, current.dataSource(), start, end, computed, id_type);
+    prediction = new EgadsResult(this, data_source, start, end, computed, id_type);
     countdown();
   }
   
@@ -527,6 +540,14 @@ public class OlympicScoringNode extends AbstractQueryNode {
       System.out.println(" SUB QUERY " + idx + " NEXT " + next.dataSource());
       updateState(State.RUNNING, null);
       // TODO filter, for now assume one result
+      
+      if (data_source == null) {
+        synchronized (OlympicScoringNode.this) {
+          if (data_source == null) {
+            data_source = next.dataSource();
+          }
+        }
+      }
       
       for (final TimeSeries series : next.timeSeries()) {
         final long hash = series.id().buildHashCode();
@@ -635,17 +656,16 @@ public class OlympicScoringNode extends AbstractQueryNode {
     baseline_queries[0].sub_context.initialize(null)
       .addCallback(new SubQueryCB(baseline_queries[0].sub_context))
       .addErrback(new ErrorCB());
+    
+    if (config.getMode() == ExecutionMode.PREDICT) {
+      // return here.
+      final AnomalyPredictionState state = cache.getState(cache_key);
+      QueryExecutionException e = new QueryExecutionException("Successfully "
+          + "started prediction start [" + prediction_start + "] and key " 
+          + Arrays.toString(cache_key) + " State: " + JSON.serializeToString(state), 423);
+      sendUpstream(e);
+    }
   }
-  
-//  byte[] generateCacheKey() {
-//    // TODO - include: jitter timestamp, full query hash, model ID
-//    // hash of model ID, query hash, prediction timestamp w jitter
-//    byte[] key = new byte[4 + 8 + 4];
-//    Bytes.setInt(key, OlympicScoringFactory.TYPE_HASH, 0);
-//    Bytes.setLong(key, context.query().buildHashCode().asLong(), 4);
-//    Bytes.setInt(key, (int) prediction_start, 12); 
-//    return key;
-//  }
   
   void countdown() {
     latch.countDown();
@@ -659,11 +679,26 @@ public class OlympicScoringNode extends AbstractQueryNode {
                           final int end, 
                           final QueryContext context, 
                           final QuerySink sink) {
-    final SemanticQuery.Builder builder = config.getBaselineQuery()
-        .toBuilder()
+    // update downsample interval
+    final SemanticQuery.Builder builder = SemanticQuery.newBuilder()
         // TODO - PADDING compute the padding
+        .setMode(QueryMode.SINGLE)
         .setStart(Integer.toString(start - 300))
         .setEnd(Integer.toString(end));
+    if (config.getBaselineQuery().getFilters() != null) {
+      builder.setFilters(config.getBaselineQuery().getFilters());
+    }
+    
+    for (final QueryNodeConfig config : config.getBaselineQuery().getExecutionGraph()) {
+      if (config instanceof DownsampleConfig) {
+        builder.addExecutionGraphNode(((DownsampleConfig.Builder)
+            config.toBuilder())
+            .setInterval(ds_interval)
+            .build());
+      } else {
+        builder.addExecutionGraphNode(config);
+      }
+    }
     
     System.out.println("  BASELINE Q: " + JSON.serializeToString(builder.build()));
     return SemanticQueryContext.newBuilder()

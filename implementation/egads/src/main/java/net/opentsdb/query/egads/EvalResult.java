@@ -7,9 +7,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-import javax.swing.text.html.HTMLDocument.Iterator;
-
-import org.jfree.util.Log;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
@@ -28,26 +27,20 @@ import net.opentsdb.query.QueryResult;
 import net.opentsdb.rollup.RollupConfig;
 
 public class EvalResult implements QueryResult {
-
+  private static final Logger LOG = LoggerFactory.getLogger(EvalResult.class);
   final QueryNode node;
   final QueryResult original_result;
   final List<TimeSeries> series;
   
-  public EvalResult(final QueryNode node, final QueryResult original_result) {
+  public EvalResult(final QueryNode node, final QueryResult original_result, final boolean include_observed) {
     this.node = node;
     this.original_result = original_result;
-    series = Lists.newArrayList(original_result.timeSeries());
+    if (include_observed) {
+      series = Lists.newArrayList(original_result.timeSeries());
+    } else {
+      series = Lists.newArrayList();
+    }
   }
-  
-//  public void addPredictionsAndThresholds(final QueryResult result) {
-//    for (final TimeSeries ts : result.timeSeries()) {
-//      if (ts.types().contains(NumericArrayType.TYPE)) {
-//        series.add(new AlignedArrayTimeSeries(ts, result));
-//      } else {
-//        series.add(ts);
-//      }
-//    }
-//  }
   
   public void addPredictionsAndThresholds(final TimeSeries ts, final QueryResult result) {
     if (ts.types().contains(NumericArrayType.TYPE)) {
@@ -206,10 +199,10 @@ public class EvalResult implements QueryResult {
         }
         
         if (value.value().isInteger()&& x > value.value().longArray().length) {
-          Log.error("WTF? x " + x + " was longer than the array: " + value.value().longArray().length);
+          LOG.error("WTF? x " + x + " was longer than the array: " + value.value().longArray().length);
           x = value.value().longArray().length;
         } else if (x > value.value().doubleArray().length) {
-          Log.error("WTF? x " + x + " was longer than the array: " + value.value().doubleArray().length);
+          LOG.error("WTF? x " + x + " was longer than the array: " + value.value().doubleArray().length);
           x = value.value().doubleArray().length;
         }
         
@@ -218,7 +211,7 @@ public class EvalResult implements QueryResult {
         has_next = end_idx > start_idx;
         
         
-        System.out.println(" ***** ALIGNMENT: " + start_idx + "  " + end_idx + "  FOR: " + source.id());
+        LOG.info(" ***** ALIGNMENT: " + start_idx + "  " + end_idx + "  FOR: " + source.id());
       }
       
       @Override

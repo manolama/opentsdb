@@ -158,6 +158,7 @@ public class OlympicScoringBaseline {
     final TimeSeriesValue<NumericArrayType> value = 
         (TimeSeriesValue<NumericArrayType>) iterator.next();
     if (value.value() == null) {
+      System.out.println("      WTF? Null array?");
       return;
     }
     
