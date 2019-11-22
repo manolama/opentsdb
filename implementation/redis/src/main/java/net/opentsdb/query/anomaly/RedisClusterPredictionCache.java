@@ -1,4 +1,4 @@
-package net.opentsdb.query.execution.cache;
+package net.opentsdb.query.anomaly;
 
 import java.util.HashSet;
 import java.util.Map;
@@ -19,6 +19,7 @@ import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.anomaly.AnomalyPredictionState;
 import net.opentsdb.query.anomaly.PredictionCache;
+import net.opentsdb.query.execution.cache.RedisClusterQueryCache;
 import net.opentsdb.query.readcache.ReadCacheQueryResult;
 import net.opentsdb.query.readcache.ReadCacheSerdes;
 import net.opentsdb.query.readcache.ReadCacheSerdesFactory;
