@@ -549,6 +549,7 @@ public class OlympicScoringNode extends AbstractQueryNode {
         }
       }
       
+      LOG.info("BASELINE [" + idx + "] got " + next.timeSeries().size() + " results!");
       for (final TimeSeries series : next.timeSeries()) {
         final long hash = series.id().buildHashCode();
         System.out.println("[" + idx + "]   RAW BASELINE HASH: " + hash);
@@ -679,6 +680,8 @@ public class OlympicScoringNode extends AbstractQueryNode {
                           final int end, 
                           final QueryContext context, 
                           final QuerySink sink) {
+    // WTF? This is breaking the pushdowns in that it links the context to M1 and 
+    // m1 doesn't have the downsample OR group by...
     // update downsample interval
     final SemanticQuery.Builder builder = SemanticQuery.newBuilder()
         // TODO - PADDING compute the padding
@@ -694,13 +697,17 @@ public class OlympicScoringNode extends AbstractQueryNode {
         builder.addExecutionGraphNode(((DownsampleConfig.Builder)
             config.toBuilder())
             .setInterval(ds_interval)
+            .setSources(config.getSources())
             .build());
       } else {
         builder.addExecutionGraphNode(config);
       }
     }
+//    final SemanticQuery.Builder builder = config.getBaselineQuery().toBuilder()
+//        .setStart(Integer.toString(start - 300))
+//        .setEnd(Integer.toString(end));
     
-    System.out.println("  BASELINE Q: " + JSON.serializeToString(builder.build()));
+    LOG.info("  BASELINE Q: " + JSON.serializeToString(builder.build()));
     return SemanticQueryContext.newBuilder()
         .setTSDB(context.tsdb())
         .setLocalSinks((List<QuerySink>) Lists.newArrayList(sink))

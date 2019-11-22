@@ -191,10 +191,10 @@ public class JsonReadCacheSerdes implements ReadCacheSerdes,
     }
     
     final byte[] array = baos.toByteArray();
-    if (ctx != null && ctx.query().isTraceEnabled()) {
-      ctx.queryContext().logTrace("Caching single segment: " 
-          + new String(array, Const.UTF8_CHARSET));
-    }
+//    if (ctx != null && ctx.query().isTraceEnabled()) {
+//      ctx.queryContext().logTrace("Caching single segment: " 
+//          + new String(array, Const.UTF8_CHARSET));
+//    }
     return array;
   }
 
@@ -202,10 +202,10 @@ public class JsonReadCacheSerdes implements ReadCacheSerdes,
   public Map<String, ReadCacheQueryResult> deserialize(
       final QueryNode node, 
       final byte[] data) {
-    if (node.pipelineContext().query().isTraceEnabled()) {
-      node.pipelineContext().queryContext().logTrace("Parsing cached segment: " 
-          + new String(data, Const.UTF8_CHARSET));
-    }
+//    if (node.pipelineContext().query().isTraceEnabled()) {
+//      node.pipelineContext().queryContext().logTrace("Parsing cached segment: " 
+//          + new String(data, Const.UTF8_CHARSET));
+//    }
     Map<String, ReadCacheQueryResult> map = Maps.newHashMap();
     try {
       JsonNode results = JSON.getMapper().readTree(data);
@@ -1571,10 +1571,10 @@ public class JsonReadCacheSerdes implements ReadCacheSerdes,
         json.close();
         cache_data[i] = baos.toByteArray();
         
-        if (ctx != null && ctx.query().isTraceEnabled()) {
-          ctx.queryContext().logTrace("Caching sub segment: " 
-              + new String(cache_data[i], Const.UTF8_CHARSET));
-        }
+//        if (ctx != null && ctx.query().isTraceEnabled()) {
+//          ctx.queryContext().logTrace("Caching sub segment: " 
+//              + new String(cache_data[i], Const.UTF8_CHARSET));
+//        }
       } catch (Throwable t) {
         LOG.error("WTF?", t);
       }

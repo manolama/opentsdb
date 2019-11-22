@@ -49,23 +49,13 @@
          <dependency>
            <groupId>com.yahoo.egads</groupId>
            <artifactId>egads</artifactId>
-           <version>0.4.0</version>
+           <version>0.4.1</version>
          </dependency>
          <dependency>
            <groupId>org.slf4j</groupId>
            <artifactId>log4j-over-slf4j</artifactId>
            <version>1.7.7</version>
          </dependency>
-         <dependency>
-        <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-api</artifactId>
-        <version>2.3</version>
-      </dependency>
-            <dependency>
-        <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-core</artifactId>
-        <version>2.3</version>
-      </dependency>
       </dependencies>
    </dependencyManagement>
    
@@ -81,7 +71,7 @@
       <dependency>
         <groupId>com.yahoo.egads</groupId>
         <artifactId>egads</artifactId>
-<!--         <exclusions>
+        <exclusions>
           <exclusion>
             <groupId>org.apache.logging</groupId>
             <artifactId>log4j-core</artifactId>
@@ -90,19 +80,11 @@
             <groupId>org.apache.logging</groupId>
             <artifactId>log4j-api</artifactId>
           </exclusion>
-        </exclusions> -->
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>log4j-over-slf4j</artifactId>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-api</artifactId>
-      </dependency>
-            <dependency>
-        <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-core</artifactId>
       </dependency>
       
       <!-- TESTING Deps. -->

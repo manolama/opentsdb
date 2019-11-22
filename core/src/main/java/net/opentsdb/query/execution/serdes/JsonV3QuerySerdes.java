@@ -613,7 +613,8 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
         json.flush();
       } 
     } catch (Throwable t) {
-      LOG.error("WTF?", t);
+      LOG.error("WTF?: " + 
+          stream.toString(), t);
     } finally {
       lock.writeLock().unlock();
     }
