@@ -105,7 +105,7 @@ public class Schema implements WritableTimeSeriesDataStore {
   
   private final TSDB tsdb;
   private final String id;
-  private final Tsdb1xDataStore data_store;
+  public final Tsdb1xDataStore data_store;
   private final UniqueIdStore uid_store;
   
   private final UniqueId metrics;

@@ -107,7 +107,7 @@ public class Tsdb1xHBaseDataStore implements Tsdb1xDataStore, TimerTask {
   private final String id;
   
   /** The AsyncHBase client. */
-  private HBaseClient client;
+  public HBaseClient client;
   
   private Schema schema;
   

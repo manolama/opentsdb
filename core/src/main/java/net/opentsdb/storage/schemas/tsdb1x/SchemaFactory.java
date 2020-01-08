@@ -63,7 +63,7 @@ public class SchemaFactory extends BaseTSDBPlugin
   public static final String ROLLUP_KEY = "rollups.config";
   
   /** The default schema. */
-  protected Schema schema;
+  public Schema schema;
   
   /** The rollup config. */
   protected DefaultRollupConfig rollup_config;

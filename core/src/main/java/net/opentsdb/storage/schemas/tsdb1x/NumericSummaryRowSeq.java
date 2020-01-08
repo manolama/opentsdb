@@ -62,7 +62,7 @@ public class NumericSummaryRowSeq implements RowSeq {
   
   /** The data in qualifier/value/qualifier/value, etc order per summary 
    * type. */
-  protected Map<Integer, byte[]> summary_data;
+  public Map<Integer, byte[]> summary_data;
   
   /** The number of values in this row. */
   protected int dps;
