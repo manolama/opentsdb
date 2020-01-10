@@ -25,6 +25,7 @@ import org.junit.Test;
 
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
+import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.rollup.DefaultRollupConfig;
 import net.opentsdb.rollup.RollupInterval;
 import net.opentsdb.rollup.RollupUtils;
@@ -66,6 +67,38 @@ public class TestNumericSummarySpan {
         .addInterval(RAW)
         .addInterval(TENMIN)
         .build();
+  }
+  
+  @Test
+  public void foo() throws Exception {
+    byte[] row = new byte[] { 0, 113, 20, -6, 0, -127, 20, -62, 0, -111, 20, -57, 0, -95, 20, -24, 0, -79, 21, 68, 0, -63, 21, 20, 0, -47, 20, -126, 0, -31, 20, -102, 0, -15, 20, -107, 1, 1, 20, -110, 1, 17, 20, -124, 1, 33, 20, -106, 1, 49, 20, -61, 1, 65, 20, -50, 1, 81, 20, 99, 1, 97, 20, 84, 20, 84, 1, 113, 20, 42 };
+    NumericSummarySpan span = new NumericSummarySpan(false);
+    
+    RollupInterval hr = RollupInterval.builder()
+        .setTable(ROLLUP_TABLE)
+        .setPreAggregationTable(PREAGG_TABLE)
+        .setInterval("1h")
+        .setRowSpan("1d")
+        .build();
+    hr.setConfig(CONFIG);
+    
+    NumericSummaryRowSeq seq = new NumericSummaryRowSeq(BASE_TIME, hr);
+    seq.addColumn((byte) 5, new byte[] { 0 }, row);
+    seq.dedupe(false, false);
+    span.addSequence(seq, false);
+    
+    Iterator<TimeSeriesValue<?>> it = span.iterator();
+    System.out.println(" HAS NEXT: " + it.hasNext());
+    while (it.hasNext()) {
+      TimeSeriesValue<NumericSummaryType> v = (TimeSeriesValue<NumericSummaryType>) it.next();
+      System.out.print(v.timestamp().epoch() + " ");
+      NumericType t = v.value().value(0);
+      if (t.isInteger()) {
+        System.out.println("LONG: " + t.longValue());
+      } else {
+        System.out.println("DOUBLE: " + t.toDouble());
+      }
+    }
   }
   
   @Test

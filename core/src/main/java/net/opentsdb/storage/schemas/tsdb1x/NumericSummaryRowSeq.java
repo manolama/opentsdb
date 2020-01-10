@@ -64,6 +64,9 @@ public class NumericSummaryRowSeq implements RowSeq {
    * type. */
   public Map<Integer, byte[]> summary_data;
   
+  
+  public Map<Integer, byte[]> pre;
+  
   /** The number of values in this row. */
   protected int dps;
   
@@ -154,7 +157,8 @@ public class NumericSummaryRowSeq implements RowSeq {
       final byte[] copy;
       if (offset_start < 0) {
         copy = new byte[data.length + value.length];
-        System.arraycopy(value, 0, data, data.length, value.length);
+        System.arraycopy(data, 0, copy, 0, data.length);
+        System.arraycopy(value, 0, copy, data.length, value.length);
         size += value.length;
         // get dps
         int i = 0;
@@ -220,9 +224,11 @@ public class NumericSummaryRowSeq implements RowSeq {
     dps = 0;
     size = 0;
     ChronoUnit resolution = null;
+    pre = Maps.newHashMap();
     final Iterator<Entry<Integer, byte[]>> it = summary_data.entrySet().iterator();
     while (it.hasNext()) {
       final Entry<Integer, byte[]> entry = it.next();
+      pre.put(entry.getKey(), Arrays.copyOf(entry.getValue(), entry.getValue().length));
       int local_dps = 0;
       // first pass, see if we even need to dedupe
       long last_offset = -1;
@@ -281,7 +287,12 @@ public class NumericSummaryRowSeq implements RowSeq {
       int vlen;
       long encoded_value = 0;
       while (idx < data.length) {
+        try {
         current_offset = RollupUtils.getOffsetFromRollupQualifier(data, idx, interval);
+        } catch (ArrayIndexOutOfBoundsException e) {
+          System.out.println("DOH!  DL: " + data.length + "  IDX: " + idx + "  INT: " + interval);
+          return null;
+        }
         /*if ((data[idx] & NumericCodec.NS_BYTE_FLAG) == 
             NumericCodec.NS_BYTE_FLAG) {
           current_offset = NumericCodec.offsetFromNanoQualifier(data, idx);
@@ -307,10 +318,14 @@ public class NumericSummaryRowSeq implements RowSeq {
         }
         
         // now copy the data into the buffer then store it
+        Long extant = null;
         if (keep_earliest) {
-          map.putIfAbsent(current_offset, encoded_value);
+          extant = map.putIfAbsent(current_offset, encoded_value);
         } else {
-          map.put(current_offset, encoded_value);
+          extant = map.put(current_offset, encoded_value);
+        }
+        if (extant != null) {
+          //System.out.println("[WARN] (" + System.identityHashCode(this) + ") Replacing value at " + current_offset + "  Was " + extant + " Now " + encoded_value);
         }
       }
       
@@ -330,7 +345,13 @@ public class NumericSummaryRowSeq implements RowSeq {
         final long value = iterator.next().getValue();
         offset = (int) (value >> 32);
         width = (int) value;
-        System.arraycopy(data, offset, sorted, idx, width);
+        try {
+          System.arraycopy(data, offset, sorted, idx, width);
+        } catch (ArrayIndexOutOfBoundsException e) {
+          System.out.println("[ERROR] OFF=" + offset + "  idx=" + idx + "  DL: " + data.length + "   SRL: " + sorted.length + "  W: " + width);
+          throw new RuntimeException("BOO!", e);
+          //return null;
+        }
         idx += width;
         local_dps++;
       }

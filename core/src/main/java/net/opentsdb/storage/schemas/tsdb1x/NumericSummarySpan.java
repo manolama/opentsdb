@@ -201,6 +201,7 @@ public class NumericSummarySpan implements Span<NumericSummaryType> {
       
       // now set our data
       final NumericSummaryRowSeq row = rows.get(rows_idx);
+      boolean foobar = false;
       for (final Entry<Integer, byte[]> entry : row.summary_data.entrySet()) {
         final byte[] data = entry.getValue();
         Integer row_idx = row_idxs.get(entry.getKey());
@@ -241,13 +242,21 @@ public class NumericSummarySpan implements Span<NumericSummaryType> {
           }
         } catch (IllegalDataException e) {
           // TODO - WTF? What now?
+          System.out.println("WTF?!?!?!?! BAD DATA: " + e.getMessage());
           dp.set(Double.NaN);
+          row_idx = Integer.MAX_VALUE;
+          has_next = false;
+          foobar = true;
+          break;
         }
         
         row_idxs.put(entry.getKey(), row_idx);
       }
       ts.update(row.base_timestamp, current_offset * 1000L * 1000L);
       
+      if (foobar) {
+        return this;
+      }
       // before returning, find out if we have more data.
       current_offset = nextOffset();
       if (current_offset == (reversed ? Long.MIN_VALUE : Long.MAX_VALUE)) {
