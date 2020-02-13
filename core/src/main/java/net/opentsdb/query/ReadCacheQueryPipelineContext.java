@@ -44,6 +44,10 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.data.TimeStamp;
+import net.opentsdb.pools.ArrayObjectPool;
+import net.opentsdb.pools.DoubleArrayPool;
+import net.opentsdb.pools.LongArrayPool;
+import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.query.TimeSeriesQuery.CacheMode;
 import net.opentsdb.query.execution.serdes.JsonV2QuerySerdesOptions;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
@@ -1291,4 +1295,5 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
     }
     return ids;
   }
+
 }

@@ -30,6 +30,10 @@ import net.opentsdb.auth.AuthState;
 import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.pools.ArrayObjectPool;
+import net.opentsdb.pools.DoubleArrayPool;
+import net.opentsdb.pools.LongArrayPool;
+import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.query.TimeSeriesQuery.CacheMode;
 import net.opentsdb.query.TimeSeriesQuery.LogLevel;
 import net.opentsdb.query.filter.NamedFilter;
@@ -384,7 +388,7 @@ public abstract class BaseQueryContext implements QueryContext {
    * Simple pipeline implementation.
    */
   protected class LocalPipeline extends AbstractQueryPipelineContext {
-
+    
     public LocalPipeline(final QueryContext context, 
                          final List<QuerySink> direct_sinks) {
       super(context);

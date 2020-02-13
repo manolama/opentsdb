@@ -29,6 +29,7 @@ import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregator;
 import net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregatorFactory;
 import net.opentsdb.exceptions.QueryDownstreamException;
+import net.opentsdb.pools.PooledObject;
 import net.opentsdb.query.QueryIterator;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
@@ -188,8 +189,9 @@ public class GroupByNumericArrayIterator
       // TODO: Need to check if it makes sense to make this threshold configurable
       final int aggrCount = Math.min(sources.size(), threadCount);
       NumericArrayAggregator[] valuesCombiner = new NumericArrayAggregator[aggrCount];
+      PooledObject[] pooled_arrays = new PooledObject[aggrCount];
       for (int i = 0; i < valuesCombiner.length; i++) {
-        valuesCombiner[i] = createAggregator(node, factory, size);
+        valuesCombiner[i] = createAggregator(node, factory, size, pooled_arrays, i);
       }
 
       this.statsCollector = tsdb.getStatsCollector();
@@ -199,10 +201,10 @@ public class GroupByNumericArrayIterator
           logger.trace("Accumulate in parallel, source size {}", sources.size());
         }
         if (sources instanceof List) {
-          accumulateInParallel((List) sources, valuesCombiner);
+          accumulateInParallel((List) sources, valuesCombiner, pooled_arrays);
         } else {
           logger.debug("Accumulation of type {}", sources.getClass().getName());
-          accumulateInParallel(sources, valuesCombiner);
+          accumulateInParallel(sources, valuesCombiner, pooled_arrays);
         }
       } else {
         if (logger.isTraceEnabled()) {
@@ -211,6 +213,14 @@ public class GroupByNumericArrayIterator
         for (TimeSeries source : sources) {
           accumulate(source, null);
         }
+        
+        if (pooled_arrays != null) {
+          for (int x = 0; x < pooled_arrays.length; x++) {
+            if (pooled_arrays[x] != null) {
+              pooled_arrays[x].release();
+            }
+          }
+        }
       }
     } catch (Throwable throwable) {
       logger.error("Error constructing the GroupByNumericArrayIterator", throwable);
@@ -218,8 +228,21 @@ public class GroupByNumericArrayIterator
     }
   }
 
-  private NumericArrayAggregator createAggregator(
-      final QueryNode node, final NumericArrayAggregatorFactory factory, final int size) {
+  /**
+   * Instantiate an aggregator with pooled arrays if possible.
+   * @param node The group by node.
+   * @param factory The agg factory to use.
+   * @param size The size of the array we need.
+   * @param pooled_arrays The pooled object array to set if used.
+   * @param index The index into the pooled array.
+   * @return The instantiated aggregator.
+   */
+  protected NumericArrayAggregator createAggregator(
+      final QueryNode node, 
+      final NumericArrayAggregatorFactory factory, 
+      final int size,
+      final PooledObject[] pooled_arrays,
+      final int index) {
     NumericArrayAggregator aggregator =
         factory.newAggregator(((GroupByConfig) node.config()).getInfectiousNan());
     if (aggregator == null) {
@@ -227,9 +250,20 @@ public class GroupByNumericArrayIterator
           "No aggregator found of type: " + ((GroupByConfig) node.config()).getAggregator());
     }
     if(aggregator.isInteger()) {
-      aggregator.accumulate(new long[size]);
+      if (node.pipelineContext().longPool() != null) {
+        pooled_arrays[index] = result.node.pipelineContext().longPool().claim(size);
+        aggregator.accumulate((long[]) pooled_arrays[index].object());
+      } else {
+        aggregator.accumulate(new long[size]);
+      }
     } else {
-      double[] nans = new double[size];
+      final double[] nans;
+      if (node.pipelineContext().doublePool() != null) {
+        pooled_arrays[index] = result.node.pipelineContext().doublePool().claim(size);
+        nans = (double[]) pooled_arrays[index].object();
+      } else {
+        nans = new double[size];
+      }
       Arrays.fill(nans, Double.NaN);
       aggregator.accumulate(nans);
     }
@@ -237,7 +271,8 @@ public class GroupByNumericArrayIterator
   }
 
   private void accumulateInParallel(final Collection<TimeSeries> sources, 
-                                    final NumericArrayAggregator[] combiners) {
+                                    final NumericArrayAggregator[] combiners,
+                                    final PooledObject[] pooled_arrays) {
     List<Future<TimeSeriesValue<NumericArrayType>>> futures = new ArrayList<>(sources.size());
     int i = 0;
 
@@ -284,10 +319,19 @@ public class GroupByNumericArrayIterator
       aggregator.combine(combiner);
     }
 
+    if (pooled_arrays != null) {
+      for (int x = 0; x < pooled_arrays.length; x++) {
+        if (pooled_arrays[x] != null) {
+          pooled_arrays[x].release();
+        }
+      }
+    }
   }
 
   private void accumulateInParallel(
-      final List<TimeSeries> tsList, final NumericArrayAggregator[] combiners) {
+      final List<TimeSeries> tsList, 
+      final NumericArrayAggregator[] combiners, 
+      final PooledObject[] pooled_arrays) {
 
     final int tsCount = tsList.size();
     final int jobCount = (int) Math.ceil((double) tsCount / timeSeriesPerJob);
@@ -335,6 +379,14 @@ public class GroupByNumericArrayIterator
 
     for (NumericArrayAggregator combiner : combiners) {
       aggregator.combine(combiner);
+    }
+    
+    if (pooled_arrays != null) {
+      for (int x = 0; x < pooled_arrays.length; x++) {
+        if (pooled_arrays[x] != null) {
+          pooled_arrays[x].release();
+        }
+      }
     }
   }
 

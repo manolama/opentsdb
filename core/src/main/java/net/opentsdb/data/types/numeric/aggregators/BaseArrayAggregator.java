@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2018  The OpenTSDB Authors.
+// Copyright (C) 2018-2020  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.types.numeric.NumericArrayType;
+import net.opentsdb.pools.PooledObject;
 
 import java.util.Arrays;
 
@@ -30,6 +31,9 @@ public abstract class BaseArrayAggregator implements NumericArrayAggregator {
 
   /** Whether or not infectious NaNs are enabled. */
   protected final boolean infectious_nans;
+  
+  /** An optional pooled obj to release. */
+  protected PooledObject pooled;
   
   /** The long accumulator. */
   protected long[] long_accumulator;
@@ -56,15 +60,12 @@ public abstract class BaseArrayAggregator implements NumericArrayAggregator {
   }
 
   @Override
-  public void combine(NumericArrayAggregator aggregator) {
-    double[] double_accumulator = ((BaseArrayAggregator) aggregator).double_accumulator;
-    long[] long_accumulator = ((BaseArrayAggregator) aggregator).long_accumulator;
-
-    if (double_accumulator != null) {
-      accumulate(double_accumulator);
+  public void combine(final NumericArrayAggregator aggregator) {
+    if (((BaseArrayAggregator) aggregator).double_accumulator != null) {
+      accumulate(((BaseArrayAggregator) aggregator).double_accumulator);
     }
-    if (long_accumulator != null) {
-      accumulate(long_accumulator);
+    if (((BaseArrayAggregator) aggregator).long_accumulator != null) {
+      accumulate(((BaseArrayAggregator) aggregator).long_accumulator);
     }
   }
 
@@ -113,4 +114,10 @@ public abstract class BaseArrayAggregator implements NumericArrayAggregator {
     }
   }
 
+  @Override
+  public void close() {
+    if (pooled != null) {
+      pooled.release();
+    }
+  }
 }

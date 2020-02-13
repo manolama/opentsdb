@@ -22,6 +22,7 @@ import com.stumbleupon.async.Deferred;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.pools.ArrayObjectPool;
 import net.opentsdb.stats.Span;
 
 /**
@@ -159,5 +160,9 @@ public interface QueryPipelineContext extends QueryNode {
    * Releases all resources held by the query graph.
    */
   public void close();
+  
+  public ArrayObjectPool longPool();
+  
+  public ArrayObjectPool doublePool();
   
 }

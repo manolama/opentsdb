@@ -50,6 +50,7 @@ import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.data.TimeSeriesDataSourceFactory;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.pools.ArrayObjectPool;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
 import net.opentsdb.query.filter.MetricLiteralFilter;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
@@ -592,6 +593,18 @@ public class TestAbstractQueryPipelineContext {
     @Override
     public Deferred<Void> initialize(Span span) {
       return initializeGraph(span);
+    }
+
+    @Override
+    public ArrayObjectPool longPool() {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public ArrayObjectPool doublePool() {
+      // TODO Auto-generated method stub
+      return null;
     }
     
   }

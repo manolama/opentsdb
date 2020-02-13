@@ -19,13 +19,60 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.util.Arrays;
+
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+import net.opentsdb.pools.ArrayObjectPool;
+import net.opentsdb.pools.DefaultObjectPoolConfig;
+import net.opentsdb.pools.DoubleArrayPool;
+import net.opentsdb.pools.IntArrayPool;
+import net.opentsdb.pools.LongArrayPool;
+import net.opentsdb.pools.MockArrayObjectPool;
+
 public class TestArrayAverage {
+  
+  private static ArrayAverageFactory NON_POOLED;
+  private static ArrayAverageFactory POOLED;
+  private static ArrayObjectPool INT_POOL;
+  private static ArrayObjectPool LONG_POOL;
+  private static ArrayObjectPool DOUBLE_POOL;
+  
+  @BeforeClass
+  public static void beforeClass() {
+    NON_POOLED = mock(ArrayAverageFactory.class);
+    POOLED = mock(ArrayAverageFactory.class);
+    INT_POOL = new MockArrayObjectPool(DefaultObjectPoolConfig.newBuilder()
+        .setAllocator(new IntArrayPool())
+        .setInitialCount(4)
+        .setArrayLength(5)
+        .setId(IntArrayPool.TYPE)
+        .build());
+    LONG_POOL = new MockArrayObjectPool(DefaultObjectPoolConfig.newBuilder()
+        .setAllocator(new LongArrayPool())
+        .setInitialCount(4)
+        .setArrayLength(5)
+        .setId(LongArrayPool.TYPE)
+        .build());
+    DOUBLE_POOL = new MockArrayObjectPool(DefaultObjectPoolConfig.newBuilder()
+        .setAllocator(new DoubleArrayPool())
+        .setInitialCount(4)
+        .setArrayLength(5)
+        .setId(DoubleArrayPool.TYPE)
+        .build());
+    when(POOLED.intPool()).thenReturn(INT_POOL);
+    when(POOLED.longPool()).thenReturn(LONG_POOL);
+    when(POOLED.doublePool()).thenReturn(DOUBLE_POOL);
+  }
+  
   @Test
   public void longs() {
-    ArrayAverageFactory.ArrayAverage agg = new ArrayAverageFactory.ArrayAverage(false);
+    ArrayAverageFactory.ArrayAverage agg = 
+        new ArrayAverageFactory.ArrayAverage(false, NON_POOLED);
     agg.accumulate(new long[] { 42, -24, 0, 1 });
     agg.accumulate(new long[] { 3, -13, 5, -1 });
     
@@ -35,7 +82,7 @@ public class TestArrayAverage {
     assertEquals(4, agg.end());
     assertArrayEquals(new double[] { 22.5, -18.5, 2.5, 0 }, agg.doubleArray(), 0.001);
     
-    agg = new ArrayAverageFactory.ArrayAverage(false);
+    agg = new ArrayAverageFactory.ArrayAverage(false, NON_POOLED);
     agg.accumulate(new long[] { });
     agg.accumulate(new long[] { });
     
@@ -46,7 +93,40 @@ public class TestArrayAverage {
     assertArrayEquals(new double[] { }, agg.doubleArray(), 0.001);
     
     // bad length
-    agg = new ArrayAverageFactory.ArrayAverage(false);
+    agg = new ArrayAverageFactory.ArrayAverage(false, NON_POOLED);
+    agg.accumulate(new long[] { 42, -24, 0, 1 });
+    try {
+      agg.accumulate(new long[] { 1 });
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+  }
+  
+  @Test
+  public void longsPooled() {
+    ArrayAverageFactory.ArrayAverage agg = 
+        new ArrayAverageFactory.ArrayAverage(false, POOLED);
+    agg.accumulate(new long[] { 42, -24, 0, 1 });
+    agg.accumulate(new long[] { 3, -13, 5, -1 });
+    
+    assertFalse(agg.isInteger());
+    assertNull(agg.longArray());
+    assertEquals(0, agg.offset());
+    assertEquals(4, agg.end());
+    System.out.println(Arrays.toString(agg.doubleArray()));
+    assertPooledArrayEquals(new double[] { 22.5, -18.5, 2.5, 0 }, agg.doubleArray(), 0.001);
+    
+    agg = new ArrayAverageFactory.ArrayAverage(false, POOLED);
+    agg.accumulate(new long[] { });
+    agg.accumulate(new long[] { });
+    
+    assertFalse(agg.isInteger());
+    assertNull(agg.longArray());
+    assertEquals(0, agg.offset());
+    assertEquals(0, agg.end());
+    assertPooledArrayEquals(new double[] { }, agg.doubleArray(), 0.001);
+    
+    // bad length
+    agg = new ArrayAverageFactory.ArrayAverage(false, POOLED);
     agg.accumulate(new long[] { 42, -24, 0, 1 });
     try {
       agg.accumulate(new long[] { 1 });
@@ -260,4 +340,11 @@ public class TestArrayAverage {
     assertArrayEquals(new int[] {2, 0, 0, 1}, agg.counts);
   }
 
+  public static void assertPooledArrayEquals(final double[] expected, 
+                                             final double[] tested,
+                                             final double epsilon) {
+    final double[] copy = Arrays.copyOf(tested, expected.length);
+    assertArrayEquals(expected, copy, epsilon);
+  }
+  
 }

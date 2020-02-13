@@ -21,6 +21,11 @@ import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.AggregatorConfig;
+import net.opentsdb.pools.ArrayObjectPool;
+import net.opentsdb.pools.DoubleArrayPool;
+import net.opentsdb.pools.IntArrayPool;
+import net.opentsdb.pools.LongArrayPool;
+import net.opentsdb.pools.PooledObject;
 
 /**
  * Computes the average across the array. Returns a double array always.
@@ -31,6 +36,10 @@ public class ArrayAverageFactory extends BaseArrayFactory {
 
   public static final String TYPE = "Avg";
   
+  private ArrayObjectPool long_pool;
+  private ArrayObjectPool double_pool;
+  private ArrayObjectPool int_pool;
+  
   @Override
   public String type() {
     return TYPE;
@@ -38,20 +47,21 @@ public class ArrayAverageFactory extends BaseArrayFactory {
   
   @Override
   public NumericArrayAggregator newAggregator() {
-    return new ArrayAverage(false);
+    return new ArrayAverage(false, this);
   }
   
   @Override
   public NumericArrayAggregator newAggregator(final AggregatorConfig config) {
     if (config != null && config instanceof NumericAggregatorConfig) {
-      return new ArrayAverage(((NumericAggregatorConfig) config).infectiousNan());
+      return new ArrayAverage(
+          ((NumericAggregatorConfig) config).infectiousNan(), this);
     }
-    return new ArrayAverage(false);
+    return new ArrayAverage(false, this);
   }
   
   @Override
   public NumericArrayAggregator newAggregator(final boolean infectious_nan) {
-    return new ArrayAverage(infectious_nan);
+    return new ArrayAverage(infectious_nan, this);
   }
 
   @Override
@@ -59,16 +69,37 @@ public class ArrayAverageFactory extends BaseArrayFactory {
     this.id = Strings.isNullOrEmpty(id) ? TYPE : id;
     tsdb.getRegistry().registerPlugin(NumericArrayAggregatorFactory.class, 
         "average", this);
+    long_pool = (ArrayObjectPool) tsdb.getRegistry().getObjectPool(LongArrayPool.TYPE);
+    double_pool = (ArrayObjectPool) tsdb.getRegistry().getObjectPool(DoubleArrayPool.TYPE);
+    int_pool = (ArrayObjectPool) tsdb.getRegistry().getObjectPool(IntArrayPool.TYPE);
     return Deferred.fromResult(null);
+  }
+  
+  /** Getters for UTs. */
+  ArrayObjectPool longPool() {
+    return long_pool;
+  }
+  
+  ArrayObjectPool doublePool() {
+    return double_pool;
+  }
+  
+  ArrayObjectPool intPool() {
+    return int_pool;
   }
   
   public static class ArrayAverage extends BaseArrayAggregator {
 
+    protected final ArrayAverageFactory factory;
     protected int[] counts;
+    protected PooledObject int_pooled;
     protected double[] results;
+    protected int end;
     
-    public ArrayAverage(final boolean infectious_nans) {
+    public ArrayAverage(final boolean infectious_nans,
+                        final ArrayAverageFactory factory) {
       super(infectious_nans);
+      this.factory = factory;
     }
 
     @Override
@@ -76,14 +107,29 @@ public class ArrayAverageFactory extends BaseArrayFactory {
                            final int from, 
                            final int to) {
       if (double_accumulator == null && long_accumulator == null) {
-        long_accumulator = Arrays.copyOfRange(values, from, to);
-        counts = new int[to - from];
-        Arrays.fill(counts, 1);
+        if (factory.longPool() != null) {
+          pooled = factory.longPool().claim(to - from);
+          if (factory.intPool() != null) {
+            int_pooled = factory.intPool().claim(to - from);
+            counts = (int[]) int_pooled.object();
+          } else {
+            counts = new int[to - from];
+          }
+          
+          long_accumulator = (long[]) pooled.object();
+          System.arraycopy(values, from, long_accumulator, 0, to - from);
+        } else {
+          long_accumulator = Arrays.copyOfRange(values, from, to);
+          counts = new int[to - from];
+        }
+        end = to - from;
+        Arrays.fill(counts, 0, end, 1);
+        System.out.println("      " + Arrays.toString(long_accumulator));
         return;
       }
       
       if (long_accumulator != null) {
-        if (to - from != long_accumulator.length) {
+        if (to - from != end) {
           throw new IllegalArgumentException("Values of length " 
               + (to - from) + " did not match the original lengh of " 
               + long_accumulator.length);
@@ -105,10 +151,15 @@ public class ArrayAverageFactory extends BaseArrayFactory {
           double_accumulator[idx++] += values[i];
         }
       }
+      
+      System.out.println("      " + Arrays.toString(long_accumulator));
     }
 
     @Override
-    public void accumulate(double value, int idx) {
+    public void accumulate(final double value, final int idx) {
+      if (double_accumulator == null) {
+        throw new IllegalStateException("The accumulator has not been initialized.");
+      }
       if (Double.isNaN(value)) {
         if (infectious_nans && !Double.isNaN(double_accumulator[idx])) {
           double_accumulator[idx] = Double.NaN;
@@ -131,9 +182,21 @@ public class ArrayAverageFactory extends BaseArrayFactory {
                            final int from, 
                            final int to) {
       if (double_accumulator == null && long_accumulator == null) {
-        double_accumulator = Arrays.copyOfRange(values, from, to);
-        counts = new int[double_accumulator.length];
-
+        if (factory.doublePool() != null) {
+          pooled = factory.doublePool().claim(to - from);
+          if (factory.intPool() != null) {
+            int_pooled = factory.intPool().claim(to - from);
+            counts = (int[]) int_pooled.object();
+          } else {
+            counts = new int[to - from];
+          }
+          
+          double_accumulator = (double[]) pooled.object();
+          System.arraycopy(double_accumulator, 0, values, from, to - from);
+        } else {
+          double_accumulator = Arrays.copyOfRange(values, from, to);
+          counts = new int[double_accumulator.length];
+        }
         for (int i = 0; i < double_accumulator.length; i++) {
           if(!Double.isNaN(double_accumulator[i])){
             counts[i] = 1;
@@ -143,11 +206,22 @@ public class ArrayAverageFactory extends BaseArrayFactory {
       }
       
       if (double_accumulator == null) {
-        double_accumulator = new double[long_accumulator.length];
+        PooledObject double_pooled = null;
+        if (factory.doublePool() != null) {
+          double_pooled = factory.doublePool().claim(long_accumulator.length);
+          double_accumulator = (double[]) double_pooled.object();
+        } else {
+          double_accumulator = new double[long_accumulator.length];
+        }
         for (int i = 0; i < long_accumulator.length; i++) {
           double_accumulator[i] = long_accumulator[i];
         }
         long_accumulator = null;
+        
+        if (double_pooled != null) {
+          pooled.release();
+          pooled = double_pooled;
+        }
       }
       
       if (to - from != double_accumulator.length) {
@@ -164,7 +238,7 @@ public class ArrayAverageFactory extends BaseArrayFactory {
     }
 
     @Override
-    public void combine(NumericArrayAggregator aggregator) {
+    public void combine(final NumericArrayAggregator aggregator) {
       ArrayAverage arrayAverage = (ArrayAverage) aggregator;
       double[] double_accumulator = arrayAverage.double_accumulator;
       long[] long_accumulator = arrayAverage.long_accumulator;
@@ -178,10 +252,23 @@ public class ArrayAverageFactory extends BaseArrayFactory {
       }
     }
 
-    private void combine(long[] values, int[] counts) {
+    private void combine(final long[] values, final int[] counts) {
       if (this.long_accumulator == null) {
-        this.long_accumulator = Arrays.copyOfRange(values, 0, values.length);
-        this.counts = Arrays.copyOfRange(counts, 0, counts.length);
+        if (factory.longPool() != null) {
+          pooled = factory.longPool().claim(values.length);
+          if (factory.intPool() != null) {
+            int_pooled = factory.intPool().claim(counts.length);
+            this.counts = (int[]) int_pooled.object();
+          } else {
+            this.counts = new int[counts.length];
+          }
+          
+          long_accumulator = (long[]) pooled.object();
+          System.arraycopy(long_accumulator, 0, values, 0, values.length);
+        } else {
+          this.long_accumulator = Arrays.copyOfRange(values, 0, values.length);
+          this.counts = Arrays.copyOfRange(counts, 0, counts.length);
+        }
       } else {
         for (int i = 0; i < values.length; i++) {
           this.long_accumulator[i] += values[i];
@@ -190,10 +277,23 @@ public class ArrayAverageFactory extends BaseArrayFactory {
       }
     }
 
-    private void combine(double[] values, int[] counts) {
+    private void combine(final double[] values, final int[] counts) {
       if (this.double_accumulator == null) {
-        this.double_accumulator = Arrays.copyOfRange(values, 0, values.length);
-        this.counts = Arrays.copyOfRange(counts, 0, counts.length);
+        if (factory.doublePool() != null) {
+          pooled = factory.doublePool().claim(values.length);
+          if (factory.intPool() != null) {
+            int_pooled = factory.intPool().claim(counts.length);
+            this.counts = (int[]) int_pooled.object();
+          } else {
+            this.counts = new int[counts.length];
+          }
+          
+          double_accumulator = (double[]) pooled.object();
+          System.arraycopy(double_accumulator, 0, values, 0, values.length);
+        } else {
+          this.double_accumulator = Arrays.copyOfRange(values, 0, values.length);
+          this.counts = Arrays.copyOfRange(counts, 0, counts.length);
+        }
       } else {
         for (int i = 0; i < values.length; i++) {
           double value = values[i];
@@ -247,14 +347,20 @@ public class ArrayAverageFactory extends BaseArrayFactory {
     
     @Override
     public int end() {
-      return counts.length;
+      return end;
     }
-
     
     @Override
     public String name() {
       return ArrayAverageFactory.TYPE;
     }
     
+    @Override
+    public void close() {
+      super.close();
+      if (int_pooled != null) {
+        int_pooled.release();
+      }
+    }
   }
 }

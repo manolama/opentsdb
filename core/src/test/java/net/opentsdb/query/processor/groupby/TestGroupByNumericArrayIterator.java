@@ -73,7 +73,8 @@ import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.pojo.FillPolicy;
 
 public class TestGroupByNumericArrayIterator {
-
+  private static final long BASE_TIME = 1514764800000L;
+  
   public static MockTSDB TSDB;
   public static NumericInterpolatorConfig NUMERIC_CONFIG;
   private static GroupByFactory groupByFactory;
@@ -497,10 +498,7 @@ public class TestGroupByNumericArrayIterator {
 
   @Test
   public void testAccumulationInParallel() {
-
-    final long BASE_TIME = 1514764800000L;
-
-    DownsampleConfig dsConfig =
+DownsampleConfig dsConfig =
         DownsampleConfig.newBuilder()
             .setAggregator("sum")
             .setId("foo")

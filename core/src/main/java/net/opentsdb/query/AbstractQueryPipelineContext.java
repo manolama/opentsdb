@@ -24,6 +24,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import net.opentsdb.data.types.status.StatusGroupQueryResult;
 import net.opentsdb.data.types.status.Summary;
+import net.opentsdb.pools.ArrayObjectPool;
+import net.opentsdb.pools.DoubleArrayPool;
+import net.opentsdb.pools.LongArrayPool;
+import net.opentsdb.pools.ObjectPool;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,6 +91,9 @@ public abstract class AbstractQueryPipelineContext implements
    * than once. */
   protected final AtomicBoolean complete;
   
+  protected final ArrayObjectPool long_pool;
+  protected final ArrayObjectPool double_pool;
+  
   /** Used to iterate over sources when in a client streaming mode. */
   protected int source_idx = 0;
   
@@ -121,6 +129,12 @@ public abstract class AbstractQueryPipelineContext implements
     finished_sources = Maps.newConcurrentMap();
     total_finished = new AtomicInteger();
     ids = Maps.newConcurrentMap();
+    ObjectPool temp = context.tsdb().getRegistry().getObjectPool(
+        LongArrayPool.TYPE);
+    long_pool = temp != null ? (ArrayObjectPool) temp : null;
+    temp = context.tsdb().getRegistry().getObjectPool(
+        DoubleArrayPool.TYPE);
+    double_pool = temp != null ? (ArrayObjectPool) temp : null;
   }
   
   @Override
@@ -672,6 +686,16 @@ public abstract class AbstractQueryPipelineContext implements
         LOG.error("Failed to close result: " + result, t);
       }
     }
+  }
+  
+  @Override
+  public ArrayObjectPool longPool() {
+    return long_pool;
+  }
+  
+  @Override
+  public ArrayObjectPool doublePool() {
+    return double_pool;
   }
   
   /**
