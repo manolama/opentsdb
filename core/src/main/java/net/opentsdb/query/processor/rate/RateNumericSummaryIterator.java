@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.rate;
 
+import java.io.IOException;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Map;
@@ -130,6 +131,11 @@ public class RateNumericSummaryIterator implements QueryIterator {
   @Override
   public TypeToken<? extends TimeSeriesDataType> getType() {
     return NumericSummaryType.TYPE;
+  }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
   }
   
   /**

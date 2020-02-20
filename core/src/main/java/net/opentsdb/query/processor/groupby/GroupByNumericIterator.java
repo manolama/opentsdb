@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.groupby;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Map;
 
@@ -188,6 +189,11 @@ public class GroupByNumericIterator implements QueryIterator,
     return NumericType.TYPE;
   }
 
+  @Override
+  public void close() throws IOException {
+    // no-op for now
+  }
+  
   @Override
   public boolean hasNext() {
     return has_next;

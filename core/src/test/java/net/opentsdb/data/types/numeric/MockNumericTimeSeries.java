@@ -25,6 +25,7 @@ import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import org.junit.Ignore;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -128,6 +129,11 @@ public class MockNumericTimeSeries implements TimeSeries {
     @Override
     public TypeToken<? extends TimeSeriesDataType> getType() {
       return NumericType.TYPE;
+    }
+    
+    @Override
+    public void close() throws IOException {
+      // no-op for now
     }
     
   }

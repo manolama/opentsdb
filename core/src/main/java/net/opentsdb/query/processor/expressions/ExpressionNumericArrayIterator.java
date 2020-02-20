@@ -14,6 +14,7 @@
 //limitations under the License.
 package net.opentsdb.query.processor.expressions;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -239,6 +240,11 @@ public class ExpressionNumericArrayIterator extends
     return NumericArrayType.TYPE;
   }
 
+  @Override
+  public void close() throws IOException {
+    // no-op for now
+  }
+  
   @Override
   public int offset() {
     return 0;

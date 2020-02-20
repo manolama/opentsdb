@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.data;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
@@ -169,6 +170,11 @@ public class MockTimeSeries implements TimeSeries {
     @Override
     public TypeToken<? extends TimeSeriesDataType> getType() {
       return type;
+    }
+    
+    @Override
+    public void close() throws IOException {
+      // no-op for now
     }
     
   }

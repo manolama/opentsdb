@@ -14,6 +14,8 @@
 // limitations under the License.
 package net.opentsdb.query.processor.summarizer;
 
+import java.io.IOException;
+
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.TimeSeriesDataType;
@@ -58,6 +60,11 @@ public class SummarizerPassThroughNumericArrayIterator implements QueryIterator 
   @Override
   public TypeToken getType() {
     return NumericArrayType.TYPE;
+  }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
   }
   
 }

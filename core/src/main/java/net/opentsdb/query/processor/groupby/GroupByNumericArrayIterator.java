@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
 import net.opentsdb.utils.BigSmallLinkedBlockingQueue;
+import net.opentsdb.utils.TSDBQueryQueue;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
@@ -29,6 +30,7 @@ import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregator;
 import net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregatorFactory;
 import net.opentsdb.exceptions.QueryDownstreamException;
+import net.opentsdb.exceptions.QueryExecutionException;
 import net.opentsdb.pools.PooledObject;
 import net.opentsdb.query.QueryIterator;
 import net.opentsdb.query.QueryNode;
@@ -38,6 +40,7 @@ import net.opentsdb.stats.StatsCollector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAmount;
 import java.util.ArrayList;
@@ -62,8 +65,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class GroupByNumericArrayIterator
     implements QueryIterator, TimeSeriesValue<NumericArrayType> {
-
-  private static final Logger logger = LoggerFactory.getLogger(
+  private static final Logger LOG = LoggerFactory.getLogger(
       GroupByNumericArrayIterator.class);
 
   protected static final int NUM_THREADS = 8;
@@ -88,7 +90,7 @@ public class GroupByNumericArrayIterator
 
   private StatsCollector statsCollector;
 
-  private BigSmallLinkedBlockingQueue<GroupByFactory.GroupByJob> blockingQueue;
+  private TSDBQueryQueue<GroupByFactory.GroupByJob> blockingQueue;
   private GroupByFactory groupByFactory;
   private int timeSeriesPerJob;
 
@@ -126,7 +128,12 @@ public class GroupByNumericArrayIterator
    * @throws IllegalArgumentException if a required parameter or config is not present.
    */
   public GroupByNumericArrayIterator(
-      final QueryNode node, final QueryResult result, final Collection<TimeSeries> sources, final int queueThreshold, final int timeSeriesPerJob, final int threadCount) {
+      final QueryNode node, 
+      final QueryResult result, 
+      final Collection<TimeSeries> sources, 
+      final int queueThreshold, 
+      final int timeSeriesPerJob, 
+      final int threadCount) {
     if (node == null) {
       throw new IllegalArgumentException("Query node cannot be null.");
     }
@@ -160,8 +167,8 @@ public class GroupByNumericArrayIterator
                 + ((GroupByConfig) node.config()).getAggregator());
       }
 
-      if(logger.isDebugEnabled()) {
-        logger.debug("Group by queue threshold {}", queueThreshold);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Group by queue threshold {}", queueThreshold);
       }
 
       int size;
@@ -197,18 +204,18 @@ public class GroupByNumericArrayIterator
       this.statsCollector = tsdb.getStatsCollector();
 
       if (this.result.isSourceProcessInParallel()) {
-        if (logger.isTraceEnabled()) {
-          logger.trace("Accumulate in parallel, source size {}", sources.size());
+        if (LOG.isTraceEnabled()) {
+          LOG.trace("Accumulate in parallel, source size {}", sources.size());
         }
         if (sources instanceof List) {
           accumulateInParallel((List) sources, valuesCombiner, pooled_arrays);
         } else {
-          logger.debug("Accumulation of type {}", sources.getClass().getName());
+          LOG.debug("Accumulation of type {}", sources.getClass().getName());
           accumulateInParallel(sources, valuesCombiner, pooled_arrays);
         }
       } else {
-        if (logger.isTraceEnabled()) {
-          logger.trace("Accumulate in sequence, source size {}", sources.size());
+        if (LOG.isTraceEnabled()) {
+          LOG.trace("Accumulate in sequence, source size {}", sources.size());
         }
         for (TimeSeries source : sources) {
           accumulate(source, null);
@@ -223,7 +230,7 @@ public class GroupByNumericArrayIterator
         }
       }
     } catch (Throwable throwable) {
-      logger.error("Error constructing the GroupByNumericArrayIterator", throwable);
+      LOG.error("Error constructing the GroupByNumericArrayIterator", throwable);
       throw new IllegalArgumentException(throwable);
     }
   }
@@ -249,31 +256,29 @@ public class GroupByNumericArrayIterator
       throw new IllegalArgumentException(
           "No aggregator found of type: " + ((GroupByConfig) node.config()).getAggregator());
     }
-    if(aggregator.isInteger()) {
-      if (node.pipelineContext().longPool() != null) {
-        pooled_arrays[index] = result.node.pipelineContext().longPool().claim(size);
-        aggregator.accumulate((long[]) pooled_arrays[index].object());
-      } else {
-        aggregator.accumulate(new long[size]);
-      }
+    
+    // TODO - allocating is a bit of a waste if the underlying source is an array
+    // that would let us copy in. Maybe we need a new agg allocator.
+    
+    // TODO - only supports nans for now.
+    
+    // TODO - no-op, defaults to false
+    final double[] nans;
+    if (node.pipelineContext().doublePool() != null) {
+      pooled_arrays[index] = result.node.pipelineContext().doublePool().claim(size);
+      nans = (double[]) pooled_arrays[index].object();
     } else {
-      final double[] nans;
-      if (node.pipelineContext().doublePool() != null) {
-        pooled_arrays[index] = result.node.pipelineContext().doublePool().claim(size);
-        nans = (double[]) pooled_arrays[index].object();
-      } else {
-        nans = new double[size];
-      }
-      Arrays.fill(nans, Double.NaN);
-      aggregator.accumulate(nans);
+      nans = new double[size];
     }
+    Arrays.fill(nans, Double.NaN);
+    aggregator.accumulate(nans);
     return aggregator;
   }
 
   private void accumulateInParallel(final Collection<TimeSeries> sources, 
                                     final NumericArrayAggregator[] combiners,
                                     final PooledObject[] pooled_arrays) {
-    List<Future<TimeSeriesValue<NumericArrayType>>> futures = new ArrayList<>(sources.size());
+    final List<Future<Void>> futures = new ArrayList<>(sources.size());
     int i = 0;
 
     final long start = System.currentTimeMillis();
@@ -283,11 +288,12 @@ public class GroupByNumericArrayIterator
       NumericArrayAggregator combiner = combiners[index];
 
       final long s = System.nanoTime();
-      Future<TimeSeriesValue<NumericArrayType>> future =
+      Future<Void> future =
           executorService.submit(
               () -> {
                 statsCollector.addTime("groupby.queue.wait.time", System.nanoTime() - s, ChronoUnit.NANOS);
-                return accumulate(timeSeries, combiner);
+                accumulate(timeSeries, combiner);
+                return null;
               });
 
       futures.add(future);
@@ -296,20 +302,20 @@ public class GroupByNumericArrayIterator
 
     statsCollector.setGauge("groupby.timeseries.count", sources.size());
 
-    for (Future<TimeSeriesValue<NumericArrayType>> future : futures) {
+    for (i = 0; i < futures.size(); i++) {
       try {
-        future.get(); // get will block until the future is done
+        futures.get(i).get(); // get will block until the future is done
       } catch (InterruptedException e) {
-        logger.error("Unable to get the status of a task", e);
+        LOG.error("Unable to get the status of a task", e);
         throw new QueryDownstreamException(e.getMessage(), e);
       } catch (ExecutionException e) {
-        logger.error("Unable to get status of the task", e.getCause());
+        LOG.error("Unable to get status of the task", e.getCause());
         throw new QueryDownstreamException(e.getMessage(), e);
       }
     }
 
-    if (logger.isDebugEnabled()) {
-      logger.debug(
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(
           "Parallel downsample time for {} timeseries is {} ms",
           sources.size(),
           System.currentTimeMillis() - start);
@@ -351,34 +357,42 @@ public class GroupByNumericArrayIterator
         endIndex = startIndex + timeSeriesPerJob;
       }
 
-      blockingQueue.put( groupByFactory.new GroupByJob<NumericArrayAggregator>(totalTsCount, tsList, startIndex, endIndex, combiner, doneSignal, statsCollector) {
+      blockingQueue.put(groupByFactory.new GroupByJob<NumericArrayAggregator>(
+          totalTsCount, tsList, startIndex, endIndex, combiner, doneSignal, statsCollector) {
         @Override
-        public void doRun(TimeSeries timeSeries, NumericArrayAggregator combiner) {
+        public void doRun(final TimeSeries timeSeries, 
+                          final NumericArrayAggregator combiner) {
           accumulate(timeSeries, combiner);
         }
       });
       has_next = true;
     }
 
-    statsCollector.setGauge("groupby.queue.big.job", blockingQueue.bigQSize());
-    statsCollector.setGauge("groupby.queue.small.job", blockingQueue.smallQSize());
+//    statsCollector.setGauge("groupby.queue.big.job", blockingQueue.bigQSize());
+//    statsCollector.setGauge("groupby.queue.small.job", blockingQueue.smallQSize());
     statsCollector.setGauge("groupby.timeseries.count", totalTsCount);
 
     try {
       doneSignal.await();
     } catch (InterruptedException e) {
-      logger.error("GroupBy interrupted", e);
+      LOG.error("GroupBy interrupted", e);
     }
 
-    if (logger.isDebugEnabled()) {
-      logger.debug(
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(
           "Parallel downsample time for {} timeseries is {} ms",
           tsCount,
           System.currentTimeMillis() - start);
     }
 
-    for (NumericArrayAggregator combiner : combiners) {
-      aggregator.combine(combiner);
+    for (int i = 0; i < combiners.length; i++) {
+      aggregator.combine(combiners[i]);
+      System.out.println("COMBINE AGGS: " + combiners[i].isInteger() + " => " + Arrays.toString(combiners[i].doubleArray()));
+      try {
+        combiners[i].close();
+      } catch (IOException e) {
+        LOG.error("Failed to close combiner, shouldn't happen", e);
+      }
     }
     
     if (pooled_arrays != null) {
@@ -390,36 +404,37 @@ public class GroupByNumericArrayIterator
     }
   }
 
-  private TimeSeriesValue<NumericArrayType> accumulate(TimeSeries source,
-      NumericArrayAggregator aggregator) {
+  private void accumulate(final TimeSeries source,
+                          final NumericArrayAggregator aggregator) {
     try {
       if (source == null) {
-        throw new IllegalArgumentException("Null time series are not " + "allowed in the sources.");
+        throw new IllegalArgumentException("Null time series are not " 
+            + "allowed in the sources.");
       }
-
+      
       final Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> optional =
           source.iterator(NumericArrayType.TYPE);
       if (optional.isPresent()) {
-        final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator = optional.get();
+        final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator = 
+            optional.get();
         if (iterator.hasNext()) {
           has_next = true;
           if (aggregator != null) {
-            return (TimeSeriesValue<NumericArrayType>) iterator.nextPool(aggregator);
+            iterator.nextPool(aggregator);
           } else {
-            TimeSeriesValue<NumericArrayType> array =
+            final TimeSeriesValue<NumericArrayType> array =
                 (TimeSeriesValue<NumericArrayType>) iterator.next();
             accumulate(array);
-            return array;
           }
         }
       }
     } catch (Throwable t) {
-      logger.error("Unable to accumulate for a timeseries", t);
+      LOG.error("Unable to accumulate for a timeseries", t);
+      throw new QueryExecutionException(t.getMessage(), 0, t);
     }
-    return null;
   }
 
-  private void accumulate(TimeSeriesValue<NumericArrayType> array) {
+  private void accumulate(final TimeSeriesValue<NumericArrayType> array) {
     if (array.value().end() - array.value().offset() > 0) {
       if (array.value().isInteger()) {
         if (array.value().longArray().length > 0) {
@@ -463,4 +478,10 @@ public class GroupByNumericArrayIterator
   public TypeToken<NumericArrayType> type() {
     return NumericArrayType.TYPE;
   }
+  
+  @Override
+  public void close() throws IOException {
+    aggregator.close();
+  }
+  
 }

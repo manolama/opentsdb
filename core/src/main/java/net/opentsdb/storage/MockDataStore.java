@@ -1150,6 +1150,12 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       public TypeToken<? extends TimeSeriesDataType> getType() {
         return type;
       }
+      
+      @Override
+      public void close() throws IOException {
+        // no-op for now
+      }
+      
     }
   }
 

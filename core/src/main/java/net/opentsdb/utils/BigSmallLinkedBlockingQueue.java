@@ -49,7 +49,7 @@ public class BigSmallLinkedBlockingQueue<T> implements TSDBQueryQueue<T> {
 
   private final Condition readSignal = readLock.newCondition();
 
-  public BigSmallLinkedBlockingQueue(Predicate<T> bigPredicate) {
+  public BigSmallLinkedBlockingQueue(final Predicate<T> bigPredicate) {
     this.bigPredicate = bigPredicate;
     this.bigQ = new ConcurrentLinkedQueue();
     this.smallQ = new ConcurrentLinkedQueue();

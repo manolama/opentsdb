@@ -322,6 +322,11 @@ public class NumericMillisecondShard implements TimeSeries {
     public TypeToken<NumericType> getType() {
       return NumericType.TYPE;
     }
+    
+    @Override
+    public void close() throws IOException {
+      // no-op for now
+    }
   }
   
   public TimeStamp startTime() {

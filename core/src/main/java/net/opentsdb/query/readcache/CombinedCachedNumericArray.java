@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.readcache;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAmount;
@@ -381,6 +382,11 @@ public class CombinedCachedNumericArray implements
     return NumericArrayType.TYPE;
   }
 
+  @Override
+  public void close() throws IOException {
+    // no-op for now
+  }
+  
   @Override
   public int offset() {
     return 0;

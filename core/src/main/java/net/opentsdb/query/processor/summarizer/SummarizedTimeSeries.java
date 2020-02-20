@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.summarizer;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -146,6 +147,11 @@ public class SummarizedTimeSeries implements TimeSeries {
     @Override
     public TypeToken<? extends TimeSeriesDataType> getType() {
       return NumericSummaryType.TYPE;
+    }
+    
+    @Override
+    public void close() throws IOException {
+      // no-op for now
     }
     
   }

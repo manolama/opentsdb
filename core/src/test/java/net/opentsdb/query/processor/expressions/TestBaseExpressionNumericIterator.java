@@ -22,6 +22,7 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
 
@@ -229,6 +230,11 @@ public class TestBaseExpressionNumericIterator extends BaseNumericTest {
     public TypeToken<NumericType> type() {
       // TODO Auto-generated method stub
       return null;
+    }
+    
+    @Override
+    public void close() throws IOException {
+      // no-op for now
     }
     
   }

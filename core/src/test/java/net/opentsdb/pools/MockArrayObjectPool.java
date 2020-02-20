@@ -48,7 +48,8 @@ public class MockArrayObjectPool implements ArrayObjectPool {
     PooledObject obj = pool.poll();
     if (obj == null) {
       claim_empty_pool++;
-      return new LocalPooled(config.allocator().allocate(), false);
+      return new LocalPooled(((ArrayObjectPoolAllocator) 
+          config.allocator()).allocate(config.arrayLength()), false);
     } else {
       claim_success++;
       return obj;
@@ -72,7 +73,7 @@ public class MockArrayObjectPool implements ArrayObjectPool {
 
   @Override
   public PooledObject claim(final int length) {
-    if (length > ((ArrayObjectPoolAllocator) config.allocator()).pooledLength()) {
+    if (length > config.arrayLength()) {
       claim_too_big++;
       return new LocalPooled(((ArrayObjectPoolAllocator) 
           config.allocator()).allocate(length), false);

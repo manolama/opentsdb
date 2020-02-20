@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.timeshift;
 
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.Optional;
 
@@ -88,4 +89,10 @@ public class TimeShiftNumericArrayIterator implements QueryIterator,
   public TypeToken<NumericArrayType> type() {
     return value.type();
   }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
+  }
+  
 }

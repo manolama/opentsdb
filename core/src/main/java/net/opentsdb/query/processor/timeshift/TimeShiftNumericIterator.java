@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.timeshift;
 
+import java.io.IOException;
 import java.util.Optional;
 
 import com.google.common.reflect.TypeToken;
@@ -76,6 +77,11 @@ public class TimeShiftNumericIterator implements QueryIterator {
   @Override
   public TypeToken<? extends TimeSeriesDataType> getType() {
     return NumericType.TYPE;
+  }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
   }
   
 }

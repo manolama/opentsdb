@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.groupby;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -24,10 +25,15 @@ import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 import net.opentsdb.core.MockTSDB;
 import net.opentsdb.core.MockTSDBDefault;
@@ -42,7 +48,10 @@ import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.processor.downsample.Downsample;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
+import net.opentsdb.query.processor.groupby.GroupByFactory.GroupByJob;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.utils.MockBigSmallLinkedBlockingQueue;
+
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -106,7 +115,12 @@ public class TestGroupByNumericArrayIterator {
             .setDataType(NumericType.TYPE.toString())
             .build();
 
-    groupByFactory = (GroupByFactory) TSDB.registry.getQueryNodeFactory(GroupByFactory.TYPE);
+    Predicate<GroupByJob> p = groupByJob -> groupByJob.totalTsCount > 5;
+    groupByFactory = mock(GroupByFactory.class);
+    MockBigSmallLinkedBlockingQueue queue = new MockBigSmallLinkedBlockingQueue(true, 
+        p);
+    when(groupByFactory.getQueue()).thenReturn(queue);
+    when(groupByFactory.predicate()).thenReturn(p);
   }
   
   @Before
@@ -488,6 +502,7 @@ public class TestGroupByNumericArrayIterator {
     TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
     assertEquals(1000, v.timestamp().msEpoch());
     assertFalse(v.value().isInteger());
+    System.out.println(Arrays.toString(v.value().doubleArray()));
     assertEquals(5, v.value().doubleArray()[0], 0.001);
     assertTrue(Double.isNaN(v.value().doubleArray()[1]));
     assertEquals(13, v.value().doubleArray()[2], 0.001);
@@ -498,7 +513,7 @@ public class TestGroupByNumericArrayIterator {
 
   @Test
   public void testAccumulationInParallel() {
-DownsampleConfig dsConfig =
+    DownsampleConfig dsConfig =
         DownsampleConfig.newBuilder()
             .setAggregator("sum")
             .setId("foo")
@@ -554,7 +569,6 @@ DownsampleConfig dsConfig =
 
     GroupByNumericArrayIterator iterator =
         new GroupByNumericArrayIterator(node, this.result, source_map, queueThreshold, timeSeriesPerJob, threadCount);
-    assertTrue(iterator.hasNext());
 
     assertTrue(iterator.hasNext());
     TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
@@ -629,6 +643,70 @@ DownsampleConfig dsConfig =
     assertFalse(iterator.hasNext());
   }
 
+  @Test
+  public void testAccumulationInParallelManyJobs() {
+    DownsampleConfig dsConfig =
+        DownsampleConfig.newBuilder()
+            .setAggregator("sum")
+            .setId("foo")
+            .setInterval("1s")
+            .setRunAll(true)
+            .setStart(Long.toString(BASE_TIME / 1000))
+            .setEnd(Long.toString((BASE_TIME / 1000) + 10))
+            .addInterpolatorConfig(numeric_config)
+            .setRunAll(false)
+            .build();
+
+    SemanticQuery q =
+        SemanticQuery.newBuilder()
+            .setMode(QueryMode.SINGLE)
+            .setStart(Long.toString(BASE_TIME / 1000))
+            .setEnd(Long.toString((BASE_TIME / 1000) + 10))
+            .setExecutionGraph(Collections.emptyList())
+            .build();
+
+    when(context.query()).thenReturn(q);
+    Downsample ds = new Downsample(mock(QueryNodeFactory.class), context, dsConfig);
+    ds.initialize(null);
+    QueryResult ds_of_ds_result = mock(QueryResult.class);
+    when(ds_of_ds_result.timeSpecification()).thenReturn(time_spec);
+    Downsample.DownsampleResult dsResult = ds.new DownsampleResult(ds_of_ds_result);
+    when(result.downstreamResult()).thenReturn(dsResult);
+    when(dsResult.timeSpecification()).thenReturn(time_spec);
+    when(time_spec.start()).thenReturn(new MillisecondTimeStamp(BASE_TIME));
+    when(time_spec.interval()).thenReturn(Duration.ofSeconds(1));
+    
+    List<TimeSeries> series = Lists.newArrayList();
+    for (int i = 0; i < 1024; i++) {
+      TimeSeries ts = new NumericArrayTimeSeries(
+              BaseTimeSeriesStringId.newBuilder().setMetric("a").build(),
+              new MillisecondTimeStamp(BASE_TIME));
+      
+      for (int x = 0; x < 10; x++) {
+        ((NumericArrayTimeSeries) ts).add(1);
+      }
+      series.add(dsResult.new DownsampleTimeSeries(ts));
+    }
+    
+    when(this.result.isSourceProcessInParallel()).thenReturn(true);
+    when(node.getDownsampleConfig()).thenReturn(dsConfig);
+    
+    GroupByNumericArrayIterator iterator = new GroupByNumericArrayIterator(
+        node, this.result, series, queueThreshold, 16, threadCount);
+    assertTrue(iterator.hasNext());
+    
+    TimeSeriesValue<NumericArrayType> v = (TimeSeriesValue<NumericArrayType>) iterator.next();
+    
+    assertEquals(BASE_TIME, v.timestamp().msEpoch());
+    assertFalse(v.value().isInteger());
+    double[] doubles = v.value().doubleArray();
+    assertEquals(10, doubles.length);
+    double[] expected = new double[10];
+    Arrays.fill(expected, 1024);
+    assertArrayEquals(expected, doubles, 0.001);
+    assertFalse(iterator.hasNext());
+  }
+  
   class MockSeries implements TimeSeries {
 
     @Override

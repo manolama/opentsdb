@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.storage.schemas.tsdb1x;
 
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -253,6 +254,11 @@ public class NumericSpan implements Span<NumericType> {
     @Override
     public TypeToken<? extends TimeSeriesDataType> getType() {
       return NumericType.TYPE;
+    }
+    
+    @Override
+    public void close() throws IOException {
+      // no-op for now
     }
     
   }

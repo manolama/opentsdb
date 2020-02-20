@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.data.types.alert;
 
+import java.io.IOException;
 import java.util.List;
 
 import com.google.common.collect.Lists;
@@ -61,5 +62,9 @@ public class AlertTypeList {
       return AlertType.TYPE;
     }
     
+    @Override
+    public void close() throws IOException {
+      // no-op for now
+    }
   }
 }

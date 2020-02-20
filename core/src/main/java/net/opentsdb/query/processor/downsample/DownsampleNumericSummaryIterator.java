@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.downsample;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -212,6 +213,11 @@ public class DownsampleNumericSummaryIterator implements QueryIterator {
   @Override
   public TypeToken<? extends TimeSeriesDataType> getType() {
     return NumericSummaryType.TYPE;
+  }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
   }
   
   /**
@@ -450,6 +456,11 @@ public class DownsampleNumericSummaryIterator implements QueryIterator {
     @Override
     public TypeToken<? extends TimeSeriesDataType> getType() {
       return NumericSummaryType.TYPE;
+    }
+    
+    @Override
+    public void close() throws IOException {
+      // no-op for now
     }
     
     private void resetIndices() {

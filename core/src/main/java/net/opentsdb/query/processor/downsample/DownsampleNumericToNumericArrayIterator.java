@@ -33,6 +33,7 @@ import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.processor.downsample.Downsample.DownsampleResult;
 
+import java.io.IOException;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Optional;
@@ -585,4 +586,9 @@ public class DownsampleNumericToNumericArrayIterator
     return NumericArrayType.TYPE;
   }
 
+  @Override
+  public void close() throws IOException {
+    // no-op for now
+  }
+  
 }

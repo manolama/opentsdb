@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.data.types.numeric;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -215,6 +216,11 @@ public class NumericArrayTimeSeries implements TimeSeries {
     @Override
     public TypeToken<? extends TimeSeriesDataType> getType() {
       return NumericArrayType.TYPE;
+    }
+    
+    @Override
+    public void close() throws IOException {
+      // no-op for now
     }
   }
 }

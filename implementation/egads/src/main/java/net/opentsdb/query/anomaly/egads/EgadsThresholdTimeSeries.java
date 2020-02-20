@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.anomaly.egads;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -144,6 +145,11 @@ public class EgadsThresholdTimeSeries implements TimeSeries {
       return NumericArrayType.TYPE;
     }
 
+    @Override
+    public void close() throws IOException {
+      // no-op for now
+    }
+    
     @Override
     public int offset() {
       return 0;

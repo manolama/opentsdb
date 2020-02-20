@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.data.iterators;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -140,7 +141,6 @@ public class SlicedTimeSeries implements TimeSeries {
       }
     }
     
-    
     @Override
     public boolean hasNext() {
       if (source_idx >= sources.size()) {
@@ -172,6 +172,12 @@ public class SlicedTimeSeries implements TimeSeries {
     @Override
     public TypeToken<? extends TimeSeriesDataType> getType() {
       return type;
+    }
+
+
+    @Override
+    public void close() throws IOException {
+      // no-op for now
     }
   }
   

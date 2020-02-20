@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.groupby;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -264,6 +265,11 @@ public class GroupByNumericSummaryIterator implements QueryIterator,
   @Override
   public TypeToken<? extends TimeSeriesDataType> getType() {
     return NumericSummaryType.TYPE;
+  }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
   }
   
   @Override

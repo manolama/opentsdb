@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.movingaverage;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
@@ -203,6 +204,11 @@ public class MovingAverageNumericArrayIterator implements QueryIterator,
   @Override
   public TypeToken<NumericArrayType> type() {
     return NumericArrayType.TYPE;
+  }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
   }
   
   @Override

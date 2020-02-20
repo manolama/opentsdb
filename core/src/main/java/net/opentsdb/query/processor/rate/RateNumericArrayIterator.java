@@ -27,6 +27,7 @@ import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.pojo.RateOptions;
 
+import java.io.IOException;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Map;
@@ -274,6 +275,11 @@ public class RateNumericArrayIterator implements QueryIterator,
   @Override
   public TypeToken<? extends TimeSeriesDataType> getType() {
     return NumericArrayType.TYPE;
+  }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
   }
   
   @Override

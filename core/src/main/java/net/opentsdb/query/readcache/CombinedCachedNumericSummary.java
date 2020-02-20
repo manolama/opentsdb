@@ -14,6 +14,8 @@
 // limitations under the License.
 package net.opentsdb.query.readcache;
 
+import java.io.IOException;
+
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.data.TimeSeries;
@@ -93,4 +95,9 @@ public class CombinedCachedNumericSummary implements
     return NumericSummaryType.TYPE;
   }
 
+  @Override
+  public void close() throws IOException {
+    // no-op for now
+  }
+  
 }

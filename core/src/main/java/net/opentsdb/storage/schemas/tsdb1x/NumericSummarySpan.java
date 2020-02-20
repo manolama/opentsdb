@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.storage.schemas.tsdb1x;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -188,6 +189,11 @@ public class NumericSummarySpan implements Span<NumericSummaryType> {
       return NumericSummaryType.TYPE;
     }
 
+    @Override
+    public void close() throws IOException {
+      // no-op for now
+    }
+    
     @Override
     public boolean hasNext() {
       return has_next;

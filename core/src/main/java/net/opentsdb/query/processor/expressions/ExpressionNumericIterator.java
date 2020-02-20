@@ -14,6 +14,7 @@
 //limitations under the License.
 package net.opentsdb.query.processor.expressions;
 
+import java.io.IOException;
 import java.util.Map;
 
 import com.google.common.reflect.TypeToken;
@@ -233,6 +234,11 @@ public class ExpressionNumericIterator extends BaseExpressionNumericIterator<Num
   @Override
   public TypeToken<NumericType> type() {
     return NumericType.TYPE;
+  }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
   }
   
 }

@@ -42,6 +42,8 @@ import net.opentsdb.query.plan.QueryPlanner;
 import net.opentsdb.query.processor.BaseQueryNodeFactory;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.utils.BigSmallLinkedBlockingQueue;
+import net.opentsdb.utils.TSDBQueryQueue;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,20 +68,20 @@ public class GroupByFactory extends BaseQueryNodeFactory<GroupByConfig, GroupBy>
   public static final int DEFAULT_GROUPBY_THREAD_COUNT = 8;
 
   private Configuration configuration;
-  private Predicate<GroupByJob> bigJobPredicate;
+  protected Predicate<GroupByJob> bigJobPredicate;
   private BigSmallLinkedBlockingQueue<GroupByJob> queue;
   private int threadCount;
   private Thread[] threads;
 
   public abstract class GroupByJob<Combiner> implements Runnable {
-    private int totalTsCount;
-    private final List<TimeSeries> tsList;
-    private final int startIndex;
-    private final int endIndex;
-    private final Combiner combiner;
-    private final CountDownLatch doneSignal;
-    private StatsCollector statsCollector;
-    private final long s = System.nanoTime();
+    protected int totalTsCount;
+    protected final List<TimeSeries> tsList;
+    protected final int startIndex;
+    protected final int endIndex;
+    protected final Combiner combiner;
+    protected final CountDownLatch doneSignal;
+    protected StatsCollector statsCollector;
+    protected final long s = System.nanoTime();
 
     public GroupByJob(
         int totalTsCount,
@@ -100,7 +102,7 @@ public class GroupByFactory extends BaseQueryNodeFactory<GroupByConfig, GroupBy>
 
     @Override
     public void run() {
-      boolean isBig = bigJobPredicate.test(this);
+      boolean isBig = predicate().test(this);
       if (isBig) {
         statsCollector.addTime(
             "groupby.queue.big.wait.time", System.nanoTime() - s, ChronoUnit.NANOS);
@@ -314,8 +316,11 @@ public class GroupByFactory extends BaseQueryNodeFactory<GroupByConfig, GroupBy>
     
   }
 
-  protected BigSmallLinkedBlockingQueue<GroupByJob> getQueue() {
+  protected TSDBQueryQueue<GroupByJob> getQueue() {
     return queue;
   }
   
+  Predicate<GroupByJob> predicate() {
+    return bigJobPredicate;
+  }
 }

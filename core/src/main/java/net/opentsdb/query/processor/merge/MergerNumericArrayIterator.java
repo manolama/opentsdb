@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.merge;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
@@ -164,4 +165,9 @@ public class MergerNumericArrayIterator implements QueryIterator,
     return NumericArrayType.TYPE;
   }
 
+  @Override
+  public void close() throws IOException {
+    // no-op for now
+  }
+  
 }

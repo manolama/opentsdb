@@ -20,6 +20,7 @@ import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 
+import java.io.IOException;
 import java.util.Map;
 
 public class StatusIterator extends StatusValue implements TypedTimeSeriesIterator<StatusType> {
@@ -69,4 +70,10 @@ public class StatusIterator extends StatusValue implements TypedTimeSeriesIterat
   public String namespace() {
     return namespace;
   }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
+  }
+  
 }

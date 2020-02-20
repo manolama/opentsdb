@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.expressions;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
 
@@ -351,4 +352,10 @@ public class ExpressionNumericSummaryIterator extends
   public TypeToken<? extends TimeSeriesDataType> getType() {
     return NumericSummaryType.TYPE;
   }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
+  }
+  
 }

@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.anomaly.egads;
 
+import java.io.IOException;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Collection;
@@ -223,6 +224,11 @@ public class EgadsPredictionTimeSeries implements TimeSeries {
       return AlertType.TYPE;
     }
     
+    @Override
+    public void close() throws IOException {
+      // no-op for now
+    }
+    
   }
   
   class ArrayIterator implements TypedTimeSeriesIterator<NumericArrayType>, 
@@ -284,6 +290,11 @@ public class EgadsPredictionTimeSeries implements TimeSeries {
     @Override
     public NumericArrayType value() {
       return this;
+    }
+    
+    @Override
+    public void close() throws IOException {
+      // no-op for now
     }
     
   }

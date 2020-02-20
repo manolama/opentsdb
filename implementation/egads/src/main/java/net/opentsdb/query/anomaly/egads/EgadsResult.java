@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.anomaly.egads;
 
+import java.io.IOException;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.List;
@@ -271,6 +272,11 @@ public class EgadsResult implements QueryResult {
         return NumericArrayType.TYPE;
       }
 
+      @Override
+      public void close() throws IOException {
+        // no-op for now
+      }
+      
       @Override
       public int offset() {
         return start_idx;

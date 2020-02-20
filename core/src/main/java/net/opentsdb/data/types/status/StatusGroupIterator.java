@@ -15,6 +15,8 @@
 
 package net.opentsdb.data.types.status;
 
+import java.io.IOException;
+
 import com.google.common.reflect.TypeToken;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TypedTimeSeriesIterator;
@@ -43,4 +45,10 @@ public class StatusGroupIterator extends StatusGroupValue implements TypedTimeSe
   public TimeSeriesValue<StatusGroupType> next() {
     return this;
   }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
+  }
+  
 }

@@ -29,6 +29,7 @@ import net.opentsdb.query.QueryIterator;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 
+import java.io.IOException;
 import java.util.Map.Entry;
 
 /**
@@ -197,6 +198,11 @@ public class SummarizerNonPassthroughNumericIterator implements QueryIterator {
   @Override
   public TypeToken<? extends TimeSeriesDataType> getType() {
     return NumericSummaryType.TYPE;
+  }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
   }
   
   /**

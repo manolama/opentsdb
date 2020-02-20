@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.slidingwindow;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
@@ -165,6 +166,11 @@ public class SlidingWindowNumericIterator implements QueryIterator,
     return NumericType.TYPE;
   }
 
+  @Override
+  public void close() throws IOException {
+    // no-op for now
+  }
+  
   /**
    * Advances to the next window.
    */

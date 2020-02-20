@@ -21,6 +21,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
+
+import java.io.IOException;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAmount;
@@ -478,6 +480,11 @@ public class HttpQueryV3Result implements QueryResult {
       return dp;
     }
     
+    @Override
+    public void close() throws IOException {
+      // no-op for now
+    }
+    
   }
   
   /**
@@ -572,6 +579,11 @@ public class HttpQueryV3Result implements QueryResult {
     }
 
     @Override
+    public void close() throws IOException {
+      // no-op for now
+    }
+    
+    @Override
     public int offset() {
       return 0;
     }
@@ -642,6 +654,11 @@ public class HttpQueryV3Result implements QueryResult {
       return NumericSummaryType.TYPE;
     }
     
+    @Override
+    public void close() throws IOException {
+      // no-op for now
+    }
+    
   }
 
   class EventData implements TypedTimeSeriesIterator {
@@ -675,6 +692,11 @@ public class HttpQueryV3Result implements QueryResult {
       return EventType.TYPE;
     }
 
+    @Override
+    public void close() throws IOException {
+      // no-op for now
+    }
+    
   }
 
   class EventGroupData implements TypedTimeSeriesIterator {
@@ -708,6 +730,11 @@ public class HttpQueryV3Result implements QueryResult {
       return EventGroupType.TYPE;
     }
 
+    @Override
+    public void close() throws IOException {
+      // no-op for now
+    }
+    
   }
   
   /**

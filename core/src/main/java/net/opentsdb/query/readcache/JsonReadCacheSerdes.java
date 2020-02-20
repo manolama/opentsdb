@@ -1208,6 +1208,11 @@ public class JsonReadCacheSerdes implements ReadCacheSerdes,
         return dp;
       }
       
+      @Override
+      public void close() throws IOException {
+        // no-op for now
+      }
+      
     }
     
     /**
@@ -1326,6 +1331,11 @@ public class JsonReadCacheSerdes implements ReadCacheSerdes,
         return double_data;
       }
       
+      @Override
+      public void close() throws IOException {
+        // no-op for now
+      }
+      
     }
 
     class SummaryData implements TypedTimeSeriesIterator {
@@ -1372,6 +1382,11 @@ public class JsonReadCacheSerdes implements ReadCacheSerdes,
         return NumericSummaryType.TYPE;
       }
       
+      @Override
+      public void close() throws IOException {
+        // no-op for now
+      }
+      
     }
 
     class EventData implements TypedTimeSeriesIterator {
@@ -1405,6 +1420,11 @@ public class JsonReadCacheSerdes implements ReadCacheSerdes,
         return EventType.TYPE;
       }
 
+      @Override
+      public void close() throws IOException {
+        // no-op for now
+      }
+      
     }
 
     class EventGroupData implements TypedTimeSeriesIterator {
@@ -1438,6 +1458,11 @@ public class JsonReadCacheSerdes implements ReadCacheSerdes,
         return EventGroupType.TYPE;
       }
 
+      @Override
+      public void close() throws IOException {
+        // no-op for now
+      }
+      
     }
     
     /**

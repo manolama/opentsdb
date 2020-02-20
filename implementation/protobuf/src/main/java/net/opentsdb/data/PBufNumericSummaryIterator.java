@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.data;
 
+import java.io.IOException;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
@@ -161,6 +162,11 @@ public class PBufNumericSummaryIterator implements TypedTimeSeriesIterator {
   @Override
   public TypeToken<? extends TimeSeriesDataType> getType() {
     return NumericSummaryType.TYPE;
+  }
+  
+  @Override
+  public void close() throws IOException {
+    // no-op for now
   }
   
   /**

@@ -40,6 +40,8 @@ import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.common.Const;
+import net.opentsdb.core.MockTSDBDefault;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
 import net.opentsdb.data.SecondTimeStamp;
@@ -70,7 +72,9 @@ public class TestByteToStringIdConverter {
   
   @Before
   public void before() throws Exception {
+    TSDB tsdb = MockTSDBDefault.getMockTSDB();
     QueryContext qc = mock(QueryContext.class);
+    when(qc.tsdb()).thenReturn(tsdb);
     when(qc.query()).thenReturn(mock(TimeSeriesQuery.class));
     context = spy(new TestByteToStringConverterForSource.TestContext(qc));
     upstream = mock(QueryNode.class);

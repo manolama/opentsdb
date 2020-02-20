@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.processor.merge;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -274,6 +275,11 @@ public class MergerNumericSummaryIterator implements QueryIterator,
     return NumericSummaryType.TYPE;
   }
 
+  @Override
+  public void close() throws IOException {
+    // no-op for now
+  }
+  
   private void resetIndices() {
     for (final NumericAccumulator accumulator : accumulators.values()) {
       accumulator.reset();
