@@ -201,8 +201,13 @@ public class SummarizerNonPassthroughNumericIterator implements QueryIterator {
   }
   
   @Override
-  public void close() throws IOException {
-    // no-op for now
+  public void close() {
+    try {
+      iterator.close();
+    } catch (IOException e) {
+      // Don't bother logging.
+      e.printStackTrace();
+    }
   }
   
   /**

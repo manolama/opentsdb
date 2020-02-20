@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2018  The OpenTSDB Authors.
+// Copyright (C) 2018-2020  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 package net.opentsdb.query.processor.downsample;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Optional;
 
 import com.google.common.reflect.TypeToken;
@@ -63,7 +62,7 @@ public class DownsampleNumericArrayIterator implements QueryIterator,
   protected int intervals;
   
   /** The source iterator. */
-  protected final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator;
+  protected TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator;
   
   /** Whether or not we're using an expected reporting interval. */
   protected final boolean reporting_average;
@@ -223,6 +222,14 @@ public class DownsampleNumericArrayIterator implements QueryIterator,
       }
       end_of_interval.add(((DownsampleConfig) node.config()).interval());
     }
+    
+    try {
+      iterator.close();
+    } catch (IOException e) {
+      // don't bother logging.
+      e.printStackTrace();
+    }
+    iterator = null;
 
     return this;
   }
@@ -273,8 +280,13 @@ public class DownsampleNumericArrayIterator implements QueryIterator,
   }
 
   @Override
-  public void close() throws IOException {
-    // no-op for now
+  public void close() {
+    try {
+      iterator.close();
+    } catch (IOException e) {
+      // don't bother logging.
+      e.printStackTrace();
+    }
   }
   
   @Override

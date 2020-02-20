@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2018 The OpenTSDB Authors.
+// Copyright (C) 2018-2020 The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -47,7 +47,7 @@ public class RateNumericArrayIterator implements QueryIterator,
   private static final long TO_NANOS = 1000000000L;
   
   /** A sequence of data points to compute rates. */
-  private final TypedTimeSeriesIterator<? extends TimeSeriesDataType> source;
+  private TypedTimeSeriesIterator<? extends TimeSeriesDataType> source;
   
   /** Options for calculating rates. */
   private final RateConfig config;
@@ -172,6 +172,14 @@ public class RateNumericArrayIterator implements QueryIterator,
           idx++;
         }
       }
+      
+      try {
+        source.close();
+      } catch (IOException e) {
+        // Don't bother logging.
+        e.printStackTrace();
+      }
+      source = null;
       return this;
     } 
 
@@ -193,6 +201,14 @@ public class RateNumericArrayIterator implements QueryIterator,
         double_values[write_idx++] = source[idx] * data_interval;
         idx++;
       }
+      
+      try {
+        source.close();
+      } catch (IOException e) {
+        // Don't bother logging.
+        e.printStackTrace();
+      }
+      source = null;
       return this;
     }
     
@@ -269,6 +285,13 @@ public class RateNumericArrayIterator implements QueryIterator,
       }
     }
     
+    try {
+      source.close();
+    } catch (IOException e) {
+      // Don't bother logging.
+      e.printStackTrace();
+    }
+    source = null;
     return this;
   }
   
@@ -278,8 +301,15 @@ public class RateNumericArrayIterator implements QueryIterator,
   }
   
   @Override
-  public void close() throws IOException {
-    // no-op for now
+  public void close() {
+    if (source != null) {
+      try {
+        source.close();
+      } catch (IOException e) {
+        // Don't bother logging.
+        e.printStackTrace();
+      }
+    }
   }
   
   @Override

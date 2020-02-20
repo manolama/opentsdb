@@ -36,6 +36,8 @@ import net.opentsdb.query.QueryIterator;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
+import net.opentsdb.query.processor.groupby.GroupByFactory.Accumulator;
+import net.opentsdb.query.processor.groupby.GroupByFactory.GroupByJob;
 import net.opentsdb.stats.StatsCollector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,7 +66,7 @@ import java.util.concurrent.TimeUnit;
  * @since 3.0
  */
 public class GroupByNumericArrayIterator
-    implements QueryIterator, TimeSeriesValue<NumericArrayType> {
+    implements QueryIterator, TimeSeriesValue<NumericArrayType>, Accumulator {
   private static final Logger LOG = LoggerFactory.getLogger(
       GroupByNumericArrayIterator.class);
 
@@ -345,6 +347,7 @@ public class GroupByNumericArrayIterator
     final long start = System.currentTimeMillis();
     final int totalTsCount = this.result.timeSeries().size();
 
+    final PooledObject[] jobs = new PooledObject[jobCount];
     final CountDownLatch doneSignal = new CountDownLatch(jobCount);
     for (int jobIndex = 0; jobIndex < jobCount; jobIndex++) {
       NumericArrayAggregator combiner = combiners[jobIndex % combiners.length];
@@ -357,19 +360,20 @@ public class GroupByNumericArrayIterator
         endIndex = startIndex + timeSeriesPerJob;
       }
 
-      blockingQueue.put(groupByFactory.new GroupByJob<NumericArrayAggregator>(
-          totalTsCount, tsList, startIndex, endIndex, combiner, doneSignal, statsCollector) {
-        @Override
-        public void doRun(final TimeSeries timeSeries, 
-                          final NumericArrayAggregator combiner) {
-          accumulate(timeSeries, combiner);
-        }
-      });
+      jobs[jobIndex] = groupByFactory.jobPool().claim();
+      final GroupByJob job = (GroupByJob) jobs[jobIndex].object();
+      job.reset(tsList, this, totalTsCount, startIndex, endIndex, combiner, doneSignal);
+      blockingQueue.put(job);
       has_next = true;
     }
 
-//    statsCollector.setGauge("groupby.queue.big.job", blockingQueue.bigQSize());
-//    statsCollector.setGauge("groupby.queue.small.job", blockingQueue.smallQSize());
+    if (blockingQueue instanceof BigSmallLinkedBlockingQueue) {
+      // TODO - maybe not record on every submission, instead track in the queue itself.
+      statsCollector.setGauge("groupby.queue.big.job", 
+          ((BigSmallLinkedBlockingQueue) blockingQueue).bigQSize());
+      statsCollector.setGauge("groupby.queue.small.job", 
+          ((BigSmallLinkedBlockingQueue) blockingQueue).smallQSize());
+    }
     statsCollector.setGauge("groupby.timeseries.count", totalTsCount);
 
     try {
@@ -383,6 +387,11 @@ public class GroupByNumericArrayIterator
           "Parallel downsample time for {} timeseries is {} ms",
           tsCount,
           System.currentTimeMillis() - start);
+    }
+    
+    // release the jobs.
+    for (int i = 0; i < jobs.length; i++) {
+      jobs[i].release();
     }
 
     for (int i = 0; i < combiners.length; i++) {
@@ -404,8 +413,9 @@ public class GroupByNumericArrayIterator
     }
   }
 
-  private void accumulate(final TimeSeries source,
-                          final NumericArrayAggregator aggregator) {
+  @Override
+  public void accumulate(final TimeSeries source,
+                         final NumericArrayAggregator aggregator) {
     try {
       if (source == null) {
         throw new IllegalArgumentException("Null time series are not " 
@@ -415,16 +425,18 @@ public class GroupByNumericArrayIterator
       final Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> optional =
           source.iterator(NumericArrayType.TYPE);
       if (optional.isPresent()) {
-        final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator = 
-            optional.get();
-        if (iterator.hasNext()) {
-          has_next = true;
-          if (aggregator != null) {
-            iterator.nextPool(aggregator);
-          } else {
-            final TimeSeriesValue<NumericArrayType> array =
-                (TimeSeriesValue<NumericArrayType>) iterator.next();
-            accumulate(array);
+        // auto-close it.
+        try (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator = 
+            optional.get()) {
+          if (iterator.hasNext()) {
+            has_next = true;
+            if (aggregator != null) {
+              iterator.nextPool(aggregator);
+            } else {
+              final TimeSeriesValue<NumericArrayType> array =
+                  (TimeSeriesValue<NumericArrayType>) iterator.next();
+              accumulate(array);
+            }
           }
         }
       }

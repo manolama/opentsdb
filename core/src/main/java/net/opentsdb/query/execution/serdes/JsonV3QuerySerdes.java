@@ -599,6 +599,13 @@ public class JsonV3QuerySerdes implements TimeSeriesSerdes {
             wrote_values = true;
           }
         }
+        
+        try {
+          iterator.close();
+        } catch (IOException e) {
+          // Don't bother logging.
+          e.printStackTrace();
+        }
       }
 
       if (wrote_values) {

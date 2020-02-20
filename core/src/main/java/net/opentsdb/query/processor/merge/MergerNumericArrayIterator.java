@@ -112,23 +112,28 @@ public class MergerNumericArrayIterator implements QueryIterator,
       final Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> optional =
           source.iterator(NumericArrayType.TYPE);
       if (optional.isPresent()) {
-        final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator = optional.get();
-        if (iterator.hasNext()) {
-          has_next = true;
-          final TimeSeriesValue<NumericArrayType> array = 
-              (TimeSeriesValue<NumericArrayType>) iterator.next();
-          // skip empties.
-          if (array.value().end() - array.value().offset() > 0) {
-            if (array.value().isInteger()) {
-              if (array.value().longArray().length > 0) {
-                aggregator.accumulate(array.value().longArray(), 
+        try (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator = 
+              optional.get()) {
+          if (iterator.hasNext()) {
+            has_next = true;
+            final TimeSeriesValue<NumericArrayType> array = 
+                (TimeSeriesValue<NumericArrayType>) iterator.next();
+            // skip empties.
+            if (array.value().end() - array.value().offset() > 0) {
+              if (array.value().isInteger()) {
+                if (array.value().longArray().length > 0) {
+                  aggregator.accumulate(array.value().longArray(), 
+                      array.value().offset(), array.value().end());
+                }
+              } else if (array.value().doubleArray().length > 0) {
+                aggregator.accumulate(array.value().doubleArray(),
                     array.value().offset(), array.value().end());
               }
-            } else if (array.value().doubleArray().length > 0) {
-              aggregator.accumulate(array.value().doubleArray(),
-                  array.value().offset(), array.value().end());
             }
           }
+        } catch (IOException e) {
+          // don't bother logging.
+          e.printStackTrace();
         }
       }
     }

@@ -29,7 +29,6 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,12 +42,15 @@ import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.data.types.numeric.aggregators.NumericAggregatorFactory;
 import net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregatorFactory;
 import net.opentsdb.data.types.numeric.aggregators.SumFactory;
+import net.opentsdb.pools.DefaultObjectPoolConfig;
+import net.opentsdb.pools.MockObjectPool;
 import net.opentsdb.query.QueryMode;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.SemanticQuery;
 import net.opentsdb.query.processor.downsample.Downsample;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
 import net.opentsdb.query.processor.groupby.GroupByFactory.GroupByJob;
+import net.opentsdb.query.processor.groupby.GroupByFactory.GroupByJobPool;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.utils.MockBigSmallLinkedBlockingQueue;
 
@@ -86,7 +88,8 @@ public class TestGroupByNumericArrayIterator {
   
   public static MockTSDB TSDB;
   public static NumericInterpolatorConfig NUMERIC_CONFIG;
-  private static GroupByFactory groupByFactory;
+  private static GroupByFactory FACTORY;
+  private static MockObjectPool JOB_POOL;
 
   private Registry registry;
   private NumericInterpolatorConfig numeric_config;
@@ -116,15 +119,26 @@ public class TestGroupByNumericArrayIterator {
             .build();
 
     Predicate<GroupByJob> p = groupByJob -> groupByJob.totalTsCount > 5;
-    groupByFactory = mock(GroupByFactory.class);
+    FACTORY = mock(GroupByFactory.class);
     MockBigSmallLinkedBlockingQueue queue = new MockBigSmallLinkedBlockingQueue(true, 
         p);
-    when(groupByFactory.getQueue()).thenReturn(queue);
-    when(groupByFactory.predicate()).thenReturn(p);
+    when(FACTORY.getQueue()).thenReturn(queue);
+    when(FACTORY.predicate()).thenReturn(p);
+    when(FACTORY.tsdb()).thenReturn(TSDB);
+    
+    GroupByJobPool allocator = FACTORY.new GroupByJobPool();
+    JOB_POOL = new MockObjectPool(DefaultObjectPoolConfig.newBuilder()
+        .setInitialCount(5)
+        .setAllocator(allocator)
+        .setId(allocator.type)
+        .build());
+    when(FACTORY.jobPool()).thenReturn(JOB_POOL);
   }
   
   @Before
   public void before() throws Exception {
+    JOB_POOL.resetCounters();
+    
     result = mock(GroupByResult.class);
     source_result = mock(QueryResult.class);
     time_spec = mock(TimeSpecification.class);
@@ -148,7 +162,7 @@ public class TestGroupByNumericArrayIterator {
     when(node.config()).thenReturn(config);
     context = mock(QueryPipelineContext.class);
     when(node.pipelineContext()).thenReturn(context);
-    when(node.factory()).thenReturn(groupByFactory);
+    when(node.factory()).thenReturn(FACTORY);
     final TSDB tsdb = mock(TSDB.class);
     when(context.tsdb()).thenReturn(tsdb);
     final TimeSeriesQuery q = mock(TimeSeriesQuery.class);
@@ -705,6 +719,9 @@ public class TestGroupByNumericArrayIterator {
     Arrays.fill(expected, 1024);
     assertArrayEquals(expected, doubles, 0.001);
     assertFalse(iterator.hasNext());
+    
+    assertEquals(5, JOB_POOL.claim_success);
+    assertEquals(59, JOB_POOL.claim_empty_pool);
   }
   
   class MockSeries implements TimeSeries {

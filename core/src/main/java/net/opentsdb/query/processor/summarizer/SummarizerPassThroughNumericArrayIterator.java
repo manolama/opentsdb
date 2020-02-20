@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2018-2019  The OpenTSDB Authors.
+// Copyright (C) 2018-2020  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ public class SummarizerPassThroughNumericArrayIterator implements QueryIterator 
   
   @Override
   public boolean hasNext() {
-    return iterator.hasNext();
+    return iterator != null && iterator.hasNext();
   }
   
   @Override
@@ -54,6 +54,14 @@ public class SummarizerPassThroughNumericArrayIterator implements QueryIterator 
         sts.summarize(value.value().doubleArray(), value.value().offset(), value.value().end());
       }
     }
+    
+    try {
+      iterator.close();
+    } catch (IOException e) {
+      // Don't bother logging.
+      e.printStackTrace();
+    }
+    iterator = null;
     return value;
   }
   
@@ -63,8 +71,15 @@ public class SummarizerPassThroughNumericArrayIterator implements QueryIterator 
   }
   
   @Override
-  public void close() throws IOException {
-    // no-op for now
+  public void close() {
+    if (iterator != null) {
+      try {
+        iterator.close();
+      } catch (IOException e) {
+        // Don't bother logging.
+        e.printStackTrace();
+      }
+    }
   }
   
 }

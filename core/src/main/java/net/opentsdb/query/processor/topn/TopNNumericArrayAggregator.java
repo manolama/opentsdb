@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2018  The OpenTSDB Authors.
+// Copyright (C) 2018-2020  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import net.opentsdb.data.types.numeric.aggregators.NumericAggregatorFactory;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 
+import java.io.IOException;
 import java.util.Optional;
 
 /**
@@ -91,6 +92,13 @@ public class TopNNumericArrayAggregator {
           value.value().offset(), 
           value.value().end(), 
           ((TopNConfig) node.config()).getInfectiousNan(), dp);
+    }
+    
+    try {
+      iterator.close();
+    } catch (IOException e) {
+      // Don't bother logging.
+      e.printStackTrace();
     }
     return dp.value();
   }

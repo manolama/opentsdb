@@ -15,7 +15,6 @@
 package net.opentsdb.query.processor.timeshift;
 
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.Optional;
 
 import com.google.common.reflect.TypeToken;
@@ -25,9 +24,7 @@ import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TypedTimeSeriesIterator;
-import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericArrayType;
-import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.QueryIterator;
 import net.opentsdb.query.QueryResult;
 
@@ -91,8 +88,13 @@ public class TimeShiftNumericArrayIterator implements QueryIterator,
   }
   
   @Override
-  public void close() throws IOException {
-    // no-op for now
+  public void close() {
+    try {
+      iterator.close();
+    } catch (IOException e) {
+      // Don't bother logging.
+      e.printStackTrace();
+    }
   }
   
 }
