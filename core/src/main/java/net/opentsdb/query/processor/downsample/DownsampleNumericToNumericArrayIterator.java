@@ -202,7 +202,7 @@ public class DownsampleNumericToNumericArrayIterator
    */
   @SuppressWarnings({"rawtypes", "unchecked"})
   @Override
-  public TimeSeriesValue<NumericArrayType> nextPool(Aggregator aggregator) {
+  public TimeSeriesValue<NumericArrayType> nextPool(final Aggregator aggregator) {
 
     has_next = false;
 
@@ -250,9 +250,11 @@ public class DownsampleNumericToNumericArrayIterator
         }
         
         if (accumulator.isFull() || flush) {
-          accumulateDoubles(accumulator, localLongAggs, localDoubleAggs);
-          accumulateLongs(accumulator, localLongAggs, localDoubleAggs);
-
+          if (accumulator.is_integer) {
+            accumulateLongs(accumulator, localLongAggs, localDoubleAggs);
+          } else {
+            accumulateDoubles(accumulator, localLongAggs, localDoubleAggs);
+          }
           accumulator.reset();
         }
         if (next.value().isInteger()) {
@@ -278,10 +280,15 @@ public class DownsampleNumericToNumericArrayIterator
 
       }
     }
+    
     if (nextTs != null) {
       // capture the last entry in agg interval
-      accumulateDoubles(accumulator, localLongAggs, localDoubleAggs);
-      accumulateLongs(accumulator, localLongAggs, localDoubleAggs);
+      if (accumulator.is_integer) {
+        accumulateLongs(accumulator, localLongAggs, localDoubleAggs);
+      } else {
+        accumulateDoubles(accumulator, localLongAggs, localDoubleAggs);
+      }
+      accumulator.reset();
       index = (int) (((nextTs.epoch() - interval_start.epoch() - intervalPart) / intervalPart)
           % intervals);
       double v = getAggValue(localDoubleAggs, localLongAggs);
@@ -388,11 +395,8 @@ public class DownsampleNumericToNumericArrayIterator
 
   private void accumulateLongs(Accumulator accumulator, long[] localLongAggs,
       double[] localDoubleAggs) {
-    if (!accumulator.hasLongValue) {
-      return;
-    }
     // run accumulator for longs
-    for (int i = 0; i < accumulator.longIndex; i++) {
+    for (int i = 0; i < accumulator.index; i++) {
 
       long v = accumulator.longValues[i];
 
@@ -437,12 +441,9 @@ public class DownsampleNumericToNumericArrayIterator
 
   private void accumulateDoubles(Accumulator accumulator, long[] localLongAggs,
       double[] localDoubleAggs) {
-    if (!accumulator.hasDoubleValue) {
-      return;
-    }
+    LOG.info("   ACC DOUBLES to " + accumulator.index);
     // run accumulator for doubles
-    for (int i = 0; i < accumulator.doubleIndex; i++) {
-
+    for (int i = 0; i < accumulator.index; i++) {
       double v = accumulator.doubleValues[i];
 
       // Ignore NaNs in dowmsampling
@@ -501,10 +502,8 @@ public class DownsampleNumericToNumericArrayIterator
     private final double[] doubleValues;
     private final long[] longValues;
     private final int size;
-    private boolean hasDoubleValue = false;
-    private boolean hasLongValue = false;
-    private int doubleIndex = 0;
-    private int longIndex = 0;
+    private boolean is_integer;
+    private int index = 0;
 
     Accumulator(int size) {
       this.size = size;
@@ -519,28 +518,30 @@ public class DownsampleNumericToNumericArrayIterator
     }
 
     void add(double value) {
-      if (!hasDoubleValue) {
-        hasDoubleValue = true;
+      if (is_integer) {
+        is_integer = false;
+        for (int i = 0; i < index; i++) {
+          doubleValues[i] = longValues[i];
+        }
       }
-      doubleValues[doubleIndex++] = value;
+      doubleValues[index++] = value;
     }
 
     void add(long value) {
-      if (!hasLongValue) {
-        hasLongValue = true;
+      if (is_integer) {
+        longValues[index++] = value;
+      } else {
+        doubleValues[index++] = value;
       }
-      longValues[longIndex++] = value;
     }
 
     boolean isFull() {
-      return longIndex >= size || doubleIndex >= size;
+      return index >= size;
     }
 
     void reset() {
-      hasDoubleValue = false;
-      hasLongValue = false;
-      doubleIndex = 0;
-      longIndex = 0;
+      index = 0;
+      is_integer = true;
     }
   }
 
