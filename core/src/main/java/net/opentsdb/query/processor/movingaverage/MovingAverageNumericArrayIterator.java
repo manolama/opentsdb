@@ -223,6 +223,13 @@ public class MovingAverageNumericArrayIterator implements QueryIterator,
         e.printStackTrace();
       }
     }
+    
+    try {
+      aggregator.close();
+    } catch (IOException e) {
+      // don't bother logging.
+      e.printStackTrace();
+    }
   }
   
   @Override

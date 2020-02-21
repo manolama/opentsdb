@@ -55,13 +55,13 @@ public class SummarizerPassThroughNumericArrayIterator implements QueryIterator 
       }
     }
     
-    try {
-      iterator.close();
-    } catch (IOException e) {
-      // Don't bother logging.
-      e.printStackTrace();
-    }
-    iterator = null;
+//    try {
+//      iterator.close();
+//    } catch (IOException e) {
+//      // Don't bother logging.
+//      e.printStackTrace();
+//    }
+//    iterator = null;
     return value;
   }
   

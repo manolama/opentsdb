@@ -219,7 +219,8 @@ public class GroupByFactory extends BaseQueryNodeFactory<GroupByConfig, GroupBy>
   @Override
   public Deferred<Object> initialize(final TSDB tsdb, final String id) {
     this.id = Strings.isNullOrEmpty(id) ? TYPE : id;
-
+    this.tsdb = tsdb;
+    
     configuration = tsdb.getConfig();
     if (!configuration.hasProperty(GROUPBY_QUEUE_THRESHOLD_KEY)) {
       configuration.register(
@@ -280,6 +281,15 @@ public class GroupByFactory extends BaseQueryNodeFactory<GroupByConfig, GroupBy>
         return null;
       }
     }
+    
+    class ErrCB implements Callback<Object, Exception> {
+      @Override
+      public Object call(Exception arg) throws Exception {
+        LOG.error("FAILED to initialize the job pool allocator.");
+        return null;
+      }
+    }
+    
     return job_pool_allocator.initialize(tsdb, null).addCallback(new InitCB());
   }
 
@@ -438,21 +448,21 @@ public class GroupByFactory extends BaseQueryNodeFactory<GroupByConfig, GroupBy>
     @Override
     public Deferred<Object> initialize(final TSDB tsdb, final String id) {
       if (Strings.isNullOrEmpty(id)) {
-        this.id = TYPE;
+        this.id = type;
       } else {
         this.id = id;
       }
       
-      registerConfigs(tsdb.getConfig(), TYPE);
+      registerConfigs(tsdb.getConfig(), type);
       
       final ObjectPoolConfig config = DefaultObjectPoolConfig.newBuilder()
           .setAllocator(this)
-          .setInitialCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, TYPE)))
-          .setMaxCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, TYPE)))
+          .setInitialCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, type)))
+          .setMaxCount(tsdb.getConfig().getInt(configKey(COUNT_KEY, type)))
           .setId(this.id)
           .build();
       try {
-        createAndRegisterPool(tsdb, config, TYPE);
+        createAndRegisterPool(tsdb, config, type);
         return Deferred.fromResult(null);
       } catch (Exception e) {
         return Deferred.fromError(e);

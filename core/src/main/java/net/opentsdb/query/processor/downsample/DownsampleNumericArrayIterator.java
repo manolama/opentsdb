@@ -287,6 +287,13 @@ public class DownsampleNumericArrayIterator implements QueryIterator,
       // don't bother logging.
       e.printStackTrace();
     }
+    
+    try {
+      aggregator.close();
+    } catch (IOException e) {
+      // don't bother logging.
+      e.printStackTrace();
+    }
   }
   
   @Override

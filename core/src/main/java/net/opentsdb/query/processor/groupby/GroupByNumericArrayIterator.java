@@ -396,7 +396,6 @@ public class GroupByNumericArrayIterator
 
     for (int i = 0; i < combiners.length; i++) {
       aggregator.combine(combiners[i]);
-      System.out.println("COMBINE AGGS: " + combiners[i].isInteger() + " => " + Arrays.toString(combiners[i].doubleArray()));
       try {
         combiners[i].close();
       } catch (IOException e) {
@@ -492,8 +491,13 @@ public class GroupByNumericArrayIterator
   }
   
   @Override
-  public void close() throws IOException {
-    aggregator.close();
+  public void close() {
+    try {
+      aggregator.close();
+    } catch (IOException e) {
+      // don't bother logging.
+      e.printStackTrace();
+    }
   }
   
 }

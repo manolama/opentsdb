@@ -25,6 +25,7 @@ import net.opentsdb.data.types.numeric.aggregators.NumericAggregatorFactory;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
 
+import java.io.IOException;
 import java.util.Optional;
 
 /**
@@ -117,6 +118,12 @@ public class TopNNumericAggregator {
     }
     
     if (idx <= 0) {
+      try {
+        aggregator.close();
+      } catch (IOException e) {
+        // don't bother logging.
+        e.printStackTrace();
+      }
       return null;
     }
     
@@ -125,6 +132,13 @@ public class TopNNumericAggregator {
       aggregator.run(long_values, 0, idx, dp);
     } else {
       aggregator.run(double_values, 0, idx, ((TopNConfig) node.config()).getInfectiousNan(), dp);
+    }
+    
+    try {
+      aggregator.close();
+    } catch (IOException e) {
+      // don't bother logging.
+      e.printStackTrace();
     }
     return dp.value();
   }

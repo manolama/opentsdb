@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.anomaly.egads;
 
+import java.io.IOException;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
@@ -192,23 +193,48 @@ public class EgadsThresholdEvaluator {
       return false;
     }
     
-    final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator = 
-        current_op.get();
-    if (!iterator.hasNext()) {
-      LOG.warn("No next type: " + current_type + " in current?");
-      return false;
+    try (final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator = 
+        current_op.get()) {
+      if (!iterator.hasNext()) {
+        LOG.warn("No next type: " + current_type + " in current?");
+        return false;
+      }
+      
+      if (current_type == NumericType.TYPE) {
+        runNumericType(iterator, value);
+      } else if (current_type == NumericArrayType.TYPE) {
+        runNumericArrayType(iterator, value);
+      } else if (current_type == NumericSummaryType.TYPE) {
+        runNumericSummaryType(iterator, value);
+      } else {
+        LOG.warn("Ummm, don't handle this type?");
+        return false;
+      }
+      
+      if (pred_it != null) {
+        try {
+          pred_it.close();
+        } catch (IOException e) {
+          // Don't bother logging.
+          e.printStackTrace();
+        }
+        pred_it = null;
+      }
+    } catch (IOException e) {
+      // Don't bother logging.
+      e.printStackTrace();
     }
     
-    if (current_type == NumericType.TYPE) {
-      runNumericType(iterator, value);
-    } else if (current_type == NumericArrayType.TYPE) {
-      runNumericArrayType(iterator, value);
-    } else if (current_type == NumericSummaryType.TYPE) {
-      runNumericSummaryType(iterator, value);
-    } else {
-      LOG.warn("Ummm, don't handle this type?");
-      return false;
+    if (pred_it != null) {
+      try {
+        pred_it.close();
+      } catch (IOException e) {
+        // Don't bother logging.
+        e.printStackTrace();
+      }
+      pred_it = null;
     }
+    
     return true;
   }
   

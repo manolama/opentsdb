@@ -46,6 +46,7 @@ public class ExpressionNumericArrayIterator extends
   protected TypedTimeSeriesIterator right;
   
   /** The values, either integers or doubles. */
+  // TODO - poolio.
   protected long[] long_values;
   protected double[] double_values;
   

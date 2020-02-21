@@ -62,6 +62,7 @@ public class RateNumericArrayIterator implements QueryIterator,
   private TimeStamp timestamp;
   
   /** The long or double values. */
+  // TODO - poolio
   private long[] long_values;
   private double[] double_values;
   
