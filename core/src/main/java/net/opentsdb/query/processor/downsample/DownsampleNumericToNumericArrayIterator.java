@@ -393,8 +393,9 @@ public class DownsampleNumericToNumericArrayIterator
     }
   }
 
-  private void accumulateLongs(Accumulator accumulator, long[] localLongAggs,
-      double[] localDoubleAggs) {
+  private void accumulateLongs(final Accumulator accumulator, 
+                               final long[] localLongAggs,
+                               final double[] localDoubleAggs) {
     // run accumulator for longs
     for (int i = 0; i < accumulator.index; i++) {
 

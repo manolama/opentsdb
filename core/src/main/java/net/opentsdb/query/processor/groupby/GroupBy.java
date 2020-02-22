@@ -23,10 +23,12 @@ import com.stumbleupon.async.Callback;
 
 import com.stumbleupon.async.Deferred;
 import net.opentsdb.common.Const;
+import net.opentsdb.data.ArrayAggregatorConfig;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.data.TimeSeriesDataSourceFactory;
+import net.opentsdb.data.types.numeric.aggregators.DefaultArrayAggregatorConfig;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
@@ -64,6 +66,10 @@ public class GroupBy extends AbstractQueryNode {
    * when running in parallel.
    */
   private DownsampleConfig downsampleConfig;
+  
+  ArrayAggregatorConfig agg_config;
+  
+  private int ds_size;
 
   /**
    * Default ctor.
@@ -104,6 +110,13 @@ public class GroupBy extends AbstractQueryNode {
                   downsampleConfig = (DownsampleConfig) downsample.config();
                   break;
                 }
+              }
+              
+              if (downsampleConfig != null) {
+                agg_config = DefaultArrayAggregatorConfig.newBuilder()
+                    .setArraySize(downsampleConfig.intervals())
+                    .setInfectiousNaN(config.getInfectiousNan())
+                    .build();
               }
               return null;
             });

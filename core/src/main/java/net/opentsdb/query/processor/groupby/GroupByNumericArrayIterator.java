@@ -20,6 +20,7 @@ import com.google.common.reflect.TypeToken;
 import net.opentsdb.utils.BigSmallLinkedBlockingQueue;
 import net.opentsdb.utils.TSDBQueryQueue;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.ArrayAggregatorConfig;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesValue;
@@ -27,6 +28,7 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TimeStamp.Op;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericArrayType;
+import net.opentsdb.data.types.numeric.aggregators.DefaultArrayAggregatorConfig;
 import net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregator;
 import net.opentsdb.data.types.numeric.aggregators.NumericArrayAggregatorFactory;
 import net.opentsdb.exceptions.QueryDownstreamException;
@@ -87,8 +89,6 @@ public class GroupByNumericArrayIterator
    * the time series has a real value.
    */
   private volatile boolean has_next = false;
-
-  protected ExecutorService executor;
 
   private StatsCollector statsCollector;
 
@@ -151,8 +151,6 @@ public class GroupByNumericArrayIterator
 
     try {
       TSDB tsdb = node.pipelineContext().tsdb();
-      executor = tsdb.quickWorkPool();
-
       this.groupByFactory = (GroupByFactory) ((GroupBy) node).factory();
       this.blockingQueue = groupByFactory.getQueue();
       this.timeSeriesPerJob = timeSeriesPerJob;
@@ -188,8 +186,17 @@ public class GroupByNumericArrayIterator
         size = downsampleConfig.intervals();
       }
       
-      aggregator =
-          factory.newAggregator(((GroupByConfig) node.config()).getInfectiousNan());
+      ArrayAggregatorConfig agg_config = ((GroupBy) node).agg_config;
+      if (agg_config == null) {
+        agg_config = DefaultArrayAggregatorConfig.newBuilder()
+            .setArraySize(size)
+            .setInfectiousNaN(((GroupByConfig) node.config()).getInfectiousNan())
+            .build();
+      }
+      
+      LOG.info("******** SIZE: " + agg_config.arraySize());
+      
+      aggregator = (NumericArrayAggregator) factory.newAggregator(agg_config);
       if (aggregator == null) {
         throw new IllegalArgumentException(
             "No aggregator found of type: " + ((GroupByConfig) node.config()).getAggregator());
@@ -200,7 +207,7 @@ public class GroupByNumericArrayIterator
       NumericArrayAggregator[] valuesCombiner = new NumericArrayAggregator[aggrCount];
       PooledObject[] pooled_arrays = new PooledObject[aggrCount];
       for (int i = 0; i < valuesCombiner.length; i++) {
-        valuesCombiner[i] = createAggregator(node, factory, size, pooled_arrays, i);
+        valuesCombiner[i] = createAggregator(node, factory, size, agg_config, pooled_arrays, i);
       }
 
       this.statsCollector = tsdb.getStatsCollector();
@@ -250,10 +257,11 @@ public class GroupByNumericArrayIterator
       final QueryNode node, 
       final NumericArrayAggregatorFactory factory, 
       final int size,
+      final ArrayAggregatorConfig agg_config,
       final PooledObject[] pooled_arrays,
       final int index) {
-    NumericArrayAggregator aggregator =
-        factory.newAggregator(((GroupByConfig) node.config()).getInfectiousNan());
+    NumericArrayAggregator aggregator = (NumericArrayAggregator)
+        factory.newAggregator(agg_config);
     if (aggregator == null) {
       throw new IllegalArgumentException(
           "No aggregator found of type: " + ((GroupByConfig) node.config()).getAggregator());
@@ -269,11 +277,13 @@ public class GroupByNumericArrayIterator
     if (node.pipelineContext().doublePool() != null) {
       pooled_arrays[index] = result.node.pipelineContext().doublePool().claim(size);
       nans = (double[]) pooled_arrays[index].object();
+      LOG.info("--------- POOLED! " + size);
     } else {
+      LOG.info("------ NON POOLED " + size);
       nans = new double[size];
     }
     Arrays.fill(nans, Double.NaN);
-    aggregator.accumulate(nans);
+    aggregator.accumulate(nans, 0, size);
     return aggregator;
   }
 
