@@ -23,9 +23,6 @@ import net.opentsdb.pools.PooledObject;
 
 import java.util.Arrays;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
  * A base implementation for numeric array aggregation functions.
  * 
@@ -128,8 +125,6 @@ public abstract class BaseArrayAggregator implements NumericArrayAggregator {
 
   @Override
   public int end() {
-//    final Logger LOG = LoggerFactory.getLogger("FOO");
-//    LOG.info("------------ " + end);
     return end;
   }
   
@@ -156,8 +151,6 @@ public abstract class BaseArrayAggregator implements NumericArrayAggregator {
     pooled = factory.longPool().claim(size);
     long_accumulator = (long[]) pooled.object();
     end = size;
-    final Logger LOG = LoggerFactory.getLogger("FOO");
-    LOG.info("------------ A " + end);
   }
   
   protected void initLong(final int size) {
@@ -167,8 +160,6 @@ public abstract class BaseArrayAggregator implements NumericArrayAggregator {
       long_accumulator = new long[size];
     }
     end = size;
-    final Logger LOG = LoggerFactory.getLogger("FOO");
-    LOG.info("------------ B " + end);
   }
   
   protected void initLong(final long[] values, 
@@ -182,16 +173,12 @@ public abstract class BaseArrayAggregator implements NumericArrayAggregator {
       long_accumulator = Arrays.copyOfRange(values, from, to);
     }
     end = to - from;
-    final Logger LOG = LoggerFactory.getLogger("FOO");
-    LOG.info("------------ C " + end);
   }
   
   protected void initDoublePooled(final int size) {
     pooled = factory.doublePool().claim(size);
     double_accumulator = (double[]) pooled.object();
     end = size;
-    final Logger LOG = LoggerFactory.getLogger("FOO");
-    LOG.info("------------ D " + end);
   }
   
   protected void initDouble(final double[] values, 
@@ -205,8 +192,6 @@ public abstract class BaseArrayAggregator implements NumericArrayAggregator {
       double_accumulator = Arrays.copyOfRange(values, from, to);
     }
     end = to - from;
-    final Logger LOG = LoggerFactory.getLogger("FOO");
-    LOG.info("------------ E " + end);
   }
   
   protected void initDouble(final int size) {
@@ -221,8 +206,6 @@ public abstract class BaseArrayAggregator implements NumericArrayAggregator {
       Arrays.fill(double_accumulator, Double.NaN);
     }
     end = size;
-    final Logger LOG = LoggerFactory.getLogger("FOO");
-    LOG.info("------------ F " + end);
   }
   
   protected void toDouble() {

@@ -194,8 +194,6 @@ public class GroupByNumericArrayIterator
             .build();
       }
       
-      LOG.info("******** SIZE: " + agg_config.arraySize());
-      
       aggregator = (NumericArrayAggregator) factory.newAggregator(agg_config);
       if (aggregator == null) {
         throw new IllegalArgumentException(
@@ -277,9 +275,7 @@ public class GroupByNumericArrayIterator
     if (node.pipelineContext().doublePool() != null) {
       pooled_arrays[index] = result.node.pipelineContext().doublePool().claim(size);
       nans = (double[]) pooled_arrays[index].object();
-      LOG.info("--------- POOLED! " + size);
     } else {
-      LOG.info("------ NON POOLED " + size);
       nans = new double[size];
     }
     Arrays.fill(nans, Double.NaN);
