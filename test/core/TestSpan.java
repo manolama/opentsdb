@@ -73,7 +73,12 @@ public final class TestSpan {
     when(RowKey.metricNameAsync(tsdb, HOUR1))
       .thenReturn(Deferred.fromResult("sys.cpu.user"));
   }
-  
+ 
+@Test
+public void failme() {
+  assertTrue(false);
+}
+ 
   @Test
   public void addRow() {
     final byte[] qual1 = { 0x00, 0x07 };
