@@ -36,6 +36,7 @@ import net.opentsdb.query.QueryIteratorFactory;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
+import net.opentsdb.query.plan.BaseQueryPlanner;
 import net.opentsdb.query.plan.DefaultQueryPlanner;
 import net.opentsdb.query.plan.QueryPlanner;
 import net.opentsdb.query.processor.BaseQueryNodeFactory;
@@ -98,7 +99,7 @@ public class SummarizerFactory extends BaseQueryNodeFactory<SummarizerConfig, Su
                          final SummarizerConfig config,
                          final QueryPlanner plan) {
     boolean pass_through = false;
-    final Map<String, String> sink_filters = ((DefaultQueryPlanner) plan).sinkFilters();
+    final Map<String, String> sink_filters = ((BaseQueryPlanner) plan).sinkFilters();
     for (final QueryNodeConfig successor : plan.configGraph().successors(config)) {
       if (sink_filters.containsKey(successor.getId())) {
         pass_through = true;

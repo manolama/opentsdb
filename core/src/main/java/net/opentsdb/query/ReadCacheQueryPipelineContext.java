@@ -47,6 +47,8 @@ import net.opentsdb.data.TimeSeriesDataSource;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.query.TimeSeriesQuery.CacheMode;
 import net.opentsdb.query.execution.serdes.JsonV2QuerySerdesOptions;
+import net.opentsdb.query.plan.BaseQueryPlanner;
+import net.opentsdb.query.plan.DefaultQueryPlanner;
 import net.opentsdb.query.processor.downsample.DownsampleConfig;
 import net.opentsdb.query.processor.downsample.DownsampleFactory;
 import net.opentsdb.query.processor.expressions.ExpressionConfig;
@@ -106,6 +108,7 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
   protected QueryContext full_query_context;
   protected List<QueryResult> sub_results;
   protected Map<String, QueryNode> summarizer_node_map;
+  protected LocalQP planner;
   
   ReadCacheQueryPipelineContext(final QueryContext context, 
                                 final List<QuerySink> direct_sinks) {
@@ -140,348 +143,8 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
               context.tsdb().getConfig().getString(KEYGEN_PLUGIN_KEY)) ? 
                   "Default" : context.tsdb().getConfig().getString(KEYGEN_PLUGIN_KEY)));
     }
-    
-    // TODO - pull this out into another shared function.
-    // For now we find the highest common denominator for intervals.
-    
-    // TODO - issue: If we have a downsample of 1w, we can't query on 1 day segments
-    // so we either cache the whole shebang or we bypass the cache.
-    interval_in_seconds = 0;
-    int ds_interval = Integer.MAX_VALUE;
-    final QueryNodeFactory ds_factory = context.tsdb().getRegistry()
-        .getQueryNodeFactory(DownsampleFactory.TYPE);
-    if (ds_factory == null) {
-      LOG.error("Unable to find a factory for the downsampler.");
-    }
-    if (((DownsampleFactory) ds_factory).intervals() == null) {
-      LOG.error("No auto intervals for the downsampler.");
-    }
-    
-    // This will hold our mutated downsamplers. After we look at all of them we
-    // need to settle on a common resolution for proper caching since we cache
-    // everything right now, not on a per time series basis.
-    List<QueryNodeConfig> downsamplers = null;
-    final List<QueryNodeConfig> execution_graph = 
-        Lists.newArrayList(context.query().getExecutionGraph());
-    Iterator<QueryNodeConfig> iterator = execution_graph.iterator();
-    while (iterator.hasNext()) {
-      QueryNodeConfig config = iterator.next();
-      if (config instanceof TopNConfig) {
-        skip_cache = true;
-        LOG.warn("Skipping cache as we had a TOPN query.");
-        break;
-      }
-      
-      if (config instanceof TimeSeriesDataSourceConfig) {
-        final List<String> types = ((TimeSeriesDataSourceConfig) config).getTypes();
-        if (types != null && !types.isEmpty()) {
-          for (final String type : types) {
-            if (!type.equalsIgnoreCase("METRIC")) {
-              skip_cache = true;
-              LOG.warn("Skipping cache as we had a query for type: " + type);
-            }
-          }
-        }
-        
-        if (skip_cache) {
-          break;
-        }
-      }
-      
-      if (config instanceof DownsampleConfig) {
-        String interval;
-        if (((DownsampleConfig) config).getRunAll()) {
-          skip_cache = true;
-          break;
-        } else if (((DownsampleConfig) config).getOriginalInterval()
-            .toLowerCase().equals("auto")) {
-          final long delta = context.query().endTime().msEpoch() - 
-              context.query().startTime().msEpoch();
-          interval = DownsampleFactory.getAutoInterval(delta, 
-              ((DownsampleFactory) ds_factory).intervals(), null);
-          
-          iterator.remove();
-          if (downsamplers == null) {
-            downsamplers = Lists.newArrayList();
-          }
-          downsamplers.add(config);
-        } else {
-          // normal interval
-          interval = ((DownsampleConfig) config).getInterval();
-        }
-        
-        int parsed = (int) DateTime.parseDuration(interval) / 1000;
-        if (parsed < ds_interval) {
-          ds_interval = parsed;
-        }
-        
-        if (parsed > interval_in_seconds) {
-          interval_in_seconds = parsed;
-          string_interval = interval;
-        }
-      }
-    }
-    
-    if (interval_in_seconds >= 86400) {
-      skip_cache = true;
-      LOG.warn("Skipping cache for now as we have a rollup query.");
-    }
-    
-    if (skip_cache) {
-      // don't bother doing anything else.
-      stats.incrementCounter(SKIPS, NULL_TAGS);
-      return Deferred.fromResult(null);
-    }
-
-    if (downsamplers != null) {
-      for (int i = 0; i < downsamplers.size(); i++) {
-        DownsampleConfig config = ((DownsampleConfig.Builder) downsamplers.get(i).toBuilder())
-            .setInterval(string_interval)
-            .setSources(downsamplers.get(i).getSources())
-            .setId(downsamplers.get(i).getId())
-            .build();
-        execution_graph.add(config);
-      }
-    }
-    
-    class CB implements Callback<Void, ArrayList<Void>> {
-      final int ds_interval;
-      final Set<String> serdes_filter;
-      
-      CB(final int ds_interval, final Set<String> serdes_filter) {
-        this.ds_interval = ds_interval;
-        this.serdes_filter = serdes_filter;
-      }
-      
-      @Override
-      public Void call(ArrayList<Void> arg) throws Exception {
-        // TODO - in the future use rollup config. For now snap to one day.
-        // AND 
-        if (interval_in_seconds >= 3600) {
-          interval_in_seconds = 86400;
-          string_interval = "1d";
-        } else {
-          interval_in_seconds = 3600;
-          string_interval = "1h";
-        }
-        
-        if (ds_interval == Integer.MAX_VALUE) {
-          min_interval = 0;
-        } else {
-          min_interval = ds_interval;
-        }
-        
-        // TODO - validate calendaring. May need to snap differently based on timezone.
-        long start = context.query().startTime().epoch();
-        start = start - (start % interval_in_seconds);
-        
-        long end = context.query().endTime().epoch();
-        end = end - (end % interval_in_seconds);
-        if (end != context.query().endTime().epoch()) {
-          end += interval_in_seconds;
-        }
-        
-        slices = new int[(int) ((end - start) / interval_in_seconds)];
-        int ts = (int) start;
-        for (int i = 0; i < slices.length; i++) {
-          slices[i] = ts;
-          ts += interval_in_seconds;
-        }
-        
-        expirations = new long[slices.length];
-        expirations[0] = min_interval * 1000; // needs to be in millis
-        
-        // TODO - blah. This will let us zoom in or change the query time range
-        // properly but it's ugly. E.g. if we start with a daily view, we may
-        // auto downsample to 5 minutes. But if the user then zooms into a couple
-        // hour view, we want 1 minute data. Tried changing the query earlier
-        // but that breaks a few things.
-        long hash = hash(ds_interval); 
-        keys = key_gen.generate(hash, 
-            string_interval, slices, expirations);
-        if (tip_query) {
-          keys = Arrays.copyOf(keys, keys.length - 1);
-        }
-        results = new ResultOrSubQuery[slices.length];
-        
-        if (context.query().getCacheMode() == CacheMode.CLEAR) {
-          LOG.info("Clearing cache for query " 
-              + hash
-              + " at timestamps " + Arrays.toString(slices));
-          context.logInfo("Clearing cache for query " 
-              + hash
-              + " at timestamps " + Arrays.toString(slices));
-          cache.delete(slices, keys);
-          stats.incrementCounter(SEGMENTS_CLEAR, keys.length, NULL_TAGS);
-          skip_cache = true;
-          return null;
-        }
-        
-        if (context.sinkConfigs() != null) {
-          for (final QuerySinkConfig config : context.sinkConfigs()) {
-            final QuerySinkFactory factory = context.tsdb().getRegistry()
-                .getPlugin(QuerySinkFactory.class, config.getId());
-            if (factory == null) {
-              throw new IllegalArgumentException("No sink factory found for: " 
-                  + config.getId());
-            }
-            
-            final QuerySink sink = factory.newSink(context, config);
-            if (sink == null) {
-              throw new IllegalArgumentException("Factory returned a null sink for: " 
-                  + config.getId());
-            }
-            sinks.add(sink);
-            if (sinks.size() > 1) {
-              throw new UnsupportedOperationException("Only one sink allowed for now, sorry!");
-            }
-          }
-        }
-        
-        final Set<String> serdes_sources = computeSerializationSources();
-        for (final String source : serdes_sources) {
-          if (serdes_filter != null && !serdes_filter.isEmpty()) {
-            if (serdes_filter.contains(source)) {
-              countdowns.put(source, new AtomicInteger(sinks.size()));  
-            }
-          } else {
-            countdowns.put(source, new AtomicInteger(sinks.size()));
-          }
-        }
-        
-        if (context.query().isTraceEnabled()) {
-          context.logTrace("Cache timestamps=" + Arrays.toString(slices));
-          StringBuilder buf = new StringBuilder().append("Cache keys=[");
-          for (int i = 0; i < keys.length; i++) {
-            if (i > 0) {
-              buf.append(",");
-            }
-            buf.append(Arrays.toString(keys[i]));
-          }
-          buf.append("]");
-          context.logTrace(buf.toString());
-        }
-        return null;
-      }
-      
-    }
-    
-    // strip summarizers as we need to join the underlying results first and then
-    // sum over all of them. If we run the full query, we need to tweak the query
-    // to get the data feeding into the summarizer and cache *that*, not the
-    // summary.
-    
-    // TODO - handle the case wherein a summary is in the middle of a DAG. That
-    // could happen. For now we assume it's always at the end.
-    final Map<String, QueryNodeConfig> summarizers = Maps.newHashMap();
-    iterator = execution_graph.iterator();
-    while (iterator.hasNext()) {
-      QueryNodeConfig config = iterator.next();
-      if (config instanceof SummarizerConfig) {
-        summarizers.put(config.getId(), config);
-        iterator.remove();
-      }
-    }
-    
-    Set<String> old_serdes_filters = Sets.newHashSet();
-    if (!summarizers.isEmpty()) {
-      SemanticQuery.Builder builder = ((SemanticQuery) context.query()).toBuilder();
-      Set<String> new_serdes_filter = Sets.newHashSet();
-      if (context.query().getSerdesConfigs() != null && 
-          !context.query().getSerdesConfigs().isEmpty()) {
-        // TODO - genercize for all types of filters
-        // TODO - handle multiple filters
-        // add summarizer sources
-        for (final QueryNodeConfig config : summarizers.values()) {
-          // ******* WTF? figure this out
-          for (final Object source : config.getSources()) {
-            new_serdes_filter.add((String) source);
-          }
-        }
-        
-        for (final SerdesOptions config : context.query().getSerdesConfigs()) {
-          for (final String id : config.getFilter()) {
-            old_serdes_filters.add(id);
-            if (!summarizers.containsKey(id)) {
-              new_serdes_filter.add(id);
-            }
-          }
-        }
-        
-        builder.setExecutionGraph(execution_graph);
-        builder.setSerdesConfigs(Lists.newArrayList(
-            JsonV2QuerySerdesOptions.newBuilder()
-                .setFilter(Lists.newArrayList(new_serdes_filter))
-                .setId("serdes")
-                .build()
-            ));
-        ((BaseQueryContext) context).resetQuery(builder.build());
-      }
-      
-      // now compute the DAG
-      summarizer_node_map = Maps.newHashMap();
-      QueryNodeFactory factory = context.tsdb().getRegistry().getQueryNodeFactory(
-          SummarizerFactory.TYPE);
-      if (factory == null) {
-        throw new IllegalStateException("No factory for summary??");
-      }
-      
-      ArrayList<Deferred<Void>> deferreds = Lists.newArrayList();
-      for (QueryNodeConfig config : summarizers.values()) {
-        // pass through or not?
-        boolean pass_through = false;
-        for (final Object source : config.getSources()) {
-          if (new_serdes_filter.contains((String) source) && 
-              old_serdes_filters.contains((String) source)) {
-            pass_through = true;
-            break;
-          }
-        }
-        
-        if (pass_through) {
-          config = ((SummarizerConfig) config).toBuilder()
-              .setPassThrough(true)
-              .setSources(config.getSources())
-              .build();
-        }
-        
-        final QueryNode summarizer = factory.newNode(this, config);
-        for (final Object source : config.getSources()) {
-          summarizer_node_map.put((String) source, summarizer);
-        }
-        deferreds.add(summarizer.initialize(span));
-      }
-      return Deferred.group(deferreds).addCallback(new CB(ds_interval, new_serdes_filter));
-    } else if (downsamplers != null) {
-      // make sure to filter out stuff we don't need.
-      if (context.query().getSerdesConfigs() != null && 
-          !context.query().getSerdesConfigs().isEmpty()) {
-        for (final SerdesOptions config : context.query().getSerdesConfigs()) {
-          for (final String id : config.getFilter()) {
-            old_serdes_filters.add(id);
-          }
-        }
-      }
-      SemanticQuery.Builder builder = ((SemanticQuery) context.query()).toBuilder()
-          .setExecutionGraph(execution_graph);
-      ((BaseQueryContext) context).resetQuery(builder.build());
-    } else {
-      // make sure to filter out stuff we don't need.
-      if (context.query().getSerdesConfigs() != null && 
-          !context.query().getSerdesConfigs().isEmpty()) {
-        for (final SerdesOptions config : context.query().getSerdesConfigs()) {
-          for (final String id : config.getFilter()) {
-            old_serdes_filters.add(id);
-          }
-        }
-      }
-    }
-    
-    try {
-      return Deferred.fromResult(new CB(ds_interval, old_serdes_filters).call(null));
-    } catch (Exception e) {
-      return Deferred.fromError(e);
-    }
+    planner = new LocalQP(this, context.query(), this);
+    return planner.plan(null);
   }
 
   @Override
@@ -1275,190 +938,567 @@ public class ReadCacheQueryPipelineContext extends AbstractQueryPipelineContext
       return 0;
     }
   }
-
-  Set<String> computeSerializationSources() {
-    MutableGraph<QueryNodeConfig> config_graph = GraphBuilder.directed()
-        .allowsSelfLoops(false)
-        .build();
-    
-    Map<String, QueryNodeConfig> configs = Maps.newHashMap();
-    for (final QueryNodeConfig config : context.query().getExecutionGraph()) {
-      config_graph.addNode(config);
-      configs.put(config.getId(), config);
-    }
-    if (summarizer_node_map != null) {
-      for (final QueryNode summarizer : summarizer_node_map.values()) {
-        configs.put(summarizer.config().getId(), summarizer.config());
-        for (final Object source : summarizer.config().getSources()) {
-          config_graph.putEdge(summarizer.config(), configs.get((String) source));
-        }
-      }
-    }
-    
-    // next pass
-    for (final QueryNodeConfig config : context.query().getExecutionGraph()) {
-      for (final Object source : config.getSources()) {
-        config_graph.putEdge(config, configs.get((String) source));
-      }
-    }
-    
-    // find roots
-    final Set<QueryNodeConfig> roots = Sets.newHashSet();
-    for (final QueryNodeConfig config : config_graph.nodes()) {
-      if (config_graph.predecessors(config).isEmpty()) {
-        roots.add(config);
-      }
-    }
-    
-    Set<String> serdes_sources = Sets.newHashSet();
-    for (final QueryNodeConfig root : roots) {
-      for (final String src : computeSerializationSources(config_graph, root)) {
-        if (src.contains(":")) {
-          serdes_sources.add(root.getId() + ":" + src.substring(src.indexOf(":") + 1));
-        } else {
-          serdes_sources.add(root.getId() + ":" + src);
-        }
-      }
-    }
-    
-    return serdes_sources;
-  }
-  
-  private Set<String> computeSerializationSources(
-      final MutableGraph<QueryNodeConfig> config_graph, 
-      final QueryNodeConfig node) {
-    if (node instanceof TimeSeriesDataSourceConfig) {
-      return Sets.newHashSet(((TimeSeriesDataSourceConfig) node).getDataSourceId());
-    } else if (node.joins()) {
-      if (node instanceof MergerConfig) {
-        return Sets.newHashSet(((MergerConfig) node).getDataSource());
-      }
-      return Sets.newHashSet(node.getId());
-    }
-    
-    final Set<String> ids = Sets.newHashSetWithExpectedSize(1);
-    for (final QueryNodeConfig downstream : config_graph.successors(node)) {
-      final Set<String> downstream_ids = computeSerializationSources(config_graph, downstream);
-      if (config_graph.predecessors(node).isEmpty()) {
-        // prepend
-        if (downstream instanceof TimeSeriesDataSourceConfig) {
-          ids.add(downstream.getId() + ":" 
-              + ((TimeSeriesDataSourceConfig) downstream).getDataSourceId());
-        } else if (downstream.joins()) {
-            if (node instanceof MergerConfig) {
-              ids.add(((MergerConfig) node).getDataSource());
-            } else if (downstream instanceof ExpressionConfig || 
-                       downstream instanceof ExpressionParseNode) {
-              final Set<String> ds_ids = getMetrics(config_graph, downstream);
-              for (final String id : ds_ids) {
-                ids.add(downstream.getId() + ":" + id.substring(id.indexOf(":") + 1));
-              }
-            } else {
-              ids.addAll(downstream_ids);
-            }
-          } else if (node instanceof SummarizerConfig &&
-            ((SummarizerConfig) node).passThrough()) {
-          for (final QueryNodeConfig successor : config_graph.successors(node)) {
-            final Set<String> summarizer_sources = 
-                computeSerializationSources(config_graph, successor);
-            List<String> srcs = getDataSourceIds(config_graph, successor);
-            for (final String id : summarizer_sources) {
-              ids.add(srcs.get(0));
-              ids.add(downstream.getId() + ":" + id);
-            }
-          }
-        } else {
-          ids.addAll(downstream_ids);
-        }
-      } else if (node instanceof MergerConfig) {
-        ids.add(((MergerConfig) node).getDataSource());
-      } else {
-        ids.addAll(downstream_ids);
-      }
-    }
-    return ids;
-  }
-  
-  //Returns stuff like <nodeID>:<dataSourceNodeID>
-  public List<String> getDataSourceIds(final MutableGraph<QueryNodeConfig> config_graph, final QueryNodeConfig node) {
-    if (node instanceof MergerConfig) {
-      if (!node.getId().equals(((MergerConfig) node).getDataSource())) {
-        return Lists.newArrayList(node.getId() + ":" 
-            + ((MergerConfig) node).getDataSource());
-      }
-      return Lists.newArrayList(((MergerConfig) node).getDataSource() + ":" 
-          + ((MergerConfig) node).getDataSource());
-    } else if (node.joins()) {
-      return Lists.newArrayList(node.getId() + ":" + node.getId());
-    } else if (node instanceof TimeSeriesDataSourceConfig) {
-      return Lists.newArrayList(node.getId() + ":" 
-          + ((TimeSeriesDataSourceConfig) node).getDataSourceId());
-    }
-    
-    List<String> sources = null;
-    final Set<QueryNodeConfig> successors = config_graph.successors(node);
-    if (successors != null) {
-      sources = Lists.newArrayList();
-      for (final QueryNodeConfig successor : successors) {
-        sources.addAll(getDataSourceIds(config_graph, successor));
-      }
-      
-      List<String> new_sources = Lists.newArrayListWithExpectedSize(sources.size());
-      for (final String source : sources) {
-        new_sources.add(node.getId() + ":" 
-            + source.substring(source.indexOf(":") + 1));
-      }
-      return new_sources;
-    }
-    throw new IllegalStateException("Made it to the root of a config graph "
-        + "without a source: " + node.getId());
-  }
-  
-  //Returns <nodeId>:<metric/as>
-  public Set<String> getMetrics(final MutableGraph<QueryNodeConfig> config_graph, 
-                                final QueryNodeConfig node) {
-    if (node instanceof TimeSeriesDataSourceConfig) {
-      return Sets.newHashSet(node.getId() + ":" + 
-          ((TimeSeriesDataSourceConfig) node).getMetric().getMetric());
-    } else if (node.joins()) {
-      if (node instanceof MergerConfig) {
-        Set<String> mg = Sets.newHashSet();
-        for (final QueryNodeConfig ds : config_graph.successors(node)) {
-          Set<String> m = getMetrics(config_graph, ds);
-          for (final String src : m) {
-            mg.add(node.getId() + ":" + src.substring(src.indexOf(":") + 1));
-          }
-        }
-        return mg;
-      } else if (node instanceof ExpressionConfig) {
-        return Sets.newHashSet(node.getId() + ":" + 
-            (((ExpressionConfig) node).getAs() == null ? node.getId() : 
-              ((ExpressionConfig) node).getAs()));
-      } else if (node instanceof ExpressionParseNode) {
-        return Sets.newHashSet(node.getId() + ":" + 
-            (((ExpressionParseNode) node).getAs() == null ? node.getId() :
-              ((ExpressionParseNode) node).getAs()));
-      }
-      
-      // fallback for now
-      return Sets.newHashSet(node.getId() + ":" + node.getId());
-    }
-   
-    Set<String> metrics = Sets.newHashSet();
-    final Set<QueryNodeConfig> successors = config_graph.successors(node);
-    for (final QueryNodeConfig successor : successors) {
-      for(final String metric : getMetrics(config_graph, successor)) {
-        metrics.add(node.getId() + ":" + metric.substring(metric.indexOf(':') + 1));
-      }
-    }
-    return metrics;
-  }
-  
+//
+//  Set<String> computeSerializationSources() {
+//    MutableGraph<QueryNodeConfig> config_graph = GraphBuilder.directed()
+//        .allowsSelfLoops(false)
+//        .build();
+//    
+//    Map<String, QueryNodeConfig> configs = Maps.newHashMap();
+//    for (final QueryNodeConfig config : context.query().getExecutionGraph()) {
+//      config_graph.addNode(config);
+//      configs.put(config.getId(), config);
+//    }
+//    
+//    if (summarizer_node_map != null) {
+//      for (final QueryNode summarizer : summarizer_node_map.values()) {
+//        configs.put(summarizer.config().getId(), summarizer.config());
+//        for (final Object source : summarizer.config().getSources()) {
+//          LOG.info("****** SUMMARIZER: " + (String) source);
+//          config_graph.putEdge(summarizer.config(), configs.get((String) source));
+//        }
+//      }
+//    }
+//    
+//    // next pass
+//    for (final QueryNodeConfig config : context.query().getExecutionGraph()) {
+//      for (final Object source : config.getSources()) {
+//        config_graph.putEdge(config, configs.get((String) source));
+//      }
+//    }
+//    
+//    // find roots
+//    final Set<QueryNodeConfig> roots = Sets.newHashSet();
+//    for (final QueryNodeConfig config : config_graph.nodes()) {
+//      if (config_graph.predecessors(config).isEmpty()) {
+//        roots.add(config);
+//      }
+//    }
+//    
+//    Set<String> serdes_sources = Sets.newHashSet();
+//    for (final QueryNodeConfig root : roots) {
+//      LOG.info("******** WORKING ROOT: " + root.getId());
+//      for (final String src : computeSerializationSources(config_graph, root)) {
+//        LOG.info("             **** SER: " + src);
+//        if (src.contains(":")) {
+//          serdes_sources.add(root.getId() + ":" + src.substring(src.indexOf(":") + 1));
+//        } else {
+//          serdes_sources.add(root.getId() + ":" + src);
+//        }
+//      }
+//    }
+//    
+//    return serdes_sources;
+//  }
+//  
+//  private Set<String> computeSerializationSources(
+//      final MutableGraph<QueryNodeConfig> config_graph, 
+//      final QueryNodeConfig node) {
+//    if (node instanceof TimeSeriesDataSourceConfig) {
+//      return Sets.newHashSet(((TimeSeriesDataSourceConfig) node).getDataSourceId());
+//    } else if (node.joins()) {
+//      if (node instanceof MergerConfig) {
+//        return Sets.newHashSet(((MergerConfig) node).getDataSource());
+//      }
+//      return Sets.newHashSet(node.getId());
+//    }
+//    
+//    final Set<String> ids = Sets.newHashSetWithExpectedSize(1);
+//    for (final QueryNodeConfig downstream : config_graph.successors(node)) {
+//      final Set<String> downstream_ids = computeSerializationSources(config_graph, downstream);
+//      if (config_graph.predecessors(node).isEmpty()) {
+//        // prepend
+//        if (downstream instanceof TimeSeriesDataSourceConfig) {
+//          ids.add(downstream.getId() + ":" 
+//              + ((TimeSeriesDataSourceConfig) downstream).getDataSourceId());
+//        } else if (downstream.joins()) {
+//            if (node instanceof MergerConfig) {
+//              ids.add(((MergerConfig) node).getDataSource());
+//            } else if (downstream instanceof ExpressionConfig || 
+//                       downstream instanceof ExpressionParseNode) {
+//              final Set<String> ds_ids = getMetrics(config_graph, downstream);
+//              for (final String id : ds_ids) {
+//                ids.add(downstream.getId() + ":" + id.substring(id.indexOf(":") + 1));
+//              }
+//            } else {
+//              ids.addAll(downstream_ids);
+//            }
+//          } else if (node instanceof SummarizerConfig &&
+//            ((SummarizerConfig) node).passThrough()) {
+//          for (final QueryNodeConfig successor : config_graph.successors(node)) {
+//            final Set<String> summarizer_sources = 
+//                computeSerializationSources(config_graph, successor);
+//            List<String> srcs = getDataSourceIds(config_graph, successor);
+//            for (final String id : summarizer_sources) {
+//              ids.add(srcs.get(0));
+//              ids.add(downstream.getId() + ":" + id);
+//            }
+//          }
+//        } else {
+//          ids.addAll(downstream_ids);
+//        }
+//      } else if (node instanceof MergerConfig) {
+//        ids.add(((MergerConfig) node).getDataSource());
+//      } else {
+//        ids.addAll(downstream_ids);
+//      }
+//    }
+//    return ids;
+//  }
+//  
+//  //Returns stuff like <nodeID>:<dataSourceNodeID>
+//  public List<String> getDataSourceIds(final MutableGraph<QueryNodeConfig> config_graph, final QueryNodeConfig node) {
+//    if (node instanceof MergerConfig) {
+//      if (!node.getId().equals(((MergerConfig) node).getDataSource())) {
+//        return Lists.newArrayList(node.getId() + ":" 
+//            + ((MergerConfig) node).getDataSource());
+//      }
+//      return Lists.newArrayList(((MergerConfig) node).getDataSource() + ":" 
+//          + ((MergerConfig) node).getDataSource());
+//    } else if (node.joins()) {
+//      return Lists.newArrayList(node.getId() + ":" + node.getId());
+//    } else if (node instanceof TimeSeriesDataSourceConfig) {
+//      return Lists.newArrayList(node.getId() + ":" 
+//          + ((TimeSeriesDataSourceConfig) node).getDataSourceId());
+//    }
+//    
+//    List<String> sources = null;
+//    final Set<QueryNodeConfig> successors = config_graph.successors(node);
+//    if (successors != null) {
+//      sources = Lists.newArrayList();
+//      for (final QueryNodeConfig successor : successors) {
+//        sources.addAll(getDataSourceIds(config_graph, successor));
+//      }
+//      
+//      List<String> new_sources = Lists.newArrayListWithExpectedSize(sources.size());
+//      for (final String source : sources) {
+//        new_sources.add(node.getId() + ":" 
+//            + source.substring(source.indexOf(":") + 1));
+//      }
+//      return new_sources;
+//    }
+//    throw new IllegalStateException("Made it to the root of a config graph "
+//        + "without a source: " + node.getId());
+//  }
+//  
+//  //Returns <nodeId>:<metric/as>
+//  public Set<String> getMetrics(final MutableGraph<QueryNodeConfig> config_graph, 
+//                                final QueryNodeConfig node) {
+//    if (node instanceof TimeSeriesDataSourceConfig) {
+//      return Sets.newHashSet(node.getId() + ":" + 
+//          ((TimeSeriesDataSourceConfig) node).getMetric().getMetric());
+//    } else if (node.joins()) {
+//      if (node instanceof MergerConfig) {
+//        Set<String> mg = Sets.newHashSet();
+//        for (final QueryNodeConfig ds : config_graph.successors(node)) {
+//          Set<String> m = getMetrics(config_graph, ds);
+//          for (final String src : m) {
+//            mg.add(node.getId() + ":" + src.substring(src.indexOf(":") + 1));
+//          }
+//        }
+//        return mg;
+//      } else if (node instanceof ExpressionConfig) {
+//        return Sets.newHashSet(node.getId() + ":" + 
+//            (((ExpressionConfig) node).getAs() == null ? node.getId() : 
+//              ((ExpressionConfig) node).getAs()));
+//      } else if (node instanceof ExpressionParseNode) {
+//        return Sets.newHashSet(node.getId() + ":" + 
+//            (((ExpressionParseNode) node).getAs() == null ? node.getId() :
+//              ((ExpressionParseNode) node).getAs()));
+//      }
+//      
+//      // fallback for now
+//      return Sets.newHashSet(node.getId() + ":" + node.getId());
+//    }
+//   
+//    Set<String> metrics = Sets.newHashSet();
+//    final Set<QueryNodeConfig> successors = config_graph.successors(node);
+//    for (final QueryNodeConfig successor : successors) {
+//      for(final String metric : getMetrics(config_graph, successor)) {
+//        metrics.add(node.getId() + ":" + metric.substring(metric.indexOf(':') + 1));
+//      }
+//    }
+//    return metrics;
+//  }
+//  
   protected long hash(final int ds_interval) {
     return Const.HASH_FUNCTION().newHasher()
         .putLong(original_query_hash)
         .putInt(ds_interval)
         .hash()
         .asLong();
+  }
+
+  class LocalQP extends BaseQueryPlanner {
+
+    public LocalQP(final QueryPipelineContext context, 
+                   final TimeSeriesQuery query, 
+                   final QueryNode context_sink) {
+      super(context, query, context_sink);
+    }
+
+    @Override
+    public Deferred<Void> plan(Span span) {
+      // TODO - pull this out into another shared function.
+      // For now we find the highest common denominator for intervals.
+      
+      // TODO - issue: If we have a downsample of 1w, we can't query on 1 day segments
+      // so we either cache the whole shebang or we bypass the cache.
+      interval_in_seconds = 0;
+      int ds_interval = Integer.MAX_VALUE;
+      final QueryNodeFactory ds_factory = context.tsdb().getRegistry()
+          .getQueryNodeFactory(DownsampleFactory.TYPE);
+      if (ds_factory == null) {
+        LOG.error("Unable to find a factory for the downsampler.");
+      }
+      if (((DownsampleFactory) ds_factory).intervals() == null) {
+        LOG.error("No auto intervals for the downsampler.");
+      }
+      
+      // This will hold our mutated downsamplers. After we look at all of them we
+      // need to settle on a common resolution for proper caching since we cache
+      // everything right now, not on a per time series basis.
+      List<QueryNodeConfig> downsamplers = null;
+      final List<QueryNodeConfig> execution_graph = 
+          Lists.newArrayList(query.getExecutionGraph());
+      Iterator<QueryNodeConfig> iterator = execution_graph.iterator();
+      while (iterator.hasNext()) {
+        QueryNodeConfig config = iterator.next();
+        if (config instanceof TopNConfig) {
+          skip_cache = true;
+          LOG.warn("Skipping cache as we had a TOPN query.");
+          break;
+        }
+        
+        if (config instanceof TimeSeriesDataSourceConfig) {
+          final List<String> types = ((TimeSeriesDataSourceConfig) config).getTypes();
+          if (types != null && !types.isEmpty()) {
+            for (final String type : types) {
+              if (!type.equalsIgnoreCase("METRIC")) {
+                skip_cache = true;
+                LOG.warn("Skipping cache as we had a query for type: " + type);
+              }
+            }
+          }
+          
+          if (skip_cache) {
+            break;
+          }
+        }
+        
+        if (config instanceof DownsampleConfig) {
+          String interval;
+          if (((DownsampleConfig) config).getRunAll()) {
+            skip_cache = true;
+            break;
+          } else if (((DownsampleConfig) config).getOriginalInterval()
+              .toLowerCase().equals("auto")) {
+            final long delta = query.endTime().msEpoch() - 
+                query.startTime().msEpoch();
+            interval = DownsampleFactory.getAutoInterval(delta, 
+                ((DownsampleFactory) ds_factory).intervals(), null);
+            
+            iterator.remove();
+            if (downsamplers == null) {
+              downsamplers = Lists.newArrayList();
+            }
+            downsamplers.add(config);
+          } else {
+            // normal interval
+            interval = ((DownsampleConfig) config).getInterval();
+          }
+          
+          int parsed = (int) DateTime.parseDuration(interval) / 1000;
+          if (parsed < ds_interval) {
+            ds_interval = parsed;
+          }
+          
+          if (parsed > interval_in_seconds) {
+            interval_in_seconds = parsed;
+            string_interval = interval;
+          }
+        }
+      }
+      
+      if (interval_in_seconds >= 86400) {
+        skip_cache = true;
+        LOG.warn("Skipping cache for now as we have a rollup query.");
+      }
+      
+      if (skip_cache) {
+        // don't bother doing anything else.
+        stats.incrementCounter(SKIPS, NULL_TAGS);
+        return Deferred.fromResult(null);
+      }
+
+      if (downsamplers != null) {
+        for (int i = 0; i < downsamplers.size(); i++) {
+          DownsampleConfig config = ((DownsampleConfig.Builder) downsamplers.get(i).toBuilder())
+              .setInterval(string_interval)
+              .setSources(downsamplers.get(i).getSources())
+              .setId(downsamplers.get(i).getId())
+              .build();
+          execution_graph.add(config);
+        }
+      }
+      
+      // strip summarizers as we need to join the underlying results first and then
+      // sum over all of them. If we run the full query, we need to tweak the query
+      // to get the data feeding into the summarizer and cache *that*, not the
+      // summary.
+      
+      // TODO - handle the case wherein a summary is in the middle of a DAG. That
+      // could happen. For now we assume it's always at the end.
+      Map<String, QueryNodeConfig> summarizers = null;
+      iterator = execution_graph.iterator();
+      while (iterator.hasNext()) {
+        QueryNodeConfig config = iterator.next();
+        if (config instanceof SummarizerConfig) {
+          if (summarizers == null) {
+            summarizers = Maps.newHashMap();
+          }
+          summarizers.put(config.getId(), config);
+          iterator.remove();
+        }
+      }
+       
+      Set<String> serdes_filters = null;
+      if (query.getSerdesConfigs() != null && !query.getSerdesConfigs().isEmpty()) {
+        for (int i = 0; i < query.getSerdesConfigs().size(); i++) {
+          final SerdesOptions serdes = query.getSerdesConfigs().get(i);
+          if (serdes_filters == null) {
+            serdes_filters = Sets.newHashSet();
+          }
+          serdes_filters.addAll(serdes.getFilter());
+        }
+        
+        if (summarizers != null && !summarizers.isEmpty()) {
+          for (final Entry<String, QueryNodeConfig> entry : summarizers.entrySet()) {
+            serdes_filters.remove(entry.getKey());
+            serdes_filters.addAll(entry.getValue().getSources());
+          }
+          SemanticQuery.Builder builder = ((SemanticQuery) query).toBuilder();
+          builder.setExecutionGraph(execution_graph);
+          builder.setSerdesConfigs(Lists.newArrayList(
+              JsonV2QuerySerdesOptions.newBuilder()
+                  .setFilter(Lists.newArrayList(serdes_filters))
+                  .setId("serdes")
+                  .build()
+              ));
+          query = builder.build();
+        }
+      }
+//        if (query.getSerdesConfigs() != null && 
+//            !query.getSerdesConfigs().isEmpty()) {
+//          // TODO - genercize for all types of filters
+//          // TODO - handle multiple filters
+//          // add summarizer sources
+//          for (final QueryNodeConfig config : summarizers.values()) {
+//            // ******* WTF? figure this out
+//            for (final Object source : config.getSources()) {
+//              new_serdes_filter.add((String) source);
+//            }
+//          }
+//          
+//          for (final SerdesOptions config : query.getSerdesConfigs()) {
+//            for (final String id : config.getFilter()) {
+//              old_serdes_filters.add(id);
+//              if (!summarizers.containsKey(id)) {
+//                new_serdes_filter.add(id);
+//              }
+//            }
+//          }
+//          
+//          builder.setExecutionGraph(execution_graph);
+//          builder.setSerdesConfigs(Lists.newArrayList(
+//              JsonV2QuerySerdesOptions.newBuilder()
+//                  .setFilter(Lists.newArrayList(new_serdes_filter))
+//                  .setId("serdes")
+//                  .build()
+//              ));
+//          ((BaseQueryContext) context).resetQuery(builder.build());
+//        }
+        
+        // now compute the DAG
+//        summarizer_node_map = Maps.newHashMap();
+//        QueryNodeFactory factory = context.tsdb().getRegistry().getQueryNodeFactory(
+//            SummarizerFactory.TYPE);
+//        if (factory == null) {
+//          throw new IllegalStateException("No factory for summary??");
+//        }
+//        
+//        ArrayList<Deferred<Void>> deferreds = Lists.newArrayList();
+//        for (QueryNodeConfig config : summarizers.values()) {
+//          // pass through or not?
+//          boolean pass_through = false;
+//          for (final Object source : config.getSources()) {
+//            if (new_serdes_filter.contains((String) source) && 
+//                old_serdes_filters.contains((String) source)) {
+//              pass_through = true;
+//              break;
+//            }
+//          }
+//          
+//          if (pass_through) {
+//            config = ((SummarizerConfig) config).toBuilder()
+//                .setPassThrough(true)
+//                .setSources(config.getSources())
+//                .build();
+//          }
+//          
+//          final QueryNode summarizer = factory.newNode(this, config);
+//          for (final Object source : config.getSources()) {
+//            summarizer_node_map.put((String) source, summarizer);
+//          }
+//          deferreds.add(summarizer.initialize(span));
+//        }
+//        
+//        LOG.info("NEW SERDES: " + new_serdes_filter);
+//        LOG.info("OLD SERDES: " + old_serdes_filters);
+//        return Deferred.group(deferreds).addCallback(new CB(ds_interval, new_serdes_filter));
+//      } else if (downsamplers != null) {
+//        // make sure to filter out stuff we don't need.
+//        if (query.getSerdesConfigs() != null && 
+//            !query.getSerdesConfigs().isEmpty()) {
+//          for (final SerdesOptions config : query.getSerdesConfigs()) {
+//            for (final String id : config.getFilter()) {
+//              old_serdes_filters.add(id);
+//            }
+//          }
+//        }
+//        SemanticQuery.Builder builder = ((SemanticQuery) query).toBuilder()
+//            .setExecutionGraph(execution_graph);
+//        ((BaseQueryContext) context).resetQuery(builder.build());
+//      } else {
+//        // make sure to filter out stuff we don't need.
+//        if (query.getSerdesConfigs() != null && 
+//            !query.getSerdesConfigs().isEmpty()) {
+//          for (final SerdesOptions config : query.getSerdesConfigs()) {
+//            for (final String id : config.getFilter()) {
+//              old_serdes_filters.add(id);
+//            }
+//          }
+//        }
+//      }
+      
+      
+   // TODO - in the future use rollup config. For now snap to one day.
+      // AND 
+      if (interval_in_seconds >= 3600) {
+        interval_in_seconds = 86400;
+        string_interval = "1d";
+      } else {
+        interval_in_seconds = 3600;
+        string_interval = "1h";
+      }
+      
+      if (ds_interval == Integer.MAX_VALUE) {
+        min_interval = 0;
+      } else {
+        min_interval = ds_interval;
+      }
+      
+      // TODO - validate calendaring. May need to snap differently based on timezone.
+      long start = query.startTime().epoch();
+      start = start - (start % interval_in_seconds);
+      
+      long end = query.endTime().epoch();
+      end = end - (end % interval_in_seconds);
+      if (end != query.endTime().epoch()) {
+        end += interval_in_seconds;
+      }
+      
+      slices = new int[(int) ((end - start) / interval_in_seconds)];
+      int ts = (int) start;
+      for (int i = 0; i < slices.length; i++) {
+        slices[i] = ts;
+        ts += interval_in_seconds;
+      }
+      
+      expirations = new long[slices.length];
+      expirations[0] = min_interval * 1000; // needs to be in millis
+      
+      // TODO - blah. This will let us zoom in or change the query time range
+      // properly but it's ugly. E.g. if we start with a daily view, we may
+      // auto downsample to 5 minutes. But if the user then zooms into a couple
+      // hour view, we want 1 minute data. Tried changing the query earlier
+      // but that breaks a few things.
+      long hash = hash(ds_interval); 
+      keys = key_gen.generate(hash, 
+          string_interval, slices, expirations);
+      if (tip_query) {
+        keys = Arrays.copyOf(keys, keys.length - 1);
+      }
+      results = new ResultOrSubQuery[slices.length];
+      
+      if (query.getCacheMode() == CacheMode.CLEAR) {
+        LOG.info("Clearing cache for query " 
+            + hash
+            + " at timestamps " + Arrays.toString(slices));
+        context.queryContext().logInfo("Clearing cache for query " 
+            + hash
+            + " at timestamps " + Arrays.toString(slices));
+        cache.delete(slices, keys);
+        stats.incrementCounter(SEGMENTS_CLEAR, keys.length, NULL_TAGS);
+        skip_cache = true;
+        return null;
+      }
+      
+      if (context.queryContext().sinkConfigs() != null) {
+        for (final QuerySinkConfig config : context.queryContext().sinkConfigs()) {
+          final QuerySinkFactory factory = context.tsdb().getRegistry()
+              .getPlugin(QuerySinkFactory.class, config.getId());
+          if (factory == null) {
+            throw new IllegalArgumentException("No sink factory found for: " 
+                + config.getId());
+          }
+          
+          final QuerySink sink = factory.newSink(context.queryContext(), config);
+          if (sink == null) {
+            throw new IllegalArgumentException("Factory returned a null sink for: " 
+                + config.getId());
+          }
+          sinks.add(sink);
+          if (sinks.size() > 1) {
+            throw new UnsupportedOperationException("Only one sink allowed for now, sorry!");
+          }
+        }
+      }
+      
+      findDataSourceNodes();
+      LOG.info("*** PLAN SRCS: " + source_nodes);
+      System.out.println("NODE: " + context_node);
+      serialization_sources = computeSerializationSources(context_node);
+      LOG.info("****** COMPUTED SERDES SOURCES: " + serialization_sources);
+      for (final String s : serialization_sources) {
+        countdowns.put(s, new AtomicInteger(sinks.size()));
+      }
+//      final Set<String> serdes_sources = computeSerializationSources();
+//      for (final String source : serdes_sources) {
+//        if (serdes_filter != null && !serdes_filter.isEmpty()) {
+//          if (serdes_filter.contains(source)) {
+//            countdowns.put(source, new AtomicInteger(sinks.size()));  
+//          }
+//        } else {
+//          countdowns.put(source, new AtomicInteger(sinks.size()));
+//        }
+//      }
+      
+      if (query.isTraceEnabled()) {
+        context.queryContext().logTrace("Cache timestamps=" + Arrays.toString(slices));
+        StringBuilder buf = new StringBuilder().append("Cache keys=[");
+        for (int i = 0; i < keys.length; i++) {
+          if (i > 0) {
+            buf.append(",");
+          }
+          buf.append(Arrays.toString(keys[i]));
+        }
+        buf.append("]");
+        context.queryContext().logTrace(buf.toString());
+      }
+      
+      return Deferred.fromResult(null);
+    }
+    
   }
 }

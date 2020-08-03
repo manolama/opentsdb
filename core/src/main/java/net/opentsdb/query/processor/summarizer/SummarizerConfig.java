@@ -149,6 +149,11 @@ public class SummarizerConfig extends BaseQueryNodeConfig<SummarizerConfig.Build
   }
 
   @Override
+  public boolean readCacheable() {
+    return false;
+  }
+  
+  @Override
   public Builder toBuilder() {
     return newBuilder()
         .setSummaries(Lists.newArrayList(summaries))

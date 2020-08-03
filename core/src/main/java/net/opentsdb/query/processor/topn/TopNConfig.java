@@ -97,6 +97,11 @@ public class TopNConfig extends BaseQueryNodeConfig<TopNConfig.Builder, TopNConf
   }
 
   @Override
+  public boolean readCacheable() {
+    return false;
+  }
+  
+  @Override
   public Builder toBuilder() {
     return null;
   }
