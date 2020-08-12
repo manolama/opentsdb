@@ -55,8 +55,10 @@ import net.opentsdb.data.types.numeric.MutableNumericValue;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.query.DefaultQueryResultId;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
+import net.opentsdb.query.QueryResultId;
 import net.opentsdb.query.TimeSeriesDataSourceConfig;
 import net.opentsdb.query.readcache.CachedQueryNode;
 import net.opentsdb.rollup.RollupConfig;
@@ -79,8 +81,7 @@ public class HttpQueryV3Result implements QueryResult {
   /** The node that owns us. */
   private final QueryNode node;
   
-  /** The name of this data source. */
-  private String data_source;
+  private final QueryResultId id;
   
   /** The time spec parsed out. */
   private TimeSpecification time_spec;
@@ -126,12 +127,20 @@ public class HttpQueryV3Result implements QueryResult {
     this.rollup_config = rollup_config;
     this.node = new CachedQueryNode(node.config().getId(), node);
     TimeSeriesDataSourceConfig cfg = (TimeSeriesDataSourceConfig) node.config();
+    System.out.println("************ HQV3R IDS: " + cfg.resultIds());
     if (exception == null && root != null) {
-      // TEMP - old versions didn't handle IDs correctly so we override the result.
-      data_source = !Strings.isNullOrEmpty(cfg.getDataSourceId()) ?
-          cfg.getDataSourceId() : cfg.getId();
+      JsonNode n = root.get("source");
+      if (n == null || n.isNull()) {
+        throw new IllegalStateException("No source from the JSON response.");
+      }
+      String[] src = n.asText().split(":");
+      if (src == null || src.length < 2) {
+        throw new IllegalStateException("Failed to parse the source: " + n.asText());
+      }
       
-      JsonNode n = root.get("timeSpecification");
+      id = new DefaultQueryResultId(src[0], src[1]);
+      
+      n = root.get("timeSpecification");
       if (n != null && !n.isNull()) {
         time_spec = new TimeSpec(n);
       }
@@ -159,8 +168,10 @@ public class HttpQueryV3Result implements QueryResult {
       }
     } else {
       series = Collections.emptyList();
-      data_source = !Strings.isNullOrEmpty(cfg.getDataSourceId()) ?
-          cfg.getDataSourceId() : cfg.getId();
+//      data_source = !Strings.isNullOrEmpty(cfg.getDataSourceId()) ?
+//          cfg.getDataSourceId() : cfg.getId();
+      id = (QueryResultId) node.config().resultIds().get(0);
+      // TODO ^^^^^^^^
     }
     
   }
@@ -197,8 +208,8 @@ public class HttpQueryV3Result implements QueryResult {
   }
 
   @Override
-  public String dataSource() {
-    return data_source;
+  public QueryResultId dataSource() {
+    return id;
   }
 
   @Override

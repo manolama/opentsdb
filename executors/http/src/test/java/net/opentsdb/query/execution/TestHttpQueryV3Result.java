@@ -67,7 +67,7 @@ public class TestHttpQueryV3Result {
                 .setMetric("system.cpu.user")
                 .build())
             .setFilterId(null)
-            .setDataSourceId("otherMetric")
+            //.setDataSourceId("otherMetric")
             .setId("m1")
             .build();
 

@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017-2019  The OpenTSDB Authors.
+// Copyright (C) 2017-2020  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyLong;
@@ -33,7 +32,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -582,7 +580,7 @@ public class TestReadCacheQueryPipelineContext {
     
     assertTrue(((MockQueryContext) ctx.results[6].sub_context).initialized);
     assertTrue(((MockQueryContext) ctx.results[6].sub_context).fetched);
-    ctx.results[6].onNext(mockResult("m1", "m1"));
+    ctx.results[6].onNext(mockResult(new DefaultQueryResultId("m1", "m1")));
     ctx.results[6].onComplete();
     
     assertEquals(0, ctx.cache_latch.get());
@@ -629,7 +627,7 @@ public class TestReadCacheQueryPipelineContext {
     
     assertTrue(((MockQueryContext) ctx.results[6].sub_context).initialized);
     assertTrue(((MockQueryContext) ctx.results[6].sub_context).fetched);
-    ctx.results[6].onNext(mockResult("m1", "m1"));
+    ctx.results[6].onNext(mockResult(new DefaultQueryResultId("m1", "m1")));
     ctx.results[6].onComplete();
     
     assertEquals(0, ctx.cache_latch.get());
@@ -676,7 +674,7 @@ public class TestReadCacheQueryPipelineContext {
     
     assertTrue(((MockQueryContext) ctx.results[6].sub_context).initialized);
     assertTrue(((MockQueryContext) ctx.results[6].sub_context).fetched);
-    ctx.results[6].onNext(mockResult("m1", "m1"));
+    ctx.results[6].onNext(mockResult(new DefaultQueryResultId("m1", "m1")));
     ctx.results[6].onComplete();
     
     assertEquals(0, ctx.cache_latch.get());
@@ -728,7 +726,7 @@ public class TestReadCacheQueryPipelineContext {
     // one result in
     assertTrue(((MockQueryContext) ctx.results[6].sub_context).initialized);
     assertTrue(((MockQueryContext) ctx.results[6].sub_context).fetched);
-    ctx.results[6].onNext(mockResult("m1", "m1"));
+    ctx.results[6].onNext(mockResult(new DefaultQueryResultId("m1", "m1")));
     ctx.results[6].onComplete();
     
     assertEquals(0, ctx.cache_latch.get()); // #5 is left
@@ -736,7 +734,7 @@ public class TestReadCacheQueryPipelineContext {
     assertTrue(TSDB.runnables.isEmpty());
     
     // last result came in
-    ctx.results[5].onNext(mockResult("m1", "m1"));
+    ctx.results[5].onNext(mockResult(new DefaultQueryResultId("m1", "m1")));
     ctx.results[5].onComplete();
     
     assertEquals(0, ctx.cache_latch.get());
@@ -787,7 +785,7 @@ public class TestReadCacheQueryPipelineContext {
     // one result in
     assertTrue(((MockQueryContext) ctx.results[6].sub_context).initialized);
     assertTrue(((MockQueryContext) ctx.results[6].sub_context).fetched);
-    ctx.results[6].onNext(mockResult("m1", "m1"));
+    ctx.results[6].onNext(mockResult(new DefaultQueryResultId("m1", "m1")));
     ctx.results[6].onComplete();
     
     assertEquals(0, ctx.cache_latch.get()); // #5 is left
@@ -795,7 +793,7 @@ public class TestReadCacheQueryPipelineContext {
     assertTrue(TSDB.runnables.isEmpty());
     
     // last result came in
-    ctx.results[5].onNext(mockResult("m1", "m1"));
+    ctx.results[5].onNext(mockResult(new DefaultQueryResultId("m1", "m1")));
     ctx.results[5].onComplete();
     
     assertEquals(0, ctx.cache_latch.get());
@@ -837,7 +835,7 @@ public class TestReadCacheQueryPipelineContext {
     // result in between
     assertTrue(((MockQueryContext) ctx.results[5].sub_context).initialized);
     assertTrue(((MockQueryContext) ctx.results[5].sub_context).fetched);
-    ctx.results[5].onNext(mockResult("m1", "m1"));
+    ctx.results[5].onNext(mockResult(new DefaultQueryResultId("m1", "m1")));
     ctx.results[5].onComplete();
     
     ctx.onCacheResult(buildFakeFullResult(ctx, 6, 1514786460));
@@ -849,7 +847,7 @@ public class TestReadCacheQueryPipelineContext {
     // one result in
     assertTrue(((MockQueryContext) ctx.results[6].sub_context).initialized);
     assertTrue(((MockQueryContext) ctx.results[6].sub_context).fetched);
-    ctx.results[6].onNext(mockResult("m1", "m1"));
+    ctx.results[6].onNext(mockResult(new DefaultQueryResultId("m1", "m1")));
     ctx.results[6].onComplete();
     
     assertEquals(0, ctx.cache_latch.get());
@@ -909,7 +907,7 @@ public class TestReadCacheQueryPipelineContext {
     assertTrue(TSDB.runnables.isEmpty());
     
     // last result came in
-    ctx.results[5].onNext(mockResult("m1", "m1"));
+    ctx.results[5].onNext(mockResult(new DefaultQueryResultId("m1", "m1")));
     ctx.results[5].onComplete();
     
     assertEquals(0, ctx.cache_latch.get());
@@ -995,7 +993,7 @@ public class TestReadCacheQueryPipelineContext {
     assertTrue(TSDB.runnables.isEmpty());
     assertNull(ctx.full_query_context);
     
-    ctx.results[4].onNext(mockResult("m1", "m1"));
+    ctx.results[4].onNext(mockResult(new DefaultQueryResultId("m1", "m1")));
     ctx.results[4].onComplete();
     
     assertEquals(0, ctx.cache_latch.get());
@@ -1038,7 +1036,7 @@ public class TestReadCacheQueryPipelineContext {
     assertTrue(((MockQueryContext) ctx.full_query_context).initialized);
     assertTrue(((MockQueryContext) ctx.full_query_context).fetched);
     
-    ((MockQueryContext) ctx.full_query_context).sink.onNext(mockResult("m1", "m1"));
+    ((MockQueryContext) ctx.full_query_context).sink.onNext(mockResult(new DefaultQueryResultId("m1", "m1")));
     verify(sink, times(1)).onNext(any(QueryResult.class));
     
     // cleaned up
@@ -1049,14 +1047,14 @@ public class TestReadCacheQueryPipelineContext {
                                         final int idx) {
     ReadCacheQueryResultSet result = mock(ReadCacheQueryResultSet.class);
     when(result.key()).thenReturn(ctx.keys[idx]);
-    Map<String, ReadCacheQueryResult> results = Maps.newHashMap();
+    Map<QueryResultId, ReadCacheQueryResult> results = Maps.newHashMap();
     ReadCacheQueryResult cqr = mock(ReadCacheQueryResult.class);
-    results.put("m1:m1", cqr);
+    results.put(new DefaultQueryResultId("m1", "m1"), cqr);
     QueryNode node = mock(QueryNode.class);
     QueryNodeConfig config = mock(QueryNodeConfig.class);
     when(config.getId()).thenReturn("m1");
     when(node.config()).thenReturn(config);
-    when(cqr.dataSource()).thenReturn("m1");
+    when(cqr.dataSource()).thenReturn(new DefaultQueryResultId("m1", "m1"));
     when(cqr.source()).thenReturn(node);
     when(result.results()).thenReturn(results);
     when(result.lastValueTimestamp()).thenReturn(new SecondTimeStamp(
@@ -1069,8 +1067,8 @@ public class TestReadCacheQueryPipelineContext {
                                        final int timestamp) {
     ReadCacheQueryResultSet result = mock(ReadCacheQueryResultSet.class);
     when(result.key()).thenReturn(ctx.keys[idx]);
-    Map<String, ReadCacheQueryResult> results = Maps.newHashMap();
-    results.put("m1:m1", mock(ReadCacheQueryResult.class));
+    Map<QueryResultId, ReadCacheQueryResult> results = Maps.newHashMap();
+    results.put(new DefaultQueryResultId("m1", "m1"), mock(ReadCacheQueryResult.class));
     when(result.results()).thenReturn(results);
     when(result.lastValueTimestamp()).thenReturn(new SecondTimeStamp(timestamp));
     return result;
@@ -1120,13 +1118,13 @@ public class TestReadCacheQueryPipelineContext {
     when(context.query()).thenReturn(query);
   }
   
-  QueryResult mockResult(final String node_id, final String source) {
+  QueryResult mockResult(final QueryResultId source) {
     QueryResult result = mock(QueryResult.class);
     when(result.dataSource()).thenReturn(source);
     QueryNode node = mock(QueryNode.class);
     QueryNodeConfig config = mock(QueryNodeConfig.class);
     when(node.config()).thenReturn(config);
-    when(config.getId()).thenReturn(node_id);
+    when(config.getId()).thenReturn(source.nodeID());
     when(result.source()).thenReturn(node);
     return result;
   }

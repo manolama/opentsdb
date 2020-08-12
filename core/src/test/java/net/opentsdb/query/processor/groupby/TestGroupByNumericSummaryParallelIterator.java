@@ -97,7 +97,7 @@ public class TestGroupByNumericSummaryParallelIterator {
     JOB_POOL = new MockObjectPool(DefaultObjectPoolConfig.newBuilder()
         .setInitialCount(5)
         .setAllocator(allocator)
-        .setId(allocator.type)
+        .setId(allocator.TYPE)
         .build());
     when(FACTORY.jobPool()).thenReturn(JOB_POOL);
   }
