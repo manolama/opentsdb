@@ -84,7 +84,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_L.getBytes(Const.UTF8_CHARSET), L_1, set, true);
     joiner.hashStringId(Operand.LEFT, L_1, set);
     
     assertEquals(1, set.left_map.size());
@@ -130,7 +129,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_R.getBytes(Const.UTF8_CHARSET), R_1, set, false);
     joiner.hashStringId(Operand.RIGHT, R_1, set);
     
     assertNull(set.left_map);
@@ -205,7 +203,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_L.getBytes(Const.UTF8_CHARSET), L_1, set, true);
     joiner.hashStringId(Operand.LEFT, L_1, set);
     
     assertEquals(1, set.left_map.size());
@@ -251,7 +248,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_R.getBytes(Const.UTF8_CHARSET), R_1, set, false);
     joiner.hashStringId(Operand.RIGHT, R_1, set);
     
     assertNull(set.left_map);
@@ -297,7 +293,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_R.getBytes(Const.UTF8_CHARSET), R_1, set, false);
     joiner.hashStringId(Operand.RIGHT, R_1, set);
     
     assertNull(set.left_map);
@@ -341,7 +336,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_L.getBytes(Const.UTF8_CHARSET), ts, set, true);
     joiner.hashStringId(Operand.LEFT, ts, set);
     
     assertEquals(1, set.left_map.size());
@@ -383,7 +377,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_L.getBytes(Const.UTF8_CHARSET), ts, set, true);
     joiner.hashStringId(Operand.LEFT, ts, set);
     
     assertNull(set.left_map);
@@ -413,7 +406,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_L.getBytes(Const.UTF8_CHARSET), L_1, set, true);
     joiner.hashStringId(Operand.LEFT, L_1, set);
     
     assertEquals(1, set.left_map.size());
@@ -459,7 +451,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_L.getBytes(Const.UTF8_CHARSET), L_1, set, true);
     joiner.hashStringId(Operand.LEFT, L_1, set);
     
     assertEquals(1, set.left_map.size());
@@ -503,7 +494,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_L.getBytes(Const.UTF8_CHARSET), L_1, set, true);
     joiner.hashStringId(Operand.LEFT, L_1, set);
     
     assertNull(set.left_map);
@@ -553,7 +543,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_L.getBytes(Const.UTF8_CHARSET), L_1, set, true);
     joiner.hashStringId(Operand.LEFT, L_1, set);
     joiner.hashStringId(Operand.RIGHT, R_1, set);
     
@@ -575,7 +564,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_L.getBytes(Const.UTF8_CHARSET), L_1, set, true);
     joiner.hashStringId(Operand.LEFT, L_1, set);
     
     assertEquals(1, set.left_map.size());
@@ -621,7 +609,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_L.getBytes(Const.UTF8_CHARSET), L_1, set, true);
     joiner.hashStringId(Operand.LEFT, L_1, set);
     
     assertEquals(1, set.left_map.size());
@@ -668,7 +655,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(METRIC_L.getBytes(Const.UTF8_CHARSET), L_1, set, true);
     joiner.hashStringId(Operand.LEFT, L_1, set);
     
     assertNull(set.left_map);
@@ -710,7 +696,6 @@ public class TestJoiner extends BaseJoinTest {
     encoded_joins.put(HOST, HOST);
     joiner.setEncodedJoins(encoded_joins);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_L_BYTES, L_1, set, true);
     joiner.hashByteId(Operand.LEFT, L_1, set);
     
     assertEquals(1, set.left_map.size());
@@ -759,7 +744,6 @@ public class TestJoiner extends BaseJoinTest {
     encoded_joins.put(HOST, HOST);
     joiner.setEncodedJoins(encoded_joins);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_R_BYTES, R_1, set, false);
     joiner.hashByteId(Operand.RIGHT, R_1, set);
     
     assertNull(set.left_map);
@@ -800,7 +784,6 @@ public class TestJoiner extends BaseJoinTest {
     encoded_joins.put(HOST, new byte[] { 1, 1, 1 });
     joiner.setEncodedJoins(encoded_joins);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_R.getBytes(Const.UTF8_CHARSET), R_1, set, false);
     joiner.hashByteId(Operand.RIGHT, R_1, set);
     
     assertNull(set.left_map);
@@ -836,7 +819,6 @@ public class TestJoiner extends BaseJoinTest {
     encoded_joins.put(HOST, HOST);
     joiner.setEncodedJoins(encoded_joins);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_L_BYTES, L_1, set, true);
     joiner.hashByteId(Operand.LEFT, L_1, set);
     
     assertEquals(1, set.left_map.size());
@@ -885,7 +867,6 @@ public class TestJoiner extends BaseJoinTest {
     encoded_joins.put(HOST, HOST);
     joiner.setEncodedJoins(encoded_joins);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_R_BYTES, R_1, set, false);
     joiner.hashByteId(Operand.RIGHT, R_1, set);
     
     assertNull(set.left_map);
@@ -934,7 +915,6 @@ public class TestJoiner extends BaseJoinTest {
     encoded_joins.put(HOST, new byte[] { 1, 1, 1 });
     joiner.setEncodedJoins(encoded_joins);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_R_BYTES, R_1, set, false);
     joiner.hashByteId(Operand.RIGHT, R_1, set);
     
     assertNull(set.left_map);
@@ -983,7 +963,6 @@ public class TestJoiner extends BaseJoinTest {
     encoded_joins.put(ROLE, ROLE);
     joiner.setEncodedJoins(encoded_joins);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_L_BYTES, ts, set, true);
     joiner.hashByteId(Operand.LEFT, ts, set);
     
     assertEquals(1, set.left_map.size());
@@ -1030,7 +1009,6 @@ public class TestJoiner extends BaseJoinTest {
     encoded_joins.put(ROLE, ROLE);
     joiner.setEncodedJoins(encoded_joins);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_L_BYTES, ts, set, true);
     joiner.hashByteId(Operand.LEFT, ts, set);
     
     assertNull(set.left_map);
@@ -1060,7 +1038,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_L_BYTES, L_1, set, true);
     joiner.hashByteId(Operand.LEFT, L_1, set);
     
     assertEquals(1, set.left_map.size());
@@ -1109,7 +1086,6 @@ public class TestJoiner extends BaseJoinTest {
     encoded_joins.put(HOST, HOST);
     joiner.setEncodedJoins(encoded_joins);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_L_BYTES, L_1, set, true);
     joiner.hashByteId(Operand.LEFT, L_1, set);
     
     assertEquals(1, set.left_map.size());
@@ -1157,7 +1133,6 @@ public class TestJoiner extends BaseJoinTest {
     encoded_joins.put(new byte[] { 2, 2, 2 }, new byte[] { 2, 2, 2 });
     joiner.setEncodedJoins(encoded_joins);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_L_BYTES, L_1, set, true);
     joiner.hashByteId(Operand.LEFT, L_1, set);
     
     assertNull(set.left_map);
@@ -1207,7 +1182,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_L.getBytes(Const.UTF8_CHARSET), L_1, set, true);
     joiner.hashByteId(Operand.LEFT, L_1, set);
     joiner.hashByteId(Operand.RIGHT, R_1, set);
     
@@ -1229,7 +1203,6 @@ public class TestJoiner extends BaseJoinTest {
     
     Joiner joiner = new Joiner(config);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_L_BYTES, L_1, set, true);
     joiner.hashByteId(Operand.LEFT, L_1, set);
     
     assertEquals(1, set.left_map.size());
@@ -1278,7 +1251,6 @@ public class TestJoiner extends BaseJoinTest {
     encoded_joins.put(HOST, HOST);
     joiner.setEncodedJoins(encoded_joins);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_L_BYTES, L_1, set, true);
     joiner.hashByteId(Operand.LEFT, L_1, set);
     
     assertEquals(1, set.left_map.size());
@@ -1329,7 +1301,6 @@ public class TestJoiner extends BaseJoinTest {
     encoded_joins.put(new byte[] { 2, 2, 2 }, new byte[] { 2, 2, 2 });
     joiner.setEncodedJoins(encoded_joins);
     KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(METRIC_L_BYTES, L_1, set, true);
     joiner.hashByteId(Operand.LEFT, L_1, set);
     
     assertNull(set.left_map);
@@ -1640,43 +1611,44 @@ public class TestJoiner extends BaseJoinTest {
     assertTrue(id.disjointTags().isEmpty());
   }
   
+//  @Test
+//    Iterator<TimeSeries[]> iterator = 
+//            false,
+//      final TimeSeries[] pair = iterator.next();
+//      assertNotNull(pair[0]);
+//      assertNotNull(pair[1]);
+//            false,
+//      final TimeSeries[] pair = iterator.next();
+//      if (pair[0] == null) {
+//        assertNotNull(pair[1]);
+//        assertNull(pair[1]);
+//        false,
+//        false,
+//          false,
+//          false,
+//          false,
+//          false,
+//          false,
+//          false,
+//    Iterator<TimeSeries[]> iterator = 
+//            false,
+//      final TimeSeries[] pair = iterator.next();
+//      assertNotNull(pair[0]);
+//      assertNotNull(pair[1]);
+//            false,
+//      final TimeSeries[] pair = iterator.next();
+//      if (pair[0] == null) {
+//        assertNotNull(pair[1]);
+//        assertNull(pair[1]);
+//        false,
+//        false,
+//          false,
+//          false,
+//          false,
+//          false,
+//          false,
+//          false,
   @Test
-    Iterator<TimeSeries[]> iterator = 
-            false,
-      final TimeSeries[] pair = iterator.next();
-      assertNotNull(pair[0]);
-      assertNotNull(pair[1]);
-            false,
-      final TimeSeries[] pair = iterator.next();
-      if (pair[0] == null) {
-        assertNotNull(pair[1]);
-        assertNull(pair[1]);
-        false,
-        false,
-          false,
-          false,
-          false,
-          false,
-          false,
-          false,
-    Iterator<TimeSeries[]> iterator = 
-            false,
-      final TimeSeries[] pair = iterator.next();
-      assertNotNull(pair[0]);
-      assertNotNull(pair[1]);
-            false,
-      final TimeSeries[] pair = iterator.next();
-      if (pair[0] == null) {
-        assertNotNull(pair[1]);
-        assertNull(pair[1]);
-        false,
-        false,
-          false,
-          false,
-          false,
-          false,
-          false,
-          false,
   public void joinStringMultipleResult() throws Exception {
     // See the various joins for details.
     setStringIds();
@@ -1735,7 +1707,7 @@ public class TestJoiner extends BaseJoinTest {
     assertFalse(iterator.hasNext());
     
     // empty results
-    Pair<QueryResult, QueryResult> results = new Pair<QueryResult, QueryResult>();
+    List<QueryResult> results = Lists.newArrayList();
     QueryResult result = mock(QueryResult.class);
     when(result.timeSeries()).thenReturn(Collections.emptyList());
     when(result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
@@ -1744,7 +1716,7 @@ public class TestJoiner extends BaseJoinTest {
         return Const.TS_STRING_ID;
       }
     });
-    results.setKey(result);
+    results.add(result);
     
     result = mock(QueryResult.class);
     when(result.timeSeries()).thenReturn(Collections.emptyList());
@@ -1754,7 +1726,7 @@ public class TestJoiner extends BaseJoinTest {
         return Const.TS_STRING_ID;
       }
     });
-    results.setValue(result);
+    results.add(result);
     
     iterator = joiner.join(results, 
         (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
@@ -1848,7 +1820,7 @@ public class TestJoiner extends BaseJoinTest {
     });
     results.add(result);
     
-    iterator = joiner.join(new Pair<QueryResult, QueryResult>(result, null), 
+    iterator = joiner.join(Lists.newArrayList(result, null), 
         (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
         (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
         false,
@@ -1867,112 +1839,113 @@ public class TestJoiner extends BaseJoinTest {
     } catch (IllegalStateException e) { }
   }
   
-  @Test
-    Iterator<TimeSeries[]> iterator = 
-            true,
-            false).iterator();
-      final TimeSeries[] pair = iterator.next();
-      assertNotNull(pair[0]);
-      assertNotNull(pair[1]);
-            true,
-            false).iterator();
-      final TimeSeries[] pair = iterator.next();
-      assertNotNull(pair[0]);
-      assertNotNull(pair[1]);
-            true,
-            false).iterator();
-      final TimeSeries[] pair = iterator.next();
-      assertNotNull(pair[0]);
-      assertNotNull(pair[1]);
-            true,
-            false).iterator();
-      final TimeSeries[] pair = iterator.next();
-      assertNotNull(pair[0]);
-      assertNotNull(pair[1]);
-    Iterator<TimeSeries[]> iterator = 
-            true,
-            false).iterator();
-      final TimeSeries[] pair = iterator.next();
-      assertNotNull(pair[0]);
-      assertNotNull(pair[1]);
-            true,
-            false).iterator();
-      final TimeSeries[] pair = iterator.next();
-      assertNotNull(pair[0]);
-      assertNotNull(pair[1]);
-            true,
-            false).iterator();
-      final TimeSeries[] pair = iterator.next();
-      assertNotNull(pair[0]);
-      assertNotNull(pair[1]);
-            true,
-            false).iterator();
-      final TimeSeries[] pair = iterator.next();
-      assertNotNull(pair[0]);
-      assertNotNull(pair[1]);
-  public void joinFilterString() throws Exception {
-    // See the various joins for details.
-    setStringIds();
-    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
-        .setJoinType(JoinType.INNER)
-        .addJoins("host", "host")
-        .setId(ID)
-        .build();
-    
-    Joiner joiner = new Joiner(config);
-    Iterator<TimeSeries[]> iterator = 
-        joiner.join(multiResults(Const.TS_STRING_ID), 
-            (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET),
-            true,
-            false).iterator();
-    int pairs = 0;
-    while (iterator.hasNext()) {
-      final TimeSeries[] pair = iterator.next();
-      assertNotNull(pair[0]);
-      assertNull(pair[1]);
-      pairs++;
-    }
-    assertEquals(7, pairs);
-  }
-  
-  @Test
-  public void joinFilterByte() throws Exception {
-    // See the various joins for details.
-    setByteIds();
-    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
-        .setJoinType(JoinType.INNER)
-        .addJoins("host", "host")
-        .setId(ID)
-        .build();
-    
-    Joiner joiner = new Joiner(config);
-    ByteMap<byte[]> encoded_joins = new ByteMap<byte[]>();
-    encoded_joins.put(HOST, HOST);
-    joiner.setEncodedJoins(encoded_joins);
-    Iterator<TimeSeries[]> iterator = 
-        joiner.join(multiResults(Const.TS_BYTE_ID), 
-            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES),
-            true,
-            false).iterator();
-    int pairs = 0;
-    while (iterator.hasNext()) {
-      final TimeSeries[] pair = iterator.next();
-      assertNotNull(pair[0]);
-      assertNull(pair[1]);
-      pairs++;
-    }
-    assertEquals(7, pairs);
-    
-    // encoded_ids not set
-    joiner = new Joiner(config);
-    try {
-      joiner.join(multiResults(Const.TS_BYTE_ID), 
-          com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
-          true,
-          false);
-      fail("Expected IllegalStateException");
-    } catch (IllegalStateException e) { }
-  }
+//  @Test
+//    Iterator<TimeSeries[]> iterator = 
+//            true,
+//            false).iterator();
+//      final TimeSeries[] pair = iterator.next();
+//      assertNotNull(pair[0]);
+//      assertNotNull(pair[1]);
+//            true,
+//            false).iterator();
+//      final TimeSeries[] pair = iterator.next();
+//      assertNotNull(pair[0]);
+//      assertNotNull(pair[1]);
+//            true,
+//            false).iterator();
+//      final TimeSeries[] pair = iterator.next();
+//      assertNotNull(pair[0]);
+//      assertNotNull(pair[1]);
+//            true,
+//            false).iterator();
+//      final TimeSeries[] pair = iterator.next();
+//      assertNotNull(pair[0]);
+//      assertNotNull(pair[1]);
+//    Iterator<TimeSeries[]> iterator = 
+//            true,
+//            false).iterator();
+//      final TimeSeries[] pair = iterator.next();
+//      assertNotNull(pair[0]);
+//      assertNotNull(pair[1]);
+//            true,
+//            false).iterator();
+//      final TimeSeries[] pair = iterator.next();
+//      assertNotNull(pair[0]);
+//      assertNotNull(pair[1]);
+//            true,
+//            false).iterator();
+//      final TimeSeries[] pair = iterator.next();
+//      assertNotNull(pair[0]);
+//      assertNotNull(pair[1]);
+//            true,
+//            false).iterator();
+//      final TimeSeries[] pair = iterator.next();
+//      assertNotNull(pair[0]);
+//      assertNotNull(pair[1]);
+//  @Test
+//  public void joinFilterString() throws Exception {
+//    // See the various joins for details.
+//    setStringIds();
+//    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
+//        .setJoinType(JoinType.INNER)
+//        .addJoins("host", "host")
+//        .setId(ID)
+//        .build();
+//    
+//    Joiner joiner = new Joiner(config);
+//    Iterator<TimeSeries[]> iterator = 
+//        joiner.join(multiResults(Const.TS_STRING_ID), 
+//            (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET),
+//            true,
+//            false).iterator();
+//    int pairs = 0;
+//    while (iterator.hasNext()) {
+//      final TimeSeries[] pair = iterator.next();
+//      assertNotNull(pair[0]);
+//      assertNull(pair[1]);
+//      pairs++;
+//    }
+//    assertEquals(7, pairs);
+//  }
+//  
+//  @Test
+//  public void joinFilterByte() throws Exception {
+//    // See the various joins for details.
+//    setByteIds();
+//    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
+//        .setJoinType(JoinType.INNER)
+//        .addJoins("host", "host")
+//        .setId(ID)
+//        .build();
+//    
+//    Joiner joiner = new Joiner(config);
+//    ByteMap<byte[]> encoded_joins = new ByteMap<byte[]>();
+//    encoded_joins.put(HOST, HOST);
+//    joiner.setEncodedJoins(encoded_joins);
+//    Iterator<TimeSeries[]> iterator = 
+//        joiner.join(multiResults(Const.TS_BYTE_ID), 
+//            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES),
+//            true,
+//            false).iterator();
+//    int pairs = 0;
+//    while (iterator.hasNext()) {
+//      final TimeSeries[] pair = iterator.next();
+//      assertNotNull(pair[0]);
+//      assertNull(pair[1]);
+//      pairs++;
+//    }
+//    assertEquals(7, pairs);
+//    
+//    // encoded_ids not set
+//    joiner = new Joiner(config);
+//    try {
+//      joiner.join(multiResults(Const.TS_BYTE_ID), 
+//          com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
+//          true,
+//          false);
+//      fail("Expected IllegalStateException");
+//    } catch (IllegalStateException e) { }
+//  }
 
   QueryResult mockResult(final boolean as_strings, final TimeSeries... series) {
     List<TimeSeries> results = Lists.newArrayList(series);

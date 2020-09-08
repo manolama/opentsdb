@@ -82,6 +82,7 @@ public class KeyedHashedJoinSet extends BaseHashedJoinSet {
         right_map.put(hash, series);
       }
       series.add(ts);
+    } else {
       throw new IllegalStateException("Shouldn't be here with a ternary condition.");
     }
   }

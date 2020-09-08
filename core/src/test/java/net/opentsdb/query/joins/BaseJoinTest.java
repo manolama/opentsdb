@@ -342,8 +342,8 @@ public class BaseJoinTest {
     return set;
   }
   
-  protected static Pair<QueryResult, QueryResult> multiResults(final TypeToken<?> ts_type) {
-    final Pair<QueryResult, QueryResult> results = new Pair<QueryResult, QueryResult>();
+  protected static List<QueryResult> multiResults(final TypeToken<?> ts_type) {
+    final List<QueryResult> results = Lists.newArrayList();
     QueryResult result = mock(QueryResult.class);
     when(result.dataSource()).thenReturn(new DefaultQueryResultId("m1", "m1"));
     List<TimeSeries> ts = Lists.newArrayList(
@@ -359,7 +359,7 @@ public class BaseJoinTest {
         return ts_type;
       }
     });
-    results.setKey(result);
+    results.add(result);
     
     // right
     result = mock(QueryResult.class);
@@ -377,7 +377,7 @@ public class BaseJoinTest {
         return ts_type;
       }
     });
-    results.setValue(result);
+    results.add(result);
     return results;
   }
   

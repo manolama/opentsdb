@@ -124,7 +124,9 @@ public class Joiner {
                                      final byte[] right_key,
                                      final boolean use_alias,
                                      final boolean is_ternary) {
-      throw new IllegalArgumentException("Results can't be null.");
+    if (results == null || results.isEmpty()) {
+      throw new IllegalArgumentException("Results list can't be null "
+          + "or empty.");
     }
     if (left_key == null || left_key.length < 1) {
       throw new IllegalArgumentException("Left key cannot be null.");
@@ -138,7 +140,7 @@ public class Joiner {
           + "  Right: " + new String(right_key, Const.UTF8_CHARSET));
     }
     
-    if (results.getKey().idType() == Const.TS_BYTE_ID && 
+    if (results.get(0).idType() == Const.TS_BYTE_ID &&
         encoded_joins == null &&
         config.getJoinType() != JoinType.NATURAL &&
         config.getJoinType() != JoinType.NATURAL_OUTER) {
@@ -148,11 +150,11 @@ public class Joiner {
     
     final KeyedHashedJoinSet join_set = is_ternary ?
         new TernaryKeyedHashedJoinSet(config.type, left_key, right_key) :
-    
+        new KeyedHashedJoinSet(config.type);
+        
     // calculate the hash for every series and let the hasher kick out
     // inapplicable series.
-    for (int i = 0; i < 2; i++) {
-      final QueryResult result = i == 0 ? results.getKey() : results.getValue();
+    for (final QueryResult result : results) {
       if (result == null) {
         continue;
       }
@@ -669,8 +671,7 @@ public class Joiner {
   @VisibleForTesting
   void hashStringId(final Operand operand,
                     final TimeSeries ts,
-                    final KeyedHashedJoinSet join_set,
-                    boolean is_left) {
+                    final KeyedHashedJoinSet join_set) {
     final TimeSeriesStringId id = (TimeSeriesStringId) ts.id();
     final StringBuilder buf = new StringBuilder();
     
@@ -701,7 +702,7 @@ public class Joiner {
         if (!config.joins.isEmpty() && 
             matched_tags < config.joins.size()) {
           if (LOG.isTraceEnabled()) {
-            LOG.trace("Ejecting a series that didn't match: " + Bytes.pretty(key));
+            LOG.trace("Ejecting a series that didn't match");
           }
           return;
         }
@@ -722,7 +723,6 @@ public class Joiner {
           if (Strings.isNullOrEmpty(value)) {
             if (Strings.isNullOrEmpty(id.tags().get(pair.getValue()))) {
               // TODO - log the ejection
-            }
               matched = false;
               break;
             }
@@ -731,21 +731,21 @@ public class Joiner {
         }
         if (!matched) {
           if (LOG.isTraceEnabled()) {
-            LOG.trace("Ejecting a series that didn't match: " + Bytes.pretty(key));
+            LOG.trace("Ejecting a series that didn't match");
           }
           return;
         }
         if (config.getExplicitTags() && 
             id.tags().size() != config.getJoins().size()) {
           if (LOG.isTraceEnabled()) {
-            LOG.trace("Ejecting a series that didn't match: " + Bytes.pretty(key));
+            LOG.trace("Ejecting a series that didn't match");
           }
           return;
         }
       }
     }
     
-    join_set.add(operand, LongHashFunction.xx_r39().hashChars(buf.toString()), ts);
+    join_set.add(operand, LongHashFunction.xx().hashChars(buf.toString()), ts);
   }
   
   /**
@@ -758,8 +758,7 @@ public class Joiner {
   @VisibleForTesting
   void hashByteId(final Operand operand,
                   final TimeSeries ts,
-                  final KeyedHashedJoinSet join_set,
-                  boolean is_left) {
+                  final KeyedHashedJoinSet join_set) {
     final TimeSeriesByteId id = (TimeSeriesByteId) ts.id();
     final ByteArrayOutputStream buf = new ByteArrayOutputStream();
     
@@ -824,7 +823,7 @@ public class Joiner {
         }
       }
       
-      join_set.add(operand, LongHashFunction.xx_r39().hashBytes(buf.toByteArray()), ts);
+      join_set.add(operand, LongHashFunction.xx().hashBytes(buf.toByteArray()), ts);
     } catch (IOException e) {
       throw new QueryExecutionException("Unexpected exception joining results", 0, e);
     }
