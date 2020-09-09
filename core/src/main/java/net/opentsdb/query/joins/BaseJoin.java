@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.query.joins;
 
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
@@ -55,6 +56,15 @@ public abstract class BaseJoin implements
   /** An index into the {@link #right_series}. */
   protected int right_idx;
   
+  /** The ternary iterator. May be null. */
+  protected TLongObjectIterator<List<TimeSeries>> ternary_iterator;
+  
+  /** The current ternary series reference. May be null. */
+  protected List<TimeSeries> ternary_series;
+  
+  /** An index into the {@link #ternary_series}. */
+  protected int ternary_idx;
+  
   /** A set of completed hashes used by the outer join when processing
    * the right iterator after finishing the left to avoid dupes. */
   protected TLongSet completed;
@@ -79,6 +89,12 @@ public abstract class BaseJoin implements
     this.join = join;
     current = new TimeSeries[join.is_ternary ? 3 : 2];
     next = new TimeSeries[join.is_ternary ? 3 : 2];
+    left_iterator = join.left_map == null ? null : join.left_map.iterator();
+    right_iterator = join.right_map == null ? null : join.right_map.iterator();
+    if (join.is_ternary) {
+      ternary_iterator = join.condition_map == null ? null : 
+        join.condition_map.iterator();
+    }
   }
   
   @Override
@@ -88,9 +104,16 @@ public abstract class BaseJoin implements
 
   @Override
   public TimeSeries[] next() {
-    current[0] = next[0];
-    current[1] = next[1];
-    advance();
+    for (int i = 0; i < current.length; i++) {
+      current[i] = next[i];
+    }
+    if (join.is_ternary) {
+      ternaryAdvance();
+    } else {
+      advance();
+    }
+    //System.out.println("             " + Arrays.toString(next));
+    //System.out.println("-----------------------------------------");
     return current;
   }
   
@@ -100,4 +123,6 @@ public abstract class BaseJoin implements
    * of data.
    */
   protected abstract void advance();
+  
+  protected abstract void ternaryAdvance();
 }

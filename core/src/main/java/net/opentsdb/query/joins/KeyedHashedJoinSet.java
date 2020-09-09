@@ -51,13 +51,6 @@ public class KeyedHashedJoinSet extends BaseHashedJoinSet {
     }
   }
   
-  /**
-   * Package private method to add a value to the proper map.
-   * @param key A non-null and non-empty key mapping to the left or right
-   * map.
-   * @param hash The hash for this time series.
-   * @param ts A non-null time series.
-   */
   void add(final Operand operand, final long hash, final TimeSeries ts) {
     if (ts == null) {
       throw new IllegalArgumentException("Time series can't be null.");

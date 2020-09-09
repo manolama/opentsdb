@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
+import net.opentsdb.query.joins.Joiner.Operand;
 import net.opentsdb.utils.Bytes;
 
 /**
@@ -44,24 +45,17 @@ public class TernaryKeyedHashedJoinSet extends KeyedHashedJoinSet {
    * map.
    * @throws IllegalArgumentException if any of the args were null or empty.
    */
-  protected TernaryKeyedHashedJoinSet(final JoinType type, 
-                               final byte[] left_key, 
-                               final byte[] right_key) {
-    super(type, left_key, right_key);
+  protected TernaryKeyedHashedJoinSet(final JoinType type) {
+    super(type);
+    is_ternary = true;
   }
   
-  /**
-   * Package private method to add a value to the proper map.
-   * @param key A non-null and non-empty key mapping to the left or right
-   * map.
-   * @param hash The hash for this time series.
-   * @param ts A non-null time series.
-   */
-  void add(final byte[] key, final long hash, final TimeSeries ts) {
+  @Override
+  void add(final Operand operand, final long hash, final TimeSeries ts) {
     if (ts == null) {
       throw new IllegalArgumentException("Time series can't be null.");
     }
-    if (Bytes.memcmp(key, left_key) == 0) {
+    if (operand == Operand.LEFT) {
       if (left_map == null) {
         left_map = new TLongObjectHashMap<List<TimeSeries>>();
       }
@@ -71,7 +65,7 @@ public class TernaryKeyedHashedJoinSet extends KeyedHashedJoinSet {
         left_map.put(hash, series);
       }
       series.add(ts);
-    } else if (Bytes.memcmp(key, right_key) == 0) {
+    } else if (operand == Operand.RIGHT) {
       if (right_map == null) {
         right_map = new TLongObjectHashMap<List<TimeSeries>>();
       }

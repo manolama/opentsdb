@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2017-2018  The OpenTSDB Authors.
+// Copyright (C) 2017-2020  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -48,7 +48,6 @@ import net.opentsdb.data.BaseTimeSeriesStringId;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
 import net.opentsdb.query.joins.Joiner.Operand;
-import net.opentsdb.utils.Pair;
 import net.opentsdb.utils.Bytes.ByteMap;
 
 public class TestJoiner extends BaseJoinTest {
@@ -71,7 +70,6 @@ public class TestJoiner extends BaseJoinTest {
     } catch (IllegalArgumentException e) { }
   }
   
-  // TODO - ug, re-do all the hash.* tests since we hash upstream now.
   @Test
   public void hashStringIdDefaultLeftOneTagMatch() throws Exception {
     setStringIds();
@@ -280,45 +278,6 @@ public class TestJoiner extends BaseJoinTest {
     assertTrue(set.right_map.isEmpty());
   }
   
-  @Test
-  public void hashStringIdDefaultRightOneTagMatchExplicitTagsDiffJoinTag() throws Exception {
-    setStringIds();
-    
-    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
-        .setJoinType(JoinType.INNER)
-        .addJoins("host", "HostName") // this is to make sure we use the right join.
-        .setExplicitTags(true)
-        .setId(ID)
-        .build();
-    
-    Joiner joiner = new Joiner(config);
-    KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashStringId(Operand.RIGHT, R_1, set);
-    
-    assertNull(set.left_map);
-    assertNull(set.right_map);
-    
-    // extra tags will be kicked out.
-    TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesStringId.newBuilder()
-        .setMetric(METRIC_R)
-        .addTags("host", "web01")
-        .addTags("owner", "tyrion")
-        .build();
-    when(ts.id()).thenReturn(id);
-    
-    joiner.hashStringId(Operand.RIGHT, ts, set);
-    assertNull(set.left_map);
-    assertNull(set.right_map);
-    
-    // tagless should be kicked
-    when(ts.id()).thenReturn(TAGLESS_STRING);
-    joiner.hashStringId(Operand.RIGHT, ts, set);
-    
-    assertNull(set.left_map);
-    assertNull(set.right_map);
-  }
-
   @Test
   public void hashStringIdDefaultMultiTagsMatch() throws Exception {
     setStringIds();
@@ -770,40 +729,6 @@ public class TestJoiner extends BaseJoinTest {
   }
 
   @Test
-  public void hashByteIdDefaultRightOneTagMatchDiffJoinTag() throws Exception {
-    setByteIds();
-    
-    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
-        .setJoinType(JoinType.INNER)
-        .addJoins("host", "HostName") // this is to make sure we use the right join.
-        .setId(ID)
-        .build();
-    
-    Joiner joiner = new Joiner(config);
-    ByteMap<byte[]> encoded_joins = new ByteMap<byte[]>();
-    encoded_joins.put(HOST, new byte[] { 1, 1, 1 });
-    joiner.setEncodedJoins(encoded_joins);
-    KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(Operand.RIGHT, R_1, set);
-    
-    assertNull(set.left_map);
-    assertNull(set.right_map);
-    
-    // extra tags will hash to the same value
-    TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataSourceFactory.class))
-        .setMetric(METRIC_R_BYTES)
-        .addTags(HOST, WEB01)
-        .addTags(OWNER, TYRION)
-        .build();
-    when(ts.id()).thenReturn(id);
-    
-    joiner.hashByteId(Operand.RIGHT, ts, set);
-    assertNull(set.left_map);
-    assertNull(set.right_map);
-  }
-
-  @Test
   public void hashByteIdDefaultLeftOneTagMatchExplicitTags() throws Exception {
     setByteIds();
     
@@ -897,48 +822,6 @@ public class TestJoiner extends BaseJoinTest {
     
     assertNull(set.left_map);
     assertTrue(set.right_map.isEmpty());
-  }
-
-  @Test
-  public void hashByteIdDefaultRightOneTagMatchExplicitTagsDiffJoinTag() throws Exception {
-    setByteIds();
-    
-    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
-        .setJoinType(JoinType.INNER)
-        .addJoins("host", "HostName") // this is to make sure we use the right join.
-        .setExplicitTags(true)
-        .setId(ID)
-        .build();
-    
-    Joiner joiner = new Joiner(config);
-    ByteMap<byte[]> encoded_joins = new ByteMap<byte[]>();
-    encoded_joins.put(HOST, new byte[] { 1, 1, 1 });
-    joiner.setEncodedJoins(encoded_joins);
-    KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER);
-    joiner.hashByteId(Operand.RIGHT, R_1, set);
-    
-    assertNull(set.left_map);
-    assertNull(set.right_map);
-    
-    // extra tags will be kicked out.
-    TimeSeries ts = mock(TimeSeries.class);
-    TimeSeriesId id = BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataSourceFactory.class))
-        .setMetric(METRIC_R_BYTES)
-        .addTags(HOST, WEB01)
-        .addTags(OWNER, TYRION)
-        .build();
-    when(ts.id()).thenReturn(id);
-    
-    joiner.hashByteId(Operand.RIGHT, ts, set);
-    assertNull(set.left_map);
-    assertNull(set.right_map);
-    
-    // tagless should be kicked
-    when(ts.id()).thenReturn(TAGLESS_BYTE);
-    joiner.hashByteId(Operand.RIGHT, ts, set);
-    
-    assertNull(set.left_map);
-    assertNull(set.right_map);
   }
 
   @Test
@@ -1611,43 +1494,276 @@ public class TestJoiner extends BaseJoinTest {
     assertTrue(id.disjointTags().isEmpty());
   }
   
-//  @Test
-//    Iterator<TimeSeries[]> iterator = 
-//            false,
-//      final TimeSeries[] pair = iterator.next();
-//      assertNotNull(pair[0]);
-//      assertNotNull(pair[1]);
-//            false,
-//      final TimeSeries[] pair = iterator.next();
-//      if (pair[0] == null) {
-//        assertNotNull(pair[1]);
-//        assertNull(pair[1]);
-//        false,
-//        false,
-//          false,
-//          false,
-//          false,
-//          false,
-//          false,
-//          false,
-//    Iterator<TimeSeries[]> iterator = 
-//            false,
-//      final TimeSeries[] pair = iterator.next();
-//      assertNotNull(pair[0]);
-//      assertNotNull(pair[1]);
-//            false,
-//      final TimeSeries[] pair = iterator.next();
-//      if (pair[0] == null) {
-//        assertNotNull(pair[1]);
-//        assertNull(pair[1]);
-//        false,
-//        false,
-//          false,
-//          false,
-//          false,
-//          false,
-//          false,
-//          false,
+  @Test
+  public void joinStringSingleResult() throws Exception {
+    // See the various joins for details.
+    setStringIds();
+    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
+        .setJoinType(JoinType.INNER)
+        .addJoins("host", "host")
+        .setId(ID)
+        .build();
+    
+    Joiner joiner = new Joiner(config);
+    Iterator<TimeSeries[]> iterator = 
+        joiner.join(singleResult(Const.TS_STRING_ID), 
+            (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+            (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+            false,
+            false).iterator();
+    int pairs = 0;
+    while (iterator.hasNext()) {
+      final TimeSeries[] pair = iterator.next();
+      assertNotNull(pair[0]);
+      assertNotNull(pair[1]);
+      pairs++;
+    }
+    assertEquals(9, pairs);
+    
+    config = (JoinConfig) JoinConfig.newBuilder()
+        .setJoinType(JoinType.OUTER_DISJOINT)
+        .addJoins("host", "host")
+        .setId(ID)
+        .build();
+    
+    joiner = new Joiner(config);
+    iterator = joiner.join(singleResult(Const.TS_STRING_ID), 
+            (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+            (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+            false,
+            false).iterator();
+    pairs = 0;
+    while (iterator.hasNext()) {
+      final TimeSeries[] pair = iterator.next();
+      if (pair[0] == null) {
+        assertNotNull(pair[1]);
+      } else {
+        assertNull(pair[1]);
+      }
+      pairs++;
+    }
+    assertEquals(2, pairs);
+    
+    // wrong keys. Missing the namespace.
+    iterator = joiner.join(singleResult(Const.TS_STRING_ID), 
+        METRIC_L.getBytes(Const.UTF8_CHARSET), 
+        METRIC_R.getBytes(Const.UTF8_CHARSET),
+        false,
+        false).iterator();
+    assertFalse(iterator.hasNext());
+    
+    // empty result
+    QueryResult result = mock(QueryResult.class);
+    when(result.timeSeries()).thenReturn(Collections.emptyList());
+    when(result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
+      @Override
+      public TypeToken<?> answer(InvocationOnMock invocation) throws Throwable {
+        return Const.TS_STRING_ID;
+      }
+    });
+    
+    iterator = joiner.join(Lists.newArrayList(result), 
+        (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+        (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+        false,
+        false).iterator();
+    assertFalse(iterator.hasNext());
+    
+    // null results
+    try {
+      joiner.join(null, 
+          (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+          (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+          false,
+          false);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    // empty list.
+    try {
+      joiner.join(Lists.newArrayList(), 
+          (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+          (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+          false,
+          false);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    // bad keys
+    try {
+      joiner.join(singleResult(Const.TS_STRING_ID), 
+          null, 
+          (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+          false,
+          false);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    try {
+      joiner.join(singleResult(Const.TS_STRING_ID), 
+          new byte[0], 
+          (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+          false,
+          false);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    try {
+      joiner.join(singleResult(Const.TS_STRING_ID), 
+          (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+          null,
+          false,
+          false);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    try {
+      joiner.join(singleResult(Const.TS_STRING_ID), 
+          (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+          new byte[0],
+          false,
+          false);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+  }
+  
+  @Test
+  public void joinByteSingleResult() throws Exception {
+    // See the various joins for details.
+    setByteIds();
+    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
+        .setJoinType(JoinType.INNER)
+        .addJoins("host", "host")
+        .setId(ID)
+        .build();
+    
+    Joiner joiner = new Joiner(config);
+    ByteMap<byte[]> encoded_joins = new ByteMap<byte[]>();
+    encoded_joins.put(HOST, HOST);
+    joiner.setEncodedJoins(encoded_joins);
+    Iterator<TimeSeries[]> iterator = 
+        joiner.join(singleResult(Const.TS_BYTE_ID), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_R_BYTES),
+            false,
+            false).iterator();
+    int pairs = 0;
+    while (iterator.hasNext()) {
+      final TimeSeries[] pair = iterator.next();
+      assertNotNull(pair[0]);
+      assertNotNull(pair[1]);
+      pairs++;
+    }
+    assertEquals(9, pairs);
+    
+    config = (JoinConfig) JoinConfig.newBuilder()
+        .setJoinType(JoinType.OUTER_DISJOINT)
+        .addJoins("host", "host")
+        .setId(ID)
+        .build();
+    
+    joiner = new Joiner(config);
+    joiner.setEncodedJoins(encoded_joins);
+    iterator = joiner.join(singleResult(Const.TS_BYTE_ID), 
+        com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
+        com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_R_BYTES),
+            false,
+            false).iterator();
+    pairs = 0;
+    while (iterator.hasNext()) {
+      final TimeSeries[] pair = iterator.next();
+      if (pair[0] == null) {
+        assertNotNull(pair[1]);
+      } else {
+        assertNull(pair[1]);
+      }
+      pairs++;
+    }
+    assertEquals(2, pairs);
+    
+    // wrong keys. Missing the namespace.
+    iterator = joiner.join(singleResult(Const.TS_BYTE_ID), 
+        METRIC_L_BYTES, 
+        METRIC_R_BYTES,
+        false,
+        false).iterator();
+    assertFalse(iterator.hasNext());
+    
+    // empty result
+    QueryResult result = mock(QueryResult.class);
+    when(result.timeSeries()).thenReturn(Collections.emptyList());
+    when(result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
+      @Override
+      public TypeToken<?> answer(InvocationOnMock invocation) throws Throwable {
+        return Const.TS_BYTE_ID;
+      }
+    });
+    
+    iterator = joiner.join(Lists.newArrayList(result), 
+        (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+        (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+        false,
+        false).iterator();
+    assertFalse(iterator.hasNext());
+    
+    // null results
+    try {
+      joiner.join(null, 
+          (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+          (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+          false,
+          false);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    // empty list.
+    try {
+      joiner.join(Lists.newArrayList(), 
+          (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+          (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+          false,
+          false);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    // bad keys
+    try {
+      joiner.join(singleResult(Const.TS_BYTE_ID), 
+          null, 
+          (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+          false,
+          false);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    try {
+      joiner.join(singleResult(Const.TS_BYTE_ID), 
+          new byte[0], 
+          (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+          false,
+          false);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    try {
+      joiner.join(singleResult(Const.TS_BYTE_ID), 
+          (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+          null,
+          false,
+          false);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+    
+    try {
+      joiner.join(singleResult(Const.TS_BYTE_ID), 
+          (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+          new byte[0],
+          false,
+          false);
+      fail("Expected IllegalArgumentException");
+    } catch (IllegalArgumentException e) { }
+  }
+
   @Test
   public void joinStringMultipleResult() throws Exception {
     // See the various joins for details.
@@ -1839,113 +1955,251 @@ public class TestJoiner extends BaseJoinTest {
     } catch (IllegalStateException e) { }
   }
   
-//  @Test
-//    Iterator<TimeSeries[]> iterator = 
-//            true,
-//            false).iterator();
-//      final TimeSeries[] pair = iterator.next();
-//      assertNotNull(pair[0]);
-//      assertNotNull(pair[1]);
-//            true,
-//            false).iterator();
-//      final TimeSeries[] pair = iterator.next();
-//      assertNotNull(pair[0]);
-//      assertNotNull(pair[1]);
-//            true,
-//            false).iterator();
-//      final TimeSeries[] pair = iterator.next();
-//      assertNotNull(pair[0]);
-//      assertNotNull(pair[1]);
-//            true,
-//            false).iterator();
-//      final TimeSeries[] pair = iterator.next();
-//      assertNotNull(pair[0]);
-//      assertNotNull(pair[1]);
-//    Iterator<TimeSeries[]> iterator = 
-//            true,
-//            false).iterator();
-//      final TimeSeries[] pair = iterator.next();
-//      assertNotNull(pair[0]);
-//      assertNotNull(pair[1]);
-//            true,
-//            false).iterator();
-//      final TimeSeries[] pair = iterator.next();
-//      assertNotNull(pair[0]);
-//      assertNotNull(pair[1]);
-//            true,
-//            false).iterator();
-//      final TimeSeries[] pair = iterator.next();
-//      assertNotNull(pair[0]);
-//      assertNotNull(pair[1]);
-//            true,
-//            false).iterator();
-//      final TimeSeries[] pair = iterator.next();
-//      assertNotNull(pair[0]);
-//      assertNotNull(pair[1]);
-//  @Test
-//  public void joinFilterString() throws Exception {
-//    // See the various joins for details.
-//    setStringIds();
-//    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
-//        .setJoinType(JoinType.INNER)
-//        .addJoins("host", "host")
-//        .setId(ID)
-//        .build();
-//    
-//    Joiner joiner = new Joiner(config);
-//    Iterator<TimeSeries[]> iterator = 
-//        joiner.join(multiResults(Const.TS_STRING_ID), 
-//            (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET),
-//            true,
-//            false).iterator();
-//    int pairs = 0;
-//    while (iterator.hasNext()) {
-//      final TimeSeries[] pair = iterator.next();
-//      assertNotNull(pair[0]);
-//      assertNull(pair[1]);
-//      pairs++;
-//    }
-//    assertEquals(7, pairs);
-//  }
-//  
-//  @Test
-//  public void joinFilterByte() throws Exception {
-//    // See the various joins for details.
-//    setByteIds();
-//    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
-//        .setJoinType(JoinType.INNER)
-//        .addJoins("host", "host")
-//        .setId(ID)
-//        .build();
-//    
-//    Joiner joiner = new Joiner(config);
-//    ByteMap<byte[]> encoded_joins = new ByteMap<byte[]>();
-//    encoded_joins.put(HOST, HOST);
-//    joiner.setEncodedJoins(encoded_joins);
-//    Iterator<TimeSeries[]> iterator = 
-//        joiner.join(multiResults(Const.TS_BYTE_ID), 
-//            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES),
-//            true,
-//            false).iterator();
-//    int pairs = 0;
-//    while (iterator.hasNext()) {
-//      final TimeSeries[] pair = iterator.next();
-//      assertNotNull(pair[0]);
-//      assertNull(pair[1]);
-//      pairs++;
-//    }
-//    assertEquals(7, pairs);
-//    
-//    // encoded_ids not set
-//    joiner = new Joiner(config);
-//    try {
-//      joiner.join(multiResults(Const.TS_BYTE_ID), 
-//          com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
-//          true,
-//          false);
-//      fail("Expected IllegalStateException");
-//    } catch (IllegalStateException e) { }
-//  }
+  @Test
+  public void joinByteTernary() throws Exception {
+    // See the various joins for details.
+    setByteIds();
+    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
+        .setJoinType(JoinType.INNER)
+        .addJoins("host", "host")
+        .setId(ID)
+        .build();
+    
+    Joiner joiner = new Joiner(config);
+    ByteMap<byte[]> encoded_joins = new ByteMap<byte[]>();
+    encoded_joins.put(HOST, HOST);
+    joiner.setEncodedJoins(encoded_joins);
+    Iterator<TimeSeries[]> iterator = 
+        joiner.join(ternaryResults(Const.TS_BYTE_ID), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_R_BYTES),
+            false,
+            true).iterator();
+    int pairs = 0;
+    while (iterator.hasNext()) {
+      final TimeSeries[] pair = iterator.next();
+      assertNotNull(pair[0]);
+      assertNotNull(pair[1]);
+      assertNotNull(pair[2]);
+      pairs++;
+    }
+    assertEquals(17, pairs);
+    
+    config = (JoinConfig) JoinConfig.newBuilder()
+        .setJoinType(JoinType.NATURAL_OUTER)
+        .addJoins("host", "host")
+        .setId(ID)
+        .build();
+    
+    joiner = new Joiner(config);
+    joiner.setEncodedJoins(encoded_joins);
+    iterator = joiner.join(ternaryResults(Const.TS_BYTE_ID), 
+        com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
+        com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_R_BYTES),
+            false,
+            true).iterator();
+    pairs = 0;
+    while (iterator.hasNext()) {
+      final TimeSeries[] pair = iterator.next();
+      // some left and right are null here but we have the full ternary set.
+      assertNotNull(pair[2]);
+      pairs++;
+    }
+    assertEquals(8, pairs);
+    
+    // wrong keys. Missing the namespace.
+    iterator = joiner.join(ternaryResults(Const.TS_BYTE_ID), 
+        METRIC_L_BYTES, 
+        METRIC_R_BYTES,
+        false,
+        true).iterator();
+    assertFalse(iterator.hasNext());
+    
+    // empty results
+    List<QueryResult> results = Lists.newArrayListWithExpectedSize(2);
+    QueryResult result = mock(QueryResult.class);
+    when(result.timeSeries()).thenReturn(Collections.emptyList());
+    when(result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
+      @Override
+      public TypeToken<?> answer(InvocationOnMock invocation) throws Throwable {
+        return Const.TS_BYTE_ID;
+      }
+    });
+    results.add(result);
+    
+    result = mock(QueryResult.class);
+    when(result.timeSeries()).thenReturn(Collections.emptyList());
+    when(result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
+      @Override
+      public TypeToken<?> answer(InvocationOnMock invocation) throws Throwable {
+        return Const.TS_BYTE_ID;
+      }
+    });
+    results.add(result);
+    
+    iterator = joiner.join(Lists.newArrayList(result, null), 
+        (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+        (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+        false,
+        true).iterator();
+    assertFalse(iterator.hasNext());
+    
+    // encoded_ids not set
+    config = (JoinConfig) JoinConfig.newBuilder()
+        .setJoinType(JoinType.INNER)
+        .addJoins("host", "host")
+        .setId(ID)
+        .build();
+    joiner = new Joiner(config);
+    try {
+      joiner.join(ternaryResults(Const.TS_BYTE_ID), 
+          com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
+          com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_R_BYTES),
+          false,
+          true);
+      fail("Expected IllegalStateException");
+    } catch (IllegalStateException e) { }
+  }
+  
+  @Test
+  public void joinByteAlias() throws Exception {
+    // See the various joins for details.
+    setByteIds();
+    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
+        .setJoinType(JoinType.INNER)
+        .addJoins("host", "host")
+        .setId(ID)
+        .build();
+    
+    Joiner joiner = new Joiner(config);
+    ByteMap<byte[]> encoded_joins = new ByteMap<byte[]>();
+    encoded_joins.put(HOST, HOST);
+    joiner.setEncodedJoins(encoded_joins);
+    Iterator<TimeSeries[]> iterator = 
+        joiner.join(singleResult(Const.TS_BYTE_ID), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, ALIAS_L_BYTES), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, ALIAS_R_BYTES),
+            true,
+            false).iterator();
+    int pairs = 0;
+    while (iterator.hasNext()) {
+      final TimeSeries[] pair = iterator.next();
+      assertNotNull(pair[0]);
+      assertNotNull(pair[1]);
+      pairs++;
+    }
+    assertEquals(9, pairs);
+    
+    // fallback left
+    iterator = joiner.join(singleResult(Const.TS_BYTE_ID), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, ALIAS_R_BYTES),
+            true,
+            false).iterator();
+    pairs = 0;
+    while (iterator.hasNext()) {
+      final TimeSeries[] pair = iterator.next();
+      assertNotNull(pair[0]);
+      assertNotNull(pair[1]);
+      pairs++;
+    }
+    assertEquals(9, pairs);
+    
+    // fallback right
+    iterator = joiner.join(singleResult(Const.TS_BYTE_ID), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, ALIAS_L_BYTES), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_R_BYTES),
+            true,
+            false).iterator();
+    pairs = 0;
+    while (iterator.hasNext()) {
+      final TimeSeries[] pair = iterator.next();
+      assertNotNull(pair[0]);
+      assertNotNull(pair[1]);
+      pairs++;
+    }
+    assertEquals(9, pairs);
+    
+    // fallback left
+    iterator = joiner.join(singleResult(Const.TS_BYTE_ID), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_R_BYTES),
+            true,
+            false).iterator();
+    pairs = 0;
+    while (iterator.hasNext()) {
+      final TimeSeries[] pair = iterator.next();
+      assertNotNull(pair[0]);
+      assertNotNull(pair[1]);
+      pairs++;
+    }
+    assertEquals(9, pairs);
+  }
+  
+  @Test
+  public void joinFilterString() throws Exception {
+    // See the various joins for details.
+    setStringIds();
+    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
+        .setJoinType(JoinType.INNER)
+        .addJoins("host", "host")
+        .setId(ID)
+        .build();
+    
+    Joiner joiner = new Joiner(config);
+    Iterator<TimeSeries[]> iterator = 
+        joiner.join(multiResults(Const.TS_STRING_ID), 
+            (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET),
+            true,
+            false).iterator();
+    int pairs = 0;
+    while (iterator.hasNext()) {
+      final TimeSeries[] pair = iterator.next();
+      assertNotNull(pair[0]);
+      assertNull(pair[1]);
+      pairs++;
+    }
+    assertEquals(7, pairs);
+  }
+  
+  @Test
+  public void joinFilterByte() throws Exception {
+    // See the various joins for details.
+    setByteIds();
+    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
+        .setJoinType(JoinType.INNER)
+        .addJoins("host", "host")
+        .setId(ID)
+        .build();
+    
+    Joiner joiner = new Joiner(config);
+    ByteMap<byte[]> encoded_joins = new ByteMap<byte[]>();
+    encoded_joins.put(HOST, HOST);
+    joiner.setEncodedJoins(encoded_joins);
+    Iterator<TimeSeries[]> iterator = 
+        joiner.join(multiResults(Const.TS_BYTE_ID), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES),
+            true,
+            false).iterator();
+    int pairs = 0;
+    while (iterator.hasNext()) {
+      final TimeSeries[] pair = iterator.next();
+      assertNotNull(pair[0]);
+      assertNull(pair[1]);
+      pairs++;
+    }
+    assertEquals(7, pairs);
+    
+    // encoded_ids not set
+    joiner = new Joiner(config);
+    try {
+      joiner.join(multiResults(Const.TS_BYTE_ID), 
+          com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
+          true,
+          false);
+      fail("Expected IllegalStateException");
+    } catch (IllegalStateException e) { }
+  }
 
   QueryResult mockResult(final boolean as_strings, final TimeSeries... series) {
     List<TimeSeries> results = Lists.newArrayList(series);
