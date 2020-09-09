@@ -16,6 +16,7 @@ package net.opentsdb.query.processor.expressions;
 
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map.Entry;
 
 import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
@@ -39,16 +40,18 @@ import net.opentsdb.utils.Pair;
 public class ExpressionResult implements QueryResult {
   /** The parent node. */
   protected final BinaryExpressionNode node;
-  
-  /** The list of 1 or 2 results. 3 if ternary with the condition as 0, 
-   * then left if present and/or right. */
-  protected List<QueryResult> results;
+//  
+//  /** The list of 1 or 2 results. 3 if ternary with the condition as 0, 
+//   * then left if present and/or right. */
+//  protected List<QueryResult> results;
   
   /** Whether or not we're a tenary result. */
   protected final boolean is_ternary;
   
   /** The list of joined time series. */
   protected List<TimeSeries> time_series;
+  
+  protected QueryResult non_null_result;
   
   /**
    * Package private ctor.
@@ -57,21 +60,21 @@ public class ExpressionResult implements QueryResult {
   ExpressionResult(final BinaryExpressionNode node) {
     this.node = node;
     is_ternary = node instanceof TernaryExpressionNode;
-    results = Lists.newArrayListWithExpectedSize(is_ternary ? 3 : 2);
+    //results = Lists.newArrayListWithExpectedSize(is_ternary ? 3 : 2);
   }
   
-  /**
-   * Package private method to add a result.
-   * @param result A non-null result.
-   * Note that we don't check the Id types here.
-   */
-  void add(final QueryResult result) {
-    if (results == null) {
-      results = Lists.newArrayList(result);
-    } else {
-      results.add(result);
-    }
-  }
+//  /**
+//   * Package private method to add a result.
+//   * @param result A non-null result.
+//   * Note that we don't check the Id types here.
+//   */
+//  void add(final QueryResult result) {
+//    if (results == null) {
+//      results = Lists.newArrayList(result);
+//    } else {
+//      results.add(result);
+//    }
+//  }
   
   /**
    * Package private method called by the node when it has seen all the
@@ -88,7 +91,8 @@ public class ExpressionResult implements QueryResult {
       final boolean use_alias = 
           config.getLeftType() != OperandType.VARIABLE ||
               config.getRightType() != OperandType.VARIABLE;
-      joins = node.joiner().join(results, 
+      System.out.println("           LEFT M: " + node.leftMetric() + "  R: " + node.rightMetric());
+      joins = node.joiner().join(node.results().values(), 
           node.leftMetric() != null ? node.leftMetric() : 
             ((String) config.getLeft()).getBytes(Const.UTF8_CHARSET), 
           node.rightMetric() != null ? node.rightMetric() : 
@@ -101,7 +105,7 @@ public class ExpressionResult implements QueryResult {
           config.getLeftType() != OperandType.VARIABLE;
       // left
       joins = node.joiner().join(
-          results, 
+          node.results().values(), 
           node.leftMetric() != null ? node.leftMetric() : 
             ((String) config.getLeft()).getBytes(Const.UTF8_CHARSET), 
           true,
@@ -111,7 +115,7 @@ public class ExpressionResult implements QueryResult {
           config.getRightType() != OperandType.VARIABLE;
       // right
       joins = node.joiner().join(
-          results, 
+          node.results().values(), 
           node.rightMetric() != null ? node.rightMetric() :
             ((String) config.getRight()).getBytes(Const.UTF8_CHARSET), 
           false, 
@@ -127,7 +131,10 @@ public class ExpressionResult implements QueryResult {
   
   @Override
   public TimeSpecification timeSpecification() {
-    return results.get(0).timeSpecification();
+    if (non_null_result == null) {
+      non_null_result = node.results().values().iterator().next();
+    }
+    return non_null_result.timeSpecification();
   }
 
   @Override
@@ -164,23 +171,32 @@ public class ExpressionResult implements QueryResult {
   
   @Override
   public TypeToken<? extends TimeSeriesId> idType() {
-    return results.get(0).idType();
+    if (non_null_result == null) {
+      non_null_result = node.results().values().iterator().next();
+    }
+    return non_null_result.idType();
   }
 
   @Override
   public ChronoUnit resolution() {
-    return results.get(0).resolution();
+    if (non_null_result == null) {
+      non_null_result = node.results().values().iterator().next();
+    }
+    return non_null_result.resolution();
   }
 
   @Override
   public RollupConfig rollupConfig() {
-    return results.get(0).rollupConfig();
+    if (non_null_result == null) {
+      non_null_result = node.results().values().iterator().next();
+    }
+    return non_null_result.rollupConfig();
   }
 
   @Override
   public void close() {
-    for (int i = 0; i < results.size(); i++) {
-      results.get(i).close();
+    for (final Entry<QueryResultId, QueryResult> entry : node.results().entrySet()) {
+      entry.getValue().close();
     }
   }
 

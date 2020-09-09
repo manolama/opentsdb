@@ -74,7 +74,7 @@ public class BinaryExpressionNodeFactory extends BaseQueryNodeFactory<Expression
   
   @Override
   public BinaryExpressionNode newNode(final QueryPipelineContext context,
-                           final ExpressionParseNode config) {
+                                      final ExpressionParseNode config) {
     return new BinaryExpressionNode(this, context, config);
   }
 

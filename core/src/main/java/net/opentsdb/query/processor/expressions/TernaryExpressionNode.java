@@ -75,14 +75,6 @@ public class TernaryExpressionNode extends BinaryExpressionNode {
       // order is important here.
       final TernaryExpressionParseNode config = 
           (TernaryExpressionParseNode) expression_config;
-      result.add(results.get(config.getConditionId()));
-      if (!Strings.isNullOrEmpty(config.getLeftId())) {
-        result.add(results.get(config.getLeftId()));
-      }
-      if (!Strings.isNullOrEmpty(config.getRightId())) {
-        result.add(results.get(config.getRightId()));
-      }
-      
       result.join();
       try {
         sendUpstream(result);

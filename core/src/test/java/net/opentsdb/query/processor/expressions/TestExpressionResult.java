@@ -25,17 +25,24 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.Before;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils.Collections;
 
 import net.opentsdb.common.Const;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.query.DefaultQueryResultId;
 import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
+import net.opentsdb.query.QueryResult;
+import net.opentsdb.query.QueryResultId;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.joins.JoinConfig;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
@@ -100,25 +107,26 @@ public class TestExpressionResult {
   @Test
   public void ctor() throws Exception {
     ExpressionResult result = new ExpressionResult(node);
-    assertNull(result.results);
   }
   
   @Test
   public void joinString() throws Exception {
-    List<Pair<TimeSeries, TimeSeries>> joins = 
-        Lists.newArrayList(new Pair<TimeSeries, TimeSeries>(mock(TimeSeries.class), mock(TimeSeries.class)));
-    when(joiner.join(any(Pair.class), any(byte[].class), any(byte[].class), anyBoolean()))
+    Collection<TimeSeries[]> joins = 
+        Lists.<TimeSeries[]>newArrayList(new TimeSeries[] {mock(TimeSeries.class), mock(TimeSeries.class)});
+    when(joiner.join(any(Collection.class), any(byte[].class), any(byte[].class), anyBoolean(), anyBoolean()))
       .thenReturn(joins);
-    when(joiner.join(any(Pair.class), any(byte[].class), anyBoolean(), anyBoolean()))
+    when(joiner.join(any(Collection.class), any(byte[].class), anyBoolean(), anyBoolean()))
       .thenReturn(joins);
     
+    setupNode(false);
     ExpressionResult result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq("a".getBytes(Const.UTF8_CHARSET)), 
         aryEq("b".getBytes(Const.UTF8_CHARSET)), 
+        eq(false),
         eq(false));
     
     // one subexp
@@ -132,15 +140,16 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(false);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq("sub1".getBytes(Const.UTF8_CHARSET)), 
         aryEq("b".getBytes(Const.UTF8_CHARSET)), 
-        eq(true));
+        eq(true),
+        eq(false));
     
     // other subexp
     expression_config = (ExpressionParseNode) ExpressionParseNode.newBuilder()
@@ -153,15 +162,16 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(false);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq("a".getBytes(Const.UTF8_CHARSET)), 
         aryEq("sub1".getBytes(Const.UTF8_CHARSET)), 
-        eq(true));
+        eq(true),
+        eq(false));
     
     // both subexp
     expression_config = (ExpressionParseNode) ExpressionParseNode.newBuilder()
@@ -174,15 +184,16 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(false);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq("sub1".getBytes(Const.UTF8_CHARSET)), 
         aryEq("sub2".getBytes(Const.UTF8_CHARSET)), 
-        eq(true));
+        eq(true),
+        eq(false));
     
     // left metric
     expression_config = (ExpressionParseNode) ExpressionParseNode.newBuilder()
@@ -195,12 +206,12 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(false);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq("a".getBytes(Const.UTF8_CHARSET)), 
         eq(true),
         eq(false));
@@ -216,12 +227,12 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(false);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq("sub1".getBytes(Const.UTF8_CHARSET)), 
         eq(true),
         eq(true));
@@ -237,12 +248,12 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(false);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq("b".getBytes(Const.UTF8_CHARSET)), 
         eq(false),
         eq(false));
@@ -258,12 +269,12 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(false);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq("sub2".getBytes(Const.UTF8_CHARSET)), 
         eq(false),
         eq(true));
@@ -271,23 +282,22 @@ public class TestExpressionResult {
   
   @Test
   public void joinBytes() throws Exception {
-    List<Pair<TimeSeries, TimeSeries>> joins = 
-        Lists.newArrayList(new Pair<TimeSeries, TimeSeries>(mock(TimeSeries.class), mock(TimeSeries.class)));
-    when(joiner.join(any(Pair.class), any(byte[].class), any(byte[].class), anyBoolean()))
+    Collection<TimeSeries[]> joins = 
+        Lists.<TimeSeries[]>newArrayList(new TimeSeries[] {mock(TimeSeries.class), mock(TimeSeries.class)});
+    when(joiner.join(any(Collection.class), any(byte[].class), any(byte[].class), anyBoolean(), anyBoolean()))
       .thenReturn(joins);
-    when(joiner.join(any(Pair.class), any(byte[].class), anyBoolean(), anyBoolean()))
+    when(joiner.join(any(Collection.class), any(byte[].class), anyBoolean(), anyBoolean()))
       .thenReturn(joins);
-    
+    setupNode(true);
     ExpressionResult result = new ExpressionResult(node);
-    when(node.leftMetric()).thenReturn(LEFT);
-    when(node.rightMetric()).thenReturn(RIGHT);
     
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq(LEFT), 
         aryEq(RIGHT), 
+        eq(false),
         eq(false));
     
     // one subexp
@@ -301,15 +311,16 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(true);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq(LEFT), 
         aryEq(RIGHT), 
-        eq(true));
+        eq(true),
+        eq(false));
     
     // other subexp
     expression_config = (ExpressionParseNode) ExpressionParseNode.newBuilder()
@@ -322,15 +333,16 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(true);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(2)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq(LEFT), 
         aryEq(RIGHT), 
-        eq(true));
+        eq(true),
+        eq(false));
     
     // both subexp
     expression_config = (ExpressionParseNode) ExpressionParseNode.newBuilder()
@@ -343,15 +355,16 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(true);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(3)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq(LEFT), 
         aryEq(RIGHT), 
-        eq(true));
+        eq(true),
+        eq(false));
     
     // left metric
     expression_config = (ExpressionParseNode) ExpressionParseNode.newBuilder()
@@ -364,12 +377,12 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(true);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq(LEFT), 
         eq(true),
         eq(false));
@@ -385,12 +398,12 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(true);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq(LEFT), 
         eq(true),
         eq(true));
@@ -406,12 +419,12 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(true);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq(RIGHT), 
         eq(false),
         eq(false));
@@ -427,14 +440,45 @@ public class TestExpressionResult {
         .setId("expression")
         .build();
     when(node.config()).thenReturn(expression_config);
-    
+    setupNode(true);
     result = new ExpressionResult(node);
     result.join();
     assertEquals(1, result.time_series.size());
     verify(joiner, times(1)).join(
-        eq(result.results), 
+        (Collection<QueryResult>) any(Collections.class), 
         aryEq(RIGHT), 
         eq(false),
         eq(true));
+  }
+  
+  void setupNode(final boolean byte_mode) {
+    when(node.config()).thenReturn(expression_config);
+    when(node.joiner()).thenReturn(joiner);
+    if (byte_mode) {
+      when(node.leftMetric()).thenReturn(LEFT);
+      when(node.rightMetric()).thenReturn(RIGHT);
+    } else {
+      when(node.leftMetric()).thenReturn(((String) expression_config.getLeft()).getBytes());
+      when(node.rightMetric()).thenReturn(((String) expression_config.getRight()).getBytes());
+    }
+    
+    Map<QueryResultId, QueryResult> results = Maps.newHashMap();
+    if (expression_config.getLeftType() != null && 
+       (expression_config.getLeftType() == OperandType.VARIABLE ||
+        expression_config.getLeftType() == OperandType.SUB_EXP)) {
+      QueryResult result = mock(QueryResult.class);
+      results.put(new DefaultQueryResultId(((String) expression_config.getLeft()), 
+          ((String) expression_config.getLeft())), 
+          result);
+    }
+    
+    if (expression_config.getRightType() != null && 
+       (expression_config.getRightType() == OperandType.VARIABLE ||
+        expression_config.getRightType() == OperandType.SUB_EXP)) {
+      QueryResult result = mock(QueryResult.class);
+      results.put(new DefaultQueryResultId(((String) expression_config.getRight()), 
+          ((String) expression_config.getRight())), 
+          result);
+    }
   }
 }

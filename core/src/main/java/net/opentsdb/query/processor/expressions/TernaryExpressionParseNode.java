@@ -162,6 +162,10 @@ public class TernaryExpressionParseNode extends ExpressionParseNode {
       return condition;
     }
     
+    public QueryResultId conditionId() {
+      return conditionId;
+    }
+    
     public Builder setConditionId(final QueryResultId conditionId) {
       this.conditionId = conditionId;
       return this;

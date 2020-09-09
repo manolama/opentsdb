@@ -122,7 +122,7 @@ public class Joiner {
    * were rejected.
    * @throws IllegalArgumentException if any args were null or invalid.
    */
-  public Iterable<TimeSeries[]> join(final List<QueryResult> results, 
+  public Iterable<TimeSeries[]> join(final Collection<QueryResult> results, 
                                      final byte[] left_key, 
                                      final byte[] right_key,
                                      final boolean use_alias,
@@ -143,7 +143,7 @@ public class Joiner {
           + "  Right: " + new String(right_key, Const.UTF8_CHARSET));
     }
     
-    if (results.get(0).idType() == Const.TS_BYTE_ID &&
+    if (results.iterator().next().idType() == Const.TS_BYTE_ID &&
         encoded_joins == null &&
         config.getJoinType() != JoinType.NATURAL &&
         config.getJoinType() != JoinType.NATURAL_OUTER) {
@@ -191,13 +191,14 @@ public class Joiner {
             }
           } else {
             if (id.namespace() == null || id.namespace().length < 1) {
+              System.out.println("        JUST METRIC " + id.metric());
               key = id.metric();
             } else {
               key = com.google.common.primitives.Bytes.concat(
                   id.namespace(), id.metric());
             }
           }
-          
+          System.out.println("LK: " + left_key + "  RK: " + right_key + "  K: " + key);
           if (Bytes.memcmp(key, left_key) == 0) {
             hashByteId(Operand.LEFT, ts, join_set);
           } else if (Bytes.memcmp(key, right_key) == 0) {
@@ -263,7 +264,7 @@ public class Joiner {
    * @throws IllegalArgumentException if any args were null or invalid.
    */
   public Iterable<TimeSeries[]> join(
-      final List<QueryResult> results,
+      final Collection<QueryResult> results,
       final byte[] filter,
       final boolean left,
       final boolean use_alias) {
@@ -274,7 +275,7 @@ public class Joiner {
       throw new IllegalArgumentException("Filter cannot be null.");
     }
     
-    if (results.get(0).idType() == Const.TS_BYTE_ID && 
+    if (results.iterator().next().idType() == Const.TS_BYTE_ID && 
         encoded_joins == null &&
         config.getJoinType() != JoinType.NATURAL &&
         config.getJoinType() != JoinType.NATURAL_OUTER) {

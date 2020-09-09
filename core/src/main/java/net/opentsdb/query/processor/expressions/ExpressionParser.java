@@ -380,10 +380,10 @@ public class ExpressionParser extends DefaultErrorStrategy
     final TernaryExpressionParseNode.Builder builder = 
         (Builder) TernaryExpressionParseNode.newBuilder()
           .setExpressionConfig(config);
-    if (condition instanceof ExpressionParseNode.Builder) {
-      builder.setCondition(((ExpressionParseNode.Builder) condition).id())
+    if (condition instanceof TernaryExpressionParseNode.Builder) {
+      builder.setCondition(((TernaryExpressionParseNode.Builder) condition).id())
              .setConditionType(OperandType.SUB_EXP)
-             .setConditionId(((ExpressionParseNode.Builder) condition).id());
+             .setConditionId(((TernaryExpressionParseNode.Builder) condition).conditionId());
     }
     setBranch(builder, left, true);
     setBranch(builder, right, false);
