@@ -42,6 +42,7 @@ public class ExpressionResult implements QueryResult {
   
   /** The list of 1 or 2 results. 3 if ternary with the condition as 0, 
    * then left if present and/or right. */
+  protected List<QueryResult> results;
   
   /** Whether or not we're a tenary result. */
   protected final boolean is_ternary;
@@ -64,8 +65,12 @@ public class ExpressionResult implements QueryResult {
    * @param result A non-null result.
    * Note that we don't check the Id types here.
    */
-  void set(final Pair<QueryResult, QueryResult> results) {
-    this.results = results;
+  void add(final QueryResult result) {
+    if (results == null) {
+      results = Lists.newArrayList(result);
+    } else {
+      results.add(result);
+    }
   }
   
   /**
@@ -122,8 +127,7 @@ public class ExpressionResult implements QueryResult {
   
   @Override
   public TimeSpecification timeSpecification() {
-    return results.getKey() != null ? results.getKey().timeSpecification() :
-      results.getValue().timeSpecification();
+    return results.get(0).timeSpecification();
   }
 
   @Override
@@ -160,29 +164,23 @@ public class ExpressionResult implements QueryResult {
   
   @Override
   public TypeToken<? extends TimeSeriesId> idType() {
-    return results.getKey() != null ? results.getKey().idType() :
-      results.getValue().idType();
+    return results.get(0).idType();
   }
 
   @Override
   public ChronoUnit resolution() {
-    return results.getKey() != null ? results.getKey().resolution() :
-      results.getValue().resolution();
+    return results.get(0).resolution();
   }
 
   @Override
   public RollupConfig rollupConfig() {
-    return results.getKey() != null ? results.getKey().rollupConfig() :
-        results.getValue().rollupConfig();
+    return results.get(0).rollupConfig();
   }
 
   @Override
   public void close() {
-    if (results.getKey() != null) {
-      results.getKey().close();
-    }
-    if (results.getValue() != null) {
-      results.getValue().close();
+    for (int i = 0; i < results.size(); i++) {
+      results.get(i).close();
     }
   }
 

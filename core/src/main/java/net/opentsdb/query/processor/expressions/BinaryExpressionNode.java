@@ -15,17 +15,17 @@
 package net.opentsdb.query.processor.expressions;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Callback;
 
@@ -40,7 +40,6 @@ import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.QueryResultId;
 import net.opentsdb.query.joins.Joiner;
-import net.opentsdb.query.processor.expressions.BinaryExpressionNode.FailedQueryResult;
 import net.opentsdb.query.processor.expressions.ExpressionParseNode.OperandType;
 import net.opentsdb.utils.Bytes.ByteMap;
 import net.opentsdb.utils.Pair;
@@ -65,7 +64,7 @@ import net.opentsdb.utils.Pair;
 public class BinaryExpressionNode extends AbstractQueryNode<ExpressionParseNode> {
   private static final Logger LOG = LoggerFactory.getLogger(
       BinaryExpressionNode.class);
-      
+  
   /** The original expression config */
   protected final ExpressionConfig config;
   
@@ -75,12 +74,11 @@ public class BinaryExpressionNode extends AbstractQueryNode<ExpressionParseNode>
   /** The joiner. */
   protected final Joiner joiner;
   
-  /** Whether or not we need two sources or if we're operating on a 
-   * source and a literal. */
-  protected final Pair<QueryResult, QueryResult> results;
-  protected QueryResultId left_source;
-  protected QueryResultId right_source;
-  protected final int expected;
+  protected final Map<QueryResultId, QueryResult> results;
+  
+//  protected QueryResultId left_source;
+//  protected QueryResultId right_source;
+//  protected final int expected;
   protected final AtomicBoolean all_in;
   
   /** The result to populate and return. */
@@ -107,7 +105,7 @@ public class BinaryExpressionNode extends AbstractQueryNode<ExpressionParseNode>
     this.expression_config = expression_config;
     config = expression_config.getExpressionConfig();
     result = new ExpressionResult(this);
-    results = new Pair<QueryResult, QueryResult>();
+    results = new ConcurrentHashMap<QueryResultId, QueryResult>(3);
     all_in = new AtomicBoolean();
     
     if (expression_config.getLeftType() == OperandType.SUB_EXP || 
@@ -115,7 +113,8 @@ public class BinaryExpressionNode extends AbstractQueryNode<ExpressionParseNode>
       if (expression_config.getLeftId() == null) {
         throw new IllegalStateException("[" + expression_config.getId() + "] Left ID cannot be null.");
       } else {
-        left_source = expression_config.getLeftId();
+        //left_source = expression_config.getLeftId();
+        results.put(expression_config.getLeftId(), null);
       }
     }
     if (expression_config.getRightType() == OperandType.SUB_EXP || 
@@ -123,14 +122,16 @@ public class BinaryExpressionNode extends AbstractQueryNode<ExpressionParseNode>
       if (expression_config.getRightId() == null) {
         throw new IllegalStateException("[" + expression_config.getId() + "] Right ID cannot be null.");
       } else {
-        right_source = expression_config.getRightId();
+        //right_source = expression_config.getRightId();
+        results.put(expression_config.getRightId(), null);
       }
     }
-    if (left_source != null && right_source != null) {
-      expected = 2;
-    } else {
-      expected = 1;
-    }
+//    if (left_source != null && right_source != null) {
+//      expected = 2;
+//    } else {
+//      expected = 1;
+//    }
+//    expected = results.size();
     joiner = new Joiner(config.getJoin());
   }
 
@@ -149,69 +150,63 @@ public class BinaryExpressionNode extends AbstractQueryNode<ExpressionParseNode>
   public void onNext(final QueryResult next) {
     if (LOG.isTraceEnabled()) {
       LOG.trace("Result: " + next.dataSource() + " (" + next.getClass() + ") " 
-        + " Want<" + left_source + ", " + right_source +">");
+        + " Want<" + results.keySet() +">");
     }
     
-    if (left_source != null && left_source.equals(next.dataSource())) {
-      if (LOG.isTraceEnabled()) {
-        LOG.trace("Matched left [" + left_source + "] with: " + next.dataSource());
-      }
-      if (!Strings.isNullOrEmpty(next.error()) || next.exception() != null) {
-        sendUpstream(new FailedQueryResult(next));
-        return;
-      }
-      synchronized (this) {
-        results.setKey(next);
-      }
-    } else {
-      LOG.warn("Unexpected result at binary node " + expression_config.getId() 
-        + ": " + next.dataSource());
-        }
-      }
-      LOG.trace("[" + config.getId() + "] Matched left source: " + next.dataSource());
-    } else if (right_source != null && right_source.equals(next.dataSource())) {
-      if (LOG.isTraceEnabled()) {
-        LOG.trace("Matched right [" + right_source + "] with: " + next.dataSource());
-      }
-      if (!Strings.isNullOrEmpty(next.error()) || next.exception() != null) {
+//    if (left_source != null && left_source.equals(next.dataSource())) {
+//      if (LOG.isTraceEnabled()) {
+//        LOG.trace("Matched left [" + left_source + "] with: " + next.dataSource());
+//      }
+//      if (!Strings.isNullOrEmpty(next.error()) || next.exception() != null) {
+//        sendUpstream(new FailedQueryResult(next));
+//        return;
+//      }
+//      results.put(next.dataSource(), next);
+////      synchronized (this) {
+////        results.setKey(next);
+////      }
+////      if (right_source != null && right_source.equals(left_source)) {
+////        synchronized (this) {
+////          results.setValue(next);
+////        }
+////      }
+//      LOG.trace("[" + config.getId() + "] Matched left source: " + next.dataSource());
+//    } else if (right_source != null && right_source.equals(next.dataSource())) {
+//      if (LOG.isTraceEnabled()) {
+//        LOG.trace("Matched right [" + right_source + "] with: " + next.dataSource());
+//      }
+//      if (!Strings.isNullOrEmpty(next.error()) || next.exception() != null) {
+//        sendUpstream(new FailedQueryResult(next));
+//        return;
+//      }
+//      synchronized (this) {
+//        results.setValue(next);
+//      }
+//      LOG.trace("[" + config.getId() + "] Matched right source: " + next.dataSource());
+//    } else {
+//      LOG.debug("Unmatched result: " + next.dataSource());
+//      return;
+//    }
+    if (!results.containsKey(next.dataSource())) {
+      LOG.debug("Unmatched result: " + next.dataSource());
       return;
     }
     
-    if (resolveMetrics(next)) {
-      // resolving, don't progress yet.
-      return;
-    }
+    results.put(next.dataSource(), next);
     
-    if (resolveJoinStrings(next)) {
-      // resolving, don't progress yet.
-      return;
-    }
-    
-    // see if all the results are in.
-    int received = 0;
-    synchronized (this) {
-      for (final QueryResult result : results.values()) {
-        if (result != null) {
-          received++;
-        }
+    // NOTE: There is a race condition here where two results may resolve
+    // the IDs. That's ok though.
+    class ErrorCB implements Callback<Object, Exception> {
+      @Override
+      public Object call(final Exception ex) throws Exception {
+        LOG.error("Failure in binary expression node", ex);
+        sendUpstream(ex);
+        return null;
       }
     }
     
-    if (received == results.size()) {
-      for (final QueryResult r : results.values()) {
-        result.add(r);
-      }
-      
-      result.join();
-      try {
-        sendUpstream(result);
-      } catch (Exception e) {
-        sendUpstream(e);
-      }
-    }
-  }
-  
-  protected boolean resolveMetrics(final QueryResult next) {
+    // Try to resolve the variable names as metrics. This should return
+    // and empty
     if (next.idType() == Const.TS_BYTE_ID &&
         (expression_config.getLeftType() == OperandType.VARIABLE || 
          expression_config.getRightType() == OperandType.VARIABLE) && 
@@ -247,7 +242,7 @@ public class BinaryExpressionNode extends AbstractQueryNode<ExpressionParseNode>
           }
           
           resolved_metrics = true;
-          // call back into onNext() to progress to the next step.
+          // fall through to the next step
           onNext(next);
           return null;
         }
@@ -267,12 +262,10 @@ public class BinaryExpressionNode extends AbstractQueryNode<ExpressionParseNode>
           .dataStore().encodeJoinMetrics(metrics, null /* TODO */)
           .addCallback(new ResolveCB())
           .addErrback(new ErrorCB());
-      return true;
+      }
+      return;
     }
-    return false;
-  }
-  
-  protected boolean resolveJoinStrings(final QueryResult next) {
+    
     if (next.idType() == Const.TS_BYTE_ID && 
         joiner.encodedJoins() == null && 
         !config.getJoin().getJoins().isEmpty()) {
@@ -306,7 +299,7 @@ public class BinaryExpressionNode extends AbstractQueryNode<ExpressionParseNode>
             encoded_joins.put(left, right);
           }
           joiner.setEncodedJoins(encoded_joins);
-          // call onNext() again so that we trigger the count of results.
+          // fall through to the next step
           onNext(next);
           return null;
         }
@@ -316,23 +309,44 @@ public class BinaryExpressionNode extends AbstractQueryNode<ExpressionParseNode>
         .dataStore().encodeJoinKeys(tagks, null /* TODO */)
         .addCallback(new ResolveCB())
         .addErrback(new ErrorCB());
-      return true;
+      return;
     }
-    return false;
-      if (results.getValue() != null) {
-        received++;
-  }
-  
-  // NOTE: There is a race condition here where two results may resolve
-  // the IDs. That's ok though.
-  class ErrorCB implements Callback<Object, Exception> {
-    @Override
-    public Object call(final Exception ex) throws Exception {
-      sendUpstream(ex);
-      return null;
+    
+    // see if all the results are in.
+    boolean full_map = true;
+    for (final Entry<QueryResultId, QueryResult> entry : results.entrySet()) {
+      if (entry.getValue() == null) {
+        full_map = false;
+        break;
       }
-    } else if (LOG.isTraceEnabled()) {
+    }
+    
+    if (!full_map) {
       LOG.trace("Not all results are in for: " + expression_config.getId());
+      return;
+    }
+//    synchronized (this) {
+//      if (results.getKey() != null) {
+//        received++;
+//      }
+//      if (results.getValue() != null) {
+//        received++;
+//      }
+//    }
+    
+    if (all_in.compareAndSet(false, true)) {
+      try {
+        for (final QueryResult incoming : results.values()) {
+          result.add(incoming);
+        }
+        result.join();
+        if (LOG.isTraceEnabled()) {
+          LOG.trace("Sending expression upstream: " + expression_config.getId());
+        }
+        sendUpstream(result);
+      } catch (Exception e) {
+        sendUpstream(e);
+      }
     }
   }
   

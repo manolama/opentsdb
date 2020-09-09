@@ -130,8 +130,8 @@ public class ExpressionParseNode extends BaseQueryNodeConfig<ExpressionParseNode
   protected final ExpressionConfig expression_config;
   
   /** Node IDs for linking results. */
-  protected String left_id;
-  protected String right_id;
+  protected QueryResultId left_id;
+  protected QueryResultId right_id;
   
   /**
    * Protected ctor.
@@ -331,9 +331,9 @@ public class ExpressionParseNode extends BaseQueryNodeConfig<ExpressionParseNode
     @JsonProperty
     protected String as;
     @JsonProperty
-    protected String leftId;
+    protected QueryResultId leftId;
     @JsonProperty
-    protected String rightId;
+    protected QueryResultId rightId;
     
     Builder() {
       setType(BinaryExpressionNodeFactory.TYPE);

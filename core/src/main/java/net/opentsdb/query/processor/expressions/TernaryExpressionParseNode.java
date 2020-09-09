@@ -18,13 +18,11 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.hash.HashCode;
 
 import net.opentsdb.common.Const;
-import net.opentsdb.query.BaseQueryNodeConfig;
-import net.opentsdb.query.QueryNodeConfig;
+import net.opentsdb.query.QueryResultId;
 
 /**
  * A node populated during parsing of a metric expression.
@@ -44,7 +42,7 @@ public class TernaryExpressionParseNode extends ExpressionParseNode {
   protected final OperandType condition_type;
   
   /** Node IDs for linking results. */
-  protected String condition_id;
+  protected QueryResultId condition_id;
   
   /**
    * Protected ctor.
@@ -71,7 +69,7 @@ public class TernaryExpressionParseNode extends ExpressionParseNode {
   }
   
   /** @return The condition result source ID, may be null. */
-  public String getConditionId() {
+  public QueryResultId getConditionId() {
     return condition_id;
   }
   
@@ -82,13 +80,7 @@ public class TernaryExpressionParseNode extends ExpressionParseNode {
         .putString(id, Const.UTF8_CHARSET)
         .hash();
   }
-
-  @Override
-  public int compareTo(QueryNodeConfig o) {
-    // TODO Auto-generated method stub
-    return 0;
-  }
-
+  
   @Override
   public boolean equals(Object o) {
     // TODO Auto-generated method stub
@@ -140,7 +132,7 @@ public class TernaryExpressionParseNode extends ExpressionParseNode {
         .setId(id);
   }
   
-  static Builder newBuilder() {
+  public static Builder newBuilder() {
     return new Builder();
   }
   
@@ -150,7 +142,7 @@ public class TernaryExpressionParseNode extends ExpressionParseNode {
     @JsonProperty
     private OperandType conditionType;
     @JsonProperty
-    private String conditionId;
+    private QueryResultId conditionId;
     
     Builder() {
       setType(TernaryExpressionNodeFactory.TYPE);
@@ -170,13 +162,13 @@ public class TernaryExpressionParseNode extends ExpressionParseNode {
       return condition;
     }
     
-    public Builder setConditionId(final String conditionId) {
+    public Builder setConditionId(final QueryResultId conditionId) {
       this.conditionId = conditionId;
       return this;
     }
     
     @Override
-    public QueryNodeConfig build() {
+    public TernaryExpressionParseNode build() {
       return new TernaryExpressionParseNode(this);
     }
     
