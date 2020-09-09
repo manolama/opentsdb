@@ -14,18 +14,18 @@ import net.opentsdb.query.joins.Joiner;
  * NOTE that the condition can ONLY be a sub expression and must logical or 
  * relational. 
  */
-public class TernaryExpressionNode extends BinaryExpressionNode {
+public class TernaryNode extends BinaryExpressionNode {
   private static final Logger LOG = LoggerFactory.getLogger(
-      TernaryExpressionNode.class);
+      TernaryNode.class);
   
   protected final Joiner condition_joiner;
   
-  public TernaryExpressionNode(final QueryNodeFactory factory,
+  public TernaryNode(final QueryNodeFactory factory,
                                final QueryPipelineContext context, 
                                final ExpressionParseNode expression_config) {
     super(factory, context, expression_config);
 
-    final TernaryExpressionParseNode config = (TernaryExpressionParseNode) expression_config;
+    final TernaryParseNode config = (TernaryParseNode) expression_config;
     results.put(config.getConditionId(), null);
     condition_joiner = new Joiner(config.getExpressionConfig().getJoin());
   }
@@ -73,8 +73,8 @@ public class TernaryExpressionNode extends BinaryExpressionNode {
     
     if (received == results.size()) {
       // order is important here.
-      final TernaryExpressionParseNode config = 
-          (TernaryExpressionParseNode) expression_config;
+      final TernaryParseNode config = 
+          (TernaryParseNode) expression_config;
       result.join();
       try {
         sendUpstream(result);

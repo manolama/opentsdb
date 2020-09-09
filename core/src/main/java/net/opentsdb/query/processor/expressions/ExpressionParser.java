@@ -76,7 +76,7 @@ import net.opentsdb.expressions.parser.MetricExpressionParser.TernaryOperandsCon
 import net.opentsdb.expressions.parser.MetricExpressionVisitor;
 import net.opentsdb.query.processor.expressions.ExpressionParseNode.ExpressionOp;
 import net.opentsdb.query.processor.expressions.ExpressionParseNode.OperandType;
-import net.opentsdb.query.processor.expressions.TernaryExpressionParseNode.Builder;
+import net.opentsdb.query.processor.expressions.TernaryParseNode.Builder;
 
 /**
  * An Antlr4 visitor to build the expression sub-graph from the parsed
@@ -377,13 +377,13 @@ public class ExpressionParser extends DefaultErrorStrategy
       return left;
     }
     
-    final TernaryExpressionParseNode.Builder builder = 
-        (Builder) TernaryExpressionParseNode.newBuilder()
+    final TernaryParseNode.Builder builder = 
+        (Builder) TernaryParseNode.newBuilder()
           .setExpressionConfig(config);
-    if (condition instanceof TernaryExpressionParseNode.Builder) {
-      builder.setCondition(((TernaryExpressionParseNode.Builder) condition).id())
+    if (condition instanceof TernaryParseNode.Builder) {
+      builder.setCondition(((TernaryParseNode.Builder) condition).id())
              .setConditionType(OperandType.SUB_EXP)
-             .setConditionId(((TernaryExpressionParseNode.Builder) condition).conditionId());
+             .setConditionId(((TernaryParseNode.Builder) condition).conditionId());
     }
     setBranch(builder, left, true);
     setBranch(builder, right, false);

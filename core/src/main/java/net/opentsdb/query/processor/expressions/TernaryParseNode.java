@@ -32,8 +32,8 @@ import net.opentsdb.query.QueryResultId;
  * @since 3.0
  */
 @JsonInclude(Include.NON_NULL)
-@JsonDeserialize(builder = TernaryExpressionParseNode.Builder.class)
-public class TernaryExpressionParseNode extends ExpressionParseNode {
+@JsonDeserialize(builder = TernaryParseNode.Builder.class)
+public class TernaryParseNode extends ExpressionParseNode {
   
   /** The condition. */
   protected Object condition;
@@ -48,7 +48,7 @@ public class TernaryExpressionParseNode extends ExpressionParseNode {
    * Protected ctor.
    * @param builder The non-null builder.
    */
-  protected TernaryExpressionParseNode(final Builder builder) {
+  protected TernaryParseNode(final Builder builder) {
     super(builder);
     if (builder.expressionConfig == null) {
       throw new IllegalArgumentException("Missing parent expression config.");
@@ -90,11 +90,11 @@ public class TernaryExpressionParseNode extends ExpressionParseNode {
     if (o == this) {
       return true;
     }
-    if (!(o instanceof TernaryExpressionParseNode)) {
+    if (!(o instanceof TernaryParseNode)) {
       return false;
     }
     
-    return id.equals(((TernaryExpressionParseNode) o).id);
+    return id.equals(((TernaryParseNode) o).id);
   }
 
   @Override
@@ -145,7 +145,7 @@ public class TernaryExpressionParseNode extends ExpressionParseNode {
     private QueryResultId conditionId;
     
     Builder() {
-      setType(TernaryExpressionNodeFactory.TYPE);
+      setType(TernaryNodeFactory.TYPE);
     }
     
     public Builder setCondition(final Object condition) {
@@ -172,8 +172,8 @@ public class TernaryExpressionParseNode extends ExpressionParseNode {
     }
     
     @Override
-    public TernaryExpressionParseNode build() {
-      return new TernaryExpressionParseNode(this);
+    public TernaryParseNode build() {
+      return new TernaryParseNode(this);
     }
     
   }

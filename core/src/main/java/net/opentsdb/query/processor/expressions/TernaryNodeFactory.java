@@ -13,16 +13,16 @@ import net.opentsdb.query.processor.BaseQueryNodeFactory;
 import net.opentsdb.query.processor.expressions.ExpressionParseNode.ExpressionOp;
 import net.opentsdb.query.processor.expressions.ExpressionParseNode.OperandType;
 
-public class TernaryExpressionNodeFactory extends BaseQueryNodeFactory<
-    TernaryExpressionParseNode, TernaryExpressionNode> {
+public class TernaryNodeFactory extends BaseQueryNodeFactory<
+    TernaryParseNode, TernaryNode> {
   public static final String TYPE = "TernaryExpression";
   
   @Override
-  public TernaryExpressionParseNode parseConfig(final ObjectMapper mapper, 
+  public TernaryParseNode parseConfig(final ObjectMapper mapper, 
                                       final TSDB tsdb,
                                       final JsonNode node) {
-    TernaryExpressionParseNode.Builder builder = 
-        TernaryExpressionParseNode.newBuilder();
+    TernaryParseNode.Builder builder = 
+        TernaryParseNode.newBuilder();
     
     OperandType left_type;
     OperandType right_type;
@@ -124,9 +124,9 @@ public class TernaryExpressionNodeFactory extends BaseQueryNodeFactory<
   }
 
   @Override
-  public TernaryExpressionNode newNode(final QueryPipelineContext context,
-                                       final TernaryExpressionParseNode config) {
-    return new TernaryExpressionNode(this, context, config);
+  public TernaryNode newNode(final QueryPipelineContext context,
+                                       final TernaryParseNode config) {
+    return new TernaryNode(this, context, config);
   }
 
   @Override

@@ -59,7 +59,7 @@ public class ExpressionResult implements QueryResult {
    */
   ExpressionResult(final BinaryExpressionNode node) {
     this.node = node;
-    is_ternary = node instanceof TernaryExpressionNode;
+    is_ternary = node instanceof TernaryNode;
     //results = Lists.newArrayListWithExpectedSize(is_ternary ? 3 : 2);
   }
   
