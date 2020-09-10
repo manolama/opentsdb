@@ -363,6 +363,9 @@ public class ExpressionParser extends DefaultErrorStrategy
     // a node. For the condition, it should be a binary so the newBinary() call
     // will populate variables for that.
     if (config == null) {
+      if (condition instanceof String) {
+        variables.add((String) condition);
+      }
       if (left instanceof String) {
         variables.add((String) left);
       }
@@ -372,18 +375,15 @@ public class ExpressionParser extends DefaultErrorStrategy
       return null;
     }
     
-    // shrug.
-    if (left instanceof Null && right instanceof Null) {
-      return left;
-    }
-    
+    System.out.println("     CONDITION: " + condition);
     final TernaryParseNode.Builder builder = 
         (Builder) TernaryParseNode.newBuilder()
           .setExpressionConfig(config);
-    if (condition instanceof TernaryParseNode.Builder) {
-      builder.setCondition(((TernaryParseNode.Builder) condition).id())
-             .setConditionType(OperandType.SUB_EXP)
-             .setConditionId(((TernaryParseNode.Builder) condition).conditionId());
+    if (condition instanceof ExpressionParseNode.Builder) {
+      builder.setCondition(((ExpressionParseNode.Builder) condition).id())
+             .setConditionType(OperandType.SUB_EXP);
+    } else {
+      // TODO - other types, e.g. null, literals, etc.
     }
     setBranch(builder, left, true);
     setBranch(builder, right, false);

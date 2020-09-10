@@ -59,9 +59,27 @@ public class TernaryNumericIterator extends ExpressionNumericIterator {
     }
     
     if (is_true) {
-      dp.reset(left_interpolator.next(c.timestamp()));
+      if (left_interpolator == null) {
+        if (left_literal == null) {
+          // TODO - real substitute!
+          dp.reset(c.timestamp(), ZERO_SUBSTITUTE);
+        } else {
+          dp.reset(c.timestamp(), left_literal);
+        }
+      } else {
+        dp.reset(left_interpolator.next(c.timestamp()));
+      }
     } else {
-      dp.reset(right_interpolator.next(c.timestamp()));
+      if (right_interpolator == null) {
+        if (right_literal == null) {
+          // TODO - real substitute!
+          dp.reset(c.timestamp(), ZERO_SUBSTITUTE);
+        } else {
+          dp.reset(c.timestamp(), right_literal);
+        }
+      } else {
+        dp.reset(right_interpolator.next(c.timestamp()));
+      }
     }
     return dp;
   }

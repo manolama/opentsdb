@@ -144,5 +144,91 @@ public class TestTernaryNumericIterator extends BaseNumericTest {
     assertFalse(iterator.hasNext());
   }
   
+  @Test
+  public void NullLeftAligned() throws Exception {
+    right = new NumericMillisecondShard(RIGHT_ID, 
+        new MillisecondTimeStamp(1000), new MillisecondTimeStamp(7000));
+    ((NumericMillisecondShard) right).add(1000, 4);
+    ((NumericMillisecondShard) right).add(3000, 2);
+    ((NumericMillisecondShard) right).add(5000, 8);
+    ((NumericMillisecondShard) right).add(7000, 3);
+    
+    condition = new NumericMillisecondShard(mock(TimeSeriesId.class), 
+        new MillisecondTimeStamp(1000), new MillisecondTimeStamp(7000));
+    ((NumericMillisecondShard) condition).add(1000, 1);
+    ((NumericMillisecondShard) condition).add(3000, 0);
+    ((NumericMillisecondShard) condition).add(5000, 0);
+    ((NumericMillisecondShard) condition).add(7000, 1);
+    
+    TernaryNumericIterator iterator = 
+        new TernaryNumericIterator(node, RESULT, 
+            (Map) ImmutableMap.builder()
+              .put(ExpressionTimeSeries.RIGHT_KEY, right)
+              .put(ExpressionTimeSeries.CONDITION_KEY, condition)
+              .build());
+    assertTrue(iterator.hasNext());
+
+    TimeSeriesValue<NumericType> value = 
+        (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1000, value.timestamp().msEpoch());
+    assertEquals(0, value.value().longValue());
+    
+    value = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(3000, value.timestamp().msEpoch());
+    assertEquals(2, value.value().longValue());
+    
+    value = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(5000, value.timestamp().msEpoch());
+    assertEquals(8, value.value().longValue());
+    
+    value = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(7000, value.timestamp().msEpoch());
+    assertEquals(0, value.value().longValue());
+    assertFalse(iterator.hasNext());
+  }
+  
+  @Test
+  public void nullRightAligned() throws Exception {
+    left = new NumericMillisecondShard(LEFT_ID, 
+        new MillisecondTimeStamp(1000), new MillisecondTimeStamp(7000));
+    ((NumericMillisecondShard) left).add(1000, 1);
+    ((NumericMillisecondShard) left).add(3000, 4);
+    ((NumericMillisecondShard) left).add(5000, 2);
+    ((NumericMillisecondShard) left).add(7000, 6);
+    
+    condition = new NumericMillisecondShard(mock(TimeSeriesId.class), 
+        new MillisecondTimeStamp(1000), new MillisecondTimeStamp(7000));
+    ((NumericMillisecondShard) condition).add(1000, 1);
+    ((NumericMillisecondShard) condition).add(3000, 0);
+    ((NumericMillisecondShard) condition).add(5000, 0);
+    ((NumericMillisecondShard) condition).add(7000, 1);
+    
+    TernaryNumericIterator iterator = 
+        new TernaryNumericIterator(node, RESULT, 
+            (Map) ImmutableMap.builder()
+              .put(ExpressionTimeSeries.LEFT_KEY, left)
+              .put(ExpressionTimeSeries.CONDITION_KEY, condition)
+              .build());
+    assertTrue(iterator.hasNext());
+
+    TimeSeriesValue<NumericType> value = 
+        (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(1000, value.timestamp().msEpoch());
+    assertEquals(1, value.value().longValue());
+    
+    value = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(3000, value.timestamp().msEpoch());
+    assertEquals(0, value.value().longValue());
+    
+    value = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(5000, value.timestamp().msEpoch());
+    assertEquals(0, value.value().longValue());
+    
+    value = (TimeSeriesValue<NumericType>) iterator.next();
+    assertEquals(7000, value.timestamp().msEpoch());
+    assertEquals(6, value.value().longValue());
+    assertFalse(iterator.hasNext());
+  }
+  
   // TODO - more tests.
 }

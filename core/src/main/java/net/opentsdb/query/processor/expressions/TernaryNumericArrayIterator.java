@@ -42,6 +42,15 @@ public class TernaryNumericArrayIterator extends
     }
     condition = op.get();
     has_next = condition.hasNext();
+    
+    if (left == null && left_literal == null) {
+      throw new IllegalStateException("Ternary must have a left hand series "
+          + "or literal.");
+    }
+    if (right == null && right_literal == null) {
+      throw new IllegalStateException("Ternary must have a right hand series "
+          + "or literal.");
+    }
   }
   
   @Override
@@ -59,15 +68,15 @@ public class TernaryNumericArrayIterator extends
     // TODO - possibly a length check here. Everything *Should* be the same length.
     
     // fills
-    if (left == null) {
-      left_value = new LiteralArray(
-          right_value.value().end() - right_value.value().offset(),
-            left_literal);
-    } else if (right == null) {
-      right_value = new LiteralArray(
-          left_value.value().end() - left_value.value().offset(),
-            right_literal);
-    }
+//    if (left == null) {
+//      left_value = new LiteralArray(
+//          right_value.value().end() - right_value.value().offset(),
+//            left_literal);
+//    } else if (right == null) {
+//      right_value = new LiteralArray(
+//          left_value.value().end() - left_value.value().offset(),
+//            right_literal);
+//    }
     next_ts.update(condition_value.timestamp());
     
     // TODO - pools
@@ -79,13 +88,36 @@ public class TernaryNumericArrayIterator extends
         double_values = new double[condition_value.value().end() - 
                                    condition_value.value().offset()];
       }
+    } else {
+      long_values = new long[condition_value.value().end() - 
+                             condition_value.value().offset()];
     }
     
     int idx = 0;
     if (condition_value.value().isInteger()) {
       for (int i = condition_value.value().offset(); i < condition_value.value().end(); i++) {
         if (condition_value.value().longArray()[i] > 0) {
-          if (left_value.value().isInteger() && long_values != null) {
+          if (left_value == null) {
+            // literal or fill
+            if (left_literal != null) {
+              if (left_literal.isInteger() && long_values != null) {
+                long_values[idx] = left_literal.longValue();
+              } else {
+                if (double_values == null) {
+                  // copy
+                  double_values = new double[long_values.length];
+                  for (int x = 0; x < idx; x++) {
+                    double_values[x] = long_values[x];
+                  }
+                  long_values = null;
+                }
+                double_values[idx] = left_literal.toDouble();
+              }
+            } else {
+              // TODO Shouldn't be here?
+              
+            }
+          } else if (left_value.value().isInteger() && long_values != null) {
             long_values[idx] = left_value.value().longArray()[left_value.value().offset() + idx];
           } else if (left_value.value().isInteger()) {
             double_values[idx] = left_value.value().longArray()[left_value.value().offset() + idx];
@@ -93,7 +125,27 @@ public class TernaryNumericArrayIterator extends
             double_values[idx] = left_value.value().doubleArray()[left_value.value().offset() + idx];
           }
         } else {
-          if (right_value.value().isInteger() && long_values != null) {
+          if (right_value == null) {
+            // literal or fill
+            if (right_literal != null) {
+              if (right_literal.isInteger() && long_values != null) {
+                long_values[idx] = right_literal.longValue();
+              } else {
+                if (double_values == null) {
+                  // copy
+                  double_values = new double[long_values.length];
+                  for (int x = 0; x < idx; x++) {
+                    double_values[x] = long_values[x];
+                  }
+                  long_values = null;
+                }
+                double_values[idx] = right_literal.toDouble();
+              }
+            } else {
+              // TODO Shouldn't be here?
+              
+            }
+          } else if (right_value.value().isInteger() && long_values != null) {
             long_values[idx] = right_value.value().longArray()[right_value.value().offset() + idx];
           } else if (right_value.value().isInteger()) {
             double_values[idx] = right_value.value().longArray()[right_value.value().offset() + idx];
@@ -108,7 +160,27 @@ public class TernaryNumericArrayIterator extends
         // TODO - how _should_ we treat nans?
         if (Double.isFinite(condition_value.value().doubleArray()[i]) && 
             condition_value.value().doubleArray()[i] > 0) {
-          if (left_value.value().isInteger() && long_values != null) {
+          if (left_value == null) {
+            // literal or fill
+            if (left_literal != null) {
+              if (left_literal.isInteger() && long_values != null) {
+                long_values[idx] = left_literal.longValue();
+              } else {
+                if (double_values == null) {
+                  // copy
+                  double_values = new double[long_values.length];
+                  for (int x = 0; x < idx; x++) {
+                    double_values[x] = long_values[x];
+                  }
+                  long_values = null;
+                }
+                double_values[idx] = left_literal.toDouble();
+              }
+            } else {
+              // TODO Shouldn't be here?
+              
+            }
+          } else if (left_value.value().isInteger() && long_values != null) {
             long_values[idx] = left_value.value().longArray()[left_value.value().offset() + idx];
           } else if (left_value.value().isInteger()) {
             double_values[idx] = left_value.value().longArray()[left_value.value().offset() + idx];
@@ -116,7 +188,27 @@ public class TernaryNumericArrayIterator extends
             double_values[idx] = left_value.value().doubleArray()[left_value.value().offset() + idx];
           }
         } else {
-          if (right_value.value().isInteger() && long_values != null) {
+          if (right_value == null) {
+            // literal or fill
+            if (right_literal != null) {
+              if (right_literal.isInteger() && long_values != null) {
+                long_values[idx] = right_literal.longValue();
+              } else {
+                if (double_values == null) {
+                  // copy
+                  double_values = new double[long_values.length];
+                  for (int x = 0; x < idx; x++) {
+                    double_values[x] = long_values[x];
+                  }
+                  long_values = null;
+                }
+                double_values[idx] = right_literal.toDouble();
+              }
+            } else {
+              // TODO Shouldn't be here?
+              
+            }
+          } else if (right_value.value().isInteger() && long_values != null) {
             long_values[idx] = right_value.value().longArray()[right_value.value().offset() + idx];
           } else if (right_value.value().isInteger()) {
             double_values[idx] = right_value.value().longArray()[right_value.value().offset() + idx];
