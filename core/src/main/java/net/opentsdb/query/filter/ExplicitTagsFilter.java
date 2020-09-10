@@ -184,6 +184,11 @@ public class ExplicitTagsFilter implements TagKeyFilter, NestedQueryFilter {
       tag_keys.add(((TagValueFilter) filter).getTagKey());
       return;
     }
+    if (filter instanceof TagKeyFilter) {
+      tag_keys.add(((TagKeyFilter) filter).filter());
+      return;
+    }
+    
     if (filter instanceof ChainFilter) {
       for (final QueryFilter child : ((ChainFilter) filter).getFilters()) {
         processFilter(child);
