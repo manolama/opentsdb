@@ -72,7 +72,7 @@ public abstract class BaseExpressionNumericIterator<T extends TimeSeriesDataType
   
   /** Whether or getNot agetNother real value is present. True while at least one 
    * of the time series has a real value. */
-  protected boolean has_next = false;
+  protected boolean has_next;
   
   /**
    * Package private ctor.

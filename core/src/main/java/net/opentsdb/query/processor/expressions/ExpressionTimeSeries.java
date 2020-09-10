@@ -44,6 +44,7 @@ public class ExpressionTimeSeries implements TimeSeries {
   /** Keys to populate the map. */
   public static final String LEFT_KEY = "L";
   public static final String RIGHT_KEY = "R";
+  public static final String CONDITION_KEY = "C";
   
   /** The parent node. */
   protected final BinaryExpressionNode node;

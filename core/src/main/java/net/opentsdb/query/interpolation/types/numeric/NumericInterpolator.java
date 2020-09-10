@@ -141,7 +141,17 @@ public class NumericInterpolator implements QueryInterpolator<NumericType> {
     }
     
     has_next = false;
-    if (timestamp.compare(Op.EQ, next.timestamp())) {
+    while (timestamp.compare(Op.GT, next.timestamp())) {
+      if (iterator.hasNext()) {
+        next = (TimeSeriesValue<NumericType>) iterator.next();
+      } else {
+        next = null;
+        has_next = false;
+      }
+    }
+    
+    //System.out.println("********* Askin gfor: " + timestamp.epoch() + "  " + next.timestamp().epoch());
+    if (next != null && timestamp.compare(Op.EQ, next.timestamp())) {
       response.reset(next);
       if (previous == null) {
         previous = new MutableNumericValue(next);
@@ -155,10 +165,14 @@ public class NumericInterpolator implements QueryInterpolator<NumericType> {
       } else {
         next = null;
       }
+
+      //System.out.println("****** REal! " + has_next + "  Next: " + next.timestamp().epoch() + "  " + next.value());
     } else {
       if (next != null) {
         has_next = true;
       }
+
+      //System.out.println("****** fill!");
       return fill(timestamp);
     }
     

@@ -1,14 +1,26 @@
 package net.opentsdb.query.processor.expressions;
 
+import java.util.Collection;
+import java.util.Map;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.TimeSeries;
+import net.opentsdb.data.TimeSeriesDataType;
+import net.opentsdb.data.TypedTimeSeriesIterator;
+import net.opentsdb.data.types.numeric.NumericArrayType;
+import net.opentsdb.data.types.numeric.NumericSummaryType;
 import net.opentsdb.data.types.numeric.NumericType;
+import net.opentsdb.query.QueryIteratorFactory;
 import net.opentsdb.query.QueryPipelineContext;
+import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.processor.BaseQueryNodeFactory;
 import net.opentsdb.query.processor.expressions.ExpressionParseNode.ExpressionOp;
 import net.opentsdb.query.processor.expressions.ExpressionParseNode.OperandType;
@@ -16,6 +28,15 @@ import net.opentsdb.query.processor.expressions.ExpressionParseNode.OperandType;
 public class TernaryNodeFactory extends BaseQueryNodeFactory<
     TernaryParseNode, TernaryNode> {
   public static final String TYPE = "TernaryExpression";
+  
+  public TernaryNodeFactory() {
+    super();
+    registerIteratorFactory(NumericType.TYPE, new NumericIteratorFactory());
+    registerIteratorFactory(NumericSummaryType.TYPE, 
+        new NumericSummaryIteratorFactory());
+    registerIteratorFactory(NumericArrayType.TYPE, 
+        new NumericArrayIteratorFactory());
+  }
   
   @Override
   public TernaryParseNode parseConfig(final ObjectMapper mapper, 
@@ -139,6 +160,87 @@ public class TernaryNodeFactory extends BaseQueryNodeFactory<
   public String type() {
     // TODO Auto-generated method stub
     return null;
+  }
+  /**
+   * The default numeric iterator factory.
+   */
+  protected class NumericIteratorFactory implements QueryIteratorFactory<TernaryNode, NumericType> {
+
+    @Override
+    public TypedTimeSeriesIterator newIterator(final TernaryNode node,
+                                               final QueryResult result,
+                                               final Collection<TimeSeries> sources,
+                                               final TypeToken<? extends TimeSeriesDataType> type) {
+      throw new UnsupportedOperationException("Expression iterators must have a map.");
+    }
+
+    @Override
+    public TypedTimeSeriesIterator newIterator(final TernaryNode node,
+                                               final QueryResult result,
+                                               final Map<String, TimeSeries> sources,
+                                               final TypeToken<? extends TimeSeriesDataType> type) {
+      return new TernaryNumericIterator(node, result, sources);
+    }
+
+    @Override
+    public Collection<TypeToken<? extends TimeSeriesDataType>> types() {
+      return Lists.newArrayList(NumericType.TYPE);
+    }
+        
+  }
+
+  /**
+   * Handles summaries.
+   */
+  protected class NumericSummaryIteratorFactory implements QueryIteratorFactory<TernaryNode, NumericSummaryType> {
+
+    @Override
+    public TypedTimeSeriesIterator newIterator(final TernaryNode node,
+                                               final QueryResult result,
+                                               final Collection<TimeSeries> sources,
+                                               final TypeToken<? extends TimeSeriesDataType> type) {
+      throw new UnsupportedOperationException("Expression iterators must have a map.");
+    }
+
+    @Override
+    public TypedTimeSeriesIterator newIterator(final TernaryNode node,
+                                               final QueryResult result,
+                                               final Map<String, TimeSeries> sources,
+                                               final TypeToken<? extends TimeSeriesDataType> type) {
+      return new TernaryNumericSummaryIterator(node, result, sources);
+    }
+    
+    @Override
+    public Collection<TypeToken<? extends TimeSeriesDataType>> types() {
+      return Lists.newArrayList(NumericSummaryType.TYPE);
+    }
+  }
+
+  /**
+   * Handles arrays.
+   */
+  protected class NumericArrayIteratorFactory implements QueryIteratorFactory<TernaryNode, NumericArrayType> {
+
+    @Override
+    public TypedTimeSeriesIterator newIterator(final TernaryNode node,
+                                               final QueryResult result,
+                                               final Collection<TimeSeries> sources,
+                                               final TypeToken<? extends TimeSeriesDataType> type) {
+      throw new UnsupportedOperationException("Expression iterators must have a map.");
+    }
+
+    @Override
+    public TypedTimeSeriesIterator newIterator(final TernaryNode node,
+                                               final QueryResult result,
+                                               final Map<String, TimeSeries> sources,
+                                               final TypeToken<? extends TimeSeriesDataType> type) {
+      return new TernaryNumericArrayIterator(node, result, sources);
+    }
+    
+    @Override
+    public Collection<TypeToken<? extends TimeSeriesDataType>> types() {
+      return Lists.newArrayList(NumericArrayType.TYPE);
+    }
   }
 
 }
