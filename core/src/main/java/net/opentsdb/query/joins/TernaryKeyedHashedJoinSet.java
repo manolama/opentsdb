@@ -88,4 +88,10 @@ public class TernaryKeyedHashedJoinSet extends KeyedHashedJoinSet {
     }
   }
   
+  @Override
+  public String toString() {
+    return "L: " + (left_map != null ? left_map.size() : 0) + "  R: " +
+  (right_map != null ? right_map.size() : 0) + " C: " 
+        + (condition_map != null ? condition_map.size() : 0);
+  }
 }

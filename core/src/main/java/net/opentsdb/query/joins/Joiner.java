@@ -246,6 +246,7 @@ public class Joiner {
       }
     }
     
+    System.out.println(" JOIN SET: " + join_set);
     return join_set;
   }
   

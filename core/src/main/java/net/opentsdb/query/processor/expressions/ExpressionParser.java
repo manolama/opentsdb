@@ -380,10 +380,23 @@ public class ExpressionParser extends DefaultErrorStrategy
         (Builder) TernaryParseNode.newBuilder()
           .setExpressionConfig(config);
     if (condition instanceof ExpressionParseNode.Builder) {
+      // TODO - make sure it IS a sub expression
       builder.setCondition(((ExpressionParseNode.Builder) condition).id())
              .setConditionType(OperandType.SUB_EXP);
-    } else {
+    } else if (condition instanceof Null) {
+      throw new IllegalArgumentException("Can't have a null as the ternary "
+          + "condition.");
       // TODO - other types, e.g. null, literals, etc.
+    } else if (condition instanceof NumericLiteral) {
+      builder.setCondition(condition)
+             .setConditionType(OperandType.LITERAL_NUMERIC);
+    } else if (condition instanceof String) {
+      System.out.println("BUILDER!");
+      builder.setCondition(condition)
+             .setConditionType(OperandType.VARIABLE);
+    } else {
+      throw new IllegalArgumentException("Unhandled ternary condition type: " 
+          + condition.getClass());
     }
     setBranch(builder, left, true);
     setBranch(builder, right, false);
@@ -734,6 +747,8 @@ public class ExpressionParser extends DefaultErrorStrategy
     // 2 == true expression
     // 3 == :
     // 4 == false expression
+    
+    // TODO - handle negatives, nots, etc
     Object condition = ctx.getChild(0).accept(this);
     Object left = ctx.getChild(2).accept(this);
     Object right = ctx.getChild(4).accept(this);

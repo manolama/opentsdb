@@ -60,6 +60,12 @@ public class ExpressionFactory extends BaseQueryNodeFactory<ExpressionConfig,
   
   public static final String TYPE = "Expression";
   
+  public static enum Operand {
+    LEFT,
+    RIGHT,
+    CONDITION
+  }
+  
   /**
    * Required empty ctor.
    */
@@ -108,18 +114,20 @@ public class ExpressionFactory extends BaseQueryNodeFactory<ExpressionConfig,
           .setSources(Lists.newArrayList());
       if (parse_node.getLeftType() == OperandType.SUB_EXP) {
         builder.addSource((String) parse_node.getLeft())
-        .setLeftId(new DefaultQueryResultId((String) parse_node.getLeft(), (String) parse_node.getLeft()));
+          .setLeftId(new DefaultQueryResultId((String) parse_node.getLeft(), 
+              (String) parse_node.getLeft()));
       }
       if (parse_node.getRightType() == OperandType.SUB_EXP) {
         builder.addSource((String) parse_node.getRight())
-          .setRightId(new DefaultQueryResultId((String) parse_node.getRight(), (String) parse_node.getRight()));
+          .setRightId(new DefaultQueryResultId((String) parse_node.getRight(), 
+              (String) parse_node.getRight()));
       }
       
       // we may need to fix up variable names. Do so by searching 
       // recursively.
       if (parse_node.getLeftType() == OperandType.VARIABLE) {
         variables++;
-        String ds = validate(builder, true, plan, config, 0, node_map);
+        String ds = validate(builder, Operand.LEFT, plan, config, 0, node_map);
         if (ds == null) {
           throw new RuntimeException("Failed to find a data source for the "
               + "left operand: " + parse_node.getLeft() + " for expression node:\n" 
@@ -130,11 +138,30 @@ public class ExpressionFactory extends BaseQueryNodeFactory<ExpressionConfig,
       // TODO - this double walk is silly and ugly, fix me!
       if (parse_node.getRightType() == OperandType.VARIABLE) {
         variables++;
-        String ds = validate(builder, false, plan, config, 0, node_map);
+        String ds = validate(builder, Operand.RIGHT, plan, config, 0, node_map);
         if (ds == null) {
           throw new RuntimeException("Failed to find a data source for the "
               + "right operand: " + parse_node.getRight() + " for expression node:\n" 
               + config.getId() + ((DefaultQueryPlanner) plan).printConfigGraph());
+        }
+      }
+      
+      // handle ternary bits.
+      if (parse_node instanceof TernaryParseNode) {
+        final TernaryParseNode ternary = (TernaryParseNode) parse_node;
+        final String id = (String) ternary.getCondition();
+        builder.addSource(id);
+        ((TernaryParseNode.Builder) builder).setConditionId(
+            new DefaultQueryResultId(id, id));
+        
+        if (ternary.getConditionType() == OperandType.VARIABLE) {
+          variables++;
+          String ds = validate(builder, Operand.CONDITION, plan, config, 0, node_map);
+          if (ds == null) {
+            throw new RuntimeException("Failed to find a data source for the "
+                + "condition operand: " + ternary.getCondition() + " for expression node:\n" 
+                + config.getId() + ((DefaultQueryPlanner) plan).printConfigGraph());
+          }
         }
       }
 
@@ -195,27 +222,48 @@ public class ExpressionFactory extends BaseQueryNodeFactory<ExpressionConfig,
   }
   
   static String validate(final ExpressionParseNode.Builder builder, 
-                         final boolean left, 
+                         final Operand operand, 
                          final QueryPlanner plan,
                          final QueryNodeConfig downstream, 
                          final int depth,
                          final Map<String, QueryNodeConfig> node_map) {
-    final String key = left ? (String) builder.left() : (String) builder.right();
+    final String key;
+    switch (operand) {
+    case LEFT:
+      key = (String) builder.left();
+      break;
+    case RIGHT:
+      key = (String) builder.right();
+      break;
+    case CONDITION:
+      key = (String) ((TernaryParseNode.Builder) builder).condition();
+      break;
+    default:
+      throw new IllegalStateException("Unhandled operand: " + operand);
+    }
+    
     for (final QueryNodeConfig node : node_map.values()) {
       for (final QueryResultId src : (List<QueryResultId>) node.resultIds()) {
         final String metric = plan.getMetricForDataSource(node, src.dataSource());
         if (key.equals(metric) || key.equals(src.dataSource())) {
-            // matched!
-            if (left) {
-              builder.setLeft(metric)
-                     .setLeftId(src)
-                     .addSource(node.getId());
-            } else {
-              builder.setRight(metric)
-                     .setRightId(src)
-                     .addSource(node.getId());
-            }
-            return src.dataSource();
+          // matched!
+          switch (operand) {
+          case LEFT:
+            builder.setLeft(metric)
+                   .setLeftId(src)
+                   .addSource(node.getId());
+            break;
+          case RIGHT:
+            builder.setRight(metric)
+                   .setRightId(src)
+                   .addSource(node.getId());
+          case CONDITION:
+            ((TernaryParseNode.Builder) builder)
+                  .setCondition(metric)
+                  .setConditionId(src)
+                  .addSource(node.getId());
+          }
+          return src.dataSource();
         }
       }
       

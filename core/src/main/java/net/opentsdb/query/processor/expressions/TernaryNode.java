@@ -32,6 +32,7 @@ public class TernaryNode extends BinaryExpressionNode {
   
   @Override
   public void onNext(final QueryResult next) {
+    System.out.println("******** DATA: " + next.dataSource());
     if (results.containsKey(next.dataSource())) {
       if (!Strings.isNullOrEmpty(next.error()) || next.exception() != null) {
         sendUpstream(new FailedQueryResult(next));
@@ -70,6 +71,7 @@ public class TernaryNode extends BinaryExpressionNode {
         }
       }
     }
+    System.out.println(" RECEIVED: " + received + " out of " + results.size() + "  Results: " + results);
     
     if (received == results.size()) {
       // order is important here.
