@@ -14,7 +14,6 @@
 // limitations under the License.
 package net.opentsdb.query.joins;
 
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 

@@ -101,8 +101,6 @@ public class ExpressionParser extends DefaultErrorStrategy
 
   /** The set of variables extracted when parsing the expression. */
   private final Set<String> variables;
-
-  //private boolean in_ternary = false;
   
   /**
    * Default ctor.
@@ -467,9 +465,14 @@ public class ExpressionParser extends DefaultErrorStrategy
   public Object visitTerminal(TerminalNode node) {
     // this is a variable or operand (or parens).
     final String text = node.getText();
-    System.out.println("              TERMINAL: " + text);
+    
     // TODO - break this into a numeric literal to avoid having to parse
     // here.
+    // TODO - ugg I hate specials. We should do this properly.
+    if (text.equalsIgnoreCase("nan")) {
+      return new NumericLiteral(Double.NaN);
+    }
+    
     if ((text.charAt(0) >= '0' &&
         text.charAt(0) <= '9') ||
         text.charAt(0) == '-') {

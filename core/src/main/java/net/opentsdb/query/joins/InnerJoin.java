@@ -33,9 +33,8 @@ public class InnerJoin extends BaseJoin {
    */
   protected InnerJoin(final BaseHashedJoinSet join) {
     super(join);
-    if (join.left_map != null &&
-        join.right_map != null &&
-        join.condition_map != null) {
+    if (join.condition_map != null && 
+        (join.left_map != null || join.right_map != null)) {
       ternaryAdvance();
     } else if (join.left_map != null && join.right_map != null) {
       advance();
@@ -103,6 +102,12 @@ public class InnerJoin extends BaseJoin {
   
   @Override
   protected void ternaryAdvance() {
+    if (left_iterator == null || right_iterator == null) {
+      naturalLeftOrRightAdvance();
+      return;
+    }
+    
+    
     while (ternary_iterator.hasNext() || 
           (ternary_series != null && ternary_idx < ternary_series.size()) ||
           (left_series != null && left_idx < left_series.size())) {
@@ -169,6 +174,142 @@ public class InnerJoin extends BaseJoin {
         left_series = null;
         right_series = null;
         continue;
+      }
+    }
+    
+    // all done!
+    next = null;
+  }
+  
+  private void naturalLeftOrRightAdvance() {
+ // A left OR right must be present for the given conditions, otherwise 
+    // what's the point?
+    while (ternary_iterator.hasNext() || 
+          (ternary_series != null && ternary_idx < ternary_series.size())) {
+      
+      // see if there are leftovers in the right array to cross on.
+      if (ternary_series != null && 
+          (left_series != null || 
+          right_series != null)) {
+        
+        if (left_series != null &&
+            right_series != null) {
+          if (left_idx < left_series.size() && 
+              right_idx < right_series.size()) {
+            next[0] = left_series.get(left_idx);
+            next[1] = right_series.get(right_idx);
+            next[2] = ternary_series.get(ternary_idx);
+            right_idx++;
+            return;
+          }
+          
+          right_idx = 0;
+          left_idx++;
+          if (left_idx < left_series.size()) {
+            next[0] = left_series.get(left_idx);
+            next[1] = right_series.get(right_idx);
+            next[2] = ternary_series.get(ternary_idx);
+            right_idx++;
+            return;
+          }
+          
+          left_idx = 0;
+          right_idx = 0;
+          ternary_idx++;
+          if (ternary_idx < ternary_series.size()) {
+            next[0] = left_series.get(left_idx);
+            next[1] = right_series.get(right_idx);
+            next[2] = ternary_series.get(ternary_idx);
+            right_idx++;
+            return;
+          } else {
+            // all done with the cross join.
+            ternary_series = null;
+            left_series = null;
+            right_series = null;
+          }
+        } else if (left_series != null) {
+          // left only
+          if (left_idx < left_series.size()) {
+            next[0] = left_series.get(left_idx);
+            next[1] = null;
+            next[2] = ternary_series.get(ternary_idx);
+            left_idx++;
+            return;
+          }
+          
+          left_idx = 0;
+          ternary_idx++;
+          if (ternary_idx < ternary_series.size()) {
+            next[0] = left_series.get(left_idx);
+            next[1] = null;
+            next[2] = ternary_series.get(ternary_idx);
+            left_idx++;
+            return;
+          } else {
+            // all done with the cross join.
+            ternary_series = null;
+            left_series = null;
+            right_series = null;
+          }
+        } else {
+          // right only
+          if (right_idx < right_series.size()) {
+            next[0] = null;
+            next[1] = right_series.get(right_idx);
+            next[2] = ternary_series.get(ternary_idx);
+            right_idx++;
+            return;
+          }
+          
+          right_idx = 0;
+          ternary_idx++;
+          if (ternary_idx < ternary_series.size()) {
+            next[0] = null;
+            next[1] = right_series.get(right_idx);
+            next[2] = ternary_series.get(ternary_idx);
+            right_idx++;
+            return;
+          } else {
+            // all done with the cross join.
+            ternary_series = null;
+            left_series = null;
+            right_series = null;
+          }
+        }
+      }
+      
+      if (!ternary_iterator.hasNext()) {
+        // all done!
+        break;
+      }
+      
+      ternary_idx = 0;
+      left_idx = 0;
+      right_idx = 0;
+      ternary_iterator.advance();
+      ternary_series = ternary_iterator.value();
+      // check for nulls and empties. Shouldn't happen but can.
+      if (ternary_series == null || ternary_series.isEmpty()) {
+        ternary_series = null;
+        left_series = null;
+        right_series = null;
+        continue;
+      }
+      
+      left_series = join.left_map != null ? 
+          join.left_map.remove(ternary_iterator.key()) : null;
+      right_series = join.right_map != null ? 
+          join.right_map.remove(ternary_iterator.key()) : null;
+      if ((left_series == null || left_series.isEmpty()) && 
+          (right_series == null || right_series.isEmpty())) {
+        // reset to null in case we had an empty list.
+        left_series = null;
+        right_series = null;
+      } else if (left_series != null && left_series.isEmpty()) {
+        left_series = null;
+      } else if (right_series != null && right_series.isEmpty()) {
+        right_series = null;
       }
     }
     

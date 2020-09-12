@@ -130,7 +130,6 @@ public class NaturalOuterJoin extends BaseJoin {
     // all done!
     next = null;
   }
-
   
   @Override
   protected void ternaryAdvance() {

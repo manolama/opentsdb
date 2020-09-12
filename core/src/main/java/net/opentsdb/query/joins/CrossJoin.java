@@ -113,6 +113,12 @@ public class CrossJoin extends BaseJoin {
     next = null;
   }
   
+  @Override
+  protected void ternaryAdvance() {
+    // TODO Auto-generated method stub
+    
+  }
+  
   /**
    * Helper to iterate to the next non-null and non-empty right value.
    */
@@ -129,4 +135,6 @@ public class CrossJoin extends BaseJoin {
     }
     right_idx = -1;
   }
+
+
 }

@@ -694,6 +694,19 @@ public class TestExpressionParser {
     assertEquals(OperandType.VARIABLE, ((TernaryParseNode) node).getConditionType());
     assertEquals("a", ((TernaryParseNode) node).getCondition());
     
+    // special case
+    parser = new ExpressionParser(config("a ? NaN : d"));
+    nodes = parser.parse();
+    assertEquals(1, nodes.size());
+    node = nodes.get(0);
+    assertEquals("e1", node.getId());
+    assertEquals(OperandType.LITERAL_NUMERIC, node.getLeftType());
+    assertEquals(new NumericLiteral(Double.NaN), node.getLeft());
+    assertEquals(OperandType.VARIABLE, node.getRightType());
+    assertEquals("d", node.getRight());
+    assertNull(node.getOperator());
+    assertEquals(OperandType.VARIABLE, ((TernaryParseNode) node).getConditionType());
+    assertEquals("a", ((TernaryParseNode) node).getCondition());
     // nesting
     // TODO - can't nest yet, need to 
 //    parser = new ExpressionParser(config("(a > 1 ? b : c) ? d : e"));
