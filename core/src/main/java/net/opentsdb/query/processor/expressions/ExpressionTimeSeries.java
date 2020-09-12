@@ -61,7 +61,7 @@ public class ExpressionTimeSeries implements TimeSeries {
   protected final TimeSeries condition;
 
   /** The set of types in this series. */
-  protected final Set<TypeToken<? extends TimeSeriesDataType>> types;
+  protected final Collection<TypeToken<? extends TimeSeriesDataType>> types;
   
   /** The new Id of the time series. */
   protected final TimeSeriesId id;
@@ -79,7 +79,7 @@ public class ExpressionTimeSeries implements TimeSeries {
                        final TimeSeries left, 
                        final TimeSeries right,
                        final TimeSeries condition) {
-    if (left == null && right == null) {
+    if (left == null && right == null && condition == null) {
       throw new IllegalArgumentException("At least one operand must "
           + "be non-null.");
     }
@@ -89,28 +89,40 @@ public class ExpressionTimeSeries implements TimeSeries {
     this.right = right;
     this.condition = condition;
     
-    types = Sets.newHashSetWithExpectedSize(1);
-    // look to join on types
-    if (left != null && right != null) {
-      if (left.types().contains(NumericArrayType.TYPE) && 
-        right != null && right.types().contains(NumericArrayType.TYPE)) {
-        types.add(NumericArrayType.TYPE);
-      } else if (left != null && left.types().contains(NumericSummaryType.TYPE) && 
-          right != null && right.types().contains(NumericSummaryType.TYPE)) {
-        types.add(NumericSummaryType.TYPE);
-      } else if (left != null && left.types().contains(NumericType.TYPE) && 
-          right != null && right.types().contains(NumericType.TYPE)) {
-        types.add(NumericType.TYPE);
-      }
-    } else if (left == null) {
-      types.addAll(right.types());
+    if (left != null) {
+      types = left.types();
+    } else if (right != null) {
+      types = right.types();
     } else {
-      types.addAll(left.types());
+      types = condition.types();
     }
+    // look to join on types
+    // TODO - for now we expect all types to be the same.
+//    if (left != null && right != null) {
+//      if (left.types().contains(NumericArrayType.TYPE) && 
+//        right != null && right.types().contains(NumericArrayType.TYPE)) {
+//        types.add(NumericArrayType.TYPE);
+//      } else if (left != null && left.types().contains(NumericSummaryType.TYPE) && 
+//          right != null && right.types().contains(NumericSummaryType.TYPE)) {
+//        types.add(NumericSummaryType.TYPE);
+//      } else if (left != null && left.types().contains(NumericType.TYPE) && 
+//          right != null && right.types().contains(NumericType.TYPE)) {
+//        types.add(NumericType.TYPE);
+//      }
+//    } else if (left == null) {
+//      types.addAll(right.types());
+//    } else {
+//      types.addAll(left.types());
+//    }
     // TODO - handle other types, e.g. bools if we add em.
     // Otherwise we just drop the data since we don't have a type join.
-    id = node.joiner().joinIds(left, right, 
-        ((ExpressionParseNode) node.config()).getAs());
+    if (left == null && right == null) {
+      id = node.joiner().joinIds(condition, null, 
+          ((ExpressionParseNode) node.config()).getAs());
+    } else {
+      id = node.joiner().joinIds(left, right, 
+          ((ExpressionParseNode) node.config()).getAs());
+    }
   }
   
   @Override
@@ -154,6 +166,7 @@ public class ExpressionTimeSeries implements TimeSeries {
 
   @Override
   public Collection<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> iterators() {
+    System.out.println("          ASKING FOR IT");
     final ImmutableMap.Builder<String, TimeSeries> builder = 
         ImmutableMap.<String, TimeSeries>builder();
     if (left != null) {
@@ -178,6 +191,7 @@ public class ExpressionTimeSeries implements TimeSeries {
             type, node, result, sources));
       }
     }
+    System.out.println("                   NEW ITERATORS");
     return iterators;
   }
 

@@ -103,43 +103,6 @@ public class ExpressionResult implements QueryResult {
       ternary_key = null;
     }
     
-//    if ((config.getLeftType() == OperandType.SUB_EXP || 
-//        config.getLeftType() == OperandType.VARIABLE) &&
-//        (config.getRightType() == OperandType.SUB_EXP || 
-//        config.getRightType() == OperandType.VARIABLE)) {
-//      
-//      
-//      
-//      joins = node.joiner().join(
-//          node.results().values(),
-//          node.expression_config,
-//          left_key, 
-//          right_key,
-//          ternary_key,
-//          false);
-//    } else if (config.getLeftType() == OperandType.SUB_EXP || 
-//        config.getLeftType() == OperandType.VARIABLE) {
-//      final boolean use_alias = 
-//          config.getLeftType() != OperandType.VARIABLE;
-//      // left
-//      joins = node.joiner().join(
-//          node.results().values(), 
-//          node.leftMetric() != null ? node.leftMetric() : 
-//            ((String) config.getLeft()).getBytes(Const.UTF8_CHARSET), 
-//          true,
-//          use_alias);
-//    } else {
-//      final boolean use_alias = 
-//          config.getRightType() != OperandType.VARIABLE;
-//      // right
-//      joins = node.joiner().join(
-//          node.results().values(), 
-//          node.rightMetric() != null ? node.rightMetric() :
-//            ((String) config.getRight()).getBytes(Const.UTF8_CHARSET), 
-//          false, 
-//          use_alias);
-//    }
-    
     joins = node.joiner().join(
         node.results().values(),
         node.expression_config,
@@ -149,7 +112,6 @@ public class ExpressionResult implements QueryResult {
     
     time_series = Lists.newArrayList();
     for (final TimeSeries[] pair : joins) {
-      System.out.println(" @@@@@@@@@@@@@@@@ ADDED A SERIES");
       time_series.add(new ExpressionTimeSeries(node, this, pair[0], pair[1], 
           (pair.length == 3 ? pair[2] : null)));
     }

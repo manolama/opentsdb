@@ -57,7 +57,7 @@ public class TernaryNumericIterator extends ExpressionNumericIterator {
         is_true = true;
       }
     }
-    
+    System.out.println("                NEXT");
     if (is_true) {
       if (left_interpolator == null) {
         if (left_literal == null) {

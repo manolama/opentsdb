@@ -44,7 +44,7 @@ public class SingleResultJoin extends BaseJoin {
       iterator.advance();
       series = iterator.value();
       series_idx = 0;
-    } else if (iterator.hasNext()) {
+    } else if (series == null && iterator.hasNext()) {
       iterator.advance();
       series = iterator.value();
       series_idx = 0;
@@ -52,26 +52,31 @@ public class SingleResultJoin extends BaseJoin {
       next = null;
       return;
     }
-    
+    System.out.println("!!!!!!!!! IDX: " + series_idx);
     // got a value
     if (left_iterator != null) {
       left_series = series;
       left_idx = series_idx;
       next[0] = series.get(series_idx);
+      left_idx++;
     } else if (right_iterator != null) {
       right_series = series;
       right_idx = series_idx;
       next[1] = series.get(series_idx);
+      right_idx++;
     } else {
       ternary_series = series;
       ternary_idx = series_idx;
       next[2] = series.get(series_idx);
+      ternary_idx++;
     }
+    
   }
 
   @Override
   protected void ternaryAdvance() {
     // no-op, we use Advance here for everything.
+    advance();
   }
 
 }

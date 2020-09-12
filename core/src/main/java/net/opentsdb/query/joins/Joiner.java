@@ -275,17 +275,15 @@ public class Joiner {
           //}
                 System.out.println("         [KEY] " + new String(key));
           final byte[] key_in_bytes = key.getBytes(Const.UTF8_CHARSET);
-          if (Bytes.memcmp(key_in_bytes, left_key) == 0) {
+          if (operand == Operand.LEFT &&
+              Bytes.memcmp(key_in_bytes, left_key) == 0) {
             hashStringId(Operand.LEFT, ts, join_set);
-          } else if (Bytes.memcmp(key_in_bytes, right_key) == 0) {
+          } else if (operand == Operand.RIGHT &&
+                     Bytes.memcmp(key_in_bytes, right_key) == 0) {
             hashStringId(Operand.RIGHT, ts, join_set);
-          } else if (operand == Operand.CONDITION) {
-            if (Bytes.memcmp(key_in_bytes, ternary_key) == 0) {
-              hashStringId(Operand.CONDITION, ts, join_set);
-            } else {
-              // TODO - log ejection
-              continue;
-            }
+          } else if (operand == Operand.CONDITION && 
+                     Bytes.memcmp(key_in_bytes, ternary_key) == 0) {
+            hashStringId(Operand.CONDITION, ts, join_set);
           } else {
             // TODO - log ejection
             continue;
