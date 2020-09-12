@@ -41,7 +41,7 @@ public class ExpressionParseNode extends BaseQueryNodeConfig<ExpressionParseNode
   /**
    * The type of value represented in the left or right operand.
    */
-  static enum OperandType {
+  public static enum OperandType {
     VARIABLE,
     SUB_EXP,
     LITERAL_NUMERIC,
@@ -53,7 +53,7 @@ public class ExpressionParseNode extends BaseQueryNodeConfig<ExpressionParseNode
   /**
    * The operation this expression will execute.
    */
-  static enum ExpressionOp {
+  public static enum ExpressionOp {
     OR(new String[] { "||", "OR" }),
     AND(new String[] { "&&", "AND" }),
     EQ(new String[] { "==" }),
@@ -311,7 +311,7 @@ public class ExpressionParseNode extends BaseQueryNodeConfig<ExpressionParseNode
     return new Builder();
   }
 
-  static class Builder extends BaseQueryNodeConfig.Builder<Builder, ExpressionParseNode> {
+  public static class Builder extends BaseQueryNodeConfig.Builder<Builder, ExpressionParseNode> {
     @JsonProperty
     protected Object left;
     @JsonProperty

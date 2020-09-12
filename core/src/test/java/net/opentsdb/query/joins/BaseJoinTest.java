@@ -38,6 +38,7 @@ import net.opentsdb.data.TimeSeriesDataSourceFactory;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.query.DefaultQueryResultId;
 import net.opentsdb.query.QueryResult;
+import net.opentsdb.query.QueryResultId;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
 import net.opentsdb.utils.Pair;
 
@@ -604,7 +605,8 @@ public class BaseJoinTest {
     return set;
   }
   
-  protected static List<QueryResult> singleResult(final TypeToken<?> ts_type) {
+  protected static List<QueryResult> singleResult(final TypeToken<?> ts_type,
+                                                  final String ds) {
     final QueryResult result = mock(QueryResult.class);
     final List<TimeSeries> ts = Lists.newArrayList(
         L_1, R_1,
@@ -620,6 +622,7 @@ public class BaseJoinTest {
         return ts_type;
       }
     });
+    when(result.dataSource()).thenReturn(new DefaultQueryResultId(ds, ds));
     return Lists.newArrayList(result);
   }
   

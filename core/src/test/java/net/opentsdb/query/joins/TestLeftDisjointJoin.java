@@ -24,7 +24,6 @@ import org.junit.Test;
 
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
-import net.opentsdb.utils.Pair;
 
 public class TestLeftDisjointJoin extends BaseJoinTest {
 
@@ -47,10 +46,10 @@ public class TestLeftDisjointJoin extends BaseJoinTest {
     
     int matched = 0;
     while (join.hasNext()) {
-      Pair<TimeSeries, TimeSeries> next = join.next();
+      TimeSeries[] next = join.next();
       matched++;
-      if (next.getKey() == L_2) {
-        assertNull(next.getValue());
+      if (next[0] == L_2) {
+        assertNull(next[1]);
       }
     }
     assertEquals(1, matched);
@@ -62,9 +61,9 @@ public class TestLeftDisjointJoin extends BaseJoinTest {
     
     int matched = 0;
     while (join.hasNext()) {
-      Pair<TimeSeries, TimeSeries> next = join.next();
+      TimeSeries[] next = join.next();
       matched++;
-      assertNull(next.getValue());
+      assertNull(next[1]);
     }
     assertEquals(7, matched);
   }
@@ -86,10 +85,10 @@ public class TestLeftDisjointJoin extends BaseJoinTest {
     LeftDisjointJoin join = new LeftDisjointJoin(leftAndRightNullLists(TYPE));
     int matched = 0;
     while (join.hasNext()) {
-      Pair<TimeSeries, TimeSeries> next = join.next();
+      TimeSeries[] next = join.next();
       matched++;
-      if (next.getKey() == L_2) {
-        assertNull(next.getValue());
+      if (next[0] == L_2) {
+        assertNull(next[1]);
       }
     }
     assertEquals(1, matched);
@@ -100,10 +99,10 @@ public class TestLeftDisjointJoin extends BaseJoinTest {
     LeftDisjointJoin join = new LeftDisjointJoin(leftAndRightEmptyLists(TYPE));
     int matched = 0;
     while (join.hasNext()) {
-      Pair<TimeSeries, TimeSeries> next = join.next();
+      TimeSeries[] next = join.next();
       matched++;
-      if (next.getKey() == L_2) {
-        assertNull(next.getValue());
+      if (next[0] == L_2) {
+        assertNull(next[1]);
       }
     }
     assertEquals(1, matched);

@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2018  The OpenTSDB Authors.
+// Copyright (C) 2018-2020  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 package net.opentsdb.query.joins;
 
 import gnu.trove.set.hash.TLongHashSet;
-import net.opentsdb.data.TimeSeries;
-import net.opentsdb.utils.Pair;
 
 /**
  * Computes the outer join, i.e. the full join with nulls on either side
@@ -27,6 +25,12 @@ import net.opentsdb.utils.Pair;
  * <p>
  * For hashes where more than one series satisfied the algorithm, a 
  * Cartesian product is produced.
+ * 
+ * TODO - Yank the `completed` hash set, we should be able to delete the entries
+ * as we go to save som RAM and ops.
+ * 
+ * <b>NOTE:</b> When used in a ternary we just use the 
+ * {@link BaseJoin#naturalTernaryLeftOrRightAdvance()} method for now. 
  * 
  * @since 3.0
  */
@@ -45,12 +49,11 @@ public class OuterJoin extends BaseJoin {
                       final boolean disjoint) {
     super(join);
     this.disjoint = disjoint;
-    left_iterator = join.left_map == null ? null : join.left_map.iterator();
-    right_iterator = join.right_map == null ? null : join.right_map.iterator();
     completed = new TLongHashSet();
-    if (left_iterator != null || right_iterator != null) {
-      current = new TimeSeries[2];  
-      next = new TimeSeries[2];
+    if (join.condition_map != null && 
+        (join.left_map != null || join.right_map != null)) {
+      ternaryAdvance();
+    } else if (left_iterator != null || right_iterator != null) {
       advance();
     } else {
       current = null;
@@ -246,5 +249,10 @@ public class OuterJoin extends BaseJoin {
     
     // all done!
     next = null;
+  }
+
+  @Override
+  protected void ternaryAdvance() {
+    naturalTernaryLeftOrRightAdvance();
   }
 }
