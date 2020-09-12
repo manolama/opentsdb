@@ -44,8 +44,9 @@ public class KeyedHashedJoinSet extends BaseHashedJoinSet {
    * map.
    * @throws IllegalArgumentException if any of the args were null or empty.
    */
-  protected KeyedHashedJoinSet(final JoinType type) {
-    super(type, false);
+  protected KeyedHashedJoinSet(final JoinType type, 
+                               final boolean is_ternary) {
+    super(type, is_ternary);
     if (type == null) {
       throw new IllegalArgumentException("Join type cannot be null.");
     }

@@ -84,7 +84,7 @@ public class BinaryExpressionNode extends AbstractQueryNode<ExpressionParseNode>
   /** The result to populate and return. */
   protected ExpressionResult result;
   
-  /** Used to filtering when we're working on encoded IDs. */
+  /** Used for filtering when we're working on encoded IDs. */
   protected byte[] left_metric;
   protected byte[] right_metric;
   protected volatile boolean resolved_metrics;
@@ -148,6 +148,7 @@ public class BinaryExpressionNode extends AbstractQueryNode<ExpressionParseNode>
   
   @Override
   public void onNext(final QueryResult next) {
+    System.out.println("     GOT RESULT: " + next.dataSource());
     if (LOG.isTraceEnabled()) {
       LOG.trace("Result: " + next.dataSource() + " (" + next.getClass() + ") " 
         + " Want<" + results.keySet() +">");

@@ -46,8 +46,7 @@ public class TernaryKeyedHashedJoinSet extends KeyedHashedJoinSet {
    * @throws IllegalArgumentException if any of the args were null or empty.
    */
   protected TernaryKeyedHashedJoinSet(final JoinType type) {
-    super(type);
-    is_ternary = true;
+    super(type, true);
   }
   
   @Override

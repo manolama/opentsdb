@@ -33,12 +33,11 @@ public class InnerJoin extends BaseJoin {
    */
   protected InnerJoin(final BaseHashedJoinSet join) {
     super(join);
-    if (join.is_ternary &&
-        join.left_map != null &&
+    if (join.left_map != null &&
         join.right_map != null &&
         join.condition_map != null) {
       ternaryAdvance();
-    } else if (!join.is_ternary && join.left_map != null && join.right_map != null) {
+    } else if (join.left_map != null && join.right_map != null) {
       advance();
     } else {
       current = null;

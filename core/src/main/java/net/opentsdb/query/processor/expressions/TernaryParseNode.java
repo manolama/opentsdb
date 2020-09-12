@@ -54,6 +54,9 @@ public class TernaryParseNode extends ExpressionParseNode {
       throw new IllegalArgumentException("Missing parent expression config.");
     }
     condition = builder.condition;
+    if (condition == null) {
+      throw new RuntimeException("WTF?");
+    }
     condition_type = builder.conditionType;
     condition_id = builder.conditionId;
   }
@@ -117,6 +120,9 @@ public class TernaryParseNode extends ExpressionParseNode {
   
   public Builder toBuilder() {
     return (Builder) new Builder()
+        .setCondition(condition)
+        .setConditionType(condition_type)
+        .setConditionId(condition_id)
         .setExpressionConfig(expression_config)
         .setExpressionOp(op)
         .setLeft(left)

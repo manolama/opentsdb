@@ -46,6 +46,8 @@ import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.exceptions.QueryExecutionException;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.joins.JoinConfig.JoinType;
+import net.opentsdb.query.processor.expressions.ExpressionParseNode;
+import net.opentsdb.query.processor.expressions.TernaryParseNode;
 import net.opentsdb.utils.ByteSet;
 import net.opentsdb.utils.Bytes;
 import net.opentsdb.utils.Pair;
@@ -123,24 +125,26 @@ public class Joiner {
    * @throws IllegalArgumentException if any args were null or invalid.
    */
   public Iterable<TimeSeries[]> join(final Collection<QueryResult> results, 
+                                     final ExpressionParseNode expression_config,
                                      final byte[] left_key, 
                                      final byte[] right_key,
-                                     final boolean use_alias,
-                                     final boolean is_ternary) {
+                                     final byte[] ternary_key/*,
+                                     final boolean use_alias*/) {
     if (results == null || results.isEmpty()) {
       throw new IllegalArgumentException("Results list can't be null "
           + "or empty.");
     }
-    if (left_key == null || left_key.length < 1) {
-      throw new IllegalArgumentException("Left key cannot be null.");
-    }
-    if (right_key == null || right_key.length < 1) {
-      throw new IllegalArgumentException("Right key cannot be null.");
+    if ((left_key == null || left_key.length < 1) && 
+        (right_key == null || right_key.length < 1) && 
+        (ternary_key == null || ternary_key.length < 1)) {
+      throw new IllegalArgumentException("Must have at least one key.");
     }
     
     if (LOG.isTraceEnabled()) {
-      LOG.trace("Joiner Left: " + new String(left_key, Const.UTF8_CHARSET) 
-          + "  Right: " + new String(right_key, Const.UTF8_CHARSET));
+      LOG.trace("Joiner Left: " + (left_key != null ? new String(left_key, Const.UTF8_CHARSET) : "null") 
+          + "  Right: " + (right_key != null ? new String(right_key, Const.UTF8_CHARSET) : "null") 
+          + "  Ternary: " + (ternary_key == null ? "null" : 
+            new String(ternary_key, Const.UTF8_CHARSET)));
     }
     
     if (results.iterator().next().idType() == Const.TS_BYTE_ID &&
@@ -151,10 +155,10 @@ public class Joiner {
           + "IDs but the local encoded tags map was null.");
     }
     
-    final KeyedHashedJoinSet join_set = is_ternary ?
+    final KeyedHashedJoinSet join_set = ternary_key != null ?
         new TernaryKeyedHashedJoinSet(config.type) :
-        new KeyedHashedJoinSet(config.type);
-        
+        new KeyedHashedJoinSet(config.type, ternary_key != null);
+        System.out.println("--------- RESULTS: " + results.size());
     // calculate the hash for every series and let the hasher kick out
     // inapplicable series.
     for (final QueryResult result : results) {
@@ -162,34 +166,55 @@ public class Joiner {
         continue;
       }
       
+      final Operand operand;
+      byte[] k;
+      if (expression_config.getLeftId() != null &&
+          expression_config.getLeftId().equals(result.dataSource())) {
+        operand = Operand.LEFT;
+        k = left_key;
+      } else if (expression_config.getRightId() != null &&
+          expression_config.getRightId().equals(result.dataSource())) {
+        operand = Operand.RIGHT;
+        k = right_key;
+      } else if (expression_config instanceof TernaryParseNode && 
+          ((TernaryParseNode) expression_config).getConditionId().equals(
+              result.dataSource())) {
+        operand = Operand.CONDITION;
+        k = ternary_key;
+      } else {
+        LOG.warn("Result in our set that we didn't want: " + result.dataSource());
+        continue;
+      }
+      
+      System.out.println("          MATCHED: " + operand + "  TO: " + result.dataSource() + " and key " + new String(k) + "  SERIES: " + result.timeSeries().size());
       // TODO - don't do bytes and allocations here. If we drop the namespace
       // field, we can use long hashes!
       for (final TimeSeries ts : result.timeSeries()) {
         if (ts.id().type() == Const.TS_BYTE_ID) {
           final TimeSeriesByteId id = (TimeSeriesByteId) ts.id();
           final byte[] key;
-          if (use_alias) {
-            final byte[] local_key;
-            if (id.namespace() == null || id.namespace().length < 1) {
-              local_key = id.alias();
-            } else {
-              local_key = com.google.common.primitives.Bytes.concat(
-                  id.namespace(), id.alias());
-            }
-            
-            if (Bytes.memcmpMaybeNull(local_key, left_key) != 0 && 
-                Bytes.memcmpMaybeNull(local_key, right_key) != 0) {
-              // we didn't match on the alias so try the metric.
-              if (id.namespace() == null || id.namespace().length < 1) {
-                key = id.metric();
-              } else {
-                key = com.google.common.primitives.Bytes.concat(
-                    id.namespace(), id.metric());
-              }
-            } else {
-              key = local_key;
-            }
-          } else {
+//          if (use_alias) {
+//            final byte[] local_key;
+//            if (id.namespace() == null || id.namespace().length < 1) {
+//              local_key = id.alias();
+//            } else {
+//              local_key = com.google.common.primitives.Bytes.concat(
+//                  id.namespace(), id.alias());
+//            }
+//            
+//            if (Bytes.memcmpMaybeNull(local_key, left_key) != 0 && 
+//                Bytes.memcmpMaybeNull(local_key, right_key) != 0) {
+//              // we didn't match on the alias so try the metric.
+//              if (id.namespace() == null || id.namespace().length < 1) {
+//                key = id.metric();
+//              } else {
+//                key = com.google.common.primitives.Bytes.concat(
+//                    id.namespace(), id.metric());
+//              }
+//            } else {
+//              key = local_key;
+//            }
+//          } else {
             if (id.namespace() == null || id.namespace().length < 1) {
               System.out.println("        JUST METRIC " + id.metric());
               key = id.metric();
@@ -197,14 +222,30 @@ public class Joiner {
               key = com.google.common.primitives.Bytes.concat(
                   id.namespace(), id.metric());
             }
-          }
+          //}
           System.out.println("LK: " + left_key + "  RK: " + right_key + "  K: " + key);
-          if (Bytes.memcmp(key, left_key) == 0) {
-            hashByteId(Operand.LEFT, ts, join_set);
-          } else if (Bytes.memcmp(key, right_key) == 0) {
-            hashByteId(Operand.RIGHT, ts, join_set);
-          } else if (is_ternary) {
-            hashByteId(Operand.CONDITION, ts, join_set);
+          if (operand == Operand.LEFT) {
+            if (Bytes.memcmp(key, left_key) == 0) {
+              hashByteId(operand, ts, join_set);
+            } else {
+              // TODO - log ejection
+              continue;
+            }
+          } else if (operand == Operand.RIGHT) {
+            if (Bytes.memcmp(key, right_key) == 0) {
+              hashByteId(Operand.RIGHT, ts, join_set);
+            } else {
+              // TODO - log ejection
+              continue;
+            }
+          } else if (operand == Operand.CONDITION) {
+            System.out.println("         " + new String(key));
+            if (Bytes.memcmp(key, ternary_key) == 0) {
+              hashByteId(Operand.CONDITION, ts, join_set);
+            } else {
+              // TODO - log ejection
+              continue;
+            }
           } else {
             // TODO - log ejection
             continue;
@@ -212,31 +253,39 @@ public class Joiner {
         } else {
           final TimeSeriesStringId id = (TimeSeriesStringId) ts.id();
           final String key;
-          if (use_alias) {
-            final String local_key = Strings.isNullOrEmpty(id.namespace()) ? 
-                id.alias() :
-                  id.namespace() + id.alias();
-            byte[] key_in_bytes = local_key != null ? 
-                local_key.getBytes(Const.UTF8_CHARSET) : new byte[0];
-            if (Bytes.memcmp(key_in_bytes, left_key) != 0 && 
-                Bytes.memcmp(key_in_bytes, right_key) != 0) {
-              // we didn't match on the alias so try the metric.
-              key = Strings.isNullOrEmpty(id.namespace()) ? 
-                  id.metric() :
-                    id.namespace() + id.metric();
-            } else {
-              key = local_key;
-            }
-          } else {
+//          if (use_alias) {
+//            final String local_key = Strings.isNullOrEmpty(id.namespace()) ? 
+//                id.alias() :
+//                  id.namespace() + id.alias();
+//            byte[] key_in_bytes = local_key != null ? 
+//                local_key.getBytes(Const.UTF8_CHARSET) : new byte[0];
+//            if (Bytes.memcmp(key_in_bytes, left_key) != 0 && 
+//                Bytes.memcmp(key_in_bytes, right_key) != 0) {
+//              // we didn't match on the alias so try the metric.
+//              key = Strings.isNullOrEmpty(id.namespace()) ? 
+//                  id.metric() :
+//                    id.namespace() + id.metric();
+//            } else {
+//              key = local_key;
+//            }
+//          } else {
             key = Strings.isNullOrEmpty(id.namespace()) ? 
                 id.metric() :
                   id.namespace() + id.metric();
-          }
+          //}
+                System.out.println("         [KEY] " + new String(key));
           final byte[] key_in_bytes = key.getBytes(Const.UTF8_CHARSET);
           if (Bytes.memcmp(key_in_bytes, left_key) == 0) {
             hashStringId(Operand.LEFT, ts, join_set);
           } else if (Bytes.memcmp(key_in_bytes, right_key) == 0) {
             hashStringId(Operand.RIGHT, ts, join_set);
+          } else if (operand == Operand.CONDITION) {
+            if (Bytes.memcmp(key_in_bytes, ternary_key) == 0) {
+              hashStringId(Operand.CONDITION, ts, join_set);
+            } else {
+              // TODO - log ejection
+              continue;
+            }
           } else {
             // TODO - log ejection
             continue;

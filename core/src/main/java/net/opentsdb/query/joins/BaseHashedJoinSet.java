@@ -53,6 +53,21 @@ public abstract class BaseHashedJoinSet implements Iterable<TimeSeries[]> {
   
   @Override
   public Iterator<TimeSeries[]> iterator() {
+    int non_null_maps = 0;
+    if (left_map != null) {
+      non_null_maps++;
+    }
+    if (right_map != null) {
+      non_null_maps++;
+    }
+    if (condition_map != null) {
+      non_null_maps++;
+    }
+    
+    if (non_null_maps == 1) {
+      return new SingleResultJoin(this);
+    }
+    
     switch (type) {
     case INNER:
     case NATURAL:
@@ -75,5 +90,20 @@ public abstract class BaseHashedJoinSet implements Iterable<TimeSeries[]> {
         throw new UnsupportedOperationException("Unsupported join type: " 
             + type);
     }
+  }
+
+  @Override
+  public String toString() {
+    return new StringBuilder()
+        .append("{leftMap=")
+        .append(left_map == null ? "null" : left_map.size())
+        .append(", rightMap=")
+        .append(right_map == null ? "null" : right_map.size())
+        .append(", conditionMap=")
+        .append(condition_map == null ? "null" : condition_map.size())
+        .append(", isTernary=")
+        .append(is_ternary)
+        .append("}")
+        .toString();
   }
 }

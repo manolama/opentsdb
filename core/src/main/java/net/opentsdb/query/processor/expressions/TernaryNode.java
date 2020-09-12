@@ -1,14 +1,22 @@
 package net.opentsdb.query.processor.expressions;
 
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.stumbleupon.async.Callback;
 
+import net.opentsdb.common.Const;
+import net.opentsdb.data.TimeSeriesByteId;
 import net.opentsdb.query.QueryNodeFactory;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.joins.Joiner;
+import net.opentsdb.query.processor.expressions.BinaryExpressionNode.ErrorCB;
+import net.opentsdb.query.processor.expressions.ExpressionParseNode.OperandType;
 
 /**
  * NOTE that the condition can ONLY be a sub expression and must logical or 
@@ -19,6 +27,8 @@ public class TernaryNode extends BinaryExpressionNode {
       TernaryNode.class);
   
   protected final Joiner condition_joiner;
+  
+  protected byte[] condition_metric;
   
   public TernaryNode(final QueryNodeFactory factory,
                                final QueryPipelineContext context, 
@@ -86,4 +96,84 @@ public class TernaryNode extends BinaryExpressionNode {
     }
   }
 
+  protected boolean resolveMetrics(final QueryResult next) {
+    if (resolved_metrics) {
+      return false;
+    }
+    if (next.idType() != Const.TS_BYTE_ID) {
+      resolved_metrics = true;
+      return false;
+    }
+    
+    final TernaryParseNode config = (TernaryParseNode) expression_config;
+    System.out.println(" -------------------- RESOLVING METRICS.......");
+    if (next.idType() == Const.TS_BYTE_ID &&
+        (config.getLeftType() == OperandType.VARIABLE || 
+         config.getRightType() == OperandType.VARIABLE ||
+         config.getConditionType() == OperandType.VARIABLE) && 
+        !resolved_metrics) {
+      final List<String> metrics = Lists.newArrayListWithExpectedSize(2);
+      if (config.getLeftType() == OperandType.VARIABLE) {
+        metrics.add((String) config.getLeft());
+      } else if (config.getLeftType() == OperandType.SUB_EXP){
+        left_metric = ((String) config.getLeft()).getBytes(Const.UTF8_CHARSET);
+      }
+      
+      if (config.getRightType() == OperandType.VARIABLE) {
+        metrics.add((String) config.getRight());
+      } else if (config.getRightType() == OperandType.SUB_EXP) {
+        right_metric = ((String) config.getRight()).getBytes(Const.UTF8_CHARSET);
+      }
+      
+      if (config.getConditionType() == OperandType.VARIABLE) {
+        metrics.add((String) config.getCondition());
+      } else if (config.getConditionType() == OperandType.SUB_EXP) {
+        condition_metric = ((String) config.getCondition()).getBytes(Const.UTF8_CHARSET);
+      }
+      
+      class ResolveCB implements Callback<Object, List<byte[]>> {
+        @Override
+        public Object call(final List<byte[]> uids) throws Exception {
+          int idx = 0;
+          if (expression_config.getLeftType() == OperandType.VARIABLE) {
+            left_metric = uids.get(idx);
+            if (expression_config.getRightType() != OperandType.VARIABLE ||
+                !expression_config.getRight().equals(expression_config.getLeft())) {
+                // ie, left and right are not the same metric
+                idx++;
+            }
+          }
+          
+          if (expression_config.getRightType() == OperandType.VARIABLE) {
+            right_metric = uids.get(idx);
+            if (config.getConditionType() != OperandType.VARIABLE ||
+                !config.getCondition().equals(config.getRight())) {
+              idx++;
+            }
+          }
+          
+          if (config.getConditionType() == OperandType.VARIABLE) {
+            System.out.println("******** SETTING COND VAR");
+            condition_metric = uids.get(idx);
+          }
+          
+          resolved_metrics = true;
+          // call back into onNext() to progress to the next step.
+          onNext(next);
+          return null;
+        }
+      }
+      
+      ((TimeSeriesByteId) next.timeSeries().iterator().next().id())
+        .dataStore().encodeJoinMetrics(metrics, null /* TODO */)
+        .addCallback(new ResolveCB())
+        .addErrback(new ErrorCB());
+      return true;
+    }
+    return false;
+  }
+  
+  byte[] conditionMetric() {
+    return condition_metric;
+  }
 }

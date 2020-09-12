@@ -63,19 +63,6 @@ public class ExpressionResult implements QueryResult {
     //results = Lists.newArrayListWithExpectedSize(is_ternary ? 3 : 2);
   }
   
-//  /**
-//   * Package private method to add a result.
-//   * @param result A non-null result.
-//   * Note that we don't check the Id types here.
-//   */
-//  void add(final QueryResult result) {
-//    if (results == null) {
-//      results = Lists.newArrayList(result);
-//    } else {
-//      results.add(result);
-//    }
-//  }
-  
   /**
    * Package private method called by the node when it has seen all the
    * results it needs for the expression.
@@ -84,48 +71,87 @@ public class ExpressionResult implements QueryResult {
     final Iterable<TimeSeries[]> joins;
     final ExpressionParseNode config = (ExpressionParseNode) node.config();
     
-    if ((config.getLeftType() == OperandType.SUB_EXP || 
-        config.getLeftType() == OperandType.VARIABLE) &&
-        (config.getRightType() == OperandType.SUB_EXP || 
-        config.getRightType() == OperandType.VARIABLE)) {
-      final boolean use_alias = 
-          config.getLeftType() != OperandType.VARIABLE ||
-              config.getRightType() != OperandType.VARIABLE;
-      System.out.println("           LEFT M: " + node.leftMetric() + "  R: " + node.rightMetric());
-      joins = node.joiner().join(node.results().values(), 
-          node.leftMetric() != null ? node.leftMetric() : 
-            ((String) config.getLeft()).getBytes(Const.UTF8_CHARSET), 
-          node.rightMetric() != null ? node.rightMetric() : 
-            ((String) config.getRight()).getBytes(Const.UTF8_CHARSET),
-          use_alias,
-          is_ternary);
-    } else if (config.getLeftType() == OperandType.SUB_EXP || 
-        config.getLeftType() == OperandType.VARIABLE) {
-      final boolean use_alias = 
-          config.getLeftType() != OperandType.VARIABLE;
-      // left
-      joins = node.joiner().join(
-          node.results().values(), 
-          node.leftMetric() != null ? node.leftMetric() : 
-            ((String) config.getLeft()).getBytes(Const.UTF8_CHARSET), 
-          true,
-          use_alias);
+    final byte[] left_key;
+    if (config.getLeft() != null && 
+        (config.getLeftType() == OperandType.SUB_EXP || 
+         config.getLeftType() == OperandType.VARIABLE)) {
+      left_key = node.leftMetric() != null ? node.leftMetric() : 
+          ((String) config.getLeft()).getBytes(Const.UTF8_CHARSET);
     } else {
-      final boolean use_alias = 
-          config.getRightType() != OperandType.VARIABLE;
-      // right
-      joins = node.joiner().join(
-          node.results().values(), 
-          node.rightMetric() != null ? node.rightMetric() :
-            ((String) config.getRight()).getBytes(Const.UTF8_CHARSET), 
-          false, 
-          use_alias);
+      left_key = null;
     }
+    
+    final byte[] right_key;
+    if (config.getRight() != null && 
+        (config.getRightType() == OperandType.SUB_EXP || 
+         config.getRightType() == OperandType.VARIABLE)) {
+      right_key = node.rightMetric() != null ? node.rightMetric() : 
+        ((String) config.getRight()).getBytes(Const.UTF8_CHARSET);
+    } else {
+      right_key = null;
+    }
+    
+    final byte[] ternary_key;
+    if (node instanceof TernaryNode) {
+      if (((TernaryNode) node).conditionMetric() != null) {
+        ternary_key = ((TernaryNode) node).conditionMetric();
+      } else {
+        ternary_key = ((TernaryParseNode) node.config()).getCondition()
+            .toString().getBytes(Const.UTF8_CHARSET);
+      }
+    } else {
+      ternary_key = null;
+    }
+    
+//    if ((config.getLeftType() == OperandType.SUB_EXP || 
+//        config.getLeftType() == OperandType.VARIABLE) &&
+//        (config.getRightType() == OperandType.SUB_EXP || 
+//        config.getRightType() == OperandType.VARIABLE)) {
+//      
+//      
+//      
+//      joins = node.joiner().join(
+//          node.results().values(),
+//          node.expression_config,
+//          left_key, 
+//          right_key,
+//          ternary_key,
+//          false);
+//    } else if (config.getLeftType() == OperandType.SUB_EXP || 
+//        config.getLeftType() == OperandType.VARIABLE) {
+//      final boolean use_alias = 
+//          config.getLeftType() != OperandType.VARIABLE;
+//      // left
+//      joins = node.joiner().join(
+//          node.results().values(), 
+//          node.leftMetric() != null ? node.leftMetric() : 
+//            ((String) config.getLeft()).getBytes(Const.UTF8_CHARSET), 
+//          true,
+//          use_alias);
+//    } else {
+//      final boolean use_alias = 
+//          config.getRightType() != OperandType.VARIABLE;
+//      // right
+//      joins = node.joiner().join(
+//          node.results().values(), 
+//          node.rightMetric() != null ? node.rightMetric() :
+//            ((String) config.getRight()).getBytes(Const.UTF8_CHARSET), 
+//          false, 
+//          use_alias);
+//    }
+    
+    joins = node.joiner().join(
+        node.results().values(),
+        node.expression_config,
+        left_key, 
+        right_key,
+        ternary_key);
     
     time_series = Lists.newArrayList();
     for (final TimeSeries[] pair : joins) {
-      // TODO TERNARY
-      time_series.add(new ExpressionTimeSeries(node, this, pair[0], pair[1]));
+      System.out.println(" @@@@@@@@@@@@@@@@ ADDED A SERIES");
+      time_series.add(new ExpressionTimeSeries(node, this, pair[0], pair[1], 
+          (pair.length == 3 ? pair[2] : null)));
     }
   }
   

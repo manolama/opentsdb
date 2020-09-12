@@ -116,16 +116,7 @@ public class ExpressionFactory extends BaseQueryNodeFactory<ExpressionConfig,
         builder.addSource((String) parse_node.getLeft())
           .setLeftId(new DefaultQueryResultId((String) parse_node.getLeft(), 
               (String) parse_node.getLeft()));
-      }
-      if (parse_node.getRightType() == OperandType.SUB_EXP) {
-        builder.addSource((String) parse_node.getRight())
-          .setRightId(new DefaultQueryResultId((String) parse_node.getRight(), 
-              (String) parse_node.getRight()));
-      }
-      
-      // we may need to fix up variable names. Do so by searching 
-      // recursively.
-      if (parse_node.getLeftType() == OperandType.VARIABLE) {
+      } else if (parse_node.getLeftType() == OperandType.VARIABLE) {
         variables++;
         String ds = validate(builder, Operand.LEFT, plan, config, 0, node_map);
         if (ds == null) {
@@ -135,8 +126,11 @@ public class ExpressionFactory extends BaseQueryNodeFactory<ExpressionConfig,
         }
       }
       
-      // TODO - this double walk is silly and ugly, fix me!
-      if (parse_node.getRightType() == OperandType.VARIABLE) {
+      if (parse_node.getRightType() == OperandType.SUB_EXP) {
+        builder.addSource((String) parse_node.getRight())
+          .setRightId(new DefaultQueryResultId((String) parse_node.getRight(), 
+              (String) parse_node.getRight()));
+      } else if (parse_node.getRightType() == OperandType.VARIABLE) {
         variables++;
         String ds = validate(builder, Operand.RIGHT, plan, config, 0, node_map);
         if (ds == null) {
@@ -149,12 +143,14 @@ public class ExpressionFactory extends BaseQueryNodeFactory<ExpressionConfig,
       // handle ternary bits.
       if (parse_node instanceof TernaryParseNode) {
         final TernaryParseNode ternary = (TernaryParseNode) parse_node;
-        final String id = (String) ternary.getCondition();
-        builder.addSource(id);
-        ((TernaryParseNode.Builder) builder).setConditionId(
-            new DefaultQueryResultId(id, id));
         
-        if (ternary.getConditionType() == OperandType.VARIABLE) {
+        if (ternary.getConditionType() == OperandType.SUB_EXP) {
+          final String id = (String) ternary.getCondition();
+          builder.addSource(id);
+          ((TernaryParseNode.Builder) builder).setConditionId(
+              new DefaultQueryResultId(id, id));
+          System.out.println("!!!!!!!! TERNARY COND: " + ternary.getCondition());
+        } else if (ternary.getConditionType() == OperandType.VARIABLE) {
           variables++;
           String ds = validate(builder, Operand.CONDITION, plan, config, 0, node_map);
           if (ds == null) {
@@ -241,7 +237,7 @@ public class ExpressionFactory extends BaseQueryNodeFactory<ExpressionConfig,
     default:
       throw new IllegalStateException("Unhandled operand: " + operand);
     }
-    
+    System.out.println("               WORKING OP: " + key);
     for (final QueryNodeConfig node : node_map.values()) {
       for (final QueryResultId src : (List<QueryResultId>) node.resultIds()) {
         final String metric = plan.getMetricForDataSource(node, src.dataSource());
@@ -257,7 +253,9 @@ public class ExpressionFactory extends BaseQueryNodeFactory<ExpressionConfig,
             builder.setRight(metric)
                    .setRightId(src)
                    .addSource(node.getId());
+            break;
           case CONDITION:
+            new RuntimeException("BOO!").printStackTrace();
             ((TernaryParseNode.Builder) builder)
                   .setCondition(metric)
                   .setConditionId(src)

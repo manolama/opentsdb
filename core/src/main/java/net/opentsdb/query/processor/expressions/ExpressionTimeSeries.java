@@ -57,6 +57,8 @@ public class ExpressionTimeSeries implements TimeSeries {
   
   /** The right time series, may be null. */
   protected final TimeSeries right;
+  
+  protected final TimeSeries condition;
 
   /** The set of types in this series. */
   protected final Set<TypeToken<? extends TimeSeriesDataType>> types;
@@ -75,7 +77,8 @@ public class ExpressionTimeSeries implements TimeSeries {
   ExpressionTimeSeries(final BinaryExpressionNode node,
                        final QueryResult result,
                        final TimeSeries left, 
-                       final TimeSeries right) {
+                       final TimeSeries right,
+                       final TimeSeries condition) {
     if (left == null && right == null) {
       throw new IllegalArgumentException("At least one operand must "
           + "be non-null.");
@@ -84,6 +87,7 @@ public class ExpressionTimeSeries implements TimeSeries {
     this.result = result;
     this.left = left;
     this.right = right;
+    this.condition = condition;
     
     types = Sets.newHashSetWithExpectedSize(1);
     // look to join on types
@@ -128,11 +132,20 @@ public class ExpressionTimeSeries implements TimeSeries {
     if (right != null) {
       builder.put(RIGHT_KEY, right);
     }
+    if (condition != null) {
+      builder.put(CONDITION_KEY, condition);
+    }
     
-    final TypedTimeSeriesIterator iterator = 
-        ((BinaryExpressionNodeFactory) node.factory())
+    final TypedTimeSeriesIterator iterator;
+    if (node instanceof TernaryNode) {
+      iterator = ((TernaryNodeFactory) node.factory())
+          .newTypedIterator(type, (TernaryNode) node, result,
+            (Map<String, TimeSeries>) builder.build()); 
+    } else {
+      iterator = ((BinaryExpressionNodeFactory) node.factory())
           .newTypedIterator(type, node, result,
             (Map<String, TimeSeries>) builder.build());
+    }
     if (iterator == null) {
       return Optional.empty();  
     }
@@ -149,12 +162,21 @@ public class ExpressionTimeSeries implements TimeSeries {
     if (right != null) {
       builder.put(RIGHT_KEY, right);
     }
+    if (condition != null) {
+      builder.put(CONDITION_KEY, condition);
+    }
+    
     final Map<String, TimeSeries> sources = (Map<String, TimeSeries>) builder.build();
     final List<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> iterators =
         Lists.newArrayListWithExpectedSize(types.size());
     for (final TypeToken<? extends TimeSeriesDataType> type : types) {
-      iterators.add(((BinaryExpressionNodeFactory) node.factory()).newTypedIterator(
-          type, node, result, sources));
+      if (node instanceof TernaryNode) {
+        iterators.add(((TernaryNodeFactory) node.factory()).newTypedIterator(
+            type, (TernaryNode) node, result, sources));
+      } else {
+        iterators.add(((BinaryExpressionNodeFactory) node.factory()).newTypedIterator(
+            type, node, result, sources));
+      }
     }
     return iterators;
   }
