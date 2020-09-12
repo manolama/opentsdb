@@ -614,6 +614,42 @@ public class TestExpressionParser {
     assertEquals(OperandType.SUB_EXP, ((TernaryParseNode) node).getConditionType());
     assertEquals("e1_SubExp#0", ((TernaryParseNode) node).getCondition());
     
+    parser = new ExpressionParser(config("a > b ? c * d : e / f"));
+    nodes = parser.parse();
+    assertEquals(4, nodes.size());
+    node = nodes.get(0);
+    assertEquals("e1_SubExp#0", node.getId());
+    assertEquals(OperandType.VARIABLE, node.getLeftType());
+    assertEquals("a", node.getLeft());
+    assertEquals(OperandType.VARIABLE, node.getRightType());
+    assertEquals("b", node.getRight());
+    assertEquals(ExpressionOp.GT, node.getOperator());
+    
+    node = nodes.get(1);
+    assertEquals("e1_SubExp#1", node.getId());
+    assertEquals(OperandType.VARIABLE, node.getLeftType());
+    assertEquals("c", node.getLeft());
+    assertEquals(OperandType.VARIABLE, node.getRightType());
+    assertEquals("d", node.getRight());
+    assertEquals(ExpressionOp.MULTIPLY, node.getOperator());
+    
+    node = nodes.get(2);
+    assertEquals("e1_SubExp#2", node.getId());
+    assertEquals(OperandType.VARIABLE, node.getLeftType());
+    assertEquals("e", node.getLeft());
+    assertEquals(OperandType.VARIABLE, node.getRightType());
+    assertEquals("f", node.getRight());
+    assertEquals(ExpressionOp.DIVIDE, node.getOperator());
+
+    node = nodes.get(3);
+    assertEquals("e1", node.getId());
+    assertEquals(OperandType.SUB_EXP, node.getLeftType());
+    assertEquals("e1_SubExp#1", node.getLeft());
+    assertEquals(OperandType.SUB_EXP, node.getRightType());
+    assertEquals("e1_SubExp#2", node.getRight());
+    assertEquals(OperandType.SUB_EXP, ((TernaryParseNode) node).getConditionType());
+    assertEquals("e1_SubExp#0", ((TernaryParseNode) node).getCondition());
+    
     parser = new ExpressionParser(config("(a > b && b < 1) ? c : d"));
     nodes = parser.parse();
     assertEquals(4, nodes.size());

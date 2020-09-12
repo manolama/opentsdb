@@ -105,7 +105,7 @@ public class ExpressionResult implements QueryResult {
     
     joins = node.joiner().join(
         node.results().values(),
-        node.expression_config,
+        (ExpressionParseNode) node.config(),
         left_key, 
         right_key,
         ternary_key);

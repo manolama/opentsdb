@@ -52,7 +52,7 @@ public class SingleResultJoin extends BaseJoin {
       next = null;
       return;
     }
-    System.out.println("!!!!!!!!! IDX: " + series_idx);
+    
     // got a value
     if (left_iterator != null) {
       left_series = series;

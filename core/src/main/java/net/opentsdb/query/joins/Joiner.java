@@ -128,8 +128,7 @@ public class Joiner {
                                      final ExpressionParseNode expression_config,
                                      final byte[] left_key, 
                                      final byte[] right_key,
-                                     final byte[] ternary_key/*,
-                                     final boolean use_alias*/) {
+                                     final byte[] ternary_key) {
     if (results == null || results.isEmpty()) {
       throw new IllegalArgumentException("Results list can't be null "
           + "or empty.");
