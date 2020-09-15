@@ -631,7 +631,6 @@ public class BaseJoinTest {
                                                   final String right) {
     final List<QueryResult> results = Lists.newArrayList();
     QueryResult result = mock(QueryResult.class);
-    when(result.dataSource()).thenReturn(new DefaultQueryResultId("m1", "m1"));
     List<TimeSeries> ts = Lists.newArrayList(
         L_1,
         L_2,
@@ -650,7 +649,6 @@ public class BaseJoinTest {
     
     // right
     result = mock(QueryResult.class);
-    when(result.dataSource()).thenReturn(new DefaultQueryResultId("m2", "m2"));
     ts = Lists.newArrayList(
         R_1,
         R_3,

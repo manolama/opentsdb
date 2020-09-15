@@ -207,37 +207,13 @@ public class Joiner {
         if (ts.id().type() == Const.TS_BYTE_ID) {
           final TimeSeriesByteId id = (TimeSeriesByteId) ts.id();
           final byte[] key;
-//          if (use_alias) {
-//            final byte[] local_key;
-//            if (id.namespace() == null || id.namespace().length < 1) {
-//              local_key = id.alias();
-//            } else {
-//              local_key = com.google.common.primitives.Bytes.concat(
-//                  id.namespace(), id.alias());
-//            }
-//            
-//            if (Bytes.memcmpMaybeNull(local_key, left_key) != 0 && 
-//                Bytes.memcmpMaybeNull(local_key, right_key) != 0) {
-//              // we didn't match on the alias so try the metric.
-//              if (id.namespace() == null || id.namespace().length < 1) {
-//                key = id.metric();
-//              } else {
-//                key = com.google.common.primitives.Bytes.concat(
-//                    id.namespace(), id.metric());
-//              }
-//            } else {
-//              key = local_key;
-//            }
-//          } else {
-            if (id.namespace() == null || id.namespace().length < 1) {
-              System.out.println("        JUST METRIC " + id.metric());
-              key = id.metric();
-            } else {
-              key = com.google.common.primitives.Bytes.concat(
-                  id.namespace(), id.metric());
-            }
-          //}
-          System.out.println("LK: " + left_key + "  RK: " + right_key + "  K: " + key);
+          if (id.namespace() == null || id.namespace().length < 1) {
+            key = id.metric();
+          } else {
+            key = com.google.common.primitives.Bytes.concat(
+                id.namespace(), id.metric());
+          }
+          
           switch (operand) {
           case LEFT:
             if (Bytes.memcmp(key, left_key) == 0) {
@@ -797,9 +773,10 @@ public class Joiner {
         //boolean is_left = join_set.left_key.equals(key);
         boolean matched = true;
         for (final Entry<String, String> pair : config.joins.entrySet()) {
-          final String value = id.tags().get(pair.getKey());
+          String value = id.tags().get(pair.getKey());
           if (Strings.isNullOrEmpty(value)) {
-            if (Strings.isNullOrEmpty(id.tags().get(pair.getValue()))) {
+            value = id.tags().get(pair.getValue());
+            if (Strings.isNullOrEmpty(value)) {
               // TODO - log the ejection
               matched = false;
               break;

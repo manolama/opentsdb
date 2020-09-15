@@ -160,37 +160,6 @@ public class TestJoiner extends BaseJoinTest {
   }
   
   @Test
-  public void hashStringIdDefaultRightOneTagMatchDiffJoinTag() throws Exception {
-    setStringIds();
-    
-    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
-        .setJoinType(JoinType.INNER)
-        .addJoins("host", "HostName") // this is to make sure we use the right join.
-        .setId(ID)
-        .build();
-    
-    Joiner joiner = new Joiner(config);
-    KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER, 1, false);
-    joiner.hashStringId(Operand.RIGHT, R_1, set);
-    
-    assertNull(set.left_map);
-    assertNull(set.right_map);
-    
-//    // extra tags will hash to the same value
-//    TimeSeries ts = mock(TimeSeries.class);
-//    TimeSeriesId id = BaseTimeSeriesStringId.newBuilder()
-//        .setMetric(METRIC_R)
-//        .addTags("host", "web01")
-//        .addTags("owner", "tyrion")
-//        .build();
-//    when(ts.id()).thenReturn(id);
-//    
-//    joiner.hashStringId(METRIC_R.getBytes(Const.UTF8_CHARSET), ts, set, false);
-//    assertNull(set.left_map);
-//    assertNull(set.right_map);
-  }
-  
-  @Test
   public void hashStringIdDefaultLeftOneTagMatchExplicitTags() throws Exception {
     setStringIds();
     
@@ -2378,6 +2347,154 @@ public class TestJoiner extends BaseJoinTest {
     } catch (IllegalStateException e) { }
   }
 
+  @Test
+  public void joinStringIdRightOneTagMatchDiffJoinTag() throws Exception {
+    setStringIds();
+    
+    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
+        .setJoinType(JoinType.INNER)
+        .addJoins("host", "HostName") // this is to make sure we use the right join.
+        .setId(ID)
+        .build();
+    
+    ExpressionParseNode expression_config = 
+        (ExpressionParseNode) ExpressionParseNode.newBuilder()
+        .setLeft("a")
+        .setLeftType(OperandType.VARIABLE)
+        .setLeftId(queryResultId(NAMESPACE + METRIC_L))
+        .setRight("b")
+        .setRightType(OperandType.VARIABLE)
+        .setRightId(queryResultId(NAMESPACE + METRIC_R))
+        .setExpressionOp(ExpressionOp.ADD)
+        .setExpressionConfig(mock(ExpressionConfig.class))
+        .setId("expression")
+        .build();
+    
+    final List<QueryResult> results = Lists.newArrayList();
+    QueryResult result = mock(QueryResult.class);
+    List<TimeSeries> ts = Lists.newArrayList(L_5A);
+    when(result.timeSeries()).thenReturn(ts);
+    when(result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
+      @Override
+      public TypeToken<?> answer(InvocationOnMock invocation) throws Throwable {
+        return Const.TS_STRING_ID;
+      }
+    });
+    when(result.dataSource()).thenReturn(new DefaultQueryResultId(
+        NAMESPACE + METRIC_L, NAMESPACE + METRIC_L));
+    results.add(result);
+    
+    TimeSeries capital_id = mock(TimeSeries.class);
+    when(capital_id.id()).thenReturn(BaseTimeSeriesStringId.newBuilder()
+        .setAlias(ALIAS_L)
+        .setNamespace(NAMESPACE)
+        .setMetric(METRIC_R)
+        .addTags("HostName", "web05")
+        .addTags("owner", "tyrion")
+        .build());
+    
+    result = mock(QueryResult.class);
+    ts = Lists.newArrayList(capital_id);
+    when(result.timeSeries()).thenReturn(ts);
+    when(result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
+      @Override
+      public TypeToken<?> answer(InvocationOnMock invocation) throws Throwable {
+        return Const.TS_STRING_ID;
+      }
+    });
+    when(result.dataSource()).thenReturn(new DefaultQueryResultId(
+        NAMESPACE + METRIC_R, NAMESPACE + METRIC_R));
+    results.add(result);
+    
+    Joiner joiner = new Joiner(config);
+    Iterator<TimeSeries[]> iterator = 
+        joiner.join(results, 
+            expression_config,
+            (NAMESPACE + METRIC_L).getBytes(Const.UTF8_CHARSET), 
+            (NAMESPACE + METRIC_R).getBytes(Const.UTF8_CHARSET),
+            null).iterator();
+    
+    TimeSeries[] pair = iterator.next();
+    assertEquals(L_5A, pair[0]);
+    assertEquals(capital_id, pair[1]);
+  }
+
+  @Test
+  public void joinByteIdRightOneTagMatchDiffJoinTag() throws Exception {
+    setByteIds();
+    
+    JoinConfig config = (JoinConfig) JoinConfig.newBuilder()
+        .setJoinType(JoinType.INNER)
+        .addJoins("host", "HostName") // this is to make sure we use the right join.
+        .setId(ID)
+        .build();
+    
+    ExpressionParseNode expression_config = 
+        (ExpressionParseNode) ExpressionParseNode.newBuilder()
+        .setLeft("a")
+        .setLeftType(OperandType.VARIABLE)
+        .setLeftId(queryResultId(NAMESPACE + METRIC_L))
+        .setRight("b")
+        .setRightType(OperandType.VARIABLE)
+        .setRightId(queryResultId(NAMESPACE + METRIC_R))
+        .setExpressionOp(ExpressionOp.ADD)
+        .setExpressionConfig(mock(ExpressionConfig.class))
+        .setId("expression")
+        .build();
+    
+    final List<QueryResult> results = Lists.newArrayList();
+    QueryResult result = mock(QueryResult.class);
+    List<TimeSeries> ts = Lists.newArrayList(L_5A);
+    when(result.timeSeries()).thenReturn(ts);
+    when(result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
+      @Override
+      public TypeToken<?> answer(InvocationOnMock invocation) throws Throwable {
+        return Const.TS_BYTE_ID;
+      }
+    });
+    when(result.dataSource()).thenReturn(new DefaultQueryResultId(
+        NAMESPACE + METRIC_L, NAMESPACE + METRIC_L));
+    results.add(result);
+    
+    TimeSeries capital_id = mock(TimeSeries.class);
+    when(capital_id.id()).thenReturn(
+        BaseTimeSeriesByteId.newBuilder(mock(TimeSeriesDataSourceFactory.class))
+          .setAlias(ALIAS_R_BYTES)
+          .setNamespace(NAMESPACE_BYTES)
+          .setMetric(METRIC_R_BYTES)
+          .addTags("HostName".getBytes(Const.UTF8_CHARSET), WEB05)
+          .addTags(OWNER, TYRION)
+          .build());
+    
+    result = mock(QueryResult.class);
+    ts = Lists.newArrayList(capital_id);
+    when(result.timeSeries()).thenReturn(ts);
+    when(result.idType()).thenAnswer(new Answer<TypeToken<?>>() {
+      @Override
+      public TypeToken<?> answer(InvocationOnMock invocation) throws Throwable {
+        return Const.TS_BYTE_ID;
+      }
+    });
+    when(result.dataSource()).thenReturn(new DefaultQueryResultId(
+        NAMESPACE + METRIC_R, NAMESPACE + METRIC_R));
+    results.add(result);
+    
+    Joiner joiner = new Joiner(config);
+    ByteMap<byte[]> encoded_joins = new ByteMap<byte[]>();
+    encoded_joins.put(HOST, "HostName".getBytes(Const.UTF8_CHARSET));
+    joiner.setEncodedJoins(encoded_joins);
+    Iterator<TimeSeries[]> iterator = 
+        joiner.join(results, 
+            expression_config,
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_L_BYTES), 
+            com.google.common.primitives.Bytes.concat(NAMESPACE_BYTES, METRIC_R_BYTES),
+            null).iterator();
+    
+    TimeSeries[] pair = iterator.next();
+    assertEquals(L_5A, pair[0]);
+    assertEquals(capital_id, pair[1]);
+  }
+  
   QueryResult mockResult(final boolean as_strings, final TimeSeries... series) {
     List<TimeSeries> results = Lists.newArrayList(series);
     QueryResult result = mock(QueryResult.class);
