@@ -35,18 +35,16 @@ import net.opentsdb.query.joins.Joiner.Operand;
  */
 public class KeyedHashedJoinSet extends BaseHashedJoinSet {
   
-  /**
-   * Default ctor.
-   * @param type A non-null join type.
-   * @param left_key A non-null and non-empty string mapping to the left
-   * map.
-   * @param right_key A non-null and non-empty string mapping to the right
-   * map.
-   * @throws IllegalArgumentException if any of the args were null or empty.
-   */
+  
   protected KeyedHashedJoinSet(final JoinType type, 
+                               final int expected_sets) {
+    this(type, expected_sets, false);
+  }
+  
+  protected KeyedHashedJoinSet(final JoinType type, 
+                               final int expected_sets,
                                final boolean is_ternary) {
-    super(type, is_ternary);
+    super(type, expected_sets, is_ternary);
     if (type == null) {
       throw new IllegalArgumentException("Join type cannot be null.");
     }

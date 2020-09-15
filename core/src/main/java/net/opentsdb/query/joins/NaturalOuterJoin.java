@@ -38,6 +38,7 @@ public class NaturalOuterJoin extends BaseJoin {
     if (join.is_ternary &&
         (join.left_map != null || join.right_map != null) &&
         join.condition_map != null) {
+      System.out.println(join.left_map +"\n" + join.right_map + "\n" + join.condition_map);
       ternaryAdvance();
     } else if (!join.is_ternary && 
         (join.left_map != null || join.right_map != null)){

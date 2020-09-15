@@ -375,7 +375,7 @@ public class BaseJoinTest {
   }
   
   protected static BaseHashedJoinSet ternaryOnlySet(final JoinType type) {
-    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type);
+    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type, 3);
     
     set.condition_map = new TLongObjectHashMap<List<TimeSeries>>();
     
@@ -390,7 +390,7 @@ public class BaseJoinTest {
   }
   
   protected static BaseHashedJoinSet ternaryLeftOnlySet(final JoinType type) {
-    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type);
+    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type, 3);
     
     set.left_map = new TLongObjectHashMap<List<TimeSeries>>();
     set.left_map.put(1, Lists.newArrayList(L_1));
@@ -403,7 +403,7 @@ public class BaseJoinTest {
   }
   
   protected static BaseHashedJoinSet ternaryRightOnlySet(final JoinType type) {
-    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type);
+    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type, 3);
     
     set.right_map = new TLongObjectHashMap<List<TimeSeries>>();
     set.right_map.put(1, Lists.newArrayList(R_1));
@@ -415,7 +415,7 @@ public class BaseJoinTest {
   }
   
   protected static BaseHashedJoinSet ternaryAndLeftOnlySet(final JoinType type) {
-    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type);
+    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type, 3);
     
     set.left_map = new TLongObjectHashMap<List<TimeSeries>>();
     set.condition_map = new TLongObjectHashMap<List<TimeSeries>>();
@@ -436,7 +436,7 @@ public class BaseJoinTest {
   }
   
   protected static BaseHashedJoinSet ternaryAndRightOnlySet(final JoinType type) {
-    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type);
+    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type, 3);
     
     set.right_map = new TLongObjectHashMap<List<TimeSeries>>();
     set.condition_map = new TLongObjectHashMap<List<TimeSeries>>();
@@ -457,7 +457,7 @@ public class BaseJoinTest {
   }
   
   protected static BaseHashedJoinSet ternaryNoTernarySet(final JoinType type) {
-    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type);
+    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type, 3);
     
     set.left_map = new TLongObjectHashMap<List<TimeSeries>>();
     set.right_map = new TLongObjectHashMap<List<TimeSeries>>();
@@ -489,7 +489,7 @@ public class BaseJoinTest {
   }
   
   protected static BaseHashedJoinSet ternaryNullListsSet(final JoinType type) {
-    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type);
+    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type, 3);
     
     set.left_map = new TLongObjectHashMap<List<TimeSeries>>();
     set.right_map = new TLongObjectHashMap<List<TimeSeries>>();
@@ -528,7 +528,7 @@ public class BaseJoinTest {
   }
   
   protected static BaseHashedJoinSet ternaryEmptyListsSet(final JoinType type) {
-    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type);
+    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type, 3);
     
     set.left_map = new TLongObjectHashMap<List<TimeSeries>>();
     set.right_map = new TLongObjectHashMap<List<TimeSeries>>();
@@ -567,7 +567,7 @@ public class BaseJoinTest {
   }
   
   protected static BaseHashedJoinSet ternarySet(final JoinType type) {
-    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type);
+    final TernaryKeyedHashedJoinSet set = new TernaryKeyedHashedJoinSet(type, 3);
     
     set.left_map = new TLongObjectHashMap<List<TimeSeries>>();
     set.right_map = new TLongObjectHashMap<List<TimeSeries>>();
@@ -626,7 +626,9 @@ public class BaseJoinTest {
     return Lists.newArrayList(result);
   }
   
-  protected static List<QueryResult> multiResults(final TypeToken<?> ts_type) {
+  protected static List<QueryResult> multiResults(final TypeToken<?> ts_type,
+                                                  final String left,
+                                                  final String right) {
     final List<QueryResult> results = Lists.newArrayList();
     QueryResult result = mock(QueryResult.class);
     when(result.dataSource()).thenReturn(new DefaultQueryResultId("m1", "m1"));
@@ -643,6 +645,7 @@ public class BaseJoinTest {
         return ts_type;
       }
     });
+    when(result.dataSource()).thenReturn(new DefaultQueryResultId(left, left));
     results.add(result);
     
     // right
@@ -661,14 +664,18 @@ public class BaseJoinTest {
         return ts_type;
       }
     });
+    when(result.dataSource()).thenReturn(new DefaultQueryResultId(right, right));
     results.add(result);
     return results;
   }
   
-  protected static List<QueryResult> ternaryResults(final TypeToken<?> ts_type) {
+  protected static List<QueryResult> ternaryResults(final TypeToken<?> ts_type,
+                                                    final String left,
+                                                    final String right,
+                                                    final String ternary) {
     final List<QueryResult> results = Lists.newArrayList();
     QueryResult result = mock(QueryResult.class);
-    when(result.dataSource()).thenReturn(new DefaultQueryResultId("m1", "m1"));
+    when(result.dataSource()).thenReturn(new DefaultQueryResultId(left, left));
     List<TimeSeries> ts = Lists.newArrayList(
         L_1,
         L_2,
@@ -686,7 +693,7 @@ public class BaseJoinTest {
     
     // right
     result = mock(QueryResult.class);
-    when(result.dataSource()).thenReturn(new DefaultQueryResultId("m2", "m2"));
+    when(result.dataSource()).thenReturn(new DefaultQueryResultId(right, right));
     ts = Lists.newArrayList(
         R_1,
         R_3,
@@ -704,7 +711,7 @@ public class BaseJoinTest {
     
     // ternary
     result = mock(QueryResult.class);
-    when(result.dataSource()).thenReturn(new DefaultQueryResultId("subexp#0", "subexp"));
+    when(result.dataSource()).thenReturn(new DefaultQueryResultId(ternary, ternary));
     ts = Lists.newArrayList(
         T_1,
         T_2,
@@ -1120,7 +1127,7 @@ public class BaseJoinTest {
   static class UTBaseHashedJoinSet extends BaseHashedJoinSet {
 
     public UTBaseHashedJoinSet(final JoinType type) {
-      super(type, false);
+      super(type, 1, false);
     }
     
   }

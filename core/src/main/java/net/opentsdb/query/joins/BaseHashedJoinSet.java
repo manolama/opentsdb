@@ -40,14 +40,19 @@ public abstract class BaseHashedJoinSet implements Iterable<TimeSeries[]> {
   
   protected TLongObjectMap<List<TimeSeries>> condition_map;
   
-  protected boolean is_ternary;
+  protected final int expected_sets;
+  
+  protected final boolean is_ternary;
   
   /**
    * Default ctor.
    * @param type A non-null type.
    */
-  public BaseHashedJoinSet(final JoinType type, final boolean is_ternary) {
+  public BaseHashedJoinSet(final JoinType type, 
+                           final int expected_sets,
+                           final boolean is_ternary) {
     this.type = type;
+    this.expected_sets = expected_sets;
     this.is_ternary = is_ternary;
   }
   
@@ -64,31 +69,78 @@ public abstract class BaseHashedJoinSet implements Iterable<TimeSeries[]> {
       non_null_maps++;
     }
     
-    if (non_null_maps == 1) {
-      return new SingleResultJoin(this);
+    // don't bother.
+    if (is_ternary && non_null_maps == 1 && condition_map == null) {
+      return EMPTY_ITERATOR;
+    }
+    
+    // shouldn't happen, but...
+    if (non_null_maps == 0) {
+      return EMPTY_ITERATOR;
     }
     
     switch (type) {
     case INNER:
+      if (non_null_maps == 1 && expected_sets == 1) {
+        return new SingleResultJoin(this);
+      } else if (non_null_maps == 1 && expected_sets > 1) {
+        return EMPTY_ITERATOR;
+      }
+      // fall-through
     case NATURAL:
+      return new InnerJoin(this);
     case LEFT:
+      if (left_map == null) {
+        return EMPTY_ITERATOR;
+      }
+      if (non_null_maps == 1) {
+        return new SingleResultJoin(this);
+      }
     case RIGHT:
+      if (right_map == null) {
+        return EMPTY_ITERATOR;
+      }
+      if (non_null_maps == 1) {
+        return new SingleResultJoin(this);
+      }
       return new InnerJoin(this);
     case NATURAL_OUTER:
+      if (non_null_maps == 1 && expected_sets == 1) {
+        return new SingleResultJoin(this);
+      }
       return new NaturalOuterJoin(this);
     case OUTER:
+      if (non_null_maps == 1 && expected_sets == 1) {
+        return new SingleResultJoin(this);
+      }
       return new OuterJoin(this, false);
     case OUTER_DISJOINT:
+      if (non_null_maps == 1 && expected_sets == 1) {
+        return new SingleResultJoin(this);
+      }
       return new OuterJoin(this, true);
     case LEFT_DISJOINT:
+      if (left_map == null) {
+        return EMPTY_ITERATOR;
+      } if (non_null_maps == 1 && expected_sets == 1) {
+        return new SingleResultJoin(this);
+      }
       return new LeftDisjointJoin(this);
     case RIGHT_DISJOINT:
+      if (right_map == null) {
+        return EMPTY_ITERATOR;
+      } else if (non_null_maps == 1 && expected_sets == 1) {
+        return new SingleResultJoin(this);
+      }
       return new RightDisjointJoin(this);
     case CROSS:
+      if (non_null_maps == 1 && expected_sets == 1) {
+        return new SingleResultJoin(this);
+      }
       return new CrossJoin(this);
-      default:
-        throw new UnsupportedOperationException("Unsupported join type: " 
-            + type);
+    default:
+      throw new UnsupportedOperationException("Unsupported join type: " 
+          + type);
     }
   }
 
@@ -106,4 +158,19 @@ public abstract class BaseHashedJoinSet implements Iterable<TimeSeries[]> {
         .append("}")
         .toString();
   }
+
+  public static class EmptyIterator implements Iterator<TimeSeries[]> {
+
+    @Override
+    public boolean hasNext() {
+      return false;
+    }
+
+    @Override
+    public TimeSeries[] next() {
+      return null;
+    }
+    
+  }
+  static final EmptyIterator EMPTY_ITERATOR = new EmptyIterator();
 }

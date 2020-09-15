@@ -154,9 +154,13 @@ public class Joiner {
           + "IDs but the local encoded tags map was null.");
     }
     
+    int expected_sets = left_key != null ? 1 : 0;
+    expected_sets += right_key != null ? 1 : 0;
+    expected_sets += ternary_key != null ? 1 : 0;
+    
     final KeyedHashedJoinSet join_set = ternary_key != null ?
-        new TernaryKeyedHashedJoinSet(config.type) :
-        new KeyedHashedJoinSet(config.type, ternary_key != null);
+        new TernaryKeyedHashedJoinSet(config.type, expected_sets) :
+        new KeyedHashedJoinSet(config.type, expected_sets, ternary_key != null);
         System.out.println("--------- RESULTS: " + results.size());
     // calculate the hash for every series and let the hasher kick out
     // inapplicable series.
@@ -166,26 +170,37 @@ public class Joiner {
       }
       
       final Operand operand;
-      byte[] k;
       if (expression_config.getLeftId() != null &&
           expression_config.getLeftId().equals(result.dataSource())) {
         operand = Operand.LEFT;
-        k = left_key;
+        if (left_key == null) {
+          LOG.warn("Received a result set for the left ID: " 
+              + expression_config.getLeftId() + " but the left key was null.");
+          continue;
+        }
       } else if (expression_config.getRightId() != null &&
           expression_config.getRightId().equals(result.dataSource())) {
         operand = Operand.RIGHT;
-        k = right_key;
+        if (right_key == null) {
+          LOG.warn("Received a result set for the right ID: " 
+              + expression_config.getRightId() + " but the right key was null.");
+          continue;
+        }
       } else if (expression_config instanceof TernaryParseNode && 
           ((TernaryParseNode) expression_config).getConditionId().equals(
               result.dataSource())) {
         operand = Operand.CONDITION;
-        k = ternary_key;
+        if (ternary_key == null) {
+          LOG.warn("Received a result set for the ternary ID: " 
+              + ((TernaryParseNode) expression_config).getConditionId() 
+              + " but the ternary key was null.");
+          continue;
+        }
       } else {
         LOG.warn("Result in our set that we didn't want: " + result.dataSource());
         continue;
       }
       
-      System.out.println("          MATCHED: " + operand + "  TO: " + result.dataSource() + " and key " + new String(k) + "  SERIES: " + result.timeSeries().size());
       // TODO - don't do bytes and allocations here. If we drop the namespace
       // field, we can use long hashes!
       for (final TimeSeries ts : result.timeSeries()) {
@@ -223,29 +238,33 @@ public class Joiner {
             }
           //}
           System.out.println("LK: " + left_key + "  RK: " + right_key + "  K: " + key);
-          if (operand == Operand.LEFT) {
+          switch (operand) {
+          case LEFT:
             if (Bytes.memcmp(key, left_key) == 0) {
               hashByteId(operand, ts, join_set);
             } else {
               // TODO - log ejection
               continue;
             }
-          } else if (operand == Operand.RIGHT) {
+            break;
+          case RIGHT:
             if (Bytes.memcmp(key, right_key) == 0) {
-              hashByteId(Operand.RIGHT, ts, join_set);
+              hashByteId(operand, ts, join_set);
             } else {
               // TODO - log ejection
               continue;
             }
-          } else if (operand == Operand.CONDITION) {
+            break;
+          case CONDITION:
             System.out.println("         " + new String(key));
             if (Bytes.memcmp(key, ternary_key) == 0) {
-              hashByteId(Operand.CONDITION, ts, join_set);
+              hashByteId(operand, ts, join_set);
             } else {
               // TODO - log ejection
               continue;
             }
-          } else {
+            break;
+          default:
             // TODO - log ejection
             continue;
           }
@@ -276,13 +295,13 @@ public class Joiner {
           final byte[] key_in_bytes = key.getBytes(Const.UTF8_CHARSET);
           if (operand == Operand.LEFT &&
               Bytes.memcmp(key_in_bytes, left_key) == 0) {
-            hashStringId(Operand.LEFT, ts, join_set);
+            hashStringId(operand, ts, join_set);
           } else if (operand == Operand.RIGHT &&
                      Bytes.memcmp(key_in_bytes, right_key) == 0) {
-            hashStringId(Operand.RIGHT, ts, join_set);
+            hashStringId(operand, ts, join_set);
           } else if (operand == Operand.CONDITION && 
                      Bytes.memcmp(key_in_bytes, ternary_key) == 0) {
-            hashStringId(Operand.CONDITION, ts, join_set);
+            hashStringId(operand, ts, join_set);
           } else {
             // TODO - log ejection
             continue;
@@ -841,8 +860,8 @@ public class Joiner {
     case NATURAL:
     case NATURAL_OUTER:
     case CROSS:
-      // copy all the tag values for natural and cross IF no tags are
-      // present.
+      // copy all the tag values for natural and cross and count the matching 
+      // join config tag keys present.
       if (encoded_joins == null || 
           config.type == JoinType.NATURAL ||
           config.type == JoinType.NATURAL_OUTER) {

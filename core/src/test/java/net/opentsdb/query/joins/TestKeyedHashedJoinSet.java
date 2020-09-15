@@ -31,20 +31,20 @@ public class TestKeyedHashedJoinSet extends BaseJoinTest {
   
   @Test
   public void ctor() throws Exception {
-    KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER, false);
+    KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER, 1, false);
     assertEquals(JoinType.INNER, set.type);
     assertNull(set.left_map);
     assertNull(set.right_map);
     
     try {
-      new KeyedHashedJoinSet(null, false);
+      new KeyedHashedJoinSet(null, 1, false);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) { }
   }
   
   @Test
   public void add() throws Exception {
-    KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER, false);
+    KeyedHashedJoinSet set = new KeyedHashedJoinSet(JoinType.INNER, 1, false);
     
     // make leftAndRightSet().
     set.add(LEFT, 1, L_1);

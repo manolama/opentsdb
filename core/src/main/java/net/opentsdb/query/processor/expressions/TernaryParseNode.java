@@ -142,7 +142,7 @@ public class TernaryParseNode extends ExpressionParseNode {
     return new Builder();
   }
   
-  static class Builder extends ExpressionParseNode.Builder {
+  public static class Builder extends ExpressionParseNode.Builder {
     @JsonProperty
     private Object condition;
     @JsonProperty

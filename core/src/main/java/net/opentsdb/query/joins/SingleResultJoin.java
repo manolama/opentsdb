@@ -1,76 +1,69 @@
 package net.opentsdb.query.joins;
 
+import java.util.Arrays;
 import java.util.List;
 
 import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.map.TLongObjectMap;
 import net.opentsdb.data.TimeSeries;
+import net.opentsdb.query.joins.Joiner.Operand;
 
 public class SingleResultJoin extends BaseJoin {
 
+  // move everything to the left iterator to keep things simple.
+  final Operand operand;
+  
   protected SingleResultJoin(final BaseHashedJoinSet join) {
     super(join);
+    if (join.left_map != null) {
+      operand = Operand.LEFT;
+    } else if (join.right_map != null) {
+      operand = Operand.RIGHT;
+      left_iterator = right_iterator;
+    } else {
+      operand = Operand.CONDITION;
+      left_iterator = ternary_iterator;
+    }
+    System.out.println(" LEFT: " + join.left_map.size() + "  R: " + join.right_map);
     advance();
   }
 
   @Override
   protected void advance() {
-    final TLongObjectIterator<List<TimeSeries>> iterator;
-    List<TimeSeries> series;
-    int series_idx;
+    while (true) {
+      if (left_series != null && left_idx < left_series.size()) {
+        TimeSeries value = left_series.get(left_idx);
+        if (value == null) {
+          left_idx++;
+          continue;
+        }
+        switch(operand) {
+        case LEFT:
+          next[0] = value;
+          break;
+        case RIGHT:
+          next[1] = value;
+          break;
+        case CONDITION:
+          next[2] = value;
+          break;
+        }
+        left_idx++;
+        return;
+      }
     
-    if (left_iterator != null) {
-      iterator = left_iterator;
-      series = left_series;
-      series_idx = left_idx;
-    } else if (right_iterator != null) {
-      iterator = right_iterator;
-      series = right_series;
-      series_idx = right_idx;
-    } else {
-      // assumption
-      iterator = ternary_iterator;
-      series = ternary_series;
-      series_idx = ternary_idx;
-    }
-    
-    if (series != null && series_idx >= series.size()) {
-      // next
-      if (!iterator.hasNext()) {
+      if (!left_iterator.hasNext()) {
         next = null;
         return;
       }
       
-      iterator.advance();
-      series = iterator.value();
-      series_idx = 0;
-    } else if (series == null && iterator.hasNext()) {
-      iterator.advance();
-      series = iterator.value();
-      series_idx = 0;
-    } else {
-      next = null;
-      return;
+      left_iterator.advance();
+      left_series = left_iterator.value();
+      left_idx = 0;
+      if (left_series == null) {
+        return;
+      }
     }
-    
-    // got a value
-    if (left_iterator != null) {
-      left_series = series;
-      left_idx = series_idx;
-      next[0] = series.get(series_idx);
-      left_idx++;
-    } else if (right_iterator != null) {
-      right_series = series;
-      right_idx = series_idx;
-      next[1] = series.get(series_idx);
-      right_idx++;
-    } else {
-      ternary_series = series;
-      ternary_idx = series_idx;
-      next[2] = series.get(series_idx);
-      ternary_idx++;
-    }
-    
   }
 
   @Override

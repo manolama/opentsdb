@@ -36,17 +36,10 @@ import net.opentsdb.utils.Bytes;
  */
 public class TernaryKeyedHashedJoinSet extends KeyedHashedJoinSet {
 
-  /**
-   * Default ctor.
-   * @param type A non-null join type.
-   * @param left_key A non-null and non-empty string mapping to the left
-   * map.
-   * @param right_key A non-null and non-empty string mapping to the right
-   * map.
-   * @throws IllegalArgumentException if any of the args were null or empty.
-   */
-  protected TernaryKeyedHashedJoinSet(final JoinType type) {
-    super(type, true);
+  
+  protected TernaryKeyedHashedJoinSet(final JoinType type, 
+      final int expected_sets) {
+    super(type, expected_sets, true);
   }
   
   @Override
