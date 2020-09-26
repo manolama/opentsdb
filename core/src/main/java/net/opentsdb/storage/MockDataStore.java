@@ -121,7 +121,8 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
   public static final List<String> DATACENTERS = Lists.newArrayList(
       "PHX", "LGA", "LAX", "DEN");
   public static final List<String> METRICS = Lists.newArrayList(
-      "sys.cpu.user", "sys.if.out", "sys.if.in", "web.requests");
+      "sys.cpu.user", "sys.if.out", "sys.if.in", "web.requests",
+      "histo_0_25", "histo_25_75", "histo_75_200");
   public static final String[] SET_INTERVALS = new String[] { "1h" };
   private final TSDB tsdb;
   private final String id;
