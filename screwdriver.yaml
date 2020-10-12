@@ -4,5 +4,6 @@ shared:
 jobs:
   main:
     requires: [~pr, ~commit]
+    timeout: 120
     steps:
       - run_arbitrary_script: apt-get update && apt-get install autoconf make python -y && ./build.sh pom.xml && mvn clean test --quiet
