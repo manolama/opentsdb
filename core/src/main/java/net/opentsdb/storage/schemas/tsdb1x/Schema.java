@@ -21,6 +21,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -106,6 +109,7 @@ public class Schema implements WritableTimeSeriesDataStore {
   
   private final TSDB tsdb;
   private final String id;
+  private final Tsdb1xDataStoreFactory data_store_factory;
   private final Tsdb1xDataStore data_store;
   private final UniqueIdStore uid_store;
   
@@ -141,14 +145,14 @@ public class Schema implements WritableTimeSeriesDataStore {
     String key = configKey("data.store");
     final String store_name = tsdb.getConfig().getString(key);
     
-    final Tsdb1xDataStoreFactory store_factory = tsdb.getRegistry()
+    data_store_factory = tsdb.getRegistry()
           .getPlugin(Tsdb1xDataStoreFactory.class, store_name);
-    if (store_factory == null) {
+    if (data_store_factory == null) {
       throw new ConfigurationException("No factory found for: " + store_name);
     }
-    data_store = store_factory.newInstance(tsdb, id, this);
+    data_store = data_store_factory.newInstance(tsdb, id, this);
     if (data_store == null) {
-      throw new IllegalStateException("Store factory " + store_factory 
+      throw new IllegalStateException("Store factory " + data_store_factory 
           + " returned a null data store instance.");
     }
     
@@ -360,6 +364,38 @@ public class Schema implements WritableTimeSeriesDataStore {
     }
     long hash = XXHash.hash(key, salt_width, metric_width);
     return XXHash.updateHash(hash, key, offset, key.length - offset);
+  }
+  
+  public long groupByHashFromTSUID(final byte[] key, final List<byte[]> tags) {
+    if (Bytes.isNullOrEmpty(key)) {
+      throw new IllegalArgumentException("Key cannot be null or empty.");
+    }
+    
+    long hash = XXHash.hash(key, salt_width, metric_width);
+    if (tags == null || tags.isEmpty()) {
+      return hash;
+    }
+    
+    int offset = salt_width + metric_width + TIMESTAMP_BYTES;
+    while (offset < key.length) {
+      tagkeys:
+      for (int i = 0; i < tags.size(); i++) {
+        int idx = offset;
+        byte[] tagk = tags.get(i);
+        for (int x = 0; x < tagk_width; x++) {
+          if (tagk[x] != key[idx++]) {
+            continue tagkeys;
+          }
+        }
+        
+        // matched!
+        hash = XXHash.updateHash(hash, key, offset + tagk_width, tagv_width);
+        offset += tagk_width + tagv_width;
+        break;
+      }
+      offset += tagk_width + tagv_width;
+    }
+    return hash;
   }
   
   /**
@@ -1022,6 +1058,10 @@ public class Schema implements WritableTimeSeriesDataStore {
     }
   }
   
+  Tsdb1xDataStoreFactory dataStoreFactory() {
+    return data_store_factory;
+  }
+  
   @VisibleForTesting
   Tsdb1xDataStore dataStore() {
     return data_store;
@@ -1049,6 +1089,10 @@ public class Schema implements WritableTimeSeriesDataStore {
   
   TSDB tsdb() {
     return tsdb;
+  }
+  
+  public SchemaFactory factory() {
+    return factory;
   }
   
   public Deferred<TimeSeriesStringId> resolveByteId(final TimeSeriesByteId id, 

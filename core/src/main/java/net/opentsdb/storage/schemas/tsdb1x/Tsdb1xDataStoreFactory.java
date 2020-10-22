@@ -16,6 +16,7 @@ package net.opentsdb.storage.schemas.tsdb1x;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.core.TSDBPlugin;
+import net.opentsdb.query.QueryNodeConfig;
 
 /**
  * The interface for a time series data store factory to spawn instances
@@ -36,4 +37,7 @@ public interface Tsdb1xDataStoreFactory extends TSDBPlugin {
   public Tsdb1xDataStore newInstance(final TSDB tsdb, 
                                      final String id, 
                                      final Schema schema);
+
+  public boolean supportsPushdown(final Class<? extends QueryNodeConfig> function);
+  
 }

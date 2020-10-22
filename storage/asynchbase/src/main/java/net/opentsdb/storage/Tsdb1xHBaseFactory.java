@@ -26,6 +26,9 @@ import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.query.QueryNodeConfig;
+import net.opentsdb.query.processor.downsample.DownsampleConfig;
+import net.opentsdb.query.processor.groupby.GroupByConfig;
 import net.opentsdb.storage.schemas.tsdb1x.Schema;
 import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStore;
 import net.opentsdb.storage.schemas.tsdb1x.Tsdb1xDataStoreFactory;
@@ -115,6 +118,16 @@ public class Tsdb1xHBaseFactory extends BaseTSDBPlugin implements Tsdb1xDataStor
     return client;
   }
 
+  @Override
+  public boolean supportsPushdown(
+      final Class<? extends QueryNodeConfig> function) {
+    if (function == GroupByConfig.class ||
+        function == DownsampleConfig.class) {
+      return true;
+    }
+    return false;
+  }
+  
   /** @return Package private TSDB instance to read the config. */
   TSDB tsdb() {
     return tsdb;

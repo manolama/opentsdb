@@ -19,11 +19,16 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
+import com.stumbleupon.async.Deferred;
 
 import gnu.trove.iterator.TLongIntIterator;
 import gnu.trove.iterator.TLongObjectIterator;
+import gnu.trove.map.TIntDoubleMap;
+import gnu.trove.map.TIntObjectMap;
 import gnu.trove.map.TLongIntMap;
 import gnu.trove.map.TLongObjectMap;
+import gnu.trove.map.hash.TIntDoubleHashMap;
+import gnu.trove.map.hash.TIntObjectHashMap;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import net.opentsdb.core.TSDB;
@@ -80,8 +85,8 @@ import net.opentsdb.utils.XXHash;
  * then we can use thread local collections that are merged at the end. For this
  * we cannot.
  */
-public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeSpecification {
-  private static final Logger LOG = LoggerFactory.getLogger(TimeHashedDSGBRateResult.class);
+public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpecification {
+  private static final Logger LOG = LoggerFactory.getLogger(TimeHashedDSGBResult.class);
   
   private static final double[] IDENTITY = {0.0, 0.0, Double.MAX_VALUE, -Double.MAX_VALUE, 0.0};
   private static final ThreadLocal<double[]> threadLocalAggs = ThreadLocal.withInitial(() -> Arrays.copyOf(IDENTITY, IDENTITY.length));
@@ -103,8 +108,7 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
   private int storage_interval;
   private final GroupByConfig gbConfig;
   private final DownsampleConfig downsampleConfig;
-  private final RateConfig rateConfig;
-//  private NumericAggregator nonOptimizedAggregator;
+  private NumericAggregator nonOptimizedAggregator;
 //  private PooledObject nonOptimizedPooled;
 //  private double[] nonOptimizedArray;
 //  private int nonOptimizedIndex;
@@ -118,9 +122,6 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
   private final Agg aggregator;
   private final boolean infectiousNans;
   protected final boolean reporting_average;
-  private final double rateInterval;
-  private final long rateDataInterval;
-  private final boolean computeDataInterval;
   private ThreadLocal<Accumulator> threadLocalAccs;
   final NumericArrayAggregatorFactory factory;
   final ArrayAggregatorConfig aggregatorConfig;
@@ -128,9 +129,6 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
   
   TLongObjectMap<Foo>[] buckets;
   TLongObjectMap<GBTS> containers;
-  //ThreadLocal<Container> containers = ThreadLocal.withInitial(() -> new Container());
-  
-  //TLongObjectMap<GBTS> final_results = new TLongObjectHashMap<GBTS>();
   
   List<TimeSeries> final_list;
   
@@ -140,16 +138,14 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
    * @param node The non-null parent node.
    * @param schema The non-null schema.
    */
-  public TimeHashedDSGBRateResult(final QueryNode node, 
+  public TimeHashedDSGBResult(final QueryNode node, 
                          final Schema schema,
                          final GroupByConfig gb_config,
-                         final DownsampleConfig ds_config,
-                         final RateConfig rate_config) {
+                         final DownsampleConfig ds_config) {
     super(0, node, schema);
     
     this.gbConfig = gb_config;
     this.downsampleConfig = ds_config;
-    this.rateConfig = rate_config;
     state = ThreadLocal.withInitial(() -> new State());
     storage_interval = 3600; // TODO - rollup or 
     factory = node.pipelineContext()
@@ -160,7 +156,7 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
       throw new IllegalArgumentException(
           "No numeric array aggregator factory found for type: " + gbConfig.getAggregator());
     }
-    LOG.info("*************** DS INTERVALS: " + downsampleConfig.intervals() + "  DS INTERVAL: " + downsampleConfig.interval());
+    //LOG.info("*************** DS INTERVALS: " + downsampleConfig.intervals() + "  DS INTERVAL: " + downsampleConfig.interval());
     aggregatorConfig = DefaultArrayAggregatorConfig.newBuilder()
         .setArraySize(downsampleConfig.intervals())
         .setInfectiousNaN(gbConfig.getInfectiousNan())
@@ -200,16 +196,8 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
       aggregator = Agg.NON_OPTIMIZED;
       final NumericAggregatorFactory fact = node.pipelineContext().tsdb().getRegistry()
           .getPlugin(NumericAggregatorFactory.class, agg);
-//      nonOptimizedAggregator = fact.newAggregator(downsampleConfig.getInfectiousNan());
-//      ObjectPool pool = node.pipelineContext().tsdb().getRegistry()
-//          .getObjectPool(DoubleArrayPool.TYPE);
-//      if (pool != null) {
-//        nonOptimizedPooled = ((ArrayObjectPool) pool).claim(64);
-//        nonOptimizedArray = (double[]) nonOptimizedPooled.object();
-//      } else {
-//        nonOptimizedArray = new double[64];
-//      }
-//      nonOptimizedDp = new MutableNumericValue();
+      nonOptimizedAggregator = fact.newAggregator(downsampleConfig.getInfectiousNan());
+
     }
     
     this.startTime = (int) downsampleConfig.startTime().epoch();
@@ -220,28 +208,6 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
             : (int) downsampleConfig.interval().get(ChronoUnit.SECONDS);
     
     this.infectiousNans = downsampleConfig.getInfectiousNan();
-    
-    if (rateConfig != null) {
-      rateInterval =
-          ((double) DateTime.parseDuration(rateConfig.getInterval()) /
-              (double) 1000);
-      if (rateConfig.getRateToCount() && rateConfig.dataIntervalMs() > 0) {
-        rateDataInterval = (rateConfig.dataIntervalMs() / 1000) /
-            rateConfig.duration().get(ChronoUnit.SECONDS);
-      } else {
-        rateDataInterval = 0;
-      }
-      if (rateConfig.getRateToCount() && rateDataInterval < 1) {
-        computeDataInterval = true;
-      } else {
-        computeDataInterval = false;
-      }
-    } else {
-      rateInterval = 0;
-      rateDataInterval = 0;
-      computeDataInterval = false; 
-    }
-    
     threadLocalAccs = ThreadLocal.withInitial(() -> new Accumulator(3600));
     
     // reduce locking a tiny bit
@@ -268,19 +234,33 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
 //        final boolean reverse);
   }
   
+  class PrevNextRate {
+    long ts;
+    double previous = Double.NaN;
+    double next = Double.NaN;
+  }
+  
   class NumericA implements Foo {
-
-    /** The data in qualifier/value/qualifier/value, etc order. */
-    //protected byte[] data;
     
-    /** The number of values in this row. */
-    //protected int dps;
-        
     NumericArrayAggregator array_aggregator;
-//    private int previousRateTimestamp = -1;
-//    private double previousRateValue = Double.NaN;
-//    int lastIntervalIndex;
-    //TLongIntMap distribution;
+    private PooledObject nonOptimizedPooled;
+    private double[] nonOptimizedArray;
+    private int nonOptimizedIndex;
+    private MutableNumericValue nonOptimizedDp;
+    
+    NumericA() {
+      if (aggregator == Agg.NON_OPTIMIZED) {
+        ObjectPool pool = node.pipelineContext().tsdb().getRegistry()
+            .getObjectPool(DoubleArrayPool.TYPE);
+        if (pool != null) {
+          nonOptimizedPooled = ((ArrayObjectPool) pool).claim(64);
+          nonOptimizedArray = (double[]) nonOptimizedPooled.object();
+        } else {
+          nonOptimizedArray = new double[64];
+        }
+        nonOptimizedDp = new MutableNumericValue();
+      }
+    }
     
     @Override
     public void setGBAgg(final NumericArrayAggregator agg) {
@@ -341,7 +321,7 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
             }
           }
         } else {
-          LOG.info("&&&&&& WTF? Bad prefix??: " + Bytes.pretty(kv.qualifier()));
+          //LOG.info("&&&&&& WTF? Bad prefix??: " + Bytes.pretty(kv.qualifier()));
         }
       }
     }
@@ -495,7 +475,7 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
           
           accumulator.add(offset, val);
         } else {
-          LOG.info("******* WTF?");
+          //LOG.info("******* WTF?");
           // TODO! Drop it for now
 //          // instead of branching more to see if it's an ms or ns column,
 //          // we can just start iterating. Note that if the column is compacted
@@ -547,13 +527,9 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
 //          }
         }
       }
-      LOG.info("****************** FINISHED parsing SEGMENT: " + base_timestamp);
+      //LOG.info("****************** FINISHED parsing SEGMENT: " + base_timestamp);
     }
-//  
-//    @Override
-//    public ChronoUnit dedupe(final TSDB tsdb,
-//        final boolean keep_earliest, 
-//        final boolean reverse) {
+    
     void flush(int base_timestamp) {
       final Accumulator accumulator = threadLocalAccs.get();
       final double[] aggs = threadLocalAggs.get();
@@ -562,66 +538,11 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
       int intervalOffset = 0;
       boolean intervalHasValue = false;
       boolean intervalInfectedByNans = false;
-
-      // TODO
-//      if (computeDataInterval) {
-//        long diff = 0;
-//        int count = 0;
-//        final TLongIntIterator it = distribution.iterator();
-//        while (it.hasNext()) {
-//          it.advance();
-//          if (it.value() > count) {
-//            diff = it.key();
-//            count = it.value();
-//          }
-//        }
-//        rateDataInterval = diff / rateConfig.duration().get(ChronoUnit.SECONDS);
-//        if (rateDataInterval < 1) {
-//          rateDataInterval = 1;
-//        }
-//      }
       
-      
-//      int startIndex = 0;
-//      int stopIndex = Math.min(3600, endTime - base_time);
-      //LOG.info("******* START: " + startIndex + "  STOP: " + stopIndex + "  BASE: " + base_time + " VALUES: " + Arrays.toString(tlAccumulator.values));
-      synchronized (array_aggregator) {
+      // UGgg, may as well keep from locking and unlocking...
+      //synchronized (array_aggregator) {
       for (int i = 0; i < accumulator.values.length; i++) {
         double v = accumulator.values[i];
-
-//        if (rateConfig != null && !Double.isNaN(v)) {
-//          int timeStamp = base_timestamp + i;
-//          double rate;
-//          if (Double.isNaN(previousRateValue)) {
-//            rate = Double.NaN; // first rate is set to NaN
-//          } else {
-//            double dr = ((double) (timeStamp - this.previousRateTimestamp)) / rateInterval;
-//            if (rateConfig.getRateToCount()) {
-//              rate = v * (dr < rateDataInterval ? dr : rateDataInterval);
-//            } else if (rateConfig.getDeltaOnly()) {
-//              rate = v - previousRateValue;
-//            } else {
-//              double valueDelta = v - previousRateValue;
-//              if (rateConfig.isCounter() && valueDelta < 0) {
-//                if (rateConfig.getDropResets()) {
-//                  rate = Double.NaN;
-//                } else {
-//                  valueDelta = rateConfig.getCounterMax() - previousRateValue + v;
-//                  rate = valueDelta / dr;
-//                  if (rateConfig.getResetValue() > RateConfig.DEFAULT_RESET_VALUE
-//                      && valueDelta > rateConfig.getResetValue()) {
-//                    rate = 0D;
-//                  }
-//                }
-//              } else {
-//                rate = valueDelta / dr;
-//              }
-//            }
-//          }
-//          this.previousRateTimestamp = timeStamp;
-//          this.previousRateValue = v;
-//          v = rate;
-//        }
 
         if (Double.isNaN(v)) {
           if (infectiousNans) {
@@ -647,15 +568,15 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
           }
           
           if (aggregator == Agg.NON_OPTIMIZED) {
-//            if (nonOptimizedIndex + 1 >= nonOptimizedArray.length) {
-//              double[] temp = new double[nonOptimizedArray.length * 2];
-//              System.arraycopy(nonOptimizedArray, 0, temp, 0, nonOptimizedIndex);
-//              nonOptimizedArray = temp;
-//              if (nonOptimizedPooled != null) {
-//                nonOptimizedPooled.release();
-//              }
-//            }
-//            nonOptimizedArray[nonOptimizedIndex++] = v;
+            if (nonOptimizedIndex + 1 >= nonOptimizedArray.length) {
+              double[] temp = new double[nonOptimizedArray.length * 2];
+              System.arraycopy(nonOptimizedArray, 0, temp, 0, nonOptimizedIndex);
+              nonOptimizedArray = temp;
+              if (nonOptimizedPooled != null) {
+                nonOptimizedPooled.release();
+              }
+            }
+            nonOptimizedArray[nonOptimizedIndex++] = v;
           }
         }
         intervalOffset++;
@@ -676,7 +597,7 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
             continue;
           }
           if (intervalIndex >= downsampleConfig.intervals()) {
-            LOG.info("#### Beyond intervals: " + intervalIndex);
+            //LOG.info("#### Beyond intervals: " + intervalIndex);
             break;
           }
 //          LOG.info("********* INTERVALOFFSET: " + intervalOffset + "  Interval: " 
@@ -706,9 +627,9 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
                 v = aggs[0] / aggs[1];
                 break;
               case NON_OPTIMIZED:
-//                nonOptimizedAggregator.run(nonOptimizedArray, 0, nonOptimizedIndex, downsampleConfig.getInfectiousNan(), nonOptimizedDp);
-//                nonOptimizedIndex = 0;
-//                v = nonOptimizedDp.toDouble();
+                nonOptimizedAggregator.run(nonOptimizedArray, 0, nonOptimizedIndex, downsampleConfig.getInfectiousNan(), nonOptimizedDp);
+                nonOptimizedIndex = 0;
+                v = nonOptimizedDp.toDouble();
                 break;
               default:
                 throw new UnsupportedOperationException(
@@ -721,6 +642,7 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
               //LOG.info("                [" + Thread.currentThread().getName() + "]   ACCUMULATE: " + intervalIndex);
               array_aggregator.accumulate(v, intervalIndex);
             } else {
+              throw new IllegalStateException("GB Agg can't be null!");
               //nonGroupByResults[intervalIndex++] = v;
             }
           }
@@ -734,8 +656,9 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
           intervalInfectedByNans = false;
         }
       }
-      }
-      LOG.info("@@@@@@@@ Finished flush");
+      //}
+      accumulator.reset();
+     //LOG.info("@@@@@@@@ Finished flush");
       //return ChronoUnit.SECONDS;
     }
   
@@ -805,34 +728,7 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
       
     }
   }
-  
-//  class SummaryA implements Foo {
-//    
-//  }
-  
-//  class GBContainer {
-//    List<Foo> groups = Lists.newArrayList();
-//    NumericArrayAggregator array_aggregator;
-//    
-//    // TODO - can stream update this sucker instead of accumulating the IDs.
-//    MergedTimeSeriesId.Builder id_builder;
-//    
-//    GBContainer() {
-//      array_aggregator = (NumericArrayAggregator) factory.newAggregator(
-//          aggregatorConfig);
-//      id_builder = MergedTimeSeriesId.newBuilder();
-//    }
-//    
-//    void add(Foo foo, final TimeSeriesId id) { 
-//      foo.setGBAgg(array_aggregator);
-//      id_builder.addSeries(id);
-//    }
-//  
-//    void close() {
-//      // TODO
-//    }
-//  }
-  
+    
   class State {
     NumericA last;
     long last_hash;
@@ -849,9 +745,7 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
         last_ts = base_ts;
         last.decode(row, interval);
         return;
-      }
-      
-      if (last != null) {
+      } else if (last != null) {
         last.flush(last_ts);
       }
       
@@ -864,23 +758,26 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
           last = new NumericA();
           buckets[bucket].put(hash, last);
           
-          StringBuilder buf = new StringBuilder()
-              .append("[");
-          for (int i = 0; i < gbConfig.getEncodedTagKeys().size(); i++) {
-            if (i > 0) {
-              buf.append(", ");
-            }
-            buf.append(Arrays.toString(gbConfig.getEncodedTagKeys().get(i)));
-          }
-          buf.append("]");
-          LOG.info("***************** GB TAGS: " + buf.toString());
+//          StringBuilder buf = new StringBuilder()
+//              .append("[");
+//          for (int i = 0; i < gbConfig.getEncodedTagKeys().size(); i++) {
+//            if (i > 0) {
+//              buf.append(", ");
+//            }
+//            buf.append(Arrays.toString(gbConfig.getEncodedTagKeys().get(i)));
+//          }
+//          buf.append("]");
+          //LOG.info("***************** GB TAGS: " + buf.toString());
           long group_hash = schema.groupByHashFromTSUID(row.get(0).key(), gbConfig.getEncodedTagKeys());
-          GBTS group = containers.get(group_hash);
-          if (group == null) {
-            group = new GBTS();
-            containers.put(group_hash, group);
+          GBTS group;
+          synchronized (containers) {
+            group = containers.get(group_hash);
+            if (group == null) {
+              group = new GBTS();
+              containers.put(group_hash, group);
+            }
           }
-          // TODO - eww
+          
           group.add(last, new TSUID(schema.getTSUID(row.get(0).key()), schema));
         }
       }
@@ -905,15 +802,6 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
       id_builder.addSeries(id);
     }
     
-//    synchronized void combine(GBContainer container) {
-//      agg.combine(container.array_aggregator);
-//      if (id_builder == null) {
-//        id_builder = container.id_builder;
-//      } else {
-//        id_builder.addSeries(container.id_builder.build());
-//      }
-//    }
-    
     @Override
     public TimeSeriesId id() {
       if (id == null) {
@@ -935,7 +823,7 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
     public Collection<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> iterators() {
       List<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> its = Lists.newArrayList();
       its.add(new It());
-      LOG.info("*********** GETTING ITERATOR!");
+      //LOG.info("*********** GETTING ITERATOR!");
       return its;
     }
 
@@ -955,15 +843,15 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
     }
     
     class It implements TypedTimeSeriesIterator<NumericArrayType>, TimeSeriesValue<NumericArrayType> {
-      boolean has_next = true;
+      boolean has_next = array_aggregator.end() > array_aggregator.offset();
       
       It() {
-        LOG.info("***** NEXT: " + array_aggregator.offset() + " => " + array_aggregator.end());
+        //LOG.info("***** NEXT: " + array_aggregator.offset() + " => " + array_aggregator.end());
       }
       
       @Override
       public boolean hasNext() {
-        LOG.info("******* HAS NEXT! " + has_next);
+        //LOG.info("******* HAS NEXT! " + has_next);
         return has_next;
       }
 
@@ -1006,53 +894,6 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
     }
   }
   
-//  class Container {
-//    long last_ts = -1;
-//    Foo last_foo = null;
-//    
-//    // two maps as we don't want to compute the GB hash every time.
-//    TLongObjectMap<GBContainer> groups = new TLongObjectHashMap<GBContainer>(); 
-//    TLongObjectMap<Foo> map = new TLongObjectHashMap<Foo>();
-//    
-//    public void decode(final ArrayList<KeyValue> row,
-//                       final RollupInterval interval) {
-//      final int base_timestamp = (int) schema.baseTimestamp(row.get(0).key());
-//      if (base_timestamp == last_ts) {
-//        // just appending
-//        last_foo.decode(base_timestamp, false, row, interval);
-//      } else {
-//        // new one!
-//        if (last_foo != null) {
-//          last_foo.dedupe(node.pipelineContext().tsdb(), keep_earliest, false);
-//          // TODO - make sure this pushes to GB.
-//        }
-//        
-//        final long hash = schema.getTSUIDHash(row.get(0).key());
-//        last_foo = map.get(hash);
-//        if (last_foo == null) {
-//          // new time series
-//          if (((Tsdb1xHBaseQueryNode) node).fetchDataType(NUMERIC_TYPE)) {
-//            last_foo = new NumericA();
-//          } else {
-//            //last_foo = new SummaryA();
-//          }
-//          map.put(hash, last_foo);
-//          
-//          // find the group
-//          long group_hash = schema.groupByHashFromTSUID(row.get(0).key(), gbConfig.getEncodedTagKeys());
-//          GBContainer group = groups.get(group_hash);
-//          if (group == null) {
-//            group = new GBContainer();
-//            groups.put(group_hash, group);
-//          }
-//          // TODO - eww
-//          group.add(last_foo, new TSUID(schema.getTSUID(row.get(0).key()), schema));
-//        }
-//        last_foo.decode(base_timestamp, true, row, interval);
-//      }
-//    }
-//  }
-  
   /**
    * Parses a row for results. Since numerics are the most prevalent we
    * have a dedicated rowSeq for those (if we're told to fetch em). For 
@@ -1074,28 +915,25 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
     }
     
     state.get().decode(row, interval);
+  }
+  
+  public void decode2(final ArrayList<ArrayList<KeyValue>> rows,
+                      final RollupInterval interval) {
+    if (interval != null && rollup_interval == null) {
+      rollup_interval = interval;
+      storage_interval = rollup_interval.getIntervals() * rollup_interval.getIntervalSeconds();
+      threadLocalAccs = ThreadLocal.withInitial(() -> new Accumulator(rollup_interval.getIntervals()));
+    }
     
-//    final long hash = schema.getTSUIDHash(row.get(0).key());
-//    int bucket = (int) hash % 16;
-//    Foo foo = null;
-//    synchronized (buckets[bucket]) {
-//      foo = buckets[bucket].get(hash);
-//      if (foo == null) {
-//        foo = new NumericA();
-//        buckets[bucket].put(hash, foo);
-//        
-//        long group_hash = schema.groupByHashFromTSUID(row.get(0).key(), gbConfig.getEncodedTagKeys());
-//        GBTS group = containers.get(group_hash);
-//        if (group == null) {
-//          group = new GBTS();
-//          containers.put(group_hash, group);
-//        }
-//        // TODO - eww
-//        group.add(foo, new TSUID(schema.getTSUID(row.get(0).key()), schema));
-//      }
-//    }
-//    
-//    foo.decode(row, interval);
+    State st = state.get();
+    for (int i = 0; i < rows.size(); i++) {
+      ArrayList<KeyValue> row = rows.get(i);
+      if (row == null || row.isEmpty()) {
+        // happens when filtering.
+        continue;
+      }
+      st.decode(rows.get(i), interval);
+    }
   }
   
   public void finishThread() {
@@ -1103,34 +941,6 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
     if (s.last != null) {
       s.last.flush(s.last_ts);
     }
-//    final Container container = containers.get();
-//    if (container.map.isEmpty()) {
-//      return;
-//    }
-//    if (container.last_foo != null) {
-//      container.last_foo.dedupe(node.pipelineContext().tsdb(), keep_earliest, false);
-//    }
-//    
-//    LOG.info("********* THREAD [" + Thread.currentThread().getName() + "] had " + container.groups.size() + " group");
-//    try {
-//      TLongObjectIterator<GBContainer> iterator = container.groups.iterator();
-//      while (iterator.hasNext()) {
-//        iterator.advance();
-//        GBTS ts = final_results.get(iterator.key());
-//        if (ts == null) {
-//          ts = new GBTS();
-//          final_results.put(iterator.key(), ts);
-//        }
-//        ts.combine(iterator.value());
-//        iterator.value().close();
-//      }
-//      container.groups = null;
-//      container.map = null;
-//      containers.remove();
-//      LOG.info("********** Finished [" + Thread.currentThread().getName() + "]");
-//    } catch (Throwable t) {
-//      LOG.error("WTF?", t);
-//    }
   }
   
   public void finalize() {
@@ -1149,18 +959,6 @@ public class TimeHashedDSGBRateResult extends Tsdb1xQueryResult implements TimeS
     return this;
   }
   
-  /**
-   * Simple little shift function.
-   * @param array The array to shift.
-   * @param idx The shift point.
-   * @param end The end of the array (to avoid some shifts)
-   */
-  static void shift(final long[] array, final int idx, final int end) {
-    for (int i = end - 1; i >= idx; i--) {
-      array[i + 2] = array[i];
-    }
-  }
-
   class Accumulator {
     private double[] values;
     private int size;

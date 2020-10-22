@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.hbase.async.KeyValue;
 import org.hbase.async.Scanner;
@@ -146,7 +148,10 @@ public class Tsdb1xScanner implements CloseablePooledObject {
   /** A timer to measure how long we waited for a response from HBase, including
    *  the request sent time. */
   protected StatsTimer scan_wait_timer;
-    
+  
+  ExecutorService es;
+  ScannerCB scannercb;
+  
   /**
    * Ctor.
    */
@@ -156,6 +161,7 @@ public class Tsdb1xScanner implements CloseablePooledObject {
     keepers = new TLongHashSet();
     base_ts = new SecondTimeStamp(0);
     last_ts = new SecondTimeStamp(-1);
+    es = Executors.newFixedThreadPool(1);
   }
   
   /**
@@ -196,6 +202,7 @@ public class Tsdb1xScanner implements CloseablePooledObject {
    * @param span An optional tracing span.
    */
   public void fetchNext(final Tsdb1xQueryResult result, final Span span) {
+    scannercb = new ScannerCB(result, span);
     if (owner.hasException() ||
         owner.node().pipelineContext().queryContext().isClosed()) {
       scanner.close();
@@ -243,7 +250,7 @@ public class Tsdb1xScanner implements CloseablePooledObject {
       scan_wait_timer = owner.node().pipelineContext().tsdb().getStatsCollector()
           .startTimer(SCAN_METRIC, ChronoUnit.MILLIS);
       scanner.nextRows()
-        .addCallback(new ScannerCB(result, child))
+        .addCallback(scannercb)
         .addErrback(new ErrorCB(child));
     }
   }
@@ -313,7 +320,12 @@ public class Tsdb1xScanner implements CloseablePooledObject {
         if (owner.node().push()) {
           processPushRow(row);
         } else {
-          result.decode(row, rollup_interval);
+          if (result instanceof TimeHashedDSGBResult) {
+            
+            return;
+          } else {
+            result.decode(row, rollup_interval);
+          }
         }
       }
       
@@ -378,6 +390,12 @@ public class Tsdb1xScanner implements CloseablePooledObject {
         
         @Override
         public Object call(final ArrayList<ArrayList<KeyValue>> rows) throws Exception {
+          if (result instanceof TimeHashedDSGBResult) {
+            scannercb.runner.rows = rows;
+            es.submit(scannercb.runner);
+            return null;
+          }
+          
           for (final ArrayList<KeyValue> row : rows) {
             if (row != null) {
               if (owner.node().push()) {
@@ -479,6 +497,8 @@ public class Tsdb1xScanner implements CloseablePooledObject {
     /** A counter for the total number of rows scanned in this pass/segment. */
     private long rows_scanned = 0;
     
+    Rnr runner = new Rnr();
+    
     /**
      * Default ctor.
      * @param result The non-null result.
@@ -494,6 +514,32 @@ public class Tsdb1xScanner implements CloseablePooledObject {
       }
     }
 
+    class Rnr implements Runnable {
+      volatile ArrayList<ArrayList<KeyValue>> rows;
+      volatile ArrayList<KeyValue> row;
+
+      @Override
+      public void run() {
+        //LOG.info("############### RUNNING!!!");
+        try {
+        if (row != null) {
+          result.decode(row, rollup_interval);
+        } else {
+          ((TimeHashedDSGBResult) result).decode2(rows, rollup_interval);
+        }
+        //LOG.info("****** DONE W RUNNER");
+        scan_wait_timer = owner.node().pipelineContext().tsdb().getStatsCollector()
+            .startTimer(SCAN_METRIC, ChronoUnit.MILLIS);
+        scanner.nextRows()
+          .addCallback(ScannerCB.this)
+          .addErrback(new ErrorCB(span));
+        } catch (Throwable t) {
+          LOG.error("WTF?", t);
+        }
+      }
+      
+    }
+    
     @Override
     public Object call(final ArrayList<ArrayList<KeyValue>> rows) throws Exception {
       if (scan_wait_timer != null) {
@@ -541,6 +587,7 @@ public class Tsdb1xScanner implements CloseablePooledObject {
         }
         
         if (owner.filterDuringScan()) {
+          //LOG.info("#### Filtering during scan.. sniff");
           final List<Deferred<ArrayList<KeyValue>>> deferreds = 
               Lists.newArrayListWithCapacity(rows.size());
           boolean keep_going = true;
@@ -590,6 +637,11 @@ public class Tsdb1xScanner implements CloseablePooledObject {
               .addErrback(new ErrorCB(child));
         } else {
           // load all
+          if (result instanceof TimeHashedDSGBResult) {
+            runner.rows = rows;
+            es.submit(runner);
+            return null;
+          }
           for (int i = 0; i < rows.size(); i++) {
             final ArrayList<KeyValue> row = rows.get(i);
             TimeStamp t = new SecondTimeStamp(0);
@@ -766,11 +818,18 @@ public class Tsdb1xScanner implements CloseablePooledObject {
       
       @Override
       public Object call(final ArrayList<ArrayList<KeyValue>> rows) throws Exception {
+        if (result instanceof TimeHashedDSGBResult) {
+          runner.rows = rows;
+          es.submit(runner);
+          return null;
+        }
+        
         for (final ArrayList<KeyValue> row : rows) {
           if (row != null) {
             if (owner.node().push()) {
               processPushRow(row);
             } else {
+              LOG.info("********* HERE IN GBResoltuion?");
               result.decode(row, rollup_interval);
             }
           }

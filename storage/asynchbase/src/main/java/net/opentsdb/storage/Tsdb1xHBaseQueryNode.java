@@ -52,6 +52,11 @@ import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.TimeSeriesDataSourceConfig;
+import net.opentsdb.query.processor.downsample.DownsampleConfig;
+import net.opentsdb.query.processor.groupby.GroupBy;
+import net.opentsdb.query.processor.groupby.GroupByConfig;
+import net.opentsdb.query.processor.groupby.GroupByResult;
+import net.opentsdb.query.processor.rate.RateConfig;
 import net.opentsdb.rollup.RollupInterval;
 import net.opentsdb.rollup.RollupUtils.RollupUsage;
 import net.opentsdb.stats.QueryStats;
@@ -76,9 +81,6 @@ import net.opentsdb.utils.Exceptions;
 public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
   private static final Logger LOG = LoggerFactory.getLogger(
       Tsdb1xHBaseQueryNode.class);
-
-  private static final Deferred<Void> INITIALIZED = 
-      Deferred.fromResult(null);
   
   /** A reference to the parent of this node. */
   protected final Tsdb1xHBaseDataStore parent;
@@ -240,11 +242,35 @@ public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
     if (push) {
       executor.fetchNext(null, span);
     } else {
-      executor.fetchNext(new Tsdb1xQueryResult(
-            sequence_id.getAndIncrement(), 
+      LOG.info("****** PUSHDOWNS: " + config.getPushDownNodes().size() + "\n" + config.getPushDownNodes());
+      if (config.getPushDownNodes() != null && config.getPushDownNodes().size() >= 2) {
+        GroupByConfig gb = null;
+        DownsampleConfig ds = null;
+        for (final QueryNodeConfig cfg : (List<QueryNodeConfig>) config.getPushDownNodes()) {
+          if (cfg instanceof GroupByConfig) {
+            gb = (GroupByConfig) cfg;
+            continue;
+          }
+          if (cfg instanceof DownsampleConfig) {
+            ds = (DownsampleConfig) cfg;
+            continue;
+          }
+          throw new IllegalStateException("WTF? What's " + cfg.getClass() + " doing here?");
+        }
+        LOG.info("********** WOOT using the new stuff1");
+        executor.fetchNext(new TimeHashedDSGBResult(
             Tsdb1xHBaseQueryNode.this, 
-            parent.schema()), 
-      span);
+            parent.schema(),
+            gb,
+            ds), 
+        span);
+      } else {
+        executor.fetchNext(new Tsdb1xQueryResult(
+              sequence_id.getAndIncrement(), 
+              Tsdb1xHBaseQueryNode.this, 
+              parent.schema()), 
+        span);
+      }
     }
   }
   
@@ -276,7 +302,8 @@ public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
   @Override
   public void onNext(final QueryResult next) {
     final QueryStats stats = pipelineContext().queryContext().stats();
-    if (stats != null) {
+    // TODO - no longer valid for Ds and GB node
+    if (stats != null && next.timeSeries() != null) {
       stats.incrementRawTimeSeriesCount(next.timeSeries().size());
     }
     context.tsdb().getQueryThreadPool().submit(new Runnable() {
@@ -370,7 +397,44 @@ public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
     if (child != null) {
       child.setSuccessTags().finish();
     }
-    return INITIALIZED;
+    
+    if (config.getPushDownNodes() != null && config.getPushDownNodes().size() >= 2) {
+      for (final QueryNodeConfig cfg : (List<QueryNodeConfig>) config.getPushDownNodes()) {
+        if (cfg instanceof GroupByConfig) {
+          final GroupByConfig gb = (GroupByConfig) cfg;
+          if (gb.getEncodedTagKeys() == null &&
+              gb.getTagKeys() != null && 
+              !gb.getTagKeys().isEmpty()) {
+            
+            class ResolveCB implements Callback<Void, List<byte[]>> {
+              @Override
+              public Void call(List<byte[]> arg) throws Exception {
+                synchronized (gb) {
+                  gb.setEncodedTagKeys(arg);
+                }
+                return null;
+              }
+            }
+            
+            class ErrorCB implements Callback<Void, Exception> {
+              @Override
+              public Void call(final Exception ex) throws Exception {
+                sendUpstream(ex);
+                return null;
+              }
+            }
+            
+            return parent.schema().factory().encodeJoinKeys(
+                  Lists.newArrayList(gb.getTagKeys()), null /* TODO */)
+              .addCallback(new ResolveCB())
+              .addErrback(new ErrorCB());
+          }
+          return Deferred.fromResult(null);
+        }
+      }
+      return Deferred.fromError(new RuntimeException("No group by pushdown for now???"));
+    }
+    return Deferred.fromResult(null);
   }
   
   @Override
@@ -523,11 +587,35 @@ public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
           if (push) {
             executor.fetchNext(null, span);
           } else {
-            executor.fetchNext(new Tsdb1xQueryResult(
-                sequence_id.incrementAndGet(), 
-                Tsdb1xHBaseQueryNode.this, 
-                parent.schema()), 
-            span);
+            LOG.info("****** PUSHDOWNS: " + config.getPushDownNodes().size() + "\n" + config.getPushDownNodes());
+            if (config.getPushDownNodes() != null && config.getPushDownNodes().size() >= 2) {
+              GroupByConfig gb = null;
+              DownsampleConfig ds = null;
+              for (final QueryNodeConfig cfg : (List<QueryNodeConfig>) config.getPushDownNodes()) {
+                if (cfg instanceof GroupByConfig) {
+                  gb = (GroupByConfig) cfg;
+                  continue;
+                }
+                if (cfg instanceof DownsampleConfig) {
+                  ds = (DownsampleConfig) cfg;
+                  continue;
+                }
+                throw new IllegalStateException("WTF? What's " + cfg.getClass() + " doing here?");
+              }
+              LOG.info("********** WOOT using the new stuff1");
+              executor.fetchNext(new TimeHashedDSGBResult(
+                  Tsdb1xHBaseQueryNode.this, 
+                  parent.schema(),
+                  gb,
+                  ds), 
+              span);
+            } else {
+              executor.fetchNext(new Tsdb1xQueryResult(
+                    sequence_id.getAndIncrement(), 
+                    Tsdb1xHBaseQueryNode.this, 
+                    parent.schema()), 
+              span);
+            }
           }
         } else {
           LOG.error("WTF? We lost an initialization race??");

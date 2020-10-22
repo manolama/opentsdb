@@ -348,6 +348,10 @@ public class Tsdb1xScanners implements HBaseExecutor, CloseablePooledObject, Tim
       send_upstream = true;
     }
     
+    if (current_result instanceof TimeHashedDSGBResult) {
+      ((TimeHashedDSGBResult) current_result).finishThread();
+    }
+    
     if (send_upstream) {
       try {
         if (node.push()) {
@@ -387,6 +391,9 @@ public class Tsdb1xScanners implements HBaseExecutor, CloseablePooledObject, Tim
               result = current_result;
               current_result = null;
             }
+            if (result instanceof TimeHashedDSGBResult) {
+              ((TimeHashedDSGBResult) result).finalize();
+            }
             if (LOG.isTraceEnabled()) {
               LOG.trace("Sending results upstream for config: " 
                   + JSON.serializeToString(node.config()));
@@ -409,6 +416,9 @@ public class Tsdb1xScanners implements HBaseExecutor, CloseablePooledObject, Tim
               synchronized (this) {
                 result = current_result;
                 current_result = null;
+              }
+              if (result instanceof TimeHashedDSGBResult) {
+                ((TimeHashedDSGBResult) result).finalize();
               }
               if (LOG.isTraceEnabled()) {
                 LOG.trace("Sending results upstream for config: " 

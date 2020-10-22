@@ -32,6 +32,8 @@ import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.TimeSeriesDataSourceConfig;
 import net.opentsdb.query.plan.QueryPlanner;
+import net.opentsdb.query.processor.downsample.DownsampleConfig;
+import net.opentsdb.query.processor.groupby.GroupByConfig;
 import net.opentsdb.query.processor.timeshift.TimeShiftConfig;
 import net.opentsdb.rollup.DefaultRollupConfig;
 import net.opentsdb.rollup.NoSuchRollupForIntervalException;
@@ -89,8 +91,7 @@ public class SchemaFactory extends BaseTSDBPlugin
   @Override
   public boolean supportsPushdown(
       final Class<? extends QueryNodeConfig> function) {
-    // TODO Auto-generated method stub
-    return false;
+    return schema.dataStoreFactory().supportsPushdown(function);
   }
   
   @Override
