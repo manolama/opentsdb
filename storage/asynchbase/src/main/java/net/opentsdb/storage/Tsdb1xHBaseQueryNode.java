@@ -262,7 +262,8 @@ public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
             Tsdb1xHBaseQueryNode.this, 
             parent.schema(),
             gb,
-            ds), 
+            ds,
+            executor instanceof Tsdb1xMultiGet), 
         span);
       } else {
         executor.fetchNext(new Tsdb1xQueryResult(
@@ -607,7 +608,8 @@ public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
                   Tsdb1xHBaseQueryNode.this, 
                   parent.schema(),
                   gb,
-                  ds), 
+                  ds,
+                  false), 
               span);
             } else {
               executor.fetchNext(new Tsdb1xQueryResult(
@@ -740,7 +742,8 @@ public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
                   Tsdb1xHBaseQueryNode.this, 
                   parent.schema(),
                   gb,
-                  ds), 
+                  ds,
+                  false), 
               span);
             } else {
             executor.fetchNext(new Tsdb1xQueryResult(
@@ -1053,7 +1056,8 @@ public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
                       Tsdb1xHBaseQueryNode.this, 
                       parent.schema(),
                       gb,
-                      ds), 
+                      ds,
+                      true), 
                   span);
                 } else {
                 executor.fetchNext(new Tsdb1xQueryResult(
@@ -1113,7 +1117,8 @@ public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
             Tsdb1xHBaseQueryNode.this, 
             parent.schema(),
             gb,
-            ds), 
+            ds,
+            executor instanceof Tsdb1xMultiGet), 
         null);
       } else {
       executor.fetchNext(new Tsdb1xQueryResult(

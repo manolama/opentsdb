@@ -208,7 +208,7 @@ public class Tsdb1xMultiGet implements
   /** Backup to let us close if something is wedged. */
   protected AtomicInteger close_attempts;
   
-  ExecutorService ex;
+  //ExecutorService ex;
   
   /**
    * Default ctor.
@@ -222,7 +222,7 @@ public class Tsdb1xMultiGet implements
     all_batches_sent = new AtomicBoolean();
     outstanding = new AtomicInteger();
     close_attempts = new AtomicInteger();
-    ex = Executors.newFixedThreadPool(8);
+    //ex = Executors.newFixedThreadPool(8);
   }
   
   public void run(final Timeout timeout) {
@@ -671,12 +671,12 @@ public class Tsdb1xMultiGet implements
         return null;
       }
       
-      if (current_result instanceof TimeHashedDSGBResult) {
-        LOG.info("******* WOOT!");
-        this.results = results;
-        ex.submit(this);
-        return null;
-      }
+//      if (current_result instanceof TimeHashedDSGBResult) {
+//        LOG.info("******* WOOT!");
+//        this.results = results;
+//        ex.submit(this);
+//        return null;
+//      }
       
       TimeStamp base_ts = new SecondTimeStamp(0);
       for (final GetResultOrException result : results) {

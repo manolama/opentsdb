@@ -15,6 +15,7 @@
 package net.opentsdb.query.processor.summarizer;
 
 import java.io.IOException;
+import java.util.Optional;
 
 import com.google.common.reflect.TypeToken;
 
@@ -39,7 +40,9 @@ public class SummarizerPassThroughNumericIterator implements QueryIterator {
   
   SummarizerPassThroughNumericIterator(final SummarizedTimeSeries sts) {
     this.sts = sts;
-    iterator = sts.source.iterator(NumericType.TYPE).get();
+    Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> op = sts.source.iterator(NumericType.TYPE);
+    
+    iterator = op.get();
     if (!iterator.hasNext()) {
       sts.fillEmpty();
     } else {
@@ -71,13 +74,15 @@ public class SummarizerPassThroughNumericIterator implements QueryIterator {
         store(value.value().doubleValue());
       }
     }
-    try {
-      iterator.close();
-    } catch (IOException e) {
-      // Don't bother logging.
-      e.printStackTrace();
-    }
-    iterator = null;
+//    Logger LOG = LoggerFactory.getLogger("foo");
+//    LOG.info("@@@@@@@@ CLOSING: " + iterator, new RuntimeException());
+//    try {
+//      iterator.close();
+//    } catch (IOException e) {
+//      // Don't bother logging.
+//      e.printStackTrace();
+//    }
+//    iterator = null;
     return value;
   }
   

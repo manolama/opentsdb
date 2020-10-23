@@ -47,8 +47,10 @@ import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TypedTimeSeriesIterator;
+import net.opentsdb.data.types.numeric.MutableNumericType;
 import net.opentsdb.data.types.numeric.MutableNumericValue;
-import net.opentsdb.data.types.numeric.NumericArrayType;
+//import net.opentsdb.data.types.numeric.NumericArrayType;
+import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.data.types.numeric.aggregators.DefaultArrayAggregatorConfig;
 import net.opentsdb.data.types.numeric.aggregators.NumericAggregator;
 import net.opentsdb.data.types.numeric.aggregators.NumericAggregatorFactory;
@@ -130,6 +132,7 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
   final ArrayAggregatorConfig aggregatorConfig;
   private final ThreadLocal<State> state;
   Set<State> states;
+  final boolean mgets;
   
 //  TLongObjectMap<Foo>[] buckets;
 //  TLongObjectMap<GBTS> containers;
@@ -145,9 +148,11 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
   public TimeHashedDSGBResult(final QueryNode node, 
                          final Schema schema,
                          final GroupByConfig gb_config,
-                         final DownsampleConfig ds_config) {
+                         final DownsampleConfig ds_config,
+                         final boolean mgets) {
     super(0, node, schema);
     
+    this.mgets = mgets;
     this.gbConfig = gb_config;
     this.downsampleConfig = ds_config;
     states = Sets.newConcurrentHashSet();
@@ -284,22 +289,22 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
     @Override
     public Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> iterator(
         TypeToken<? extends TimeSeriesDataType> type) {
-      if (type == NumericArrayType.TYPE) {
-        return Optional.of(new It());
-      }
+//      if (type == NumericArrayType.TYPE) {
+//        return Optional.of(new It());
+//      }
       return Optional.empty();
     }
 
     @Override
     public Collection<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> iterators() {
       List<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> its = Lists.newArrayList();
-      its.add(new It());
+      //its.add(new It());
       return null;
     }
 
     @Override
     public Collection<TypeToken<? extends TimeSeriesDataType>> types() {
-      return NumericArrayType.SINGLE_LIST;
+      return null;
     }
 
     @Override
@@ -670,71 +675,6 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
       //return ChronoUnit.SECONDS;
     }
   
-    class It implements TypedTimeSeriesIterator<NumericArrayType>, TimeSeriesValue<NumericArrayType>, NumericArrayType {
-      boolean has_next = true;
-      @Override
-      public boolean hasNext() {
-        return has_next;
-      }
-
-      @Override
-      public TimeSeriesValue<NumericArrayType> next() {
-        has_next = false;
-        return this;
-      }
-
-      @Override
-      public void close() throws IOException {
-        // TODO Auto-generated method stub
-        
-      }
-
-      @Override
-      public TypeToken<NumericArrayType> getType() {
-        return NumericArrayType.TYPE;
-      }
-
-      @Override
-      public int offset() {
-        return 0;
-      }
-
-      @Override
-      public int end() {
-        return downsampleConfig.intervals();
-      }
-
-      @Override
-      public boolean isInteger() {
-        return false;
-      }
-
-      @Override
-      public long[] longArray() {
-        return null;
-      }
-
-      @Override
-      public double[] doubleArray() {
-        return array_aggregator.doubleArray();
-      }
-
-      @Override
-      public TypeToken<NumericArrayType> type() {
-        return NumericArrayType.TYPE;
-      }
-
-      @Override
-      public TimeStamp timestamp() {
-        return new SecondTimeStamp(startTime);
-      }
-
-      @Override
-      public NumericArrayType value() {
-        return this;
-      }
-      
-    }
   }
     
   class State {
@@ -750,7 +690,7 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
     }
     
     public void decode(final ArrayList<KeyValue> row,
-        final RollupInterval interval) {
+                       final RollupInterval interval) {
       int base_ts = (int) schema.baseTimestamp(row.get(0).key());
       final long hash = schema.getTSUIDHash(row.get(0).key());
       if (last_hash == hash) {
@@ -772,18 +712,8 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
         if (last == null) {
           last = new NumericA();
           foos.put(hash, last);
-          
-//          StringBuilder buf = new StringBuilder()
-//              .append("[");
-//          for (int i = 0; i < gbConfig.getEncodedTagKeys().size(); i++) {
-//            if (i > 0) {
-//              buf.append(", ");
-//            }
-//            buf.append(Arrays.toString(gbConfig.getEncodedTagKeys().get(i)));
-//          }
-//          buf.append("]");
-          //LOG.info("***************** GB TAGS: " + buf.toString());
           long group_hash = schema.groupByHashFromTSUID(row.get(0).key(), gbConfig.getEncodedTagKeys());
+          LOG.info("            !! " + base_ts + "  " + hash + "  GBHash: " + group_hash);
           GBTS group = containers.get(group_hash);
           if (group == null) {
             group = new GBTS();
@@ -834,7 +764,7 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
     @Override
     public Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> iterator(
         TypeToken<? extends TimeSeriesDataType> type) {
-      if (type == NumericArrayType.TYPE) {
+      if (type == NumericType.TYPE) {
         return Optional.of(new It());
       }
       return Optional.empty();
@@ -850,7 +780,7 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
 
     @Override
     public Collection<TypeToken<? extends TimeSeriesDataType>> types() {
-      return NumericArrayType.SINGLE_LIST;
+      return NumericType.SINGLE_LIST;
     }
 
     @Override
@@ -863,22 +793,27 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
       }
     }
     
-    class It implements TypedTimeSeriesIterator<NumericArrayType>, TimeSeriesValue<NumericArrayType> {
-      boolean has_next = array_aggregator.end() > array_aggregator.offset();
+    class It implements TypedTimeSeriesIterator<NumericType>, TimeSeriesValue<NumericType> {
+      //boolean has_next = array_aggregator.end() > array_aggregator.offset();
+      
+      int i = array_aggregator.offset();
+      MutableNumericType mutable;
+      TimeStamp ts;
       
       It() {
-        //LOG.info("***** NEXT: " + array_aggregator.offset() + " => " + array_aggregator.end());
+        mutable = new MutableNumericType();
+        ts = downsampleConfig.startTime().getCopy();
       }
       
       @Override
       public boolean hasNext() {
-        //LOG.info("******* HAS NEXT! " + has_next);
-        return has_next;
+        return i < array_aggregator.end();
       }
 
       @Override
-      public TimeSeriesValue<NumericArrayType> next() {
-        has_next = false;
+      public TimeSeriesValue<NumericType> next() {
+        mutable.set(array_aggregator.doubleArray()[i++]);
+        ts.add(downsampleConfig.interval());
         return this;
       }
 
@@ -889,27 +824,23 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
       }
 
       @Override
-      public TypeToken<NumericArrayType> getType() {
-        return NumericArrayType.TYPE;
+      public TypeToken<NumericType> getType() {
+        return NumericType.TYPE;
       }
 
       @Override
       public TimeStamp timestamp() {
-        // TODO - what do I do?
-        TimeStamp ts = new SecondTimeStamp(startTime);
-        System.out.println(" ******* GOT TS sending upstream: " + ts.epoch());
         return ts;
       }
 
       @Override
       public TypeToken type() {
-        return NumericArrayType.TYPE;
+        return NumericType.TYPE;
       }
 
       @Override
-      public NumericArrayType value() {
-        System.out.println("***** RETURNING " + array_aggregator);
-        return array_aggregator;
+      public NumericType value() {
+        return mutable;
       }
       
     }
@@ -968,6 +899,7 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
   
   public void finalize() {
     TLongObjectMap<GBTS> containers = new TLongObjectHashMap<GBTS>();
+    LOG.info("@@@@@@@@ STATES: " + states.size());
     for (final State s : states) {
       if (s.last != null) {
         s.last.flush(s.last_ts);
