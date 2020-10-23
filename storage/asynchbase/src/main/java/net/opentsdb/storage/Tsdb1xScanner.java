@@ -321,7 +321,8 @@ public class Tsdb1xScanner implements CloseablePooledObject {
           processPushRow(row);
         } else {
           if (result instanceof TimeHashedDSGBResult) {
-            
+              scannercb.runner.row = row;
+              es.submit(scannercb.runner);
             return;
           } else {
             result.decode(row, rollup_interval);
@@ -520,7 +521,7 @@ public class Tsdb1xScanner implements CloseablePooledObject {
 
       @Override
       public void run() {
-        //LOG.info("############### RUNNING!!!");
+        LOG.info("############### RUNNING!!!");
         try {
         if (row != null) {
           result.decode(row, rollup_interval);
@@ -829,7 +830,7 @@ public class Tsdb1xScanner implements CloseablePooledObject {
             if (owner.node().push()) {
               processPushRow(row);
             } else {
-              LOG.info("********* HERE IN GBResoltuion?");
+              //LOG.info("********* HERE IN GBResoltuion?");
               result.decode(row, rollup_interval);
             }
           }

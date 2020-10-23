@@ -22,6 +22,9 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -205,6 +208,8 @@ public class Tsdb1xMultiGet implements
   /** Backup to let us close if something is wedged. */
   protected AtomicInteger close_attempts;
   
+  ExecutorService ex;
+  
   /**
    * Default ctor.
    */
@@ -217,6 +222,7 @@ public class Tsdb1xMultiGet implements
     all_batches_sent = new AtomicBoolean();
     outstanding = new AtomicInteger();
     close_attempts = new AtomicInteger();
+    ex = Executors.newFixedThreadPool(8);
   }
   
   public void run(final Timeout timeout) {
@@ -493,6 +499,47 @@ public class Tsdb1xMultiGet implements
     }
   }
   
+  void flushy() {
+    CountDownLatch ltch = new CountDownLatch(8);
+    class Ctdn implements Runnable {
+
+      @Override
+      public void run() {
+        LOG.info("********** FINISH THREAD");
+        ((TimeHashedDSGBResult) current_result).finishThread();
+        ltch.countDown();
+        try {
+          Thread.sleep(100);
+        } catch (InterruptedException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
+      }
+      
+    }
+    
+    for (int i = 0; i < 8; i++) {
+      ex.submit(new Ctdn());
+    }
+    try {
+      LOG.info("WAITING............");
+      ltch.await();
+      
+    } catch (InterruptedException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
+    LOG.info("********** BOO DONE!");
+    ((TimeHashedDSGBResult) current_result).finalize();
+    final QueryResult result = current_result;
+    current_result = null;
+    if (child != null) {
+      child.setSuccessTags().finish();
+    }
+    state = State.COMPLETE;
+    node.onNext(result);
+  }
+  
   /**
    * Called when a batch has completed successfully (possibly empty).
    * This method may start another batch or send the results upstream. It
@@ -510,8 +557,14 @@ public class Tsdb1xMultiGet implements
           (!node.push() && index == -1)) ? 
           this.outstanding.decrementAndGet() : 
             this.outstanding.get();
+          LOG.info("######## Outstanding: " + outstanding);
       if (!node.push() && current_result.isFull()) {
         if (outstanding <= 0) {
+          if (current_result instanceof TimeHashedDSGBResult) {
+            LOG.info("********** Fl;ushing.......");
+            flushy();
+            return;
+          }
           final QueryResult result = current_result;
           current_result = null;
           if (child != null) {
@@ -563,6 +616,12 @@ public class Tsdb1xMultiGet implements
             }
             state = State.COMPLETE;
           } else {
+            if (current_result instanceof TimeHashedDSGBResult) {
+              LOG.info("********** Fl;ushing.......");
+              flushy();
+              return;
+            }
+            
             // no fallback, we're done.
             final QueryResult result = current_result;
             current_result = null;
@@ -593,9 +652,10 @@ public class Tsdb1xMultiGet implements
    * While it would be nice to attach a tracer here, we can avoid a lot
    * of object overhead by using a singleton here.
    */
-  class ResponseCB implements Callback<Void, List<GetResultOrException>> {
+  class ResponseCB implements Callback<Void, List<GetResultOrException>>, Runnable {
     final Span span;
     final int index;
+    List<GetResultOrException> results;
     
     ResponseCB(final int index, final Span span) {
       this.index = index;
@@ -606,6 +666,13 @@ public class Tsdb1xMultiGet implements
     public Void call(final List<GetResultOrException> results)
         throws Exception {
       if (has_failed.get()) {
+        return null;
+      }
+      
+      if (current_result instanceof TimeHashedDSGBResult) {
+        LOG.info("******* WOOT!");
+        this.results = results;
+        ex.submit(this);
         return null;
       }
       
@@ -660,6 +727,64 @@ public class Tsdb1xMultiGet implements
       }
       onComplete(index);
       return null;
+    }
+  
+    public void run() {
+      try {
+        LOG.info("######## RUNNING!");
+      TimeStamp base_ts = new SecondTimeStamp(0);
+      for (final GetResultOrException result : results) {
+        if (result.getException() != null) {
+          if (span != null) {
+            span.setErrorTags().finish();
+          }
+          onError(result.getException());
+          return;
+        }
+        
+        if (result.getCells() == null || result.getCells().isEmpty()) {
+          continue;
+        }
+        
+        final QueryStats stats = node.pipelineContext().queryContext().stats();
+        if (stats != null) {
+          long size = 0;
+          for (int k = 0; k < result.getCells().size(); k++) {
+            size += 8; // timestamp
+            final KeyValue kv = result.getCells().get(k);
+            size += kv.key().length;
+            size += kv.family().length;
+            size += kv.qualifier().length;
+            size += kv.value() != null ? kv.value().length : 0;
+          }
+          stats.incrementRawDataSize(size);
+        }
+        
+        if (node != null && node.push()) {
+          if (base_ts.epoch() == 0) {
+            node.schema().baseTimestamp(result.getCells().get(0).key(), base_ts);
+          }
+          processPushRow(result.getCells(), index, base_ts);
+        } else {
+          if (current_result != null) {
+            current_result.decode(result.getCells(), 
+                (rollup_index < 0 || 
+                 rollup_index >= node.rollupIntervals().size() 
+                   ? null : node.rollupIntervals().get(rollup_index)));
+          } else {
+            LOG.error("Results for a multiget were nulled but we had valid "
+                + "data to process.");
+          }
+        }
+      }
+      
+      if (span != null) {
+        span.setSuccessTags().finish();
+      }
+      onComplete(index);
+      } catch (Throwable t) {
+        LOG.error("WTF? THROWABLE IN RUN:", t);
+      }
     }
   }
   

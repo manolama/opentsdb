@@ -18,6 +18,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -121,6 +124,8 @@ public class Tsdb1xHBaseFactory extends BaseTSDBPlugin implements Tsdb1xDataStor
   @Override
   public boolean supportsPushdown(
       final Class<? extends QueryNodeConfig> function) {
+    Logger LOG = LoggerFactory.getLogger("foo");
+    LOG.info("******** EVAL: " + function.toString());
     if (function == GroupByConfig.class ||
         function == DownsampleConfig.class) {
       return true;

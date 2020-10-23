@@ -720,11 +720,35 @@ public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
           if (push) {
             executor.fetchNext(null, span);
           } else {
+            LOG.info("****** PUSHDOWNS: " + config.getPushDownNodes().size() + "\n" + config.getPushDownNodes());
+            if (config.getPushDownNodes() != null && config.getPushDownNodes().size() >= 2) {
+              GroupByConfig gb = null;
+              DownsampleConfig ds = null;
+              for (final QueryNodeConfig cfg : (List<QueryNodeConfig>) config.getPushDownNodes()) {
+                if (cfg instanceof GroupByConfig) {
+                  gb = (GroupByConfig) cfg;
+                  continue;
+                }
+                if (cfg instanceof DownsampleConfig) {
+                  ds = (DownsampleConfig) cfg;
+                  continue;
+                }
+                throw new IllegalStateException("WTF? What's " + cfg.getClass() + " doing here?");
+              }
+              LOG.info("********** WOOT using the new stuff1");
+              executor.fetchNext(new TimeHashedDSGBResult(
+                  Tsdb1xHBaseQueryNode.this, 
+                  parent.schema(),
+                  gb,
+                  ds), 
+              span);
+            } else {
             executor.fetchNext(new Tsdb1xQueryResult(
                 sequence_id.incrementAndGet(), 
                 Tsdb1xHBaseQueryNode.this, 
                 parent.schema()), 
             span);
+              }
           }
         } else {
           LOG.error("WTF? We lost an initialization race??");
@@ -1009,11 +1033,35 @@ public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
               if (push) {
                 executor.fetchNext(null, span);
               } else {
+                LOG.info("****** PUSHDOWNS: " + config.getPushDownNodes().size() + "\n" + config.getPushDownNodes());
+                if (config.getPushDownNodes() != null && config.getPushDownNodes().size() >= 2) {
+                  GroupByConfig gb = null;
+                  DownsampleConfig ds = null;
+                  for (final QueryNodeConfig cfg : (List<QueryNodeConfig>) config.getPushDownNodes()) {
+                    if (cfg instanceof GroupByConfig) {
+                      gb = (GroupByConfig) cfg;
+                      continue;
+                    }
+                    if (cfg instanceof DownsampleConfig) {
+                      ds = (DownsampleConfig) cfg;
+                      continue;
+                    }
+                    throw new IllegalStateException("WTF? What's " + cfg.getClass() + " doing here?");
+                  }
+                  LOG.info("********** WOOT using the new stuff1");
+                  executor.fetchNext(new TimeHashedDSGBResult(
+                      Tsdb1xHBaseQueryNode.this, 
+                      parent.schema(),
+                      gb,
+                      ds), 
+                  span);
+                } else {
                 executor.fetchNext(new Tsdb1xQueryResult(
                     sequence_id.incrementAndGet(), 
                     Tsdb1xHBaseQueryNode.this, 
                     parent.schema()), 
                 span);
+                }
               }
             } else {
               LOG.error("WTF? We lost an initialization race??");
@@ -1045,11 +1093,35 @@ public class Tsdb1xHBaseQueryNode implements Tsdb1xQueryNode, Runnable {
     if (push) {
       executor.fetchNext(null, null);
     } else {
+      LOG.info("****** PUSHDOWNS: " + config.getPushDownNodes().size() + "\n" + config.getPushDownNodes());
+      if (config.getPushDownNodes() != null && config.getPushDownNodes().size() >= 2) {
+        GroupByConfig gb = null;
+        DownsampleConfig ds = null;
+        for (final QueryNodeConfig cfg : (List<QueryNodeConfig>) config.getPushDownNodes()) {
+          if (cfg instanceof GroupByConfig) {
+            gb = (GroupByConfig) cfg;
+            continue;
+          }
+          if (cfg instanceof DownsampleConfig) {
+            ds = (DownsampleConfig) cfg;
+            continue;
+          }
+          throw new IllegalStateException("WTF? What's " + cfg.getClass() + " doing here?");
+        }
+        LOG.info("********** WOOT using the new stuff1");
+        executor.fetchNext(new TimeHashedDSGBResult(
+            Tsdb1xHBaseQueryNode.this, 
+            parent.schema(),
+            gb,
+            ds), 
+        null);
+      } else {
       executor.fetchNext(new Tsdb1xQueryResult(
           sequence_id.incrementAndGet(), 
           Tsdb1xHBaseQueryNode.this, 
           parent.schema()), 
       null);
+      }
     }
   }
 }

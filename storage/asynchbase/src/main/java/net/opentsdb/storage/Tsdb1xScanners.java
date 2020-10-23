@@ -493,7 +493,9 @@ public class Tsdb1xScanners implements HBaseExecutor, CloseablePooledObject, Tim
   
   @Override
   public synchronized void close() {
-    if (initialized && scanners_done != scanners.get(scanner_index).length) {
+    if (initialized && 
+        scanners_done != scanners.get(scanner_index).length && 
+        close_attempts++ < 50) {
       node.pipelineContext().tsdb().getMaintenanceTimer().newTimeout(
           this, 100, TimeUnit.MILLISECONDS);
       if (LOG.isTraceEnabled()) {
