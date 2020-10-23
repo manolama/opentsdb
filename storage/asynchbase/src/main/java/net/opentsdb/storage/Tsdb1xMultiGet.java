@@ -499,46 +499,46 @@ public class Tsdb1xMultiGet implements
     }
   }
   
-  void flushy() {
-    CountDownLatch ltch = new CountDownLatch(8);
-    class Ctdn implements Runnable {
-
-      @Override
-      public void run() {
-        LOG.info("********** FINISH THREAD");
-        ((TimeHashedDSGBResult) current_result).finishThread();
-        ltch.countDown();
-        try {
-          Thread.sleep(100);
-        } catch (InterruptedException e) {
-          // TODO Auto-generated catch block
-          e.printStackTrace();
-        }
-      }
-      
-    }
-    
-    for (int i = 0; i < 8; i++) {
-      ex.submit(new Ctdn());
-    }
-    try {
-      LOG.info("WAITING............");
-      ltch.await();
-      
-    } catch (InterruptedException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }
-    LOG.info("********** BOO DONE!");
-    ((TimeHashedDSGBResult) current_result).finalize();
-    final QueryResult result = current_result;
-    current_result = null;
-    if (child != null) {
-      child.setSuccessTags().finish();
-    }
-    state = State.COMPLETE;
-    node.onNext(result);
-  }
+//  void flushy() {
+//    CountDownLatch ltch = new CountDownLatch(8);
+//    class Ctdn implements Runnable {
+//
+//      @Override
+//      public void run() {
+//        LOG.info("********** FINISH THREAD");
+//        //((TimeHashedDSGBResult) current_result).finishThread();
+//        ltch.countDown();
+//        try {
+//          Thread.sleep(100);
+//        } catch (InterruptedException e) {
+//          // TODO Auto-generated catch block
+//          e.printStackTrace();
+//        }
+//      }
+//      
+//    }
+//    
+//    for (int i = 0; i < 8; i++) {
+//      ex.submit(new Ctdn());
+//    }
+//    try {
+//      LOG.info("WAITING............");
+//      ltch.await();
+//      
+//    } catch (InterruptedException e) {
+//      // TODO Auto-generated catch block
+//      e.printStackTrace();
+//    }
+//    LOG.info("********** BOO DONE!");
+//    ((TimeHashedDSGBResult) current_result).finalize();
+//    final QueryResult result = current_result;
+//    current_result = null;
+//    if (child != null) {
+//      child.setSuccessTags().finish();
+//    }
+//    state = State.COMPLETE;
+//    node.onNext(result);
+//  }
   
   /**
    * Called when a batch has completed successfully (possibly empty).
@@ -561,9 +561,10 @@ public class Tsdb1xMultiGet implements
       if (!node.push() && current_result.isFull()) {
         if (outstanding <= 0) {
           if (current_result instanceof TimeHashedDSGBResult) {
-            LOG.info("********** Fl;ushing.......");
-            flushy();
-            return;
+//            LOG.info("********** Fl;ushing.......");
+//            flushy();
+//            return;
+            ((TimeHashedDSGBResult) current_result).finalize();
           }
           final QueryResult result = current_result;
           current_result = null;
@@ -617,9 +618,10 @@ public class Tsdb1xMultiGet implements
             state = State.COMPLETE;
           } else {
             if (current_result instanceof TimeHashedDSGBResult) {
-              LOG.info("********** Fl;ushing.......");
-              flushy();
-              return;
+              ((TimeHashedDSGBResult) current_result).finalize();
+//              LOG.info("********** Fl;ushing.......");
+//              flushy();
+//              return;
             }
             
             // no fallback, we're done.
@@ -731,7 +733,7 @@ public class Tsdb1xMultiGet implements
   
     public void run() {
       try {
-        LOG.info("######## RUNNING!");
+        //LOG.info("######## RUNNING!");
       TimeStamp base_ts = new SecondTimeStamp(0);
       for (final GetResultOrException result : results) {
         if (result.getException() != null) {

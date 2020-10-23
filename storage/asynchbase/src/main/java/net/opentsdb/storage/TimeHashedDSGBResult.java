@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.hbase.async.Bytes;
 import org.hbase.async.KeyValue;
@@ -18,10 +19,12 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.reflect.TypeToken;
 import com.stumbleupon.async.Deferred;
 
 import gnu.trove.iterator.TLongIntIterator;
+import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.map.TIntDoubleMap;
 import gnu.trove.map.TIntObjectMap;
@@ -126,9 +129,10 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
   final NumericArrayAggregatorFactory factory;
   final ArrayAggregatorConfig aggregatorConfig;
   private final ThreadLocal<State> state;
+  Set<State> states;
   
-  TLongObjectMap<Foo>[] buckets;
-  TLongObjectMap<GBTS> containers;
+//  TLongObjectMap<Foo>[] buckets;
+//  TLongObjectMap<GBTS> containers;
   
   List<TimeSeries> final_list;
   
@@ -146,7 +150,11 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
     
     this.gbConfig = gb_config;
     this.downsampleConfig = ds_config;
-    state = ThreadLocal.withInitial(() -> new State());
+    states = Sets.newConcurrentHashSet();
+    state = ThreadLocal.withInitial(() -> { 
+      State s = new State(); 
+      states.add(s);
+      return s;});
     storage_interval = 3600; // TODO - rollup or 
     factory = node.pipelineContext()
             .tsdb()
@@ -211,11 +219,11 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
     threadLocalAccs = ThreadLocal.withInitial(() -> new Accumulator(3600));
     
     // reduce locking a tiny bit
-    buckets = new TLongObjectMap[16];
-    for (int i = 0; i < 16; i++) {
-      buckets[i] = new TLongObjectHashMap();
-    }
-    containers = new TLongObjectHashMap<GBTS>();
+//    buckets = new TLongObjectMap[16];
+//    for (int i = 0; i < 16; i++) {
+//      buckets[i] = new TLongObjectHashMap();
+//    }
+//    containers = new TLongObjectHashMap<GBTS>();
   }
   
   @Override
@@ -733,6 +741,13 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
     NumericA last;
     long last_hash;
     int last_ts;
+    TLongObjectMap<Foo> foos;
+    TLongObjectMap<GBTS> containers;
+    
+    State() {
+      foos = new TLongObjectHashMap();
+      containers = new TLongObjectHashMap<GBTS>();
+    }
     
     public void decode(final ArrayList<KeyValue> row,
         final RollupInterval interval) {
@@ -751,12 +766,12 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
       
       last_ts = base_ts;
       last_hash = hash;
-      int bucket = Math.abs((int) hash % 16);
-      synchronized (buckets[bucket]) {
-        last = (NumericA) buckets[bucket].get(hash);
+      //int bucket = Math.abs((int) hash % 16);
+      //synchronized (buckets[bucket]) {
+        last = (NumericA) foos.get(hash);
         if (last == null) {
           last = new NumericA();
-          buckets[bucket].put(hash, last);
+          foos.put(hash, last);
           
 //          StringBuilder buf = new StringBuilder()
 //              .append("[");
@@ -769,17 +784,14 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
 //          buf.append("]");
           //LOG.info("***************** GB TAGS: " + buf.toString());
           long group_hash = schema.groupByHashFromTSUID(row.get(0).key(), gbConfig.getEncodedTagKeys());
-          GBTS group;
-          synchronized (containers) {
-            group = containers.get(group_hash);
-            if (group == null) {
-              group = new GBTS();
-              containers.put(group_hash, group);
-            }
+          GBTS group = containers.get(group_hash);
+          if (group == null) {
+            group = new GBTS();
+            containers.put(group_hash, group);
           }
           
           group.add(last, new TSUID(schema.getTSUID(row.get(0).key()), schema));
-        }
+//        }
       }
       
       last.decode(row, interval);
@@ -797,9 +809,18 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
       id_builder = MergedTimeSeriesId.newBuilder();
     }
     
-    synchronized void add(Foo foo, final TimeSeriesId id) { 
+    void add(Foo foo, final TimeSeriesId id) { 
       foo.setGBAgg(array_aggregator);
       id_builder.addSeries(id);
+    }
+    
+    void merge(GBTS other) {
+      if (other.array_aggregator == null || array_aggregator == null) {
+        LOG.error("WTF? Null aggs?");
+        return;
+      }
+      
+      array_aggregator.combine(other.array_aggregator);
     }
     
     @Override
@@ -909,6 +930,7 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
   public void decode(final ArrayList<KeyValue> row,
                      final RollupInterval interval) {
     if (interval != null && rollup_interval == null) {
+      LOG.info("********** RESETTING ROLLUP INTERVAL");
       rollup_interval = interval;
       storage_interval = rollup_interval.getIntervals() * rollup_interval.getIntervalSeconds();
       threadLocalAccs = ThreadLocal.withInitial(() -> new Accumulator(rollup_interval.getIntervals()));
@@ -920,6 +942,7 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
   public void decode2(final ArrayList<ArrayList<KeyValue>> rows,
                       final RollupInterval interval) {
     if (interval != null && rollup_interval == null) {
+      LOG.info("********** RESETTING ROLLUP INTERVAL");
       rollup_interval = interval;
       storage_interval = rollup_interval.getIntervals() * rollup_interval.getIntervalSeconds();
       threadLocalAccs = ThreadLocal.withInitial(() -> new Accumulator(rollup_interval.getIntervals()));
@@ -936,14 +959,37 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
     }
   }
   
-  public void finishThread() {
-    State s = state.get();
-    if (s.last != null) {
-      s.last.flush(s.last_ts);
-    }
-  }
+//  public void finishThread() {
+//    State s = state.get();
+//    if (s.last != null) {
+//      s.last.flush(s.last_ts);
+//    }
+//  }
   
   public void finalize() {
+    TLongObjectMap<GBTS> containers = new TLongObjectHashMap<GBTS>();
+    for (final State s : states) {
+      if (s.last != null) {
+        s.last.flush(s.last_ts);
+      }
+      
+      // mergeroo!
+      s.foos = null;
+      TLongObjectIterator<GBTS> iterator = s.containers.iterator();
+      while(iterator.hasNext()) {
+        iterator.advance();
+        GBTS extant = containers.get(iterator.key());
+        if (extant == null) {
+          containers.put(iterator.key(), iterator.value());
+        } else {
+          extant.merge(iterator.value());
+          iterator.value().close();
+        }
+      }
+      s.containers = null;
+    }
+    
+    
     final_list = Lists.newArrayListWithExpectedSize(containers.size());
     TLongObjectIterator<GBTS> iterator = containers.iterator();
     while (iterator.hasNext()) {

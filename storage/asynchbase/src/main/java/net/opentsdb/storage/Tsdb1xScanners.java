@@ -349,7 +349,7 @@ public class Tsdb1xScanners implements HBaseExecutor, CloseablePooledObject, Tim
     }
     
     if (current_result instanceof TimeHashedDSGBResult) {
-      ((TimeHashedDSGBResult) current_result).finishThread();
+      //((TimeHashedDSGBResult) current_result).finishThread();
     }
     
     if (send_upstream) {

@@ -170,7 +170,7 @@ public class ServletSink implements QuerySink, SerdesCallback {
               // TODO - possible upstream headers
               .put("queryId", Bytes.byteArrayToString(context.query().buildHashCode().asBytes()))
               //.put("node", next.dataSource())
-              .build()));
+              .build()), new RuntimeException("Wheretoartthough?"));
     }
     if (context.query().isTraceEnabled()) {
       context.logTrace(next.source(), "Received response: " 

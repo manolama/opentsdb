@@ -188,7 +188,7 @@ public class ExpressionResult implements QueryResult {
 
   @Override
   public boolean processInParallel() {
-    return false;
+    return true;
   }
 
 }
