@@ -544,6 +544,10 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
     }
     
     void flush(int base_timestamp) {
+      if (base_timestamp < 0) {
+        return;
+      }
+      //LOG.info("          FLUSHING: " + base_timestamp);
       final Accumulator accumulator = threadLocalAccs.get();
       final double[] aggs = threadLocalAggs.get();
       
@@ -551,6 +555,9 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
       int intervalOffset = 0;
       boolean intervalHasValue = false;
       boolean intervalInfectedByNans = false;
+//      int ac = 0;
+//      int max = -1;
+//      int min = Integer.MAX_VALUE;
       
       // UGgg, may as well keep from locking and unlocking...
       //synchronized (array_aggregator) {
@@ -654,6 +661,13 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
             if (array_aggregator != null) {
               //LOG.info("                [" + Thread.currentThread().getName() + "]   ACCUMULATE: " + intervalIndex);
               array_aggregator.accumulate(v, intervalIndex);
+//              ac++;
+//              if (intervalIndex > max) {
+//                max = intervalIndex;
+//              }
+//              if (intervalIndex < min) {
+//                min = intervalIndex;
+//              }
             } else {
               throw new IllegalStateException("GB Agg can't be null!");
               //nonGroupByResults[intervalIndex++] = v;
@@ -671,7 +685,7 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
       }
       //}
       accumulator.reset();
-     //LOG.info("@@@@@@@@ Finished flush");
+     //LOG.info("@@@@@@@@ Finished flush " + base_timestamp + " t: " + ac + " max: " + max + " min: " + min);
       //return ChronoUnit.SECONDS;
     }
   
@@ -708,23 +722,27 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
       last_hash = hash;
       //int bucket = Math.abs((int) hash % 16);
       //synchronized (buckets[bucket]) {
-        last = (NumericA) foos.get(hash);
-        if (last == null) {
-          last = new NumericA();
-          foos.put(hash, last);
-          long group_hash = schema.groupByHashFromTSUID(row.get(0).key(), gbConfig.getEncodedTagKeys());
-          LOG.info("            !! " + base_ts + "  " + hash + "  GBHash: " + group_hash);
-          GBTS group = containers.get(group_hash);
-          if (group == null) {
-            group = new GBTS();
-            containers.put(group_hash, group);
-          }
-          
-          group.add(last, new TSUID(schema.getTSUID(row.get(0).key()), schema));
+      last = (NumericA) foos.get(hash);
+      if (last == null) {
+        last = new NumericA();
+        foos.put(hash, last);
+        long group_hash = schema.groupByHashFromTSUID(row.get(0).key(), gbConfig.getEncodedTagKeys());
+        //LOG.info("            !! " + base_ts + "  " + hash + "  GBHash: " + group_hash);
+        GBTS group = containers.get(group_hash);
+        if (group == null) {
+          group = new GBTS();
+          containers.put(group_hash, group);
+        }
+        
+        group.add(last, new TSUID(schema.getTSUID(row.get(0).key()), schema));
 //        }
       }
       
       last.decode(row, interval);
+      //if (mgets) {
+        last.flush(last_ts);
+        last_ts = -1;
+      //}
     }
   }
   
@@ -749,7 +767,7 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
         LOG.error("WTF? Null aggs?");
         return;
       }
-      
+      id_builder.addSeries(other.id_builder.build());
       array_aggregator.combine(other.array_aggregator);
     }
     
@@ -901,7 +919,8 @@ public class TimeHashedDSGBResult extends Tsdb1xQueryResult implements TimeSpeci
     TLongObjectMap<GBTS> containers = new TLongObjectHashMap<GBTS>();
     LOG.info("@@@@@@@@ STATES: " + states.size());
     for (final State s : states) {
-      if (s.last != null) {
+      if (s.last != null && s.last_ts > 0) {
+        LOG.info("FLUSHING STATE:::::::::::::::::::" + s);
         s.last.flush(s.last_ts);
       }
       
