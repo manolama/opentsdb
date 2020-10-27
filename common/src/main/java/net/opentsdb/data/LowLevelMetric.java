@@ -20,7 +20,7 @@ public interface LowLevelMetric extends LowLevelTimeSeries {
   float floatValue();
   double doubleValue();
   
-  public interface HashedLowLevelMetric extends LowLevelMetric {
+  public interface HashedLowLevelMetric extends LowLevelMetric, HashedLowLevelTimeSeries {
     long metricHash();
   }
 }

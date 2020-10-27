@@ -1,10 +1,11 @@
-package net.opentsdb.data;
+package net.opentsdb.data.influx;
 
 import java.time.temporal.ChronoUnit;
 
 import net.opentsdb.data.LowLevelMetric.HashedLowLevelMetric;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.Parsing;
+import net.opentsdb.utils.XXHash;
 
 public class Influx2 implements HashedLowLevelMetric {
 static int escaped_mask = 0x80000000;
@@ -46,6 +47,15 @@ static int UNescaped_mask = 0x7FFFFFFF;
   double[] temp_double = new double[1];
   ValueFormat valueFormat;
   
+  // Hashes
+  boolean hashIt;
+  long seriesHash;
+  long metricHash;
+  long tagSetHash;
+  long tagKeyHash;
+  long tagValueHash;
+  long tagPairHash;
+  
   public void setBuffer(final byte[] buffer) {
     this.buffer = buffer;
     offset = 0;
@@ -55,7 +65,7 @@ static int UNescaped_mask = 0x7FFFFFFF;
     lineEnd = lineStart;
   }
   
-  public void setBuffer (byte[] bytes, int offset, int length) {
+  public void setBuffer(byte[] bytes, int offset, int length) {
     buffer = bytes;
     this.offset = offset;
     end = offset + length;
@@ -242,9 +252,13 @@ static int UNescaped_mask = 0x7FFFFFFF;
       tagIndex++;
     }
     
+    if (hashIt) {
+      tagKeyHash = XXHash.hash(tagBuffer, start, tagIndex - start);
+    }
     tagKey = (long) start << 32;
     tagKey |= tagIndex;
     
+    int pairHashStart = start;
     tagIndex++;
     start = tagIndex;
     while (tagIndex < tagsEnd) {
@@ -252,6 +266,11 @@ static int UNescaped_mask = 0x7FFFFFFF;
         break;
       }
       tagIndex++;
+    }
+    
+    if (hashIt) {
+      tagValueHash = XXHash.hash(tagBuffer, start, tagIndex - start);
+      tagPairHash = XXHash.hash(tagBuffer, pairHashStart, tagIndex - pairHashStart);
     }
     
     tagValue = (long) start << 32;
@@ -287,8 +306,33 @@ static int UNescaped_mask = 0x7FFFFFFF;
 
   @Override
   public long metricHash() {
+    return metricHash;
+  }
+
+  @Override
+  public long seriesHash() {
+    return seriesHash;
+  }
+
+  @Override
+  public long tagsSetHash() {
     // TODO Auto-generated method stub
     return 0;
+  }
+
+  @Override
+  public long tagPairHash() {
+    return tagPairHash;
+  }
+
+  @Override
+  public long tagKeyHash() {
+    return tagKeyHash;
+  }
+
+  @Override
+  public long tagValueHash() {
+    return tagValueHash;
   }
 
   private int findNextNewLine(final int start) {
@@ -476,6 +520,10 @@ static int UNescaped_mask = 0x7FFFFFFF;
         return false;
       }
       // done with tags!
+      // TODO - sort
+      if (hashIt) {
+        tagSetHash = XXHash.hash(tagBuffer, 0, tagsEnd);
+      }
     } else {
       // TODO we don't have tags. BUT WE NEED EM!
       //throw new IllegalStateException("We need tags!!");
@@ -655,6 +703,11 @@ static int UNescaped_mask = 0x7FFFFFFF;
       System.arraycopy(buffer, s, metric_buffer, measurementIndex, end - s);
       metricBytes = measurementIndex + (end - s);
     }
+    
+    if (hashIt) {
+      metricHash = XXHash.hash(metric_buffer, 0, metricBytes);
+      seriesHash = XXHash.combineHashes(metricHash, tagSetHash);
+    }
   }
   
   boolean parseValue(final int start, int end, final boolean set) {
@@ -696,4 +749,5 @@ static int UNescaped_mask = 0x7FFFFFFF;
     System.arraycopy(tagBuffer, 0, temp, 0, tagsEnd);
     tagBuffer = temp;
   }
+  
 }

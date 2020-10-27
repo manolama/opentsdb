@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2018  The OpenTSDB Authors.
+// Copyright (C) 2018-2020  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,11 +50,10 @@ import net.opentsdb.auth.AuthState;
 import net.opentsdb.common.Const;
 import net.opentsdb.configuration.Configuration;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.LowLevelTimeSeries;
 import net.opentsdb.data.TimeSeriesDatum;
 import net.opentsdb.data.TimeSeriesSharedTagsAndTimeData;
 import net.opentsdb.data.types.numeric.NumericType;
-import net.opentsdb.query.QueryNode;
-import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.TimeSeriesDataSourceConfig;
 import net.opentsdb.stats.Span;
@@ -495,6 +494,13 @@ public class Tsdb1xBigtableDataStore implements Tsdb1xDataStore {
     return Deferred.groupInOrder(deferreds).addCallback(new GroupCB());
   }
 
+  @Override
+  public Deferred<List<WriteStatus>> write(final AuthState state,
+                                           final LowLevelTimeSeries data,
+                                           final Span span) {
+    return Deferred.fromError(new UnsupportedOperationException("TODO"));
+  }
+  
   /**
    * Prepends the {@link #CONFIG_PREFIX} and the current data store ID to
    * the given suffix.

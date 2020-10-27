@@ -22,6 +22,7 @@ import com.stumbleupon.async.Deferred;
 import net.opentsdb.auth.AuthState;
 import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.LowLevelTimeSeries;
 import net.opentsdb.data.TimeSeriesDatum;
 import net.opentsdb.data.TimeSeriesSharedTagsAndTimeData;
 import net.opentsdb.stats.Span;
@@ -67,6 +68,21 @@ public class BlackHoleWriter extends BaseTSDBPlugin implements
                                            final Span span) {
     final List<WriteStatus> list = Lists.newArrayListWithExpectedSize(data.size());
     for (int i = 0; i < data.size(); i++) {
+      list.add(WriteStatus.OK);
+    }
+    return Deferred.fromResult(list);
+  }
+  
+  @Override
+  public Deferred<List<WriteStatus>> write(final AuthState state,
+                                           final LowLevelTimeSeries data,
+                                           final Span span) {
+    int count = 0;
+    while (data.advance()) {
+      count++;
+    }
+    final List<WriteStatus> list = Lists.newArrayListWithExpectedSize(count);
+    for (int i = 0; i < count; i++) {
       list.add(WriteStatus.OK);
     }
     return Deferred.fromResult(list);

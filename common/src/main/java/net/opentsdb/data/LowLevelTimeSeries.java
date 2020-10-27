@@ -11,12 +11,6 @@ public interface LowLevelTimeSeries extends Closeable {
     ENCODED
   }
   
-  static enum ValueFormat {
-    INTEGER,
-    FLOAT,
-    DOUBLE
-  }
-
   /** Releases pooled resources, etc. */
   void close();
   

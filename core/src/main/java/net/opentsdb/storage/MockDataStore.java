@@ -27,6 +27,7 @@ import net.opentsdb.configuration.ConfigurationEntrySchema;
 import net.opentsdb.configuration.ConfigurationException;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.BaseTimeSeriesDatumStringId;
+import net.opentsdb.data.LowLevelTimeSeries;
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
@@ -237,6 +238,13 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       states.add(WriteStatus.OK);
     }
     return Deferred.fromResult(states);
+  }
+  
+  @Override
+  public Deferred<List<WriteStatus>> write(final AuthState state,
+      final LowLevelTimeSeries data,
+      final Span span) {
+    return Deferred.fromError(new UnsupportedOperationException("TODO"));
   }
   
   class MockSpan {

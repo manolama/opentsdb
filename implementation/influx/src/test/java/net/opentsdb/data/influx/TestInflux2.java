@@ -1,4 +1,4 @@
-package net.opentsdb.data;
+package net.opentsdb.data.influx;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -13,6 +13,7 @@ import org.powermock.modules.junit4.PowerMockRunner;
 
 import net.opentsdb.common.Const;
 import net.opentsdb.data.LowLevelMetric.ValueFormat;
+import net.opentsdb.data.influx.Influx2;
 import net.opentsdb.utils.DateTime;
 
 @RunWith(PowerMockRunner.class)

@@ -1,5 +1,5 @@
 // This file is part of OpenTSDB.
-// Copyright (C) 2018  The OpenTSDB Authors.
+// Copyright (C) 2018-2020  The OpenTSDB Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.auth.AuthState;
 import net.opentsdb.data.TimeSeriesSharedTagsAndTimeData;
+import net.opentsdb.data.LowLevelTimeSeries;
 import net.opentsdb.data.TimeSeriesDatum;
 import net.opentsdb.stats.Span;
 
@@ -56,4 +57,17 @@ public interface WritableTimeSeriesDataStore {
                                           final TimeSeriesSharedTagsAndTimeData data, 
                                           final Span span);
   
+  /**
+   * Writes the given time series or set of time series to the data store.
+   * @param state A required state to use for authorization, filtering 
+   * and routing.
+   * @param data A non-null low-level interface to the underlying time series
+   * data.
+   * @param span An optional span for tracing.
+   * @return A deferred resolving to a list of WriteStates in the same
+   * same order and number as the entries in the data iterator.
+   */
+  public Deferred<List<WriteStatus>> write(final AuthState state,
+                                           final LowLevelTimeSeries data,
+                                           final Span span);
 }

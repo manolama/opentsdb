@@ -40,6 +40,7 @@ import com.stumbleupon.async.Deferred;
 import net.opentsdb.auth.AuthState;
 import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.data.LowLevelTimeSeries;
 import net.opentsdb.data.TimeSeriesDatum;
 import net.opentsdb.data.TimeSeriesSharedTagsAndTimeData;
 import net.opentsdb.query.serdes.TimeSeriesDataSerdes;
@@ -213,6 +214,13 @@ public class PubSubWriter extends BaseTSDBPlugin implements
           WriteStatus.error(e.getMessage(), e),
           data.size()));
     }
+  }
+  
+  @Override
+  public Deferred<List<WriteStatus>> write(final AuthState state,
+                                           final LowLevelTimeSeries data,
+                                           final Span span) {
+    return Deferred.fromError(new UnsupportedOperationException("TODO"));
   }
 
   @Override
