@@ -315,7 +315,6 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       }
       
       TimeSeriesDatumStringId id = builder.build();
-      //System.out.println("            MDS: " + id.metric());
       MockSpan data_span = database.get(id);
       if (data_span == null) {
         data_span = new MockSpan((TimeSeriesDatumStringId) id);

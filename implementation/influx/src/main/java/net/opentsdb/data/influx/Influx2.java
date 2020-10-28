@@ -9,7 +9,7 @@ import net.opentsdb.common.Const;
 import net.opentsdb.data.LowLevelMetric.HashedLowLevelMetric;
 import net.opentsdb.data.LowLevelTimeSeries.Namespaced;
 import net.opentsdb.utils.DateTime;
-//import net.opentsdb.utils.Parsing;
+import net.opentsdb.utils.Parsing;
 import net.opentsdb.utils.XXHash;
 
 public class Influx2 implements HashedLowLevelMetric, Namespaced {
@@ -878,7 +878,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       }
       
       if (idx < i) {
-        if (true /*Parsing.parseLong(buffer, idx, i, temp_long)*/) {
+        if (Parsing.parseLong(buffer, idx, i, temp_long)) {
           timestamp = temp_long[0];
         } else {
           // WTF?
@@ -964,7 +964,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       if (set) {
         valueFormat = ValueFormat.INTEGER;
       }
-      return true;//Parsing.parseLong(buffer, start, end - 1, set ? long_value : temp_long);
+      return Parsing.parseLong(buffer, start, end - 1, set ? long_value : temp_long);
     } else {
       if (buffer[end - 1] == 'u') {
         // parse as double for now
@@ -975,7 +975,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
         valueFormat = ValueFormat.DOUBLE;
       }
 //      System.out.println(" PARSING NUMBER: [" + new String(buffer, start, end - start) + "]");
-      return true;//Parsing.parseDouble(buffer, start, end, set ? double_value : temp_double);
+      return Parsing.parseDouble(buffer, start, end, set ? double_value : temp_double);
     }
   }
   
