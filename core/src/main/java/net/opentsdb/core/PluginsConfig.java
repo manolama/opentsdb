@@ -304,6 +304,21 @@ public class PluginsConfig extends Validatable {
       id.toLowerCase());
   }
   
+  public <T> List<T> getPlugins(final Class<T> clazz) {
+    if (clazz == null) {
+      throw new IllegalArgumentException("Class cannot be null.");
+    }
+    final Map<String, TSDBPlugin> class_map = plugins.get(clazz);
+    if (class_map == null) {
+      return null;
+    }
+    final List<T> instances = Lists.newArrayListWithCapacity(class_map.size());
+    for (final TSDBPlugin instance : class_map.values()) {
+      instances.add((T) instance);
+    }
+    return instances;
+  }
+  
   /**
    * Initializes the plugins in the config in order of their appearance in the
    * list.

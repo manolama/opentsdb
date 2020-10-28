@@ -14,6 +14,7 @@
 // limitations under the License.
 package net.opentsdb.core;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
@@ -75,6 +76,8 @@ public interface Registry {
    */
   public <T> T getPlugin(final Class<T> clazz, final String id);
 
+  public <T> List<T> getPlugins(final Class<T> clazz);
+  
   /** @return An umodifiable map of registered plugins. */
   public Map<Class<?>, Map<String, TSDBPlugin>> plugins();
   
