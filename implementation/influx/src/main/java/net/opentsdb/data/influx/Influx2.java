@@ -3,12 +3,13 @@ package net.opentsdb.data.influx;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 
 import net.opentsdb.common.Const;
 import net.opentsdb.data.LowLevelMetric.HashedLowLevelMetric;
 import net.opentsdb.data.LowLevelTimeSeries.Namespaced;
 import net.opentsdb.utils.DateTime;
-import net.opentsdb.utils.Parsing;
+//import net.opentsdb.utils.Parsing;
 import net.opentsdb.utils.XXHash;
 
 public class Influx2 implements HashedLowLevelMetric, Namespaced {
@@ -180,7 +181,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
     readIdx = 1;
     tagsEnd = 0;
     
-    System.out.println("______________________________ NEW LINE _______________");
+    //System.out.println("______________________________ NEW LINE _______________");
     lineStart = lineEnd > 0 ? lineEnd + 1 : 0;
     
     if (stream != null) {
@@ -262,9 +263,17 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       }
       
       lineEnd = findNextNewLine(lineStart);
-      System.out.println(" lineEnd: " + lineEnd +"    END: " + end);
+//      System.out.println(" lineEnd: " + lineEnd +"    END: " + end);
 
       //System.out.println("@@@@@ S: " + lineStart + "  -  " + lineEnd);
+      
+      for (int x = lineStart; x < lineEnd; x++) {
+        if (buffer[x] == 0) {
+          System.out.println("!!!!!!!!!!!!!!!!!!!!!!! WTF?????? Null at " + x + " in line^^^^^^^^^^");
+          System.exit(2);
+        }
+        System.out.println("               " + x + " was ok.");
+      }
       System.out.println(" MATCHED! s " + lineStart + " e: " + lineEnd 
           + "  [" + new String(buffer, lineStart, lineEnd - lineStart) + "]");
       if (processLine()) {
@@ -319,6 +328,12 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       System.out.println(" lineEnd: " + lineEnd +"    END: " + end);
 
       //System.out.println("@@@@@ S: " + lineStart + "  -  " + lineEnd);
+      for (int x = lineStart; x < lineEnd; x++) {
+        if (buffer[x] == 0) {
+          System.out.println("!!!!!!!!!!!!!!!!!!!!!!! WTF?????? Null at " + x + " in line^^^^^^^^^^");
+          System.exit(2);
+        }
+      }
       System.out.println(" MATCHED! s " + lineStart + " e: " + lineEnd 
           + "  [" + new String(buffer, lineStart, lineEnd - lineStart) + "]");
       if (processLine()) {
@@ -340,6 +355,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
     // been processed.
     if (lineStart > 0) {
       System.arraycopy(buffer, lineEnd + 1, buffer, 0, end - lineEnd);
+      
       end = end - lineEnd;
       lineStart = 0;
     }
@@ -349,20 +365,21 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
         byte[] temp = new byte[buffer.length * 2];
         System.arraycopy(buffer, 0, temp, 0, end);
         buffer = temp;
+        System.out.println("@@@@@@@@@@@@@@ Expanding buffer for stream.");
       }
       
       int read;
       try {
-        read = stream.read(buffer, end, chunks);
-        System.out.println("************ READ: " + read);
+        read = stream.read(buffer, end > 0 ? end - 1 : 0, chunks);
+        System.out.println("************ READ: " + read + " and appended to " + end);
         if (read < 0) {
           eos = true;
           return -1;
         }
-        end += read;
+        end += read - 1;
         
         int newline = findNextNewLine(lineStart);
-        System.out.println("********* ST: " + lineStart + "  NL: " + newline);
+        //System.out.println("********* ST: " + lineStart + "  NL: " + newline);
         if (newline > 0) {
           return newline;
         }
@@ -372,7 +389,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       }
     }
     if (end > lineStart) {
-      System.out.println("********* Had data: " + end);
+      //System.out.println("********* Had data: " + end);
       return end;
     }
     return -1;
@@ -677,7 +694,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
             }
             escaped_char = false;
           } else {
-            System.out.println(" COPYING: [" + new String(buffer, idx, i - idx) + "]  " + idx + " to " + i);
+//            System.out.println(" COPYING: [" + new String(buffer, idx, i - idx) + "]  " + idx + " to " + i);
             System.arraycopy(buffer, idx, tagBuffer, tagsEnd, i - idx);
             tagsEnd += (i - idx);
           }
@@ -775,7 +792,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
         fieldIndices = temp;
       }
       fieldIndices[fieldIndex++] = f;
-      System.out.println("***** F: "+ new String(buffer, idx, i - idx) + "  " + idx + " => " + i);
+//      System.out.println("***** F: "+ new String(buffer, idx, i - idx) + "  " + idx + " => " + i);
       
       if (fieldIndex == 1) {
         // TODO - copy into metric buffer
@@ -824,7 +841,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
           valueIndices = temp;
         }
         valueIndices[valueIndex++] = v;
-        System.out.println("***** v: "+new String(buffer, idx, i - idx));
+//        System.out.println("***** v: "+new String(buffer, idx, i - idx));
         idx = i;
       }
       
@@ -861,7 +878,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       }
       
       if (idx < i) {
-        if (Parsing.parseLong(buffer, idx, i, temp_long)) {
+        if (true /*Parsing.parseLong(buffer, idx, i, temp_long)*/) {
           timestamp = temp_long[0];
         } else {
           // WTF?
@@ -871,20 +888,21 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       idx = i + 1;
     }
     
-    System.out.println("@@@@@@ End of loop, field index: " + fieldIndex);
     return fieldIndex > 0;
   }
-  
+
   void appendField(final int start, final int end) {
     boolean escaped = (start & escaped_mask) != 0;
 
     int s = start & UNescaped_mask;
-    System.out.println("COPYING       NEW STRING: " + new String(buffer, s, end - s));
+    //System.out.println("COPYING    [" + escaped + "]   NEW STRING: " + new String(buffer, s, end - s));
     if (measurementIndex + (end - s) >= metric_buffer.length) {
+      System.out.println("********* GROWING metric buffer.");
       byte[] temp = new byte[metric_buffer.length * 2];
       System.arraycopy(metric_buffer, 0, temp, 0, measurementIndex);
       metric_buffer = temp;
     }
+    
     if (escaped) {
       int idx = measurementIndex;
       for (int x = s; x < end; x++) {
@@ -902,8 +920,23 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       metricBytes = idx;
     } else {
       System.arraycopy(buffer, s, metric_buffer, measurementIndex, end - s);
+      for (int i = s; i < end; i++) {
+        if (buffer[i] == 0) {
+          System.out.println("**************************** WTF? Original buffer had a null in our read at " + i + "! " + s + " " + end);
+        }
+      }
       metricBytes = measurementIndex + (end - s);
     }
+    
+    String s2 = new String(metric_buffer, 0, metricBytes, Const.UTF8_CHARSET);
+    byte[] slice = Arrays.copyOf(metric_buffer, metricBytes);
+    for (int i = 0; i < slice.length; i++) {
+      if (slice[i] == 0) {
+        System.out.println("!!!!!!!!!!! BAD {" + s2 + "} " + Arrays.toString(slice));
+        System.exit(1);
+      }
+    }
+    //System.out.println("NEW METRIC    [" + escaped + "]   NEW STRING: {" + s2 + "} " + Arrays.toString(slice));
     
     if (hashIt) {
       metricHash = XXHash.hash(metric_buffer, 0, metricBytes);
@@ -912,7 +945,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
   }
   
   boolean parseValue(final int start, int end, final boolean set) {
-    System.out.println("       ST: " + start + " end " + end);
+    //System.out.println("       ST: " + start + " end " + end);
     // boolean to 1 or 0
     if (buffer[start] == 't' || buffer[start] == 'T') {
       if (set) {
@@ -931,7 +964,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       if (set) {
         valueFormat = ValueFormat.INTEGER;
       }
-      return Parsing.parseLong(buffer, start, end - 1, set ? long_value : temp_long);
+      return true;//Parsing.parseLong(buffer, start, end - 1, set ? long_value : temp_long);
     } else {
       if (buffer[end - 1] == 'u') {
         // parse as double for now
@@ -941,8 +974,8 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       if (set) {
         valueFormat = ValueFormat.DOUBLE;
       }
-      System.out.println(" PARSING NUMBER: [" + new String(buffer, start, end - start) + "]");
-      return Parsing.parseDouble(buffer, start, end, set ? double_value : temp_double);
+//      System.out.println(" PARSING NUMBER: [" + new String(buffer, start, end - start) + "]");
+      return true;//Parsing.parseDouble(buffer, start, end, set ? double_value : temp_double);
     }
   }
   

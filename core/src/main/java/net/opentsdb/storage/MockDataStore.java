@@ -256,6 +256,25 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
     TimeStamp ts = new SecondTimeStamp(0);
     while (metric.advance()) {
       try {
+        
+        MutableNumericValue dp = new MutableNumericValue();
+        switch (metric.valueFormat()) {
+        case DOUBLE:
+          if (!Double.isFinite(metric.doubleValue())) {
+            continue;
+          }
+          dp.reset(ts, metric.doubleValue());
+          break;
+        case FLOAT:
+          if (!Float.isFinite(metric.floatValue())) {
+            continue;
+          }
+          dp.reset(ts, metric.floatValue());
+          break;
+        case INTEGER:
+          dp.reset(ts, metric.intValue());
+        }
+        
       switch (data.timeStampFormat()) {
       case SECONDS:
         ts.updateEpoch(data.timestamp());
@@ -294,19 +313,9 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
             new String(metric.tagsBuffer(), metric.tagKeyStart(), (metric.tagKeyEnd() - metric.tagKeyStart()), Const.UTF8_CHARSET), 
             new String(metric.tagsBuffer(), metric.tagValueStart(), (metric.tagValueEnd() - metric.tagValueStart()), Const.UTF8_CHARSET));
       }
-      MutableNumericValue dp = new MutableNumericValue();
-      switch (metric.valueFormat()) {
-      case DOUBLE:
-        dp.reset(ts, metric.doubleValue());
-        break;
-      case FLOAT:
-        dp.reset(ts, metric.floatValue());
-        break;
-      case INTEGER:
-        dp.reset(ts, metric.intValue());
-      }
       
       TimeSeriesDatumStringId id = builder.build();
+      //System.out.println("            MDS: " + id.metric());
       MockSpan data_span = database.get(id);
       if (data_span == null) {
         data_span = new MockSpan((TimeSeriesDatumStringId) id);

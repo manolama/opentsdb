@@ -62,6 +62,30 @@ public class Influx2Resource extends BaseTSDBPlugin implements Resource {
                        final @Context HttpServletRequest request) throws Exception {
     // TODO - pool and stuff.
     Influx2 parser = new Influx2();
+    
+//    final AsyncContext async = request.startAsync();
+//    ReadListener rl = new ReadListener() {
+//      byte[] buf;
+//      @Override
+//      public void onDataAvailable() throws IOException {
+//        // TODO Auto-generated method stub
+//        
+//      }
+//
+//      @Override
+//      public void onAllDataRead() throws IOException {
+//        async.getResponse().set
+//      }
+//
+//      @Override
+//      public void onError(Throwable t) {
+//        // TODO Auto-generated method stub
+//        
+//      }
+//      
+//    };
+    int idx = 0;
+    
     InputStream stream = request.getInputStream();
     LOG.info("REQUEST: " + request);
     String encoding = request.getHeader("Content-Encoding");
@@ -72,6 +96,25 @@ public class Influx2Resource extends BaseTSDBPlugin implements Resource {
       }
     }
     
+//    byte[] buf = new byte[1024];
+//    int avail;
+//    while ((avail = stream.available()) >= 0) {
+//      //int avail = request.getInputStream().available();
+//      if (idx + avail >= buf.length) {
+//        byte[] temp = new byte[idx * 2];
+//        System.arraycopy(buf, 0, temp, 0, idx);
+//        buf = temp;
+//      }
+//      int read = stream.read(buf, idx, avail);
+//      if (read < 0) {
+//        break;
+//      }
+//      idx += read;
+//    }
+    //LOG.info("Payload: " + new String(buf, 0, idx, Const.UTF8_CHARSET));
+    //LOG.info("***** BUFF:ER" + new String(buf, Const.UTF8_CHARSET));
+    //request.getInputStream().read(buf);
+    //parser.setBuffer(buf, 0, idx);
     parser.setInputStream(stream);
     
     String[] db = request.getParameterValues("db");
@@ -80,8 +123,6 @@ public class Influx2Resource extends BaseTSDBPlugin implements Resource {
     }
     data_store.write(null, parser, null);
     parser.close();
-    LOG.info("QUERY PARANS: " + request.getParameterMap());
-    LOG.info("#@@@@@@@@@@ DB: " + new String(parser.namespaceBuffer()));
     return Response.noContent()
         .header("Content-Type", "text/plain")
         .build();
