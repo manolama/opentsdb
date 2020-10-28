@@ -23,7 +23,6 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Strings;
 import com.stumbleupon.async.Deferred;
 
-import net.opentsdb.common.Const;
 import net.opentsdb.core.BaseTSDBPlugin;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.servlet.resources.Resource;
@@ -97,26 +96,29 @@ public class Influx2Resource extends BaseTSDBPlugin implements Resource {
       }
     }
     
-    byte[] buf = new byte[1024];
-    int avail;
-    while ((avail = stream.available()) >= 0) {
-      //int avail = request.getInputStream().available();
-      if (idx + avail >= buf.length) {
-        byte[] temp = new byte[idx * 2];
-        System.arraycopy(buf, 0, temp, 0, idx);
-        buf = temp;
-      }
-      int read = stream.read(buf, idx, avail);
-      if (read < 0) {
-        break;
-      }
-      idx += read;
-    }
-    LOG.info("Payload: " + new String(buf, 0, idx, Const.UTF8_CHARSET));
+//    byte[] buf = new byte[1024];
+//    int avail;
+//    while ((avail = stream.available()) >= 0) {
+//      //int avail = request.getInputStream().available();
+//      if (idx + avail >= buf.length) {
+//        byte[] temp = new byte[idx * 2];
+//        System.arraycopy(buf, 0, temp, 0, idx);
+//        buf = temp;
+//      }
+//      int read = stream.read(buf, idx, avail);
+//      if (read < 0) {
+//        break;
+//      }
+//      idx += read;
+//    }
+    //LOG.info("Payload: " + new String(buf, 0, idx, Const.UTF8_CHARSET));
     //LOG.info("***** BUFF:ER" + new String(buf, Const.UTF8_CHARSET));
     //request.getInputStream().read(buf);
-    parser.setBuffer(buf, 0, idx);
+    //parser.setBuffer(buf, 0, idx);
+    parser.setInputStream(stream);
     data_store.write(null, parser, null);
+    parser.close();
+    LOG.info("QUERY PARANS: " + request.getParameterMap());
     return Response.noContent()
         .header("Content-Type", "text/plain")
         .build();

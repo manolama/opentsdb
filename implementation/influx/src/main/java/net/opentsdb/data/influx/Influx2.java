@@ -1,5 +1,7 @@
 package net.opentsdb.data.influx;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.temporal.ChronoUnit;
 
 import net.opentsdb.data.LowLevelMetric.HashedLowLevelMetric;
@@ -8,10 +10,13 @@ import net.opentsdb.utils.Parsing;
 import net.opentsdb.utils.XXHash;
 
 public class Influx2 implements HashedLowLevelMetric {
-static int escaped_mask = 0x80000000;
-static int UNescaped_mask = 0x7FFFFFFF;
+  static int escaped_mask = 0x80000000;
+  static int UNescaped_mask = 0x7FFFFFFF;
+  static int chunks = 4096;
 
   byte[] buffer;
+  InputStream stream;
+  boolean eos;
   int offset;
   int end;
   
@@ -73,6 +78,19 @@ static int UNescaped_mask = 0x7FFFFFFF;
     lineStart = offset;
     lineEnd = lineStart;
   }
+  
+  public void setInputStream(final InputStream stream) {
+    if (buffer == null) {
+      buffer = new byte[chunks * 2];
+    }
+    this.stream = stream;
+    eos = false;
+    offset = 0;
+    end = 0;
+    lineStart = 0;
+    lineEnd = lineStart;
+  }
+  
   @Override
   public Format metricFormat() {
     return Format.UTF8_STRING;
@@ -115,8 +133,15 @@ static int UNescaped_mask = 0x7FFFFFFF;
 
   @Override
   public void close() {
-    // TODO Auto-generated method stub
-    
+    if (stream != null) {
+      try {
+        stream.close();
+      } catch (IOException e) {
+        // safeish to ignore it.
+        e.printStackTrace();
+      }
+      stream = null;
+    }
   }
 
   @Override
@@ -147,6 +172,60 @@ static int UNescaped_mask = 0x7FFFFFFF;
     System.out.println("______________________________ NEW LINE _______________");
     lineStart = lineEnd > 0 ? lineEnd + 1 : 0;
     
+    if (stream != null) {
+      return advanceStream();
+    }
+    return advanceBytes();
+//    if (lineStart >= end) {
+//      System.out.println("******** past end: " + end);
+//      return false;
+//    }
+//    
+//    // consume whitespace to get to the first measurement.
+//    while (lineStart < end) {
+//      lineStart = findNextChar(lineStart);
+//      if (lineStart >= end) {
+//        System.out.println("******** past end: " + end);
+//        return false;
+//      }
+//      if (buffer[lineStart] == '#') {
+//        // it's a comment;
+//        lineEnd = findNextNewLine(lineStart);
+//        lineStart = lineEnd;
+//        continue;
+//      }
+//      
+//      if (lineStart >= end) {
+//        System.out.println("******** past end 2: " + end);
+//        return false;
+//      }
+//      
+//      lineEnd = findNextNewLine(lineStart);
+//      System.out.println(" lineEnd: " + lineEnd +"    END: " + end);
+//
+//      //System.out.println("@@@@@ S: " + lineStart + "  -  " + lineEnd);
+//      System.out.println(" MATCHED! s " + lineStart + " e: " + lineEnd 
+//          + "  [" + new String(buffer, lineStart, lineEnd - lineStart) + "]");
+//      if (processLine()) {
+//        return true;
+//      }
+//      System.out.println("----------- FAILED to match");
+//
+//      // shift and try again
+//      System.out.println("DAMN");
+//      lineStart = lineEnd;
+//    }
+//    
+//    // TODO - tons of work to validate here.
+//    // fell through so nothing left.
+//    lineStart = end;
+//    return false;
+  }
+
+  boolean advanceBytes() {
+    System.out.println("______________________________ NEW LINE _______________");
+    lineStart = lineEnd > 0 ? lineEnd + 1 : 0;
+    
     if (lineStart >= end) {
       System.out.println("******** past end: " + end);
       return false;
@@ -173,15 +252,7 @@ static int UNescaped_mask = 0x7FFFFFFF;
       
       lineEnd = findNextNewLine(lineStart);
       System.out.println(" lineEnd: " + lineEnd +"    END: " + end);
-      
-      // found a line end, walk back over whitespace
-//      for (int x = lineEnd; x >= lineStart; x--) {
-//        if (!Character.isISOControl((char) buffer[x]) && buffer[x] != ' ') {
-//          lineEnd = x;
-//          break;
-//        }
-//      }
-//      
+
       //System.out.println("@@@@@ S: " + lineStart + "  -  " + lineEnd);
       System.out.println(" MATCHED! s " + lineStart + " e: " + lineEnd 
           + "  [" + new String(buffer, lineStart, lineEnd - lineStart) + "]");
@@ -201,6 +272,101 @@ static int UNescaped_mask = 0x7FFFFFFF;
     return false;
   }
 
+  boolean advanceStream() {
+    if (eos) {
+      return false;
+    }
+    
+    while (!eos) {
+      // find the next new line
+      int newline = findNextNewLine(lineStart);
+      if (newline < 0) {
+        // need more data!
+        newline = readFromStream();
+        if (newline < 0) {
+          // all done
+          return false;
+        }
+      }
+      
+      lineStart = findNextChar(lineStart);
+      if (lineStart >= end) {
+        continue;
+      }
+      if (buffer[lineStart] == '#') {
+        // it's a comment;
+        lineEnd = findNextNewLine(lineStart);
+        lineStart = lineEnd;
+        continue;
+      }
+      
+      if (lineStart >= end) {
+        continue;
+      }
+      
+      lineEnd = newline;
+      System.out.println(" lineEnd: " + lineEnd +"    END: " + end);
+
+      //System.out.println("@@@@@ S: " + lineStart + "  -  " + lineEnd);
+      System.out.println(" MATCHED! s " + lineStart + " e: " + lineEnd 
+          + "  [" + new String(buffer, lineStart, lineEnd - lineStart) + "]");
+      if (processLine()) {
+        return true;
+      }
+      System.out.println("----------- FAILED to match");
+
+      // shift and try again
+      System.out.println("DAMN");
+      lineStart = lineEnd;
+    }
+    
+    // eos
+    return false;
+  }
+  
+  int readFromStream() {
+    // to avoid growing the buffer if we don't have to we shift what hasn't
+    // been processed.
+    if (lineStart > 0) {
+      System.arraycopy(buffer, lineEnd + 1, buffer, 0, end - lineEnd);
+      end = end - lineEnd;
+      lineStart = 0;
+    }
+    
+    while (!eos) {
+      if (end + chunks >= buffer.length) {
+        byte[] temp = new byte[buffer.length * 2];
+        System.arraycopy(buffer, 0, temp, 0, end);
+        buffer = temp;
+      }
+      
+      int read;
+      try {
+        read = stream.read(buffer, end, chunks);
+        System.out.println("************ READ: " + read);
+        if (read < 0) {
+          eos = true;
+          return -1;
+        }
+        end += read;
+        
+        int newline = findNextNewLine(lineStart);
+        System.out.println("********* ST: " + lineStart + "  NL: " + newline);
+        if (newline > 0) {
+          return newline;
+        }
+        // get some more info.
+      } catch (IOException e) {
+        throw new IllegalStateException("Failed to read from the stream", e);
+      }
+    }
+    if (end > lineStart) {
+      System.out.println("********* Had data: " + end);
+      return end;
+    }
+    return -1;
+  }
+  
   @Override
   public long timestamp() {
     return timestamp;
@@ -346,6 +512,9 @@ static int UNescaped_mask = 0x7FFFFFFF;
       } else if (!Character.isISOControl(buffer[i]) && buffer[i] != ' ') {
         printableChars++;
       }
+    }
+    if (stream != null && !eos) {
+      return -1;
     }
     return end;
   }
