@@ -208,8 +208,7 @@ static int UNescaped_mask = 0x7FFFFFFF;
 
   @Override
   public ChronoUnit timeStampFormat() {
-    // TODO Auto-generated method stub
-    return null;
+    return ChronoUnit.NANOS;
   }
 
   @Override
@@ -578,6 +577,11 @@ static int UNescaped_mask = 0x7FFFFFFF;
         f = (long) idx << 32;
       }
       f |= i;
+      if (fieldIndex + 1 >= fieldIndices.length) {
+        long[] temp = new long[fieldIndices.length * 2];
+        System.arraycopy(fieldIndices, 0, temp, 0, fieldIndex);
+        fieldIndices = temp;
+      }
       fieldIndices[fieldIndex++] = f;
       System.out.println("***** F: "+ new String(buffer, idx, i - idx) + "  " + idx + " => " + i);
       
@@ -622,6 +626,11 @@ static int UNescaped_mask = 0x7FFFFFFF;
       } else {
         long v = (long) idx << 32;
         v |= i;
+        if (valueIndex + 1 >= valueIndices.length) {
+          long[] temp = new long[valueIndices.length * 2];
+          System.arraycopy(valueIndices, 0, temp, 0, valueIndex);
+          valueIndices = temp;
+        }
         valueIndices[valueIndex++] = v;
         System.out.println("***** v: "+new String(buffer, idx, i - idx));
         idx = i;
@@ -711,6 +720,7 @@ static int UNescaped_mask = 0x7FFFFFFF;
   }
   
   boolean parseValue(final int start, int end, final boolean set) {
+    System.out.println("       ST: " + start + " end " + end);
     // boolean to 1 or 0
     if (buffer[start] == 't' || buffer[start] == 'T') {
       if (set) {

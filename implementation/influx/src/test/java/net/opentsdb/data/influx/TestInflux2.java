@@ -566,6 +566,109 @@ public class TestInflux2 {
     assertFalse(parser.advance());
   }
   
+  @Test
+  public void foo2() throws Exception {
+    String msg = "cpu,cpu=cpu12,host=C02ZM182LVDV usage_guest_nice=0,usage_idle=42.4424424424307,usage_nice=0,usage_iowait=0,usage_irq=0,usage_guest=0,usage_user=52.652652652661025,usage_system=4.9049049049059965,usage_softirq=0,usage_steal=0 1603905190000000000\n" + 
+        "cpu,cpu=cpu13,host=C02ZM182LVDV usage_guest=0,usage_user=17.51751751752109,usage_nice=0,usage_irq=0,usage_softirq=0,usage_steal=0,usage_system=1.5015015015018647,usage_idle=80.98098098096254,usage_iowait=0,usage_guest_nice=0 1603905190000000000\n" + 
+        "cpu,cpu=cpu14,host=C02ZM182LVDV usage_user=52.80000000003587,usage_system=3.2000000000016917,usage_idle=43.99999999997381,usage_nice=0,usage_iowait=0,usage_guest=0,usage_guest_nice=0,usage_irq=0,usage_softirq=0,usage_steal=0 1603905190000000000\n" + 
+        "cpu,cpu=cpu15,host=C02ZM182LVDV usage_steal=0,usage_guest=0,usage_user=16.383616383624823,usage_iowait=0,usage_irq=0,usage_softirq=0,usage_guest_nice=0,usage_system=1.6983016983026042,usage_idle=81.91808191809571,usage_nice=0 1603905190000000000\n" + 
+        "cpu,cpu=cpu-total,host=C02ZM182LVDV usage_idle=62.03125,usage_steal=0,usage_guest=0,usage_user=33.956249999996544,usage_system=4.0125000000000455,usage_nice=0,usage_iowait=0,usage_irq=0,usage_softirq=0,usage_guest_nice=0 1603905190000000000\n" + 
+        "system,host=C02ZM182LVDV load5=2.732421875,load15=2.3037109375,n_cpus=16i,n_users=17i,load1=3.251953125 1603905190000000000\n" + 
+        "system,host=C02ZM182LVDV uptime=138648i 1603905190000000000\n" + 
+        "system,host=C02ZM182LVDV uptime_format=\"1 day, 14:30\" 1603905190000000000\n" + 
+        "processes,host=C02ZM182LVDV idle=0i,blocked=0i,zombies=2i,stopped=0i,running=3i,sleeping=573i,total=578i,unknown=0i 1603905190000000000\n" + 
+        "swap,host=C02ZM182LVDV total=0i,used=0i,free=0i,used_percent=0 1603905200000000000\n" + 
+        "swap,host=C02ZM182LVDV in=0i,out=0i 1603905200000000000\n" + 
+        "mem,host=C02ZM182LVDV total=34359738368i,active=14224404480i,free=28590080i,wired=3467272192i,available=14243762176i,used=20115976192i,used_percent=58.54519605636597,available_percent=41.45480394363403,inactive=14215172096i 1603905200000000000\n" + 
+        "cpu,cpu=cpu0,host=C02ZM182LVDV usage_idle=76.52347652347878,usage_irq=0,usage_user=15.684315684320985,usage_system=7.792207792209326,usage_nice=0,usage_iowait=0,usage_softirq=0,usage_steal=0,usage_guest=0,usage_guest_nice=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu1,host=C02ZM182LVDV usage_irq=0,usage_softirq=0,usage_steal=0,usage_guest=0,usage_user=0.8982035928144086,usage_system=2.1956087824358197,usage_nice=0,usage_idle=96.90618762477274,usage_iowait=0,usage_guest_nice=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu2,host=C02ZM182LVDV usage_irq=0,usage_steal=0,usage_user=12.899999999999636,usage_system=6.399999999998727,usage_nice=0,usage_iowait=0,usage_idle=80.69999999999709,usage_softirq=0,usage_guest=0,usage_guest_nice=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu3,host=C02ZM182LVDV usage_system=1.8018018018022375,usage_nice=0,usage_iowait=0,usage_irq=0,usage_steal=0,usage_guest_nice=0,usage_user=0.8008008008008047,usage_idle=97.39739739737648,usage_softirq=0,usage_guest=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu4,host=C02ZM182LVDV usage_idle=82.90000000000873,usage_iowait=0,usage_irq=0,usage_softirq=0,usage_steal=0,usage_user=11.899999999995998,usage_nice=0,usage_guest=0,usage_guest_nice=0,usage_system=5.199999999999818 1603905200000000000\n" + 
+        "cpu,cpu=cpu5,host=C02ZM182LVDV usage_guest=0,usage_user=0.8008008008002215,usage_system=1.7017017017006841,usage_idle=97.49749749749881,usage_nice=0,usage_irq=0,usage_softirq=0,usage_iowait=0,usage_steal=0,usage_guest_nice=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu6,host=C02ZM182LVDV usage_softirq=0,usage_steal=0,usage_guest_nice=0,usage_system=4.700000000000273,usage_nice=0,usage_iowait=0,usage_guest=0,usage_user=9.700000000002547,usage_idle=85.59999999997672,usage_irq=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu7,host=C02ZM182LVDV usage_idle=97.5024975024962,usage_nice=0,usage_softirq=0,usage_guest_nice=0,usage_user=0.8991008991011198,usage_system=1.598401598402401,usage_iowait=0,usage_irq=0,usage_steal=0,usage_guest=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu8,host=C02ZM182LVDV usage_user=8.291708291705877,usage_iowait=0,usage_softirq=0,usage_guest_nice=0,usage_system=3.896103896101831,usage_idle=87.81218781217866,usage_nice=0,usage_irq=0,usage_steal=0,usage_guest=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu9,host=C02ZM182LVDV usage_user=0.7999999999998408,usage_system=1.4999999999999147,usage_idle=97.70000000004075,usage_irq=0,usage_guest=0,usage_nice=0,usage_iowait=0,usage_softirq=0,usage_steal=0,usage_guest_nice=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu10,host=C02ZM182LVDV usage_idle=86.88688688690752,usage_iowait=0,usage_irq=0,usage_softirq=0,usage_guest=0,usage_user=9.509509509509629,usage_system=3.603603603604475,usage_nice=0,usage_steal=0,usage_guest_nice=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu11,host=C02ZM182LVDV usage_nice=0,usage_iowait=0,usage_irq=0,usage_softirq=0,usage_user=0.8000000000004093,usage_system=1.2999999999999545,usage_idle=97.90000000000873,usage_steal=0,usage_guest=0,usage_guest_nice=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu12,host=C02ZM182LVDV usage_system=3.0969030969041724,usage_nice=0,usage_iowait=0,usage_irq=0,usage_steal=0,usage_guest=0,usage_user=7.092907092911168,usage_idle=89.81018981021646,usage_softirq=0,usage_guest_nice=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu13,host=C02ZM182LVDV usage_irq=0,usage_softirq=0,usage_guest=0,usage_user=0.7992007992010585,usage_idle=98.00199800202603,usage_nice=0,usage_iowait=0,usage_system=1.1988011988018716,usage_steal=0,usage_guest_nice=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu14,host=C02ZM182LVDV usage_steal=0,usage_guest=0,usage_guest_nice=0,usage_user=7.2927072927006895,usage_nice=0,usage_iowait=0,usage_irq=0,usage_softirq=0,usage_system=3.1968031968007224,usage_idle=89.5104895104702 1603905200000000000\n" + 
+        "cpu,cpu=cpu15,host=C02ZM182LVDV usage_system=0.9999999999992155,usage_iowait=0,usage_softirq=0,usage_steal=0,usage_user=0.5999999999995862,usage_idle=98.39999999996624,usage_nice=0,usage_irq=0,usage_guest=0,usage_guest_nice=0 1603905200000000000\n" + 
+        "cpu,cpu=cpu-total,host=C02ZM182LVDV usage_user=5.548266166824163,usage_system=3.1365198375501255,usage_idle=91.31521399561434,usage_iowait=0,usage_irq=0,usage_nice=0,usage_softirq=0,usage_steal=0,usage_guest=0,usage_guest_nice=0 1603905200000000000\n" + 
+        "disk,device=disk1s1,fstype=apfs,host=C02ZM182LVDV,mode=ro,path=/ total=499963174912i,free=165971582976i,used=11227463680i,used_percent=6.336074539834346,inodes_total=4882452880i,inodes_free=4881964598i,inodes_used=488282i 1603905200000000000\n" + 
+        "disk,device=disk1s5,fstype=apfs,host=C02ZM182LVDV,mode=rw,path=/System/Volumes/Data used_percent=65.91184624243071,inodes_total=4882452880i,inodes_free=4880521999i,inodes_used=1930881i,total=499963174912i,free=165971582976i,used=320917745664i 1603905200000000000\n" + 
+        "disk,device=disk1s4,fstype=apfs,host=C02ZM182LVDV,mode=rw,path=/private/var/vm free=165971582976i,used=1073762304i,used_percent=0.6427969017635115,inodes_total=4882452880i,inodes_free=4882452879i,inodes_used=1i,total=499963174912i 1603905200000000000\n" + 
+        "disk,device=disk1s3,fstype=apfs,host=C02ZM182LVDV,mode=rw,path=/Volumes/Recovery used=528900096i,used_percent=0.3176567936870712,inodes_total=4882452880i,inodes_free=4882452830i,inodes_used=50i,total=499963174912i,free=165971582976i 1603905200000000000\n" + 
+        "system,host=C02ZM182LVDV load5=2.78955078125,load15=2.3291015625,n_cpus=16i,n_users=17i,load1=3.42724609375 1603905200000000000\n" + 
+        "system,host=C02ZM182LVDV uptime=138658i 1603905200000000000\n" + 
+        "diskio,host=C02ZM182LVDV,name=disk0 read_time=619658i,io_time=2627047i,weighted_io_time=0i,iops_in_progress=0i,reads=1684427i,writes=2318667i,read_bytes=30730891264i,write_bytes=43480100864i,merged_reads=0i,merged_writes=0i,write_time=2007388i 1603905200000000000\n" + 
+        "system,host=C02ZM182LVDV uptime_format=\"1 day, 14:30\" 1603905200000000000\n" + 
+        "processes,host=C02ZM182LVDV sleeping=575i,total=578i,unknown=0i,idle=0i,blocked=0i,zombies=2i,stopped=0i,running=1i 1603905200000000000\n" + 
+        "swap,host=C02ZM182LVDV total=0i,used=0i,free=0i,used_percent=0 1603905210000000000\n" + 
+        "swap,host=C02ZM182LVDV in=0i,out=0i 1603905210000000000\n" + 
+        "mem,host=C02ZM182LVDV wired=3471589376i,used=19570159616i,used_percent=56.956660747528076,active=13673021440i,free=1131094016i,inactive=13658484736i,total=34359738368i,available=14789578752i,available_percent=43.043339252471924 1603905210000000000\n" + 
+        "cpu,cpu=cpu0,host=C02ZM182LVDV usage_nice=0,usage_softirq=0,usage_steal=0,usage_guest_nice=0,usage_user=11.81181181180853,usage_system=6.506506506508557,usage_idle=81.68168168167381,usage_iowait=0,usage_irq=0,usage_guest=0 1603905210000000000\n" + 
+        "cpu,cpu=cpu1,host=C02ZM182LVDV usage_idle=99.89989989987956,usage_irq=0,usage_guest_nice=0,usage_user=0,usage_system=0.10010010009995657,usage_nice=0,usage_iowait=0,usage_softirq=0,usage_steal=0,usage_guest=0 1603905210000000000\n" + 
+        "cpu,cpu=cpu2,host=C02ZM182LVDV usage_user=9.799999999995634,usage_system=4.400000000000546,usage_iowait=0,usage_softirq=0,usage_guest_nice=0,usage_idle=85.80000000001746,usage_nice=0,usage_irq=0,usage_steal=0,usage_guest=0 1603905210000000000\n" + 
+        "cpu,cpu=cpu3,host=C02ZM182LVDV usage_guest_nice=0,usage_system=0.09999999999990905,usage_nice=0,usage_iowait=0,usage_steal=0,usage_guest=0,usage_user=0.09999999999990905,usage_idle=99.80000000003201,usage_irq=0,usage_softirq=0 1603905210000000000\n" + 
+        "cpu,cpu=cpu4,host=C02ZM182LVDV usage_user=7.492507492505967,usage_system=3.296703296701899,usage_iowait=0,usage_irq=0,usage_idle=89.21078921077397,usage_nice=0,usage_softirq=0,usage_steal=0,usage_guest=0,usage_guest_nice=0 1603905210000000000\n" + 
+        "cpu,cpu=cpu5,host=C02ZM182LVDV usage_idle=99.80000000003187,usage_irq=0,usage_guest_nice=0,usage_user=0.09999999999998181,usage_system=0.09999999999998181,usage_softirq=0,usage_steal=0,usage_guest=0,usage_nice=0,usage_iowait=0 1603905210000000000\n" + 
+        "disk,device=disk1s1,fstype=apfs,host=C02ZM182LVDV,mode=ro,path=/ inodes_free=4881964598i,inodes_used=488282i,total=499963174912i,free=165977980928i,used=11227463680i,used_percent=6.335845777671513,inodes_total=4882452880i 1603905210000000000\n" + 
+        "disk,device=disk1s5,fstype=apfs,host=C02ZM182LVDV,mode=rw,path=/System/Volumes/Data used=320911347712i,used_percent=65.91053219596807,inodes_total=4882452880i,inodes_free=4880521999i,inodes_used=1930881i,total=499963174912i,free=165977980928i 1603905210000000000\n" + 
+        "cpu,cpu=cpu6,host=C02ZM182LVDV usage_idle=93.49999999999018,usage_nice=0,usage_iowait=0,usage_softirq=0,usage_guest=0,usage_user=4.399999999992797,usage_system=2.0999999999988357,usage_guest_nice=0,usage_irq=0,usage_steal=0 1603905210000000000\n" + 
+        "cpu,cpu=cpu7,host=C02ZM182LVDV usage_idle=100,usage_iowait=0,usage_irq=0,usage_softirq=0,usage_steal=0,usage_guest=0,usage_user=0,usage_system=0,usage_guest_nice=0,usage_nice=0 1603905210000000000\n" + 
+        "disk,device=disk1s4,fstype=apfs,host=C02ZM182LVDV,mode=rw,path=/private/var/vm inodes_used=1i,total=499963174912i,free=165977980928i,used=1073762304i,used_percent=0.6427722831414984,inodes_total=4882452880i,inodes_free=4882452879i 1603905210000000000\n" + 
+        "cpu,cpu=cpu8,host=C02ZM182LVDV usage_user=4.200000000000728,usage_nice=0,usage_iowait=0,usage_steal=0,usage_guest=0,usage_system=1.5000000000009095,usage_idle=94.30000000000291,usage_irq=0,usage_softirq=0,usage_guest_nice=0 1603905210000000000\n" + 
+        "disk,device=disk1s3,fstype=apfs,host=C02ZM182LVDV,mode=rw,path=/Volumes/Recovery free=165977980928i,used=528900096i,used_percent=0.31764458786767213,inodes_total=4882452880i,inodes_free=4882452830i,inodes_used=50i,total=499963174912i 1603905210000000000\n" + 
+        "cpu,cpu=cpu9,host=C02ZM182LVDV usage_idle=99.89999999997963,usage_nice=0,usage_iowait=0,usage_softirq=0,usage_guest=0,usage_user=0.09999999999990905,usage_system=0,usage_guest_nice=0,usage_irq=0,usage_steal=0 1603905210000000000\n" + 
+        "cpu,cpu=cpu10,host=C02ZM182LVDV usage_system=1.3999999999998636,usage_iowait=0,usage_steal=0,usage_guest=0,usage_user=3.000000000001819,usage_nice=0,usage_irq=0,usage_softirq=0,usage_guest_nice=0,usage_idle=95.59999999997672 1603905210000000000\n" + 
+        "cpu,cpu=cpu11,host=C02ZM182LVDV usage_user=0.09990009990006132,usage_system=0.09990009990020329,usage_iowait=0,usage_guest_nice=0,usage_steal=0,usage_guest=0,usage_idle=99.80019980023168,usage_nice=0,usage_irq=0,usage_softirq=0 1603905210000000000\n" + 
+        "cpu,cpu=cpu12,host=C02ZM182LVDV usage_nice=0,usage_irq=0,usage_steal=0,usage_guest_nice=0,usage_softirq=0,usage_guest=0,usage_user=3.0999999999971988,usage_system=0.6999999999999909,usage_idle=96.1999999999562,usage_iowait=0 1603905210000000000\n" + 
+        "cpu,cpu=cpu13,host=C02ZM182LVDV usage_irq=0,usage_steal=0,usage_guest=0,usage_guest_nice=0,usage_system=0.09999999999983629,usage_idle=99.8999999999797,usage_nice=0,usage_user=0,usage_iowait=0,usage_softirq=0 1603905210000000000\n" + 
+        "cpu,cpu=cpu14,host=C02ZM182LVDV usage_idle=97.497497497497,usage_nice=0,usage_irq=0,usage_steal=0,usage_guest_nice=0,usage_system=0.4004004004001179,usage_iowait=0,usage_softirq=0,usage_guest=0,usage_user=2.102102102102895 1603905210000000000\n" + 
+        "cpu,cpu=cpu15,host=C02ZM182LVDV usage_user=0,usage_irq=0,usage_softirq=0,usage_guest=0,usage_system=0.10010010010017173,usage_idle=99.89989989987949,usage_nice=0,usage_iowait=0,usage_steal=0,usage_guest_nice=0 1603905210000000000\n" + 
+        "cpu,cpu=cpu-total,host=C02ZM182LVDV usage_user=2.8944736184036377,usage_system=1.3065766441614355,usage_idle=95.79894973745084,usage_guest=0,usage_guest_nice=0,usage_nice=0,usage_iowait=0,usage_irq=0,usage_softirq=0,usage_steal=0 1603905210000000000\n" + 
+        "system,host=C02ZM182LVDV n_cpus=16i,n_users=17i,load1=3.126953125,load5=2.74658203125,load15=2.3193359375 1603905210000000000\n" + 
+        "system,host=C02ZM182LVDV uptime=138668i 1603905210000000000\n" + 
+        "system,host=C02ZM182LVDV uptime_format=\"1 day, 14:31\" 1603905210000000000\n" + 
+        "diskio,host=C02ZM182LVDV,name=disk0 read_bytes=30768029696i,write_bytes=43498524672i,weighted_io_time=0i,merged_writes=0i,merged_reads=0i,reads=1684866i,writes=2318793i,read_time=619846i,write_time=2007495i,io_time=2627342i,iops_in_progress=0i 1603905210000000000\n" + 
+        "processes,host=C02ZM182LVDV total=577i,unknown=0i,idle=0i,blocked=0i,zombies=2i,stopped=0i,running=1i,sleeping=574i 1603905210000000000\n" + 
+        "swap,host=C02ZM182LVDV total=0i,used=0i,free=0i,used_percent=0 1603905220000000000\n" + 
+        "swap,host=C02ZM182LVDV in=0i,out=0i 1603905220000000000\n" + 
+        "mem,host=C02ZM182LVDV free=1042231296i,wired=3479437312i,used_percent=57.114291191101074,active=13720211456i,used=19624321024i,available_percent=42.885708808898926,inactive=13693186048i,total=34359738368i,available=14735417344i 1603905220000000000\n" + 
+        "cpu,cpu=cpu0,host=C02ZM182LVDV usage_softirq=0,usage_user=13.600000000015717,usage_iowait=0,usage_nice=0,usage_irq=0,usage_steal=0,usage_guest=0,usage_guest_nice=0,usage_system=6.100000000001164,usage_idle=80.30000000004678 1603905220000000000\n" + 
+        "disk,device=disk1s1,fstype=apfs,host=C02ZM182LVDV,mode=ro,path=/ used_percent=6.335847242165471,inodes_total=4882452880i,inodes_free=4881964598i,inodes_used=488282i,total=499963174912i,free=165977939968i,used=11227463680i 1603905220000000000\n" + 
+        "disk,device=disk1s5,fstype=apfs,host=C02ZM182LVDV,mode=rw,path=/System/Volumes/Data inodes_free=4880521997i,inodes_used=1930883i,total=499963174912i,free=165977939968i,used=320911388672i,used_percent=65.91054060855747,inodes_total=4882452880i 1603905220000000000\n" + 
+        "cpu,cpu=cpu1,host=C02ZM182LVDV usage_idle=99.79999999995925,usage_iowait=0,usage_guest=0,usage_user=0.09999999999990905,usage_nice=0,usage_irq=0,usage_softirq=0,usage_steal=0,usage_guest_nice=0,usage_system=0.10000000000019327 1603905220000000000\n" + 
+        "disk,device=disk1s4,fstype=apfs,host=C02ZM182LVDV,mode=rw,path=/private/var/vm inodes_total=4882452880i,inodes_free=4882452879i,inodes_used=1i,total=499963174912i,free=165977939968i,used=1073762304i,used_percent=0.6427724407451167 1603905220000000000\n" + 
+        "cpu,cpu=cpu2,host=C02ZM182LVDV usage_user=11.300000000001091,usage_iowait=0,usage_steal=0,usage_guest=0,usage_system=3.8999999999987267,usage_idle=84.79999999995925,usage_nice=0,usage_irq=0,usage_softirq=0,usage_guest_nice=0 1603905220000000000\n" + 
+        "cpu,cpu=cpu3,host=C02ZM182LVDV usage_nice=0,usage_irq=0,usage_steal=0,usage_guest=0,usage_user=0,usage_system=0.09999999999990905,usage_softirq=0,usage_guest_nice=0,usage_idle=99.89999999997963,usage_iowait=0 1603905220000000000\n" + 
+        "disk,device=disk1s3,fstype=apfs,host=C02ZM182LVDV,mode=rw,path=/Volumes/Recovery used=528900096i,used_percent=0.31764466600693847,inodes_total=4882452880i,inodes_free=4882452830i,inodes_used=50i,total=499963174912i,free=165977939968i 1603905220000000000\n" + 
+        "cpu,cpu=cpu4,host=C02ZM182LVDV usage_system=2.9999999999972715,usage_idle=89.80000000003201,usage_nice=0,usage_irq=0,usage_softirq=0,usage_guest=0,usage_guest_nice=0,usage_user=7.200000000002547,usage_steal=0,usage_iowait=0 1603905220000000000\n" + 
+        "cpu,cpu=cpu5,host=C02ZM182LVDV usage_system=0.10000000000019327,usage_idle=99.89999999997963,usage_nice=0,usage_guest=0,usage_user=0,usage_iowait=0,usage_irq=0,usage_softirq=0,usage_steal=0,usage_guest_nice=0 1603905220000000000\n" + 
+        "cpu,cpu=cpu6,host=C02ZM182LVDV usage_system=2.2000000000018733,usage_nice=0,usage_steal=0,usage_guest=0,usage_guest_nice=0,usage_user=5.900000000005748,usage_idle=91.90000000001739,usage_iowait=0,usage_irq=0,usage_softirq=0 1603905220000000000\n" + 
+        "cpu,cpu=cpu7,host=C02ZM182LVDV usage_system=0.09990009990020329,usage_idle=99.80019980023168,usage_nice=0,usage_iowait=0,usage_irq=0,usage_softirq=0,usage_user=0.09990009990006132,usage_steal=0,usage_guest=0,usage_guest_nice=0 1603905220000000000\n" + 
+        "cpu,cpu=cpu8,host=C02ZM182LVDV usage_guest_nice=0,usage_system=1.5999999999985448,usage_idle=94.19999999998254,usage_nice=0,usage_softirq=0,usage_guest=0,usage_user=4.19999999999618,usage_iowait=0,usage_irq=0,usage_steal=0 1603905220000000000\n" + 
+        "";
+    Influx2 parser = new Influx2();
+    parser.setBuffer(msg.getBytes(Const.UTF8_CHARSET));
+    while (parser.advance()) {
+    print(parser);
+    }
+//    assertTrue(parser.advance());
+//    assertEquals(1465839830100400200L, parser.timestamp());
+//    assertEquals("sys.if.in", new String(parser.metricBuffer(), 
+//                                         parser.metricStart(), 
+//                                         parser.metricEnd() - parser.metricStart(), 
+//                                         Const.UTF8_CHARSET));
+//    assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
+//    assertEquals(10.24, parser.doubleValue(), 0.001);
+//    assertTags(parser);
+//    assertFalse(parser.advance());
+  }
+  
   //@Test
   public void foo() throws Exception {
     //  String msg = "sys.if,tagKey=tagValue,tagk2=tagv2 in=10.24,out=\"skip\" 1465839830100400200\n"

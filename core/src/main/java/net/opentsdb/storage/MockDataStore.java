@@ -27,6 +27,7 @@ import net.opentsdb.configuration.ConfigurationEntrySchema;
 import net.opentsdb.configuration.ConfigurationException;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.data.BaseTimeSeriesDatumStringId;
+import net.opentsdb.data.LowLevelMetric;
 import net.opentsdb.data.LowLevelTimeSeries;
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.PartialTimeSeries;
@@ -244,7 +245,77 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
   public Deferred<List<WriteStatus>> write(final AuthState state,
       final LowLevelTimeSeries data,
       final Span span) {
-    return Deferred.fromError(new UnsupportedOperationException("TODO"));
+    if (!(data instanceof LowLevelMetric)) {
+      return Deferred.fromError(new UnsupportedOperationException("TODO"));
+    }
+    
+    try {
+    final LowLevelMetric metric = (LowLevelMetric) data;
+    int count = 0;
+    TimeStamp ts = new SecondTimeStamp(0);
+    while (metric.advance()) {
+      try {
+      switch (data.timeStampFormat()) {
+      case SECONDS:
+        ts.updateEpoch(data.timestamp());
+        break;
+      case MILLIS:
+        ts.updateEpoch(data.timestamp() / 1000);
+        break;
+      case MICROS:
+        ts.updateEpoch(data.timestamp() / 1000 / 1000);
+        break;
+      case NANOS:
+        ts.updateEpoch(data.timestamp() / 1000 / 1000 / 1000);
+        break;
+      default:
+        LOG.debug("Bad timestamp format: " + data.timeStampFormat());
+        return Deferred.fromError(new RuntimeException("Bad timestamp format: " + data.timeStampFormat()));
+      }
+      
+      BaseTimeSeriesDatumStringId.Builder builder = BaseTimeSeriesDatumStringId.newBuilder();
+      builder.setMetric(new String(metric.metricBuffer(), metric.metricStart(), (metric.metricEnd() - metric.metricStart()), Const.UTF8_CHARSET));
+      while (metric.advanceTagPair()) {
+        builder.addTags(
+            new String(metric.tagsBuffer(), metric.tagKeyStart(), (metric.tagKeyEnd() - metric.tagKeyStart()), Const.UTF8_CHARSET), 
+            new String(metric.tagsBuffer(), metric.tagValueStart(), (metric.tagValueEnd() - metric.tagValueStart()), Const.UTF8_CHARSET));
+      }
+      MutableNumericValue dp = new MutableNumericValue();
+      switch (metric.valueFormat()) {
+      case DOUBLE:
+        dp.reset(ts, metric.doubleValue());
+        break;
+      case FLOAT:
+        dp.reset(ts, metric.floatValue());
+        break;
+      case INTEGER:
+        dp.reset(ts, metric.intValue());
+      }
+      
+      TimeSeriesDatumStringId id = builder.build();
+      MockSpan data_span = database.get(id);
+      if (data_span == null) {
+        data_span = new MockSpan((TimeSeriesDatumStringId) id);
+        database.put((TimeSeriesDatumStringId) id, data_span);
+      }
+      data_span.addValue(dp);
+      } catch (IllegalArgumentException e) {
+        // meh
+      }
+      count++;
+      //LOG.info("########## [" + count + "] WRote a datapoint!: " + id);
+    }
+    LOG.info("######### Wrote " + count + " dps.");
+    // TODO pool
+    List<WriteStatus> status = Lists.newArrayListWithExpectedSize(count);
+    for (int i = 0; i < count; i++) {
+      status.add(WriteStatus.OK);
+    }
+    return Deferred.fromResult(status);
+    } catch (Exception t) {
+      t.printStackTrace();
+      return Deferred.fromError(t);
+    }
   }
   
   class MockSpan {
