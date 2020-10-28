@@ -41,8 +41,8 @@ public interface WritableTimeSeriesDataStore {
    * @return A deferred resolving to a WriteState.
    */
   public Deferred<WriteStatus> write(final AuthState state, 
-                                    final TimeSeriesDatum datum, 
-                                    final Span span);
+                                     final TimeSeriesDatum datum, 
+                                     final Span span);
   
   /**
    * Writes the given value to the data store.
@@ -54,8 +54,8 @@ public interface WritableTimeSeriesDataStore {
    * same order and number as the entries in the data iterator.
    */
   public Deferred<List<WriteStatus>> write(final AuthState state, 
-                                          final TimeSeriesSharedTagsAndTimeData data, 
-                                          final Span span);
+                                           final TimeSeriesSharedTagsAndTimeData data, 
+                                           final Span span);
   
   /**
    * Writes the given time series or set of time series to the data store.

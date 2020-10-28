@@ -14,6 +14,8 @@
 // limitations under the License.
 package net.opentsdb.storage;
 
+import com.google.common.base.Strings;
+
 /**
  * The response from a write call including the state and optional
  * error message or exception.
@@ -59,12 +61,20 @@ public interface WriteStatus {
     return OK;
   }
   
+  public static WriteStatus retry() {
+    return RETRY;
+  }
+  
   /**
    * Returns a retry status with the given message.
    * @param message An optional error message.
    * @return The retry write status.
    */
   public static WriteStatus retry(final String message) {
+    if (Strings.isNullOrEmpty(message)) {
+      return RETRY;
+    }
+    
     return new WriteStatus() {
 
       @Override
@@ -85,12 +95,20 @@ public interface WriteStatus {
     };
   }
   
+  public static WriteStatus rejected() {
+    return REJECTED;
+  }
+  
   /**
    * Returns a rejected status with the given message.
    * @param message An optional error message.
    * @return The rejected write status.
    */
   public static WriteStatus rejected(final String message) {
+    if (Strings.isNullOrEmpty(message)) {
+      return REJECTED;
+    }
+    
     return new WriteStatus() {
 
       @Override
@@ -157,4 +175,43 @@ public interface WriteStatus {
     }
     
   };
+
+  public static final WriteStatus REJECTED = new WriteStatus() {
+
+    @Override
+    public WriteState state() {
+      return WriteState.REJECTED;
+    }
+
+    @Override
+    public String message() {
+      return "Rejected";
+    }
+
+    @Override
+    public Throwable exception() {
+      return null;
+    }
+    
+  };
+  
+  public static final WriteStatus RETRY = new WriteStatus() {
+
+    @Override
+    public WriteState state() {
+      return WriteState.RETRY;
+    }
+
+    @Override
+    public String message() {
+      return "Retry";
+    }
+
+    @Override
+    public Throwable exception() {
+      return null;
+    }
+    
+  };
+  
 }
