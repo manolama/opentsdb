@@ -29,6 +29,7 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.data.BaseTimeSeriesDatumStringId;
 import net.opentsdb.data.LowLevelMetric;
 import net.opentsdb.data.LowLevelTimeSeries;
+import net.opentsdb.data.LowLevelTimeSeries.Namespaced;
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.PartialTimeSeries;
 import net.opentsdb.data.PartialTimeSeriesSet;
@@ -274,7 +275,20 @@ public class MockDataStore implements WritableTimeSeriesDataStore {
       }
       
       BaseTimeSeriesDatumStringId.Builder builder = BaseTimeSeriesDatumStringId.newBuilder();
-      builder.setMetric(new String(metric.metricBuffer(), metric.metricStart(), (metric.metricEnd() - metric.metricStart()), Const.UTF8_CHARSET));
+      if (data instanceof Namespaced) {
+        Namespaced nsd = (Namespaced) data;
+        if (nsd.namespaceEnd() > 0) {
+          StringBuilder buf = new StringBuilder();
+          buf.append(new String(nsd.namespaceBuffer(), nsd.namespaceStart(), nsd.namespaceEnd() - nsd.namespaceStart(), Const.UTF8_CHARSET))
+            .append(".")
+            .append(new String(metric.metricBuffer(), metric.metricStart(), (metric.metricEnd() - metric.metricStart()), Const.UTF8_CHARSET));
+          builder.setMetric(buf.toString());
+        } else {
+          builder.setMetric(new String(metric.metricBuffer(), metric.metricStart(), (metric.metricEnd() - metric.metricStart()), Const.UTF8_CHARSET));
+        }
+      } else {
+        builder.setMetric(new String(metric.metricBuffer(), metric.metricStart(), (metric.metricEnd() - metric.metricStart()), Const.UTF8_CHARSET));
+      }
       while (metric.advanceTagPair()) {
         builder.addTags(
             new String(metric.tagsBuffer(), metric.tagKeyStart(), (metric.tagKeyEnd() - metric.tagKeyStart()), Const.UTF8_CHARSET), 

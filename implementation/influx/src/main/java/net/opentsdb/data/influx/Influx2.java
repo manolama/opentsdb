@@ -4,16 +4,20 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.temporal.ChronoUnit;
 
+import net.opentsdb.common.Const;
 import net.opentsdb.data.LowLevelMetric.HashedLowLevelMetric;
+import net.opentsdb.data.LowLevelTimeSeries.Namespaced;
 import net.opentsdb.utils.DateTime;
 import net.opentsdb.utils.Parsing;
 import net.opentsdb.utils.XXHash;
 
-public class Influx2 implements HashedLowLevelMetric {
+public class Influx2 implements HashedLowLevelMetric, Namespaced {
   static int escaped_mask = 0x80000000;
   static int UNescaped_mask = 0x7FFFFFFF;
   static int chunks = 4096;
 
+  byte[] namespace;
+  
   byte[] buffer;
   InputStream stream;
   boolean eos;
@@ -68,6 +72,7 @@ public class Influx2 implements HashedLowLevelMetric {
     //newLineIdx = offset;
     lineStart = offset;
     lineEnd = lineStart;
+    namespace = null;
   }
   
   public void setBuffer(byte[] bytes, int offset, int length) {
@@ -77,6 +82,7 @@ public class Influx2 implements HashedLowLevelMetric {
     //newLineIdx = offset;
     lineStart = offset;
     lineEnd = lineStart;
+    namespace = null;
   }
   
   public void setInputStream(final InputStream stream) {
@@ -89,6 +95,11 @@ public class Influx2 implements HashedLowLevelMetric {
     end = 0;
     lineStart = 0;
     lineEnd = lineStart;
+    namespace = null;
+  }
+  
+  public void setNamespace(final String namespace) {
+    this.namespace = namespace.getBytes(Const.UTF8_CHARSET);
   }
   
   @Override
@@ -500,6 +511,18 @@ public class Influx2 implements HashedLowLevelMetric {
     return tagValueHash;
   }
 
+  public byte[] namespaceBuffer() {
+    return namespace;
+  }
+  
+  public int namespaceStart() {
+    return 0;
+  }
+  
+  public int namespaceEnd() {
+    return namespace != null ? namespace.length : 0;
+  }
+  
   private int findNextNewLine(final int start) {
     int printableChars = 0;
     for (int i = start + 1; i < end; i++) {

@@ -53,4 +53,10 @@ public interface LowLevelTimeSeries extends Closeable {
   
   /** The index of the end of the tag set in the buffer. */
   int tagSetEnd(); 
+  
+  public interface Namespaced extends LowLevelTimeSeries {
+    byte[] namespaceBuffer();
+    int namespaceStart();
+    int namespaceEnd();
+  }
 }
