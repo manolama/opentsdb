@@ -30,7 +30,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -48,7 +48,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -68,7 +68,7 @@ public class TestInflux2 {
     assertEquals(1234123456789012345L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -88,7 +88,7 @@ public class TestInflux2 {
     assertEquals(1234123456789012345L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -106,7 +106,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -125,7 +125,7 @@ public class TestInflux2 {
     assertEquals(1234123456789012345L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -142,7 +142,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -153,7 +153,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.out", new String(parser.metricBuffer(), 
         parser.metricStart(), 
-        parser.metricEnd() - parser.metricStart(), 
+        parser.metricLength(), 
         Const.UTF8_CHARSET));
     assertEquals(ValueFormat.INTEGER, parser.valueFormat());
     assertEquals(42, parser.intValue());
@@ -163,7 +163,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.err", new String(parser.metricBuffer(), 
         parser.metricStart(), 
-        parser.metricEnd() - parser.metricStart(), 
+        parser.metricLength(), 
         Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     //assertEquals(0.05, parser.doubleValue(), 0.001); TODO - fix parsing
@@ -247,7 +247,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -266,7 +266,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys, if.in", new String(parser.metricBuffer(), 
                                           parser.metricStart(), 
-                                          parser.metricEnd() - parser.metricStart(), 
+                                          parser.metricLength(), 
                                           Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -284,27 +284,27 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
     assertTrue(parser.advanceTagPair());
     assertEquals("tag Key", new String(parser.tagsBuffer(),
                                       parser.tagKeyStart(),
-                                      parser.tagKeyEnd() - parser.tagKeyStart(),
+                                      parser.tagKeyLength(),
                                       Const.UTF8_CHARSET));
     assertEquals("Value", new String(parser.tagsBuffer(),
                                      parser.tagValueStart(),
-                                     parser.tagValueEnd() - parser.tagValueStart(),
+                                     parser.tagValueLength(),
                                      Const.UTF8_CHARSET));
     assertTrue(parser.advanceTagPair());
     assertEquals("tag=k,2", new String(parser.tagsBuffer(),
                                      parser.tagKeyStart(),
-                                     parser.tagKeyEnd() - parser.tagKeyStart(),
+                                     parser.tagKeyLength(),
                                      Const.UTF8_CHARSET));
     assertEquals("Value2", new String(parser.tagsBuffer(),
                                      parser.tagValueStart(),
-                                     parser.tagValueEnd() - parser.tagValueStart(),
+                                     parser.tagValueLength(),
                                      Const.UTF8_CHARSET));
     assertFalse(parser.advanceTagPair());
     assertFalse(parser.advance());
@@ -320,27 +320,27 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
     assertTrue(parser.advanceTagPair());
     assertEquals("tagKey", new String(parser.tagsBuffer(),
                                       parser.tagKeyStart(),
-                                      parser.tagKeyEnd() - parser.tagKeyStart(),
+                                      parser.tagKeyLength(),
                                       Const.UTF8_CHARSET));
     assertEquals("Va lue", new String(parser.tagsBuffer(),
                                      parser.tagValueStart(),
-                                     parser.tagValueEnd() - parser.tagValueStart(),
+                                     parser.tagValueLength(),
                                      Const.UTF8_CHARSET));
     assertTrue(parser.advanceTagPair());
     assertEquals("tagk2", new String(parser.tagsBuffer(),
                                      parser.tagKeyStart(),
-                                     parser.tagKeyEnd() - parser.tagKeyStart(),
+                                     parser.tagKeyLength(),
                                      Const.UTF8_CHARSET));
     assertEquals("Va=lu,e2", new String(parser.tagsBuffer(),
                                      parser.tagValueStart(),
-                                     parser.tagValueEnd() - parser.tagValueStart(),
+                                     parser.tagValueLength(),
                                      Const.UTF8_CHARSET));
     assertFalse(parser.advanceTagPair());
     assertFalse(parser.advance());
@@ -356,27 +356,27 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
     assertTrue(parser.advanceTagPair());
     assertEquals("tag Key", new String(parser.tagsBuffer(),
                                       parser.tagKeyStart(),
-                                      parser.tagKeyEnd() - parser.tagKeyStart(),
+                                      parser.tagKeyLength(),
                                       Const.UTF8_CHARSET));
     assertEquals("V\\a lue", new String(parser.tagsBuffer(),
                                      parser.tagValueStart(),
-                                     parser.tagValueEnd() - parser.tagValueStart(),
+                                     parser.tagValueLength(),
                                      Const.UTF8_CHARSET));
     assertTrue(parser.advanceTagPair());
     assertEquals("ta=gk,2", new String(parser.tagsBuffer(),
                                      parser.tagKeyStart(),
-                                     parser.tagKeyEnd() - parser.tagKeyStart(),
+                                     parser.tagKeyLength(),
                                      Const.UTF8_CHARSET));
     assertEquals("Va=lu,e2", new String(parser.tagsBuffer(),
                                      parser.tagValueStart(),
-                                     parser.tagValueEnd() - parser.tagValueStart(),
+                                     parser.tagValueLength(),
                                      Const.UTF8_CHARSET));
     assertFalse(parser.advanceTagPair());
     assertFalse(parser.advance());
@@ -393,7 +393,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.i, n", new String(parser.metricBuffer(), 
                                           parser.metricStart(), 
-                                          parser.metricEnd() - parser.metricStart(), 
+                                          parser.metricLength(), 
                                           Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -403,7 +403,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.te=st", new String(parser.metricBuffer(), 
                                           parser.metricStart(), 
-                                          parser.metricEnd() - parser.metricStart(), 
+                                          parser.metricLength(), 
                                           Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(42, parser.doubleValue(), 0.001);
@@ -421,7 +421,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -439,7 +439,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -457,7 +457,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -476,7 +476,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -486,7 +486,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.out", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.INTEGER, parser.valueFormat());
     assertEquals(42, parser.intValue());
@@ -496,7 +496,7 @@ public class TestInflux2 {
     assertEquals(1465839830100000000L, parser.timestamp());
     assertEquals("sys.cpu.sys", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(-1.234456e+78, parser.doubleValue(), 0.001);
@@ -506,7 +506,7 @@ public class TestInflux2 {
     assertEquals(1465839830100000000L, parser.timestamp());
     assertEquals("sys.cpu.user", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(41, parser.doubleValue(), 0.001);
@@ -527,7 +527,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.in", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -537,7 +537,7 @@ public class TestInflux2 {
     assertEquals(1465839830100400200L, parser.timestamp());
     assertEquals("sys.if.out", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.INTEGER, parser.valueFormat());
     assertEquals(42, parser.intValue());
@@ -547,7 +547,7 @@ public class TestInflux2 {
     assertEquals(1465839830100000000L, parser.timestamp());
     assertEquals("sys.cpu.sys", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(-1.234456e+78, parser.doubleValue(), 0.001);
@@ -557,7 +557,7 @@ public class TestInflux2 {
     assertEquals(1465839830100000000L, parser.timestamp());
     assertEquals("sys.cpu.user", new String(parser.metricBuffer(), 
                                          parser.metricStart(), 
-                                         parser.metricEnd() - parser.metricStart(), 
+                                         parser.metricLength(), 
                                          Const.UTF8_CHARSET));
     assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
     assertEquals(41, parser.doubleValue(), 0.001);
@@ -661,7 +661,7 @@ public class TestInflux2 {
 //    assertEquals(1465839830100400200L, parser.timestamp());
 //    assertEquals("sys.if.in", new String(parser.metricBuffer(), 
 //                                         parser.metricStart(), 
-//                                         parser.metricEnd() - parser.metricStart(), 
+//                                         parser.metricLength(), 
 //                                         Const.UTF8_CHARSET));
 //    assertEquals(ValueFormat.DOUBLE, parser.valueFormat());
 //    assertEquals(10.24, parser.doubleValue(), 0.001);
@@ -707,7 +707,7 @@ public class TestInflux2 {
   void print(Influx2 influx) {
     System.out.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
     //System.out.println(influx.hasNext());
-    System.out.println("    Metric: " + new String(influx.metricBuffer(), influx.metricStart(), influx.metricEnd()));
+    System.out.println("    Metric: " + new String(influx.metricBuffer(), influx.metricStart(), influx.metricLength()));
     System.out.println("    Tags: " + new String(influx.tagsBuffer()));
     System.out.println("    Timestamp: " + influx.timestamp);
     System.out.println("    Type: " + influx.valueFormat());
@@ -723,20 +723,20 @@ public class TestInflux2 {
     assertTrue(parser.advanceTagPair());
     assertEquals("tagKey", new String(parser.tagsBuffer(),
                                       parser.tagKeyStart(),
-                                      parser.tagKeyEnd() - parser.tagKeyStart(),
+                                      parser.tagKeyLength(),
                                       Const.UTF8_CHARSET));
     assertEquals("Value", new String(parser.tagsBuffer(),
                                      parser.tagValueStart(),
-                                     parser.tagValueEnd() - parser.tagValueStart(),
+                                     parser.tagValueLength(),
                                      Const.UTF8_CHARSET));
     assertTrue(parser.advanceTagPair());
     assertEquals("tagk2", new String(parser.tagsBuffer(),
                                      parser.tagKeyStart(),
-                                     parser.tagKeyEnd() - parser.tagKeyStart(),
+                                     parser.tagKeyLength(),
                                      Const.UTF8_CHARSET));
     assertEquals("Value2", new String(parser.tagsBuffer(),
                                      parser.tagValueStart(),
-                                     parser.tagValueEnd() - parser.tagValueStart(),
+                                     parser.tagValueLength(),
                                      Const.UTF8_CHARSET));
     assertFalse(parser.advanceTagPair());
   }

@@ -10,10 +10,10 @@ public interface LowLevelTimeSeries extends Closeable {
     UTF8_STRING,
     ENCODED
   }
-  
-  /** Releases pooled resources, etc. */
-  void close();
-  
+//  
+//  /** Releases pooled resources, etc. */
+//  void close();
+//  
   /** The raw buffer. */
   byte[] rawBuffer();
   
@@ -34,7 +34,8 @@ public interface LowLevelTimeSeries extends Closeable {
   byte[] tagsBuffer();
   Format tagsFormat();
 
-  /** The tag delimiter */
+  /** The tag delimiter for use when reading the entire tag set in one go
+   * instead of using {@link #advanceTagPair()}. */
   byte tagDelimiter();
   
   /** number of tag key/value pairs. */
@@ -45,18 +46,18 @@ public interface LowLevelTimeSeries extends Closeable {
 
   /** Indices into the buffer when using the {@link hasNextTagPair} method. */
   int tagKeyStart();
-  int tagKeyEnd();
+  int tagKeyLength();
   
   /** Indices into the buffer when using the {@link hasNextTagPair} method. */
   int tagValueStart();
-  int tagValueEnd();
+  int tagValueLength();
   
   /** The index of the end of the tag set in the buffer. */
-  int tagSetEnd(); 
+  int tagSetLength(); 
   
   public interface Namespaced extends LowLevelTimeSeries {
     byte[] namespaceBuffer();
     int namespaceStart();
-    int namespaceEnd();
+    int namespaceLength();
   }
 }

@@ -11,7 +11,7 @@ public interface LowLevelMetric extends LowLevelTimeSeries {
 
   /** indices into the metric buffer. */
   int metricStart();
-  int metricEnd();
+  int metricLength();
   byte[] metricBuffer();
   
   /** We may have more values some day. */

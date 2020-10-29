@@ -37,17 +37,19 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
   int measurementIndex;
   int metricBytes;
   
-  long[] fieldIndices = new long[8];
+  int[] fieldIndices = new int[16];
   int fieldIndex;
-  long[] valueIndices = new long[8];
+  int[] valueIndices = new int[16];
   int valueIndex;
   
   byte[] tagBuffer = new byte[26];
-  int tagsEnd = 0;
+  int tagsLength = 0;
   int tagsCount = 0;
   int tagIndex = 0;
-  long tagKey;
-  long tagValue;
+  int tagKeyStart;
+  int tagKeyLength;
+  int tagValueStart;
+  int tagValueLength;
   
   long timestamp;
   
@@ -114,7 +116,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
   }
 
   @Override
-  public int metricEnd() {
+  public int metricLength() {
     return metricBytes;
   }
 
@@ -165,12 +167,12 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
   public boolean advance() {
     // first see if we have more fields to read for the current line.
     if (readIdx < fieldIndex) {
-      int start = (int) (fieldIndices[readIdx] >> 32);
-      int end = (int) fieldIndices[readIdx];
+      int start = fieldIndices[readIdx * 2];
+      int end = fieldIndices[(readIdx * 2) + 1];
       appendField(start, end);
       
-      start = (int) (valueIndices[readIdx] >> 32);
-      end = (int) valueIndices[readIdx];
+      start = valueIndices[readIdx * 2];
+      end = valueIndices[(readIdx * 2) + 1];
       parseValue(start, end, true);
       readIdx++;
       tagIndex = 0;
@@ -179,7 +181,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
     
     // reset
     readIdx = 1;
-    tagsEnd = 0;
+    tagsLength = 0;
     
     //System.out.println("______________________________ NEW LINE _______________");
     lineStart = lineEnd > 0 ? lineEnd + 1 : 0;
@@ -188,50 +190,6 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       return advanceStream();
     }
     return advanceBytes();
-//    if (lineStart >= end) {
-//      System.out.println("******** past end: " + end);
-//      return false;
-//    }
-//    
-//    // consume whitespace to get to the first measurement.
-//    while (lineStart < end) {
-//      lineStart = findNextChar(lineStart);
-//      if (lineStart >= end) {
-//        System.out.println("******** past end: " + end);
-//        return false;
-//      }
-//      if (buffer[lineStart] == '#') {
-//        // it's a comment;
-//        lineEnd = findNextNewLine(lineStart);
-//        lineStart = lineEnd;
-//        continue;
-//      }
-//      
-//      if (lineStart >= end) {
-//        System.out.println("******** past end 2: " + end);
-//        return false;
-//      }
-//      
-//      lineEnd = findNextNewLine(lineStart);
-//      System.out.println(" lineEnd: " + lineEnd +"    END: " + end);
-//
-//      //System.out.println("@@@@@ S: " + lineStart + "  -  " + lineEnd);
-//      System.out.println(" MATCHED! s " + lineStart + " e: " + lineEnd 
-//          + "  [" + new String(buffer, lineStart, lineEnd - lineStart) + "]");
-//      if (processLine()) {
-//        return true;
-//      }
-//      System.out.println("----------- FAILED to match");
-//
-//      // shift and try again
-//      System.out.println("DAMN");
-//      lineStart = lineEnd;
-//    }
-//    
-//    // TODO - tons of work to validate here.
-//    // fell through so nothing left.
-//    lineStart = end;
-//    return false;
   }
 
   boolean advanceBytes() {
@@ -272,7 +230,6 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
           System.out.println("!!!!!!!!!!!!!!!!!!!!!!! WTF?????? Null at " + x + " in line^^^^^^^^^^");
           System.exit(2);
         }
-        System.out.println("               " + x + " was ok.");
       }
       System.out.println(" MATCHED! s " + lineStart + " e: " + lineEnd 
           + "  [" + new String(buffer, lineStart, lineEnd - lineStart) + "]");
@@ -440,7 +397,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
   
   @Override
   public boolean advanceTagPair() {
-    if (tagIndex >= tagsEnd) {
+    if (tagIndex >= tagsLength) {
       return false;
     }
     
@@ -453,15 +410,15 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
     }
     
     if (hashIt) {
-      tagKeyHash = XXHash.hash(tagBuffer, start, tagIndex - start);
+      tagKeyHash = XXHash.hash(tagBuffer, start, tagKeyLength);
     }
-    tagKey = (long) start << 32;
-    tagKey |= tagIndex;
+    tagKeyStart = start;
+    tagKeyLength = tagIndex - tagKeyStart;
     
     int pairHashStart = start;
     tagIndex++;
     start = tagIndex;
-    while (tagIndex < tagsEnd) {
+    while (tagIndex < tagIndex + tagsLength) {
       if (tagBuffer[tagIndex] == 0) {
         break;
       }
@@ -473,35 +430,35 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       tagPairHash = XXHash.hash(tagBuffer, pairHashStart, tagIndex - pairHashStart);
     }
     
-    tagValue = (long) start << 32;
-    tagValue |= tagIndex;
+    tagValueStart = start;
+    tagValueLength = tagIndex - start;
     tagIndex++;
     return true;
   }
 
   @Override
   public int tagKeyStart() {
-    return (int) (tagKey >> 32);
+    return tagKeyStart;
   }
 
   @Override
-  public int tagKeyEnd() {
-    return (int) tagKey;
+  public int tagKeyLength() {
+    return tagKeyLength;
   }
 
   @Override
   public int tagValueStart() {
-    return (int) (tagValue >> 32);
+    return tagValueStart;
   }
 
   @Override
-  public int tagValueEnd() {
-    return (int) tagValue;
+  public int tagValueLength() {
+    return tagValueLength;
   }
 
   @Override
-  public int tagSetEnd() {
-    return tagsEnd;
+  public int tagSetLength() {
+    return tagsLength;
   }
 
   @Override
@@ -543,7 +500,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
     return 0;
   }
   
-  public int namespaceEnd() {
+  public int namespaceLength() {
     return namespace != null ? namespace.length : 0;
   }
   
@@ -576,7 +533,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
   }
   
   boolean processLine() {
-    fieldIndex = valueIndex = tagsEnd = tagIndex = 0;
+    fieldIndex = valueIndex = tagsLength = tagIndex = 0;
     boolean has_quote = false;
     boolean escaped_char = false;
     int idx = lineStart;
@@ -682,7 +639,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
         }
         
         // copy key or value
-        if (tagsEnd + (i - idx) + 1 >= tagBuffer.length) {
+        if (tagsLength + (i - idx) + 1 >= tagBuffer.length) {
           growTagBuffer();
         }
         
@@ -697,15 +654,15 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
                   buffer[x + 1] == '\'')) {
                 continue;
               }
-              tagBuffer[tagsEnd++] = buffer[x];
+              tagBuffer[tagsLength++] = buffer[x];
             }
             escaped_char = false;
           } else {
 //            System.out.println(" COPYING: [" + new String(buffer, idx, i - idx) + "]  " + idx + " to " + i);
-            System.arraycopy(buffer, idx, tagBuffer, tagsEnd, i - idx);
-            tagsEnd += (i - idx);
+            System.arraycopy(buffer, idx, tagBuffer, tagsLength, i - idx);
+            tagsLength += (i - idx);
           }
-          tagBuffer[tagsEnd++] = 0;
+          tagBuffer[tagsLength++] = 0;
           idx = i;
           if (++matched % 2 == 0) {
             tagsCount++;
@@ -737,7 +694,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       // done with tags!
       // TODO - sort
       if (hashIt) {
-        tagSetHash = XXHash.hash(tagBuffer, 0, tagsEnd);
+        tagSetHash = XXHash.hash(tagBuffer, 0, tagsLength);
       }
     } else {
       // TODO we don't have tags. BUT WE NEED EM!
@@ -785,20 +742,22 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
         }
       }
       
-      long f;
+      int f;
       if (escaped_char) {
-        f = (long) (idx | escaped_mask) << 32;
+        f = (idx | escaped_mask);
         System.out.println("________ ESCAPED! ");
       } else {
-        f = (long) idx << 32;
+        f = idx;
       }
-      f |= i;
-      if (fieldIndex + 1 >= fieldIndices.length) {
-        long[] temp = new long[fieldIndices.length * 2];
-        System.arraycopy(fieldIndices, 0, temp, 0, fieldIndex);
+      //f |= i;
+      if ((fieldIndex * 2) + 1 >= fieldIndices.length) {
+        int[] temp = new int[fieldIndices.length * 2];
+        System.arraycopy(fieldIndices, 0, temp, 0, (fieldIndex * 2));
         fieldIndices = temp;
       }
-      fieldIndices[fieldIndex++] = f;
+      fieldIndices[fieldIndex * 2] = f;
+      fieldIndices[(fieldIndex * 2) + 1] = i;
+      fieldIndex++;
 //      System.out.println("***** F: "+ new String(buffer, idx, i - idx) + "  " + idx + " => " + i);
       
       if (fieldIndex == 1) {
@@ -840,14 +799,16 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
         fieldIndex--;
         idx = i;
       } else {
-        long v = (long) idx << 32;
-        v |= i;
-        if (valueIndex + 1 >= valueIndices.length) {
-          long[] temp = new long[valueIndices.length * 2];
-          System.arraycopy(valueIndices, 0, temp, 0, valueIndex);
+//        long v = (long) idx << 32;
+//        v |= i;
+        if ((valueIndex * 2) + 1 >= valueIndices.length) {
+          int[] temp = new int[valueIndices.length * 2];
+          System.arraycopy(valueIndices, 0, temp, 0, (valueIndex * 2));
           valueIndices = temp;
         }
-        valueIndices[valueIndex++] = v;
+        valueIndices[valueIndex * 2] = idx;
+        valueIndices[(valueIndex * 2) + 1] = i;
+        valueIndex++;
 //        System.out.println("***** v: "+new String(buffer, idx, i - idx));
         idx = i;
       }
@@ -988,7 +949,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
   
   void growTagBuffer() {
     byte[] temp = new byte[tagBuffer.length * 2];
-    System.arraycopy(tagBuffer, 0, temp, 0, tagsEnd);
+    System.arraycopy(tagBuffer, 0, temp, 0, tagsLength);
     tagBuffer = temp;
   }
   
