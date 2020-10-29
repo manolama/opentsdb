@@ -325,7 +325,7 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       }
       
       lineEnd = newline;
-      System.out.println(" lineEnd: " + lineEnd +"    END: " + end);
+      //System.out.println(" lineEnd: " + lineEnd +"    END: " + end);
 
       //System.out.println("@@@@@ S: " + lineStart + "  -  " + lineEnd);
       for (int x = lineStart; x < lineEnd; x++) {
@@ -334,8 +334,8 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
           System.exit(2);
         }
       }
-      System.out.println(" MATCHED! s " + lineStart + " e: " + lineEnd 
-          + "  [" + new String(buffer, lineStart, lineEnd - lineStart) + "]");
+      //System.out.println(" MATCHED! s " + lineStart + " e: " + lineEnd 
+      //    + "  [" + new String(buffer, lineStart, lineEnd - lineStart) + "]");
       if (processLine()) {
         return true;
       }
@@ -354,10 +354,16 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
     // to avoid growing the buffer if we don't have to we shift what hasn't
     // been processed.
     if (lineStart > 0) {
-      System.arraycopy(buffer, lineEnd + 1, buffer, 0, end - lineEnd);
-      
+      if (buffer[lineEnd] == '\n') {
+        lineEnd++;
+      }
+      System.out.println("######## LS: " + lineStart + "  LE: " + lineEnd + "  End: " + end + " Char @LineEnd ["
+          + (char) buffer[lineEnd] + "] Diff : " + (end - lineEnd) + " Remaining: \n  {" + new String(buffer, lineEnd, end - lineEnd, Const.UTF8_CHARSET) + "}");
+      System.arraycopy(buffer, lineEnd, buffer, 0, end - lineEnd);
       end = end - lineEnd;
-      lineStart = 0;
+      lineStart = lineEnd = 0;
+      System.out.println("######## LS: " + lineStart + "  LE: " + lineEnd + "  End: " + end + " Char @LineEnd ["
+          + (char) buffer[lineEnd] + "] Diff : " + (end - lineEnd) + " Start of Buffer: \n  {" + new String(buffer, lineEnd, end - lineEnd, Const.UTF8_CHARSET) + "}");
     }
     
     while (!eos) {
@@ -370,13 +376,14 @@ public class Influx2 implements HashedLowLevelMetric, Namespaced {
       
       int read;
       try {
-        read = stream.read(buffer, end > 0 ? end - 1 : 0, chunks);
-        System.out.println("************ READ: " + read + " and appended to " + end);
+        read = stream.read(buffer, end, chunks);
         if (read < 0) {
           eos = true;
           return -1;
         }
-        end += read - 1;
+        end += read;
+        System.out.println("************ READ: " + read + " and appended to " + end + "\n  {"
+            + new String(buffer, lineStart, end, Const.UTF8_CHARSET) + "}");
         
         int newline = findNextNewLine(lineStart);
         //System.out.println("********* ST: " + lineStart + "  NL: " + newline);
