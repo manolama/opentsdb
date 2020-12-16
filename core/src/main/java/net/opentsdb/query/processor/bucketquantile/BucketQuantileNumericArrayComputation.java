@@ -1,4 +1,4 @@
-package net.opentsdb.query.processor.bucketpercentile;
+package net.opentsdb.query.processor.bucketquantile;
 
 import java.io.IOException;
 import java.util.List;
@@ -19,11 +19,11 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.query.QueryNode;
-import net.opentsdb.query.processor.bucketpercentile.BucketPercentile.Bucket;
+import net.opentsdb.query.processor.bucketquantile.BucketQuantile.Bucket;
 
-public class BucketPercentileNumericArrayComputation extends Computer {
+public class BucketQuantileNumericArrayComputation extends BucketQuantileComputer {
   private static final Logger LOG = LoggerFactory.getLogger(
-      BucketPercentileNumericArrayComputation.class);
+      BucketQuantileNumericArrayComputation.class);
   final QueryNode node;
   final TimeSeries[] sources;
   double[][] percentiles;
@@ -31,9 +31,9 @@ public class BucketPercentileNumericArrayComputation extends Computer {
   // TODO - byte IDs
   TimeSeriesId id;
   
-  BucketPercentileNumericArrayComputation(final int index,
-                                          final QueryNode node,
-                                          final TimeSeries[] sources) {
+  BucketQuantileNumericArrayComputation(final int index,
+                                        final QueryNode node,
+                                        final TimeSeries[] sources) {
     super(index);
     this.node = node;
     this.sources = sources;
@@ -43,10 +43,10 @@ public class BucketPercentileNumericArrayComputation extends Computer {
     long[] accumulator = new long[sources.length];
     long[][] results = new long[sources.length][];
     int[] indices = new int[sources.length];
-    List<Double> ptiles = ((BucketPercentileConfig) node.config()).getPercentiles();
+    List<Double> ptiles = ((BucketQuantileConfig) node.config()).getQuantiles();
     percentiles = new double[ptiles.size()][];
     
-    Bucket overflow = ((BucketPercentile) node).buckets()[((BucketPercentile) node).buckets().length - 1];
+    Bucket overflow = ((BucketQuantile) node).buckets()[((BucketQuantile) node).buckets().length - 1];
     double[] p_thresholds = new double[percentiles.length];
     int limit = -1;
     for (int i = 0; i < sources.length; i++) {
@@ -160,7 +160,7 @@ public class BucketPercentileNumericArrayComputation extends Computer {
         so_far += accumulator[z];
         while (so_far >= p_thresholds[threshold_idx]) {
           percentiles[threshold_idx][i] = 
-              ((BucketPercentile) node).buckets()[z].report;
+              ((BucketQuantile) node).buckets()[z].report;
           p_thresholds[threshold_idx] = -Double.MIN_VALUE;
           threshold_idx++;
           
@@ -194,10 +194,11 @@ public class BucketPercentileNumericArrayComputation extends Computer {
 
   @Override
   TimeSeries getSeries(final int percentile_index) {
-    return new BucketPercentileNumericArrayIterator(timestamp,
-        percentiles[percentile_index], 
+    return new BucketQuantileNumericArrayIterator(timestamp,
+        percentiles[percentile_index],
+        percentiles[percentile_index].length,
         id, 
-        ((BucketPercentileConfig) node.config()).getAs(),
-        ((BucketPercentileConfig) node.config()).getPercentiles().get(percentile_index));
+        ((BucketQuantileConfig) node.config()).getAs(),
+        ((BucketQuantileConfig) node.config()).getQuantiles().get(percentile_index));
   }
 }

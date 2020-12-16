@@ -12,18 +12,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package net.opentsdb.query.processor.bucketpercentile;
+package net.opentsdb.query.processor.bucketquantile;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
 import java.util.regex.Pattern;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.Map.Entry;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -34,22 +27,29 @@ import com.google.common.collect.Lists;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
-import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.common.Const;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.query.BaseQueryNodeConfigWithInterpolators;
 import net.opentsdb.query.DefaultQueryResultId;
 import net.opentsdb.query.QueryResultId;
-import net.opentsdb.query.interpolation.QueryInterpolatorConfig;
-import net.opentsdb.query.processor.ratio.RatioConfig;
-import net.opentsdb.query.processor.ratio.RatioConfig.Builder;
 
-public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators<
-    BucketPercentileConfig.Builder, BucketPercentileConfig> {
-  private static final Logger LOG = LoggerFactory.getLogger(BucketPercentileConfig.class);
-  public static final String DEFAULT_PATTERN = ".*?[\\.\\-_]([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)$";
+/**
+ * A complex config class for the bucket quantile node since there are a lot of
+ * tweaks folks can make. We'll try to choose useful defaults.
+ * 
+ * @since 3.0
+ */
+public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
+    BucketQuantileConfig.Builder, BucketQuantileConfig> {
+  public static final String DEFAULT_PATTERN = 
+      ".*?[\\.\\-_](\\-?[0-9\\.]+[eE]?\\-?[0-9]*)[_\\-](\\-?[0-9\\.]+[eE]?\\-?[0-9]*)$";
   
+  /**
+   * Determines the output of the bucket value for the bounded histogram buckets.
+   * E.g. the default of mean returns the mean of the upper and lower bounds while
+   * top takes the upper and bottom the lower.
+   */
   public static enum OutputOfBucket {
     MEAN,
     TOP,
@@ -72,9 +72,13 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
   private final List<QueryResultId> histogram_ids;
   private final boolean infectious_nan;
   private final String as;
-  private final List<Double> percentiles;
+  private final List<Double> quantiles;
+  private final boolean cumulative_buckets;
+  private final boolean counter_buckets;
+  private final double nan_threshold;
+  private final double missing_metric_threshold;
   
-  private BucketPercentileConfig(final Builder builder) {
+  private BucketQuantileConfig(final Builder builder) {
     super(builder);
     bucket_regex = Strings.isNullOrEmpty(builder.bucket_regex) ?
         DEFAULT_PATTERN : builder.bucket_regex;
@@ -86,36 +90,49 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
     under_flow_min = builder.under_flow_min;
     under_flow_metric = builder.under_flow_metric;
     under_flow_id = builder.under_flow_id;
-    output_of_bucket = builder.output_of_bucket == null ? OutputOfBucket.MEAN : builder.output_of_bucket;
+    output_of_bucket = builder.output_of_bucket == null ? 
+        OutputOfBucket.MEAN : builder.output_of_bucket;
     histograms = builder.histograms;
     histogram_metrics = builder.histogram_metrics;
     histogram_ids = builder.histogram_ids;
     infectious_nan = builder.infectiousNan;
     as = builder.as;
     pattern = Pattern.compile(bucket_regex);
+    cumulative_buckets = builder.cumulative_buckets;
+    counter_buckets = builder.counter_buckets;
+    nan_threshold = builder.nan_threshold;
+    missing_metric_threshold = builder.missing_metric_threshold;
     
-    if (builder.percentiles == null || builder.percentiles.isEmpty()) {
+    if (Strings.isNullOrEmpty(as)) {
+      throw new IllegalArgumentException("As cannot be null or empty.");
+    }
+    if (builder.quantiles == null || builder.quantiles.isEmpty()) {
       throw new IllegalArgumentException("Percentiles cannot be null or empty.");
+    }
+    if (histograms == null || histograms.isEmpty()) {
+      throw new IllegalArgumentException("Histograms cannot be empty.");
     }
     
     // We want to convert 99.9 to 0.999
     boolean convert = false;
-    for (int i = 0; i < builder.percentiles.size(); i++) {
-      if (builder.percentiles.get(i) > 1) {
+    for (int i = 0; i < builder.quantiles.size(); i++) {
+      if (builder.quantiles.get(i) > 1) {
         convert = true;
+        // NOTE We assume all quantiles are formatted the same.
         break;
       }
     }
     
     if (convert) {
-      percentiles = Lists.newArrayList();
-      for (int i = 0; i < builder.percentiles.size(); i++) {
-        percentiles.add(builder.percentiles.get(i) / 100);
+      quantiles = Lists.newArrayList();
+      for (int i = 0; i < builder.quantiles.size(); i++) {
+        quantiles.add(builder.quantiles.get(i) / 100);
       }
     } else {
-      percentiles = builder.percentiles;
+      quantiles = builder.quantiles;
     }
-    Collections.sort(percentiles);
+    Collections.sort(quantiles);
+    Collections.sort(histograms);
     
     result_ids = Lists.newArrayList(new DefaultQueryResultId(as, as));
   }
@@ -182,8 +199,24 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
     return as;
   }
   
-  public List<Double> getPercentiles() {
-    return percentiles;
+  public List<Double> getQuantiles() {
+    return quantiles;
+  }
+  
+  public boolean getCumulativeBuckets() {
+    return cumulative_buckets;
+  }
+  
+  public boolean getCounterBuckets() {
+    return counter_buckets;
+  }
+
+  public double getNanThreshold() {
+    return nan_threshold;
+  }
+  
+  public double getMissingMetricThreshold() {
+    return missing_metric_threshold;
   }
   
   /** @return Whether or not NaNs should be treated as sentinels or considered 
@@ -206,19 +239,27 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
   public Builder toBuilder() {
     final Builder builder = new Builder()
         .setAs(as)
-        .setOutputOfBucket(output_of_bucket)
         .setBucketRegex(bucket_regex)
+        .setOverFlowMax(over_flow_max)
         .setOverFlow(over_flow)
         .setOverFlowMetric(over_flow_metric)
+        .setUnderFlowMin(under_flow_min)
         .setOverFlowId(over_flow_id)
         .setUnderFlow(under_flow)
         .setUnderFlowMetric(under_flow_metric)
         .setUnderFlowId(under_flow_id)
-        .setHistograms(histograms)
-        .setHistogramMetrics(histogram_metrics)
-        .setHistogramIds(histogram_ids)
+        .setOutputOfBucket(output_of_bucket)
+        .setHistograms(Lists.newArrayList(histograms))
+        .setHistogramMetrics(histogram_metrics == null ? null : 
+            Lists.newArrayList(histogram_metrics))
+        .setHistogramIds(histogram_ids == null ? null : 
+            Lists.newArrayList(histogram_ids))
         .setInfectiousNan(infectious_nan)
-        .setPercentiles(percentiles);
+        .setQuantiles(Lists.newArrayList(quantiles))
+        .setCumulativeBuckets(cumulative_buckets)
+        .setCounterBuckets(counter_buckets)
+        .setNanThreshold(nan_threshold)
+        .setMissingMetricThreshold(missing_metric_threshold);
     super.toBuilder(builder);
     return builder;
   }
@@ -231,10 +272,20 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-    final BucketPercentileConfig config = (BucketPercentileConfig) o;
+    final BucketQuantileConfig config = (BucketQuantileConfig) o;
     return Objects.equal(as, config.getAs()) &&
-        // TODO!
+        Objects.equal(bucket_regex, config.bucket_regex) &&
+        Objects.equal(over_flow, config.over_flow) &&
+        Objects.equal(over_flow_max, config.over_flow_max) &&
+        Objects.equal(under_flow, config.under_flow) &&
+        Objects.equal(under_flow_min, config.under_flow_min) &&
+        Objects.equal(output_of_bucket, config.output_of_bucket) &&
         Objects.equal(histograms, config.getHistograms()) &&
+        Objects.equal(quantiles, config.quantiles) &&
+        Objects.equal(cumulative_buckets, config.cumulative_buckets) &&
+        Objects.equal(counter_buckets, config.counter_buckets) &&
+        Objects.equal(nan_threshold, config.nan_threshold) &&
+        Objects.equal(missing_metric_threshold, config.missing_metric_threshold) &&
         Objects.equal(infectious_nan, config.getInfectiousNan()) &&
         Objects.equal(interpolator_configs, config.interpolator_configs) &&
         Objects.equal(id, config.getId());
@@ -250,23 +301,24 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
     final List<HashCode> hashes =
         Lists.newArrayListWithCapacity(3);
     hashes.add(super.buildHashCode());
-    
-    if (interpolator_configs != null && 
-        !interpolator_configs.isEmpty()) {
-      final Map<String, QueryInterpolatorConfig> sorted = 
-          new TreeMap<String, QueryInterpolatorConfig>();
-      for (final Entry<TypeToken<?>, QueryInterpolatorConfig> entry : 
-          interpolator_configs.entrySet()) {
-        sorted.put(entry.getKey().toString(), entry.getValue());
-      }
-      for (final Entry<String, QueryInterpolatorConfig> entry : sorted.entrySet()) {
-        hashes.add(entry.getValue().buildHashCode());
-      }
-    }
-    
+        
     final Hasher hasher = Const.HASH_FUNCTION().newHasher();
+    hasher.putString(bucket_regex, Const.UTF8_CHARSET)
+          .putDouble(over_flow_max)
+          .putString(over_flow == null ? "" : over_flow, Const.UTF8_CHARSET)
+          .putDouble(under_flow_min)
+          .putString(under_flow == null ? "" : under_flow, Const.UTF8_CHARSET)
+          .putInt(output_of_bucket.ordinal())
+          .putString(as, Const.UTF8_CHARSET)
+          .putBoolean(cumulative_buckets)
+          .putBoolean(counter_buckets)
+          .putDouble(nan_threshold)
+          .putDouble(missing_metric_threshold);
     for (int i = 0; i < histograms.size(); i++) {
       hasher.putString(histograms.get(i), Const.UTF8_CHARSET);
+    }
+    for (int i = 0; i < quantiles.size(); i++) {
+      hasher.putDouble(quantiles.get(i));
     }
     hasher.putString(as, Const.UTF8_CHARSET)
           .putBoolean(infectious_nan);
@@ -275,11 +327,15 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
   }
 
   @Override
-  public int compareTo(final BucketPercentileConfig o) {
+  public int compareTo(final BucketQuantileConfig o) {
     // TODO Auto-generated method stub
     return 0;
   }
 
+  public static Builder newBuilder() {
+    return new Builder();
+  }
+  
   /**
    * Parses a JSON config.
    * @param mapper The non-null mapper.
@@ -287,10 +343,9 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
    * @param node The non-null node.
    * @return The parsed config.
    */
-  public static BucketPercentileConfig parse(final ObjectMapper mapper,
+  public static BucketQuantileConfig parse(final ObjectMapper mapper,
                                   final TSDB tsdb,
                                   final JsonNode node) {
-    try {
     Builder builder = new Builder();
     JsonNode n = node.get("histograms");
     if (n != null && !n.isNull()) {
@@ -301,10 +356,10 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
       builder.setHistograms(sources);
     }
     
-    n = node.get("percentiles");
+    n = node.get("quantiles");
     if (n != null && !n.isNull()) {
       for (final JsonNode ptile : n) {
-        builder.addPercentile(ptile.asDouble());
+        builder.addQuantile(ptile.asDouble());
       }
     }
     
@@ -318,9 +373,19 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
       builder.setOverFlow(n.asText());
     }
     
+    n = node.get("overFlowMax");
+    if (n != null && !n.isNull()) {
+      builder.setOverFlowMax(n.asDouble());
+    }
+    
     n = node.get("underFlow");
     if (n != null && !n.isNull()) {
       builder.setUnderFlow(n.asText());
+    }
+    
+    n = node.get("underFlowMin");
+    if (n != null && !n.isNull()) {
+      builder.setUnderFlowMin(n.asDouble());
     }
     
     n = node.get("outputOfBucket");
@@ -333,18 +398,39 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
       builder.setAs(n.asText());
     }
     
+    n = node.get("cumulativeBuckets");
+    if (n != null && !n.isNull()) {
+      builder.setCumulativeBuckets(n.asBoolean());
+    }
+    
+    n = node.get("counterBuckets");
+    if (n != null && !n.isNull()) {
+      builder.setCounterBuckets(n.asBoolean());
+    }
+    
+    n = node.get("nanThreshold");
+    if (n != null && !n.isNull()) {
+      builder.setNanThreshold(n.asDouble());
+    }
+    
+    n = node.get("missingMetricThreshold");
+    if (n != null && !n.isNull()) {
+      builder.setMissingMetricThreshold(n.asDouble());
+    }
+    
+    n = node.get("infectiousNan");
+    if (n != null && !n.isNull()) {
+      builder.setInfectiousNan(n.asBoolean());
+    }
+    
     BaseQueryNodeConfigWithInterpolators.parse(builder, mapper, tsdb, node);
     
     return builder.build();
-    } catch (Throwable t) {
-      LOG.warn("WTF?", t);
-      throw new RuntimeException(t);
-    }
   }
   
   @JsonIgnoreProperties(ignoreUnknown = true)
   public static final class Builder extends BaseQueryNodeConfigWithInterpolators.Builder
-      <Builder, BucketPercentileConfig> {
+      <Builder, BucketQuantileConfig> {
     private String bucket_regex;
     private String over_flow;
     private double over_flow_max;
@@ -358,12 +444,16 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
     private List<String> histograms;
     private List<String> histogram_metrics;
     private List<QueryResultId> histogram_ids;
-    private List<Double> percentiles;
+    private List<Double> quantiles;
+    private boolean cumulative_buckets;
+    private boolean counter_buckets;
+    private double nan_threshold;
+    private double missing_metric_threshold;
     private boolean infectiousNan;
     private String as;
     
     Builder() {
-      setType(BucketPercentileFactory.TYPE);
+      setType(BucketQuantileFactory.TYPE);
     }
     
     public QueryResultId overFlowId() {
@@ -442,6 +532,11 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
       return this;
     }
     
+    public Builder setOverFlowMax(final double over_flow_max) {
+      this.over_flow_max = over_flow_max;
+      return this;
+    }
+    
     public Builder setUnderFlow(final String under_flow) {
       this.under_flow = under_flow;
       return this;
@@ -454,6 +549,11 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
     
     public Builder setUnderFlowId(final QueryResultId under_flow_id) {
       this.under_flow_id = under_flow_id;
+      return this;
+    }
+    
+    public Builder setUnderFlowMin(final double under_flow_min) {
+      this.under_flow_min = under_flow_min;
       return this;
     }
     
@@ -472,21 +572,41 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
       return this;
     }
     
-    public Builder setPercentiles(final List<Double> percentiles) {
-      this.percentiles = percentiles;
+    public Builder setQuantiles(final List<Double> quantiles) {
+      this.quantiles = quantiles;
       return this;
     }
     
-    public Builder addPercentile(final double percentile) {
-      if (percentiles == null) {
-        percentiles = Lists.newArrayList();
+    public Builder addQuantile(final double quantile) {
+      if (quantiles == null) {
+        quantiles = Lists.newArrayList();
       }
-      percentiles.add(percentile);
+      quantiles.add(quantile);
       return this;
     }
     
-    public BucketPercentileConfig build() {
-      return new BucketPercentileConfig(this);
+    public Builder setCumulativeBuckets(final boolean cumulative_buckets) {
+      this.cumulative_buckets = cumulative_buckets;
+      return this;
+    }
+    
+    public Builder setCounterBuckets(final boolean counter_buckets) {
+      this.counter_buckets = counter_buckets;
+      return this;
+    }
+    
+    public Builder setNanThreshold(final double nan_threshold) {
+      this.nan_threshold = nan_threshold;
+      return this;
+    }
+    
+    public Builder setMissingMetricThreshold(final double missing_metric_threshold) {
+      this.missing_metric_threshold = missing_metric_threshold;
+      return this;
+    }
+    
+    public BucketQuantileConfig build() {
+      return new BucketQuantileConfig(this);
     }
 
     @Override

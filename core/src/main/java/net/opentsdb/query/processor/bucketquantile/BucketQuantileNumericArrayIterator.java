@@ -1,12 +1,21 @@
-package net.opentsdb.query.processor.bucketpercentile;
+// This file is part of OpenTSDB.
+// Copyright (C) 2020  The OpenTSDB Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package net.opentsdb.query.processor.bucketquantile;
 
-import java.io.IOException;
 import java.util.Collection;
-import java.util.List;
 import java.util.Optional;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -22,33 +31,48 @@ import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.query.QueryIterator;
-import net.opentsdb.query.QueryNode;
-import net.opentsdb.query.QueryResult;
 
-public class BucketPercentileNumericArrayIterator implements TimeSeries, 
+/**
+ * Simple iterator that wraps up the quantiles array and returns it.
+ * 
+ * @since 3.0
+ */
+public class BucketQuantileNumericArrayIterator implements TimeSeries, 
     QueryIterator, 
     TimeSeriesValue<NumericArrayType>, 
     NumericArrayType{
   
   private final TimeStamp timestamp;
-  private final double[] percentile;
+  private final double[] quantile;
+  private final int quantiles_idx;
   private boolean has_next;
   private TimeSeriesId id;
   private final TimeSeriesId base_id;
   private final String as;
   private final double ptile;
-    
-  public BucketPercentileNumericArrayIterator(final TimeStamp timestamp,
-                                              final double[] percentile,
-                                              final TimeSeriesId base_id,
-                                              final String as,
-                                              final double ptile) {
+  
+  /**
+   * Default ctor.
+   * @param timestamp The timestamp to return.
+   * @param quantiles The quantile array. If null, no data.
+   * @param quantiles_idx The end value for the quantiles array.
+   * @param base_id The base array to add to.
+   * @param as The as string to use as the metric.
+   * @param quantile The quantile we're measuring.
+   */
+  public BucketQuantileNumericArrayIterator(final TimeStamp timestamp,
+                                            final double[] quantiles,
+                                            final int quantiles_idx,
+                                            final TimeSeriesId base_id,
+                                            final String as,
+                                            final double quantile) {
     this.timestamp = timestamp;
-    this.percentile = percentile;
+    this.quantile = quantiles;
+    this.quantiles_idx = quantiles_idx;
     this.base_id = base_id;
     this.as = as;
-    this.ptile = ptile;
-    has_next = true;
+    this.ptile = quantile;
+    has_next = quantiles != null && quantiles_idx > 0 ? true : false;
   }
   
   @Override
@@ -79,7 +103,7 @@ public class BucketPercentileNumericArrayIterator implements TimeSeries,
 
   @Override
   public int end() {
-    return percentile.length;
+    return quantiles_idx;
   }
 
   @Override
@@ -94,7 +118,7 @@ public class BucketPercentileNumericArrayIterator implements TimeSeries,
 
   @Override
   public double[] doubleArray() {
-    return percentile;
+    return quantile;
   }
 
   @Override
@@ -117,12 +141,14 @@ public class BucketPercentileNumericArrayIterator implements TimeSeries,
     if (id != null) {
       return id;
     }
+    // TODO - byte id
     id = BaseTimeSeriesStringId.newBuilder()
         .setMetric(as)
         .setTags(Maps.newHashMap(((TimeSeriesStringId) base_id).tags()))
+        // TODO - ?
         //.setAggregatedTags(((TimeSeriesStringId) base_id).aggregatedTags())
         //.setDisjointTags(((TimeSeriesStringId) base_id).disjointTags())
-        .addTags("_percentile", Double.toString(ptile * 100))
+        .addTags(BucketQuantileFactory.PERCENTILE_TAG, Double.toString(ptile * 100))
         .build();
     return id;
   }

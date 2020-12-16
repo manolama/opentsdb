@@ -1,15 +1,27 @@
-package net.opentsdb.query.processor.bucketpercentile;
+// This file is part of OpenTSDB.
+// Copyright (C) 2020  The OpenTSDB Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package net.opentsdb.query.processor.bucketquantile;
 
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 
 import org.slf4j.Logger;
@@ -19,17 +31,13 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
+import com.stumbleupon.async.Callback;
+import com.stumbleupon.async.Deferred;
 
-import gnu.trove.iterator.TLongObjectIterator;
-import gnu.trove.map.TLongObjectMap;
-import gnu.trove.map.hash.TLongObjectHashMap;
-import net.opentsdb.data.BaseTimeSeriesList;
 import net.opentsdb.data.TimeSeries;
-import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
-import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSpecification;
-import net.opentsdb.data.TypedTimeSeriesIterator;
+import net.opentsdb.exceptions.QueryDownstreamException;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
@@ -39,20 +47,35 @@ import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.QueryResultId;
 import net.opentsdb.rollup.RollupConfig;
 
-public class BucketPercentile extends AbstractQueryNode {
+/**
+ * Quantile node that expects a certain number of histogram metrics and once
+ * all are received, joins and creates a result set for computing quantiles
+ * from the counts.
+ * 
+ * @since 3.0
+ */
+public class BucketQuantile extends AbstractQueryNode {
   private static final Logger LOG = LoggerFactory.getLogger(
-      BucketPercentile.class);
+      BucketQuantile.class);
   
-  private final BucketPercentileConfig config;
+  private final BucketQuantileConfig config;
   private final Map<QueryResultId, QueryResult> results;
   private final Bucket[] buckets;
+  private final AtomicBoolean failed;
   
-  public BucketPercentile(final QueryNodeFactory factory, 
-                          final QueryPipelineContext context,
-                          final BucketPercentileConfig config) {
+  /**
+   * Default ctor.
+   * @param factory The non-null factory.
+   * @param context The non-null context.
+   * @param config The non-null config.
+   */
+  public BucketQuantile(final QueryNodeFactory factory, 
+                        final QueryPipelineContext context,
+                        final BucketQuantileConfig config) {
     super(factory, context);
     this.config = config;
     results = Maps.newConcurrentMap();
+    failed = new AtomicBoolean();
     if (config.underFlowId() != null) {
       results.put(config.underFlowId(), DUMMY);
     }
@@ -65,7 +88,6 @@ public class BucketPercentile extends AbstractQueryNode {
     }
     
     // parse out the metrics
-    LOG.info("***** RESULTS SIZE: " + results.size());
     buckets = new Bucket[results.size()];
     int bucket_idx = 0;
     for (final String histogram : config.histogramMetrics()) {
@@ -83,6 +105,7 @@ public class BucketPercentile extends AbstractQueryNode {
       try {
          lower = Double.parseDouble(matcher.group(1));
       } catch (NumberFormatException e) {
+        // actually shouldn't happen as the regex would toss it
         throw new IllegalArgumentException("Failed to parse lower bucket from "
             + "metric [" + histogram + "] using pattern: " 
             + config.getBucketRegex() + " that matched: " + matcher.group(1));
@@ -90,14 +113,13 @@ public class BucketPercentile extends AbstractQueryNode {
       
       double upper = Double.NaN;
       try {
+        // actually shouldn't happen as the regex would toss it
         upper = Double.parseDouble(matcher.group(2));
       } catch (NumberFormatException e) {
         throw new IllegalArgumentException("Failed to parse upper bucket from "
             + "metric [" + histogram + "] using pattern: " 
             + config.getBucketRegex() + " that matched: " + matcher.group(2));
       }
-      
-      LOG.info("          LW: " + lower + "   UP: " + upper);
       buckets[bucket_idx++] = new Bucket(histogram, lower, upper);
     }
     
@@ -119,16 +141,25 @@ public class BucketPercentile extends AbstractQueryNode {
 
   @Override
   public void close() {
-    // TODO Auto-generated method stub
-    
+    // no-op
   }
 
   @Override
   public void onNext(final QueryResult next) {
-    LOG.info("GOT RESULT: " + next.dataSource());
     if (results.get(next.dataSource()) != DUMMY) {
-      LOG.error("Unexpected result: " + next.dataSource());
+      LOG.warn("Unexpected result: " + next.dataSource());
       return;
+    }
+    
+    if (!Strings.isNullOrEmpty(next.error()) || next.exception() != null) {
+      // failed
+      if (failed.compareAndSet(false, true)) {
+        if (next.exception() != null) {
+          onError(next.exception());
+        } else {
+          onError(new QueryDownstreamException(next.error()));
+        }
+      }
     }
     
     results.put(next.dataSource(), next);
@@ -146,18 +177,95 @@ public class BucketPercentile extends AbstractQueryNode {
       return;
     }
     
-    BucketPercentileResult result = new BucketPercentileResult(this);
+    final BucketQuantileResult result = new BucketQuantileResult(this);
+    List<Deferred<Void>> deferreds = Lists.newArrayList();
     for (final Entry<QueryResultId, QueryResult> entry : results.entrySet()) {
-      result.addResult(entry.getValue());
+      deferreds.add(result.addResult(entry.getValue()));
     }
-    result.finishSetup();
-    sendUpstream(result);
+
+    class ErrCB implements Callback<Void, Exception> {
+
+      @Override
+      public Void call(final Exception e) throws Exception {
+        LOG.error("Failed to join results", e);
+        onError(e);
+        return null;
+      }
+      
+    }
+    
+    class ResolveCB implements Callback<Void, ArrayList<Void>> {
+
+      @Override
+      public Void call(final ArrayList<Void> arg) throws Exception {
+        result.finishSetup();
+        sendUpstream(result);
+        return null;
+      }
+      
+    }
+    Deferred.group(deferreds)
+      .addCallback(new ResolveCB())
+      .addErrback(new ErrCB());
   }
   
   Bucket[] buckets() {
     return buckets;
   }
+
+  Map<QueryResultId, QueryResult> results() {
+    return results;
+  }
   
+  /**
+   * A bucket definition that is sorted once we have the under flow, over flow
+   * and histos.
+   */
+  public class Bucket {
+    String metric;
+    double lower;
+    double upper;
+    double report;
+    boolean is_overflow;
+    boolean is_underflow;
+    
+    Bucket(String metric, double lower, double upper) {
+      this.metric = metric;
+      this.lower = lower;
+      this.upper = upper;
+      switch (config.getOutputOfBucket()) {
+      case BOTTOM:
+        report = lower;
+        break;
+      case TOP:
+        report = upper;
+        break;
+      case MEAN:
+        report = lower + (upper - lower) / 2;
+        break;
+      default:
+        throw new IllegalArgumentException("No handler for: " + 
+            config.getOutputOfBucket());
+      }
+    }
+    
+    Bucket(String metric, boolean is_overflow, boolean is_underflow) {
+      this.metric = metric;
+      this.is_overflow = is_overflow;
+      this.is_underflow = is_underflow;
+      if (is_overflow) {
+        report = config.getOverFlowMax();
+      } else {
+        report = config.getUnderFlowMin();
+      }
+    }
+    
+  }
+  
+  /**
+   * A static object used to tell the node that it hasn't seen a result yet
+   * but expects one.
+   */
   static class DummyResult implements QueryResult {
 
     @Override
@@ -233,51 +341,8 @@ public class BucketPercentile extends AbstractQueryNode {
     }
     
   }
-  private final static DummyResult DUMMY = new DummyResult();
+  protected final static DummyResult DUMMY = new DummyResult();
 
-  class Bucket {
-    String metric;
-    double lower;
-    double upper;
-    double report;
-    boolean is_overflow;
-    boolean is_underflow;
-    
-    Bucket(String metric, double lower, double upper) {
-      this.metric = metric;
-      this.lower = lower;
-      this.upper = upper;
-      switch (config.getOutputOfBucket()) {
-      case BOTTOM:
-        report = lower;
-        LOG.info("******* lower: " + metric + "  REPORT: " + report);
-        break;
-      case TOP:
-        report = upper;
-        LOG.info("******* upper: " + metric + "  REPORT: " + report);
-        break;
-      case MEAN:
-        report = lower + (upper - lower) / 2;
-        LOG.info("******* mean: " + metric + "  REPORT: " + report);
-        break;
-      default:
-        throw new IllegalArgumentException("No handler for: " + config.getOutputOfBucket());
-      }
-    }
-    
-    Bucket(String metric, boolean is_overflow, boolean is_underflow) {
-      this.metric = metric;
-      this.is_overflow = is_overflow;
-      this.is_underflow = is_underflow;
-      if (is_overflow) {
-        report = config.getOverFlowMax();
-      } else {
-        report = config.getUnderFlowMin();
-      }
-    }
-    
-  }
-  
   static class BucketComparator implements Comparator<Bucket> {
 
     @Override

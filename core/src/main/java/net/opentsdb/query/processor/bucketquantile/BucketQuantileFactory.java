@@ -12,45 +12,50 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package net.opentsdb.query.processor.bucketpercentile;
+package net.opentsdb.query.processor.bucketquantile;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
-import com.google.common.collect.Maps;
 import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.exceptions.QueryExecutionException;
 import net.opentsdb.query.QueryNodeConfig;
 import net.opentsdb.query.QueryPipelineContext;
 import net.opentsdb.query.QueryResultId;
 import net.opentsdb.query.plan.QueryPlanner;
 import net.opentsdb.query.processor.BaseQueryNodeFactory;
-import net.opentsdb.utils.Pair;
 
-public class BucketPercentileFactory extends BaseQueryNodeFactory<BucketPercentileConfig, BucketPercentile> {
+/**
+ * Factory for validating the bucket quantile nodes and setting them up by 
+ * walking the graph to find the input node IDs and metric names.
+ * 
+ * @since 3.0
+ */
+public class BucketQuantileFactory extends BaseQueryNodeFactory<BucketQuantileConfig, BucketQuantile> {
 
-  public static final String TYPE = "BucketPercentile";
+  public static final String TYPE = "BucketQuantile";
+  
+  public static final String PERCENTILE_TAG = "_percentile";
 
   @Override
-  public BucketPercentileConfig parseConfig(final ObjectMapper mapper, 
+  public BucketQuantileConfig parseConfig(final ObjectMapper mapper, 
                                             final TSDB tsdb, 
                                             final JsonNode node) {
-    return BucketPercentileConfig.parse(mapper, tsdb, node);
+    return BucketQuantileConfig.parse(mapper, tsdb, node);
   }
 
   @Override
   public void setupGraph(final QueryPipelineContext context, 
-                         final BucketPercentileConfig config,
+                         final BucketQuantileConfig config,
                          final QueryPlanner plan) {
     final Set<QueryNodeConfig> downstream = plan.configGraph().successors(config);
-    BucketPercentileConfig.Builder builder = config.toBuilder();
+    BucketQuantileConfig.Builder builder = config.toBuilder();
     
-    // TODO - super inefficient walk.. ug.
     for (final QueryNodeConfig ds : downstream) {
       if (builder.underFlowId() == null && !Strings.isNullOrEmpty(config.getUnderFlow())) {
         final String metric = plan.getMetricForDataSource(ds, config.getUnderFlow());
@@ -77,7 +82,49 @@ public class BucketPercentileFactory extends BaseQueryNodeFactory<BucketPercenti
       }
     }
     
-    plan.replace(config, builder.build());
+    // validations now
+    BucketQuantileConfig rebuilt = (BucketQuantileConfig) builder.build();
+    if (rebuilt.histogramIds() == null || 
+        rebuilt.getHistograms().size() != rebuilt.histogramIds().size()) {
+      throw new QueryExecutionException(
+          "Missing one or more node IDs given the histograms requested. "
+              + "Histograms: " + rebuilt.getHistograms() + " IDs: " 
+              + rebuilt.histogramIds(), 0, 400);
+    }
+    if (rebuilt.histogramMetrics() == null || 
+        rebuilt.getHistograms().size() != rebuilt.histogramMetrics().size()) {
+      throw new QueryExecutionException(
+          "Missing one or more histogram metrics given the histograms requested. "
+              + "Histograms: " + rebuilt.getHistograms() + " IDs: " 
+              + rebuilt.histogramMetrics(), 0, 400);
+    }
+    
+    if (!Strings.isNullOrEmpty(rebuilt.getOverFlow())) {
+      if (rebuilt.overFlowId() == null) {
+        throw new QueryExecutionException(
+            "Missing the overflow node ID for overflow: " 
+                + rebuilt.getOverFlow(), 0, 400);
+      }
+      if (Strings.isNullOrEmpty(rebuilt.overFlowMetric())) {
+        throw new QueryExecutionException(
+            "Missing the overflow metric for overflow: " 
+                + rebuilt.getOverFlow(), 0, 400);
+      }
+    }
+    
+    if (!Strings.isNullOrEmpty(rebuilt.getUnderFlow())) {
+      if (rebuilt.underFlowId() == null) {
+        throw new QueryExecutionException(
+            "Missing the underflow node ID for overflow: " 
+                + rebuilt.getUnderFlow(), 0, 400);
+      }
+      if (Strings.isNullOrEmpty(rebuilt.underFlowMetric())) {
+        throw new QueryExecutionException(
+            "Missing the underflow metric for overflow: " 
+                + rebuilt.getUnderFlow(), 0, 400);
+      }
+    }
+    plan.replace(config, rebuilt);
   }
   
   @Override
@@ -93,11 +140,17 @@ public class BucketPercentileFactory extends BaseQueryNodeFactory<BucketPercenti
   }
 
   @Override
-  public BucketPercentile newNode(QueryPipelineContext context, BucketPercentileConfig config) {
-    return new BucketPercentile(this, context, config);
+  public BucketQuantile newNode(QueryPipelineContext context, BucketQuantileConfig config) {
+    return new BucketQuantile(this, context, config);
   }
   
-  QueryResultId matchId(final QueryNodeConfig config, final String id) {
+  /**
+   * Helper to match the result ID given a list of IDs in the node. 
+   * @param config The non-null config read IDs from.
+   * @param id The non-null ID to match.
+   * @return The ID if found, null if not.
+   */
+  private QueryResultId matchId(final QueryNodeConfig config, final String id) {
     final List<QueryResultId> ids = config.resultIds();
     for (int i = 0; i < ids.size(); i++) {
       final QueryResultId result_id = ids.get(i);
