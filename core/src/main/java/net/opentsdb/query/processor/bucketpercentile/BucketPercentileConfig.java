@@ -19,6 +19,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Map.Entry;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -43,7 +47,7 @@ import net.opentsdb.query.processor.ratio.RatioConfig.Builder;
 
 public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators<
     BucketPercentileConfig.Builder, BucketPercentileConfig> {
-  
+  private static final Logger LOG = LoggerFactory.getLogger(BucketPercentileConfig.class);
   public static final String DEFAULT_PATTERN = ".*?[\\.\\-_]([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)$";
   
   public static enum OutputOfBucket {
@@ -190,7 +194,7 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
 
   @Override
   public boolean pushDown() {
-    return true;
+    return false;
   }
 
   @Override
@@ -286,7 +290,7 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
   public static BucketPercentileConfig parse(final ObjectMapper mapper,
                                   final TSDB tsdb,
                                   final JsonNode node) {
-    System.out.println("BUILDER!!!!!!!!!!!!!!!!!!!!");
+    try {
     Builder builder = new Builder();
     JsonNode n = node.get("histograms");
     if (n != null && !n.isNull()) {
@@ -332,6 +336,10 @@ public class BucketPercentileConfig extends BaseQueryNodeConfigWithInterpolators
     BaseQueryNodeConfigWithInterpolators.parse(builder, mapper, tsdb, node);
     
     return builder.build();
+    } catch (Throwable t) {
+      LOG.warn("WTF?", t);
+      throw new RuntimeException(t);
+    }
   }
   
   @JsonIgnoreProperties(ignoreUnknown = true)

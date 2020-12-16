@@ -65,6 +65,7 @@ public class BucketPercentile extends AbstractQueryNode {
     }
     
     // parse out the metrics
+    LOG.info("***** RESULTS SIZE: " + results.size());
     buckets = new Bucket[results.size()];
     int bucket_idx = 0;
     for (final String histogram : config.histogramMetrics()) {
@@ -96,7 +97,7 @@ public class BucketPercentile extends AbstractQueryNode {
             + config.getBucketRegex() + " that matched: " + matcher.group(2));
       }
       
-      System.out.println("          LW: " + lower + "   UP: " + upper);
+      LOG.info("          LW: " + lower + "   UP: " + upper);
       buckets[bucket_idx++] = new Bucket(histogram, lower, upper);
     }
     
@@ -249,15 +250,15 @@ public class BucketPercentile extends AbstractQueryNode {
       switch (config.getOutputOfBucket()) {
       case BOTTOM:
         report = lower;
-        System.out.println("******* lower: " + metric + "  REPORT: " + report);
+        LOG.info("******* lower: " + metric + "  REPORT: " + report);
         break;
       case TOP:
         report = upper;
-        System.out.println("******* upper: " + metric + "  REPORT: " + report);
+        LOG.info("******* upper: " + metric + "  REPORT: " + report);
         break;
       case MEAN:
-        report = (upper - lower) / 2;
-        System.out.println("******* mean: " + metric + "  REPORT: " + report);
+        report = lower + (upper - lower) / 2;
+        LOG.info("******* mean: " + metric + "  REPORT: " + report);
         break;
       default:
         throw new IllegalArgumentException("No handler for: " + config.getOutputOfBucket());
