@@ -86,7 +86,7 @@ public class BucketQuantileNumericArrayIterator extends BucketQuantileIterator
 
   @Override
   public int end() {
-    return quantile_index;
+    return processor.limit;
   }
 
   @Override

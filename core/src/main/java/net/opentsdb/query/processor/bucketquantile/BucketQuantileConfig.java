@@ -134,7 +134,7 @@ public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
     Collections.sort(quantiles);
     Collections.sort(histograms);
     
-    result_ids = Lists.newArrayList(new DefaultQueryResultId(as, as));
+    result_ids = Lists.newArrayList(new DefaultQueryResultId(id, as));
   }
   
   public String getBucketRegex() {

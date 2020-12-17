@@ -108,7 +108,9 @@ public class BucketQuantileNumericArrayProcessor extends BucketQuantileProcessor
       for (int i = 0; i < sources.length; i++) {
         if (sources[i] == null) {
           indices[i] = -1;
-          LOG.debug("No source at " + i);
+          if (LOG.isTraceEnabled()) {
+            LOG.trace("No source at " + i);
+          }
           continue;
         }
         
@@ -116,7 +118,9 @@ public class BucketQuantileNumericArrayProcessor extends BucketQuantileProcessor
             sources[i].iterator(NumericArrayType.TYPE);
         if (!op.isPresent()) {
           indices[i] = -1;
-          LOG.debug("No array iterator for source at " + i + ": " + sources[i].id());
+          if (LOG.isTraceEnabled()) {
+            LOG.trace("No array iterator for source at " + i + ": " + sources[i].id());
+          }
           continue;
         }
         
@@ -125,8 +129,10 @@ public class BucketQuantileNumericArrayProcessor extends BucketQuantileProcessor
         iterators[i] = iterator;
         if (!iterator.hasNext()) {
           indices[i] = -1;
-          LOG.debug("No data for the iterator for source at " + i + ": " 
-              + sources[i].id());
+          if (LOG.isTraceEnabled()) {
+            LOG.trace("No data for the iterator for source at " + i + ": " 
+                + sources[i].id());
+          }
           continue;
         }
         
@@ -134,7 +140,9 @@ public class BucketQuantileNumericArrayProcessor extends BucketQuantileProcessor
             (TimeSeriesValue<NumericArrayType>) iterator.next();
         if (value.value() == null) {
           indices[i] = -1;
-          LOG.debug("Null value from source at " + i + ": " + sources[i].id());
+          if (LOG.isTraceEnabled()) {
+            LOG.trace("Null value from source at " + i + ": " + sources[i].id());
+          }
           continue;
         }
         
@@ -160,7 +168,9 @@ public class BucketQuantileNumericArrayProcessor extends BucketQuantileProcessor
         } else {
           // ewwwww, eww! No!! This shouldn't happen because histograms
           // are counts!
-          LOG.debug("Converting from double [" + Arrays.toString(value.value().doubleArray()) + " to long at " + i + ": " + sources[i].id());
+          if (LOG.isTraceEnabled()) {
+            LOG.trace("Converting from double [" + Arrays.toString(value.value().doubleArray()) + " to long at " + i + ": " + sources[i].id());
+          }
           if (node.longArrayPool() != null) {
             results_pooled[i] = node.longArrayPool().claim(value.value().end() - value.value().offset());
           }

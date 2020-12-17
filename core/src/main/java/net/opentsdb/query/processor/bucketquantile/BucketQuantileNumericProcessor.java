@@ -99,22 +99,26 @@ public class BucketQuantileNumericProcessor extends BucketQuantileProcessor {
       boolean have_series = false;
       for (int i = 0; i < sources.length; i++) {
         if (sources[i] == null) {
-          LOG.debug("No source at " + i);
+          LOG.trace("No source at " + i);
           continue;
         }
         
         final Optional<TypedTimeSeriesIterator<? extends TimeSeriesDataType>> op = 
             sources[i].iterator(NumericType.TYPE);
         if (!op.isPresent()) {
-          LOG.debug("No array iterator for source at " + i + ": " + sources[i].id());
+          if (LOG.isTraceEnabled()) {
+            LOG.trace("No array iterator for source at " + i + ": " + sources[i].id());
+          }
           continue;
         }
         
         final TypedTimeSeriesIterator<? extends TimeSeriesDataType> iterator = 
             op.get();
         if (!iterator.hasNext()) {
-          LOG.debug("No data for the iterator for source at " + i + ": " 
-              + sources[i].id());
+          if (LOG.isTraceEnabled()) {
+            LOG.trace("No data for the iterator for source at " + i + ": " 
+                + sources[i].id());
+          }
           continue;
         }
         iterators[i] = iterator;
@@ -190,11 +194,15 @@ public class BucketQuantileNumericProcessor extends BucketQuantileProcessor {
                 negatives++;
                 includes[i] = -1;
               } else if (sum < 0 || cumulative) {
-                LOG.debug("Casting a double to a long.");
+                if (LOG.isTraceEnabled()) {
+                  LOG.trace("Casting a double to a long.");
+                }
                 sum = (long) value.doubleValue();
                 includes[i] = (long) value.doubleValue();
               } else {
-                LOG.debug("Casting a double to a long.");
+                if (LOG.isTraceEnabled()) {
+                  LOG.trace("Casting a double to a long.");
+                }
                 sum += (long) value.doubleValue();
                 includes[i] = (long) value.doubleValue();
               }
