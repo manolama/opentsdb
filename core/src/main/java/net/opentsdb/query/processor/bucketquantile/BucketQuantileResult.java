@@ -16,14 +16,11 @@ package net.opentsdb.query.processor.bucketquantile;
 
 import java.io.IOException;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
-import java.util.Optional;
 import java.util.TreeMap;
 import java.util.Map.Entry;
 
@@ -80,10 +77,11 @@ public class BucketQuantileResult extends BaseTimeSeriesList implements QueryRes
   private final List<Double> quantiles;
   private final QueryResultId result_id;
   private TLongObjectMap<TimeSeries[]> map;
+  private TLongObjectMap<TimeSeriesId> resolved_ids;
   private QueryResult initial_result;
   private TimeSeries[][] final_series;
-  private int final_index;
-  private BucketQuantileComputer last_ts;
+  private TimeSeriesId[] final_ids;
+  private BucketQuantileProcessor last_ts;
   
   BucketQuantileResult(final BucketQuantile node) {
     this.node = node;
@@ -93,6 +91,13 @@ public class BucketQuantileResult extends BaseTimeSeriesList implements QueryRes
         ((BucketQuantileConfig) node.config()).getAs());
   }
   
+  /**
+   * Join the result on tags with the other buckets for a time series.
+   * 
+   * @param result The non-null result to add.
+   * @return A deferred in case we need to resolve the ID to strings for proper
+   * joining.
+   */
   Deferred<Void> addResult(final QueryResult result) {
     if (initial_result == null || 
         initial_result.timeSeries().isEmpty() && !result.timeSeries().isEmpty()) {
@@ -136,6 +141,9 @@ public class BucketQuantileResult extends BaseTimeSeriesList implements QueryRes
     }
     
     // bytes so a bit more work
+    if (resolved_ids == null) {
+      resolved_ids = new TLongObjectHashMap<TimeSeriesId>();
+    }
     List<Deferred<Void>> deferreds = Lists.newArrayList();
     for (int i = 0; i < result.timeSeries().size(); i++) {
       final TimeSeries series = result.timeSeries().get(i);
@@ -154,17 +162,20 @@ public class BucketQuantileResult extends BaseTimeSeriesList implements QueryRes
             }
           }
           if (bucket_index < 0) {
-            LOG.error("??? The result set with metric: " + id.metric() 
+            LOG.error("The result set with metric: " + id.metric() 
               + " didn't match a bucket?");
             return Deferred.fromResult(null);
           }
           
-          TimeSeries[] ts = map.get(hash);
-          if (ts == null) {
-            ts = new TimeSeries[node.buckets().length];
-            map.put(hash, ts);
+          synchronized (map) { 
+            TimeSeries[] ts = map.get(hash);
+            if (ts == null) {
+              ts = new TimeSeries[node.buckets().length];
+              map.put(hash, ts);
+            }
+            ts[bucket_index] = series;
+            resolved_ids.putIfAbsent(hash, id);
           }
-          ts[bucket_index] = series;
           return Deferred.fromResult(null);
         }
         
@@ -175,8 +186,16 @@ public class BucketQuantileResult extends BaseTimeSeriesList implements QueryRes
     return Deferred.group(deferreds).addCallback(Deferreds.VOID_GROUP_CB);
   }
   
+  /**
+   * Walks the map to find out if we have any data, tossing out everything if
+   * the missing metric threshold has been configured and exceeded.
+   * 
+   */
   void finishSetup() {
     final_series = new TimeSeries[map.size()][];
+    if (resolved_ids != null) {
+      final_ids = new TimeSeriesId[map.size()];
+    }
     final TLongObjectIterator<TimeSeries[]> iterator = map.iterator();
     int final_index = 0;
     final double threshold = ((BucketQuantileConfig) node.config())
@@ -215,7 +234,11 @@ public class BucketQuantileResult extends BaseTimeSeriesList implements QueryRes
           continue;
         }
       }
-      final_series[final_index++] = iterator.value();
+      final_series[final_index] = iterator.value();
+      if (final_ids != null) {
+        final_ids[final_index] = resolved_ids.get(iterator.key());
+      }
+      final_index++;
     }
     size = final_index * quantiles.size();
     map = null;
@@ -259,7 +282,7 @@ public class BucketQuantileResult extends BaseTimeSeriesList implements QueryRes
 
   @Override
   public TypeToken<? extends TimeSeriesId> idType() {
-    return initial_result.idType();
+    return Const.TS_STRING_ID;
   }
 
   @Override
@@ -310,27 +333,29 @@ public class BucketQuantileResult extends BaseTimeSeriesList implements QueryRes
         try {
           last_ts.close();
         } catch (IOException e) {
-          // TODO Auto-generated catch block
+          // don't worry about it.
           e.printStackTrace();
         }
       }
       
       if (type == NumericType.TYPE) {
-        last_ts = new BucketQuantileNumericComputation(real_idx, node, set);
+        last_ts = new BucketQuantileNumericProcessor(real_idx, node, set, 
+            final_ids != null ? final_ids[real_idx] : null) ;
       } else if (type == NumericArrayType.TYPE) {
-        last_ts = new BucketQuantileNumericArrayComputation(real_idx, node, set);
+        last_ts = new BucketQuantileNumericArrayProcessor(real_idx, node, set, 
+            final_ids != null ? final_ids[real_idx] : null);
       } else if (type == NumericSummaryType.TYPE) {
-        last_ts = new BucketQuantileNumericSummaryComputation(real_idx, node, set);
+        last_ts = new BucketQuantileNumericSummaryProcessor(real_idx, node, set, 
+            final_ids != null ? final_ids[real_idx] : null);
       } else {
-        // TODO - the others
-        throw new IllegalStateException("BAD TYPE: " + type);
+        throw new IllegalStateException("Unhandled type: " + type);
       }
       
       last_ts.run();
     }
     
-    int ptile = index - (real_idx * quantiles.size());
-    return last_ts.getSeries(ptile);
+    int quantile = index - (real_idx * quantiles.size());
+    return last_ts.getSeries(quantile);
   }
 
   /**

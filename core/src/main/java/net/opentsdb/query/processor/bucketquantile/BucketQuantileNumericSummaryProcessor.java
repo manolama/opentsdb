@@ -54,9 +54,9 @@ import net.opentsdb.pools.PooledObject;
  * 
  * @since 3.0
  */
-public class BucketQuantileNumericSummaryComputation extends BucketQuantileComputer {
+public class BucketQuantileNumericSummaryProcessor extends BucketQuantileProcessor {
   private static final Logger LOG = LoggerFactory.getLogger(
-      BucketQuantileNumericSummaryComputation.class);
+      BucketQuantileNumericSummaryProcessor.class);
   
   /** The percentiles we'll populate and return to the caller. */
   protected long[] timestamps;
@@ -71,10 +71,11 @@ public class BucketQuantileNumericSummaryComputation extends BucketQuantileCompu
    * @param node The non-null node.
    * @param sources The non-null source.
    */
-  BucketQuantileNumericSummaryComputation(final int index,
-                                          final BucketQuantile node,
-                                          final TimeSeries[] sources) {
-    super(index, node, sources);
+  BucketQuantileNumericSummaryProcessor(final int index,
+                                        final BucketQuantile node,
+                                        final TimeSeries[] sources,
+                                        final TimeSeriesId base_id) {
+    super(index, node, sources, base_id);
   }
   
   @Override
@@ -123,6 +124,9 @@ public class BucketQuantileNumericSummaryComputation extends BucketQuantileCompu
         }
         iterators[i] = iterator;
         have_series = true;
+        if (base_id == null) {
+          base_id = sources[i].id();
+        }
       }
       
       if (!have_series) {

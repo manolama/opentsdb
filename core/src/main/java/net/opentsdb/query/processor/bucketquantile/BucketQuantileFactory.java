@@ -40,7 +40,7 @@ public class BucketQuantileFactory extends BaseQueryNodeFactory<BucketQuantileCo
 
   public static final String TYPE = "BucketQuantile";
   
-  public static final String PERCENTILE_TAG = "_percentile";
+  public static final String QUANTILE_TAG = "_quantile";
 
   @Override
   public BucketQuantileConfig parseConfig(final ObjectMapper mapper, 
@@ -57,19 +57,19 @@ public class BucketQuantileFactory extends BaseQueryNodeFactory<BucketQuantileCo
     BucketQuantileConfig.Builder builder = config.toBuilder();
     
     for (final QueryNodeConfig ds : downstream) {
-      if (builder.underFlowId() == null && !Strings.isNullOrEmpty(config.getUnderFlow())) {
-        final String metric = plan.getMetricForDataSource(ds, config.getUnderFlow());
+      if (builder.underFlowId() == null && !Strings.isNullOrEmpty(config.getUnderflow())) {
+        final String metric = plan.getMetricForDataSource(ds, config.getUnderflow());
         if (!Strings.isNullOrEmpty(metric)) {
-          builder.setUnderFlowId(matchId(ds, config.getUnderFlow()))
-                 .setUnderFlowMetric(metric);
+          builder.setUnderflowId(matchId(ds, config.getUnderflow()))
+                 .setUnderflowMetric(metric);
         }
       }
       
-      if (builder.overFlowId() == null && !Strings.isNullOrEmpty(config.getOverFlow())) {
-        final String metric = plan.getMetricForDataSource(ds, config.getOverFlow());
+      if (builder.overFlowId() == null && !Strings.isNullOrEmpty(config.getOverflow())) {
+        final String metric = plan.getMetricForDataSource(ds, config.getOverflow());
         if (!Strings.isNullOrEmpty(metric)) {
-          builder.setOverFlowId(matchId(ds, config.getOverFlow()))
-                 .setOverFlowMetric(metric);
+          builder.setOverflowId(matchId(ds, config.getOverflow()))
+                 .setOverflowMetric(metric);
         }
       }
       
@@ -99,29 +99,29 @@ public class BucketQuantileFactory extends BaseQueryNodeFactory<BucketQuantileCo
               + rebuilt.histogramMetrics(), 0, 400);
     }
     
-    if (!Strings.isNullOrEmpty(rebuilt.getOverFlow())) {
-      if (rebuilt.overFlowId() == null) {
+    if (!Strings.isNullOrEmpty(rebuilt.getOverflow())) {
+      if (rebuilt.overflowId() == null) {
         throw new QueryExecutionException(
             "Missing the overflow node ID for overflow: " 
-                + rebuilt.getOverFlow(), 0, 400);
+                + rebuilt.getOverflow(), 0, 400);
       }
-      if (Strings.isNullOrEmpty(rebuilt.overFlowMetric())) {
+      if (Strings.isNullOrEmpty(rebuilt.overflowMetric())) {
         throw new QueryExecutionException(
             "Missing the overflow metric for overflow: " 
-                + rebuilt.getOverFlow(), 0, 400);
+                + rebuilt.getOverflow(), 0, 400);
       }
     }
     
-    if (!Strings.isNullOrEmpty(rebuilt.getUnderFlow())) {
-      if (rebuilt.underFlowId() == null) {
+    if (!Strings.isNullOrEmpty(rebuilt.getUnderflow())) {
+      if (rebuilt.underflowId() == null) {
         throw new QueryExecutionException(
             "Missing the underflow node ID for overflow: " 
-                + rebuilt.getUnderFlow(), 0, 400);
+                + rebuilt.getUnderflow(), 0, 400);
       }
-      if (Strings.isNullOrEmpty(rebuilt.underFlowMetric())) {
+      if (Strings.isNullOrEmpty(rebuilt.underflowMetric())) {
         throw new QueryExecutionException(
             "Missing the underflow metric for overflow: " 
-                + rebuilt.getUnderFlow(), 0, 400);
+                + rebuilt.getUnderflow(), 0, 400);
       }
     }
     plan.replace(config, rebuilt);

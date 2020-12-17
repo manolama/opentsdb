@@ -20,9 +20,14 @@ import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.pools.PooledObject;
 
-public abstract class BucketQuantileComputer implements Closeable {
+/**
+ * Base class for processors that will compute the quantiles.
+ * 
+ * @since 3.0
+ */
+public abstract class BucketQuantileProcessor implements Closeable {
 
-  protected static final int DEFAULT_ARRAY_SIZE = 4096;
+  protected static final int DEFAULT_ARRAY_SIZE = 1024;
   
   /** The node we belong to. */
   protected final BucketQuantile node;
@@ -30,26 +35,47 @@ public abstract class BucketQuantileComputer implements Closeable {
   /** The sorted sources. */
   protected final TimeSeries[] sources;
   
+  /** The real index in the overall result set. */
   protected final int index;
   
+  /** The quantiles to be populated. */
   protected double[][] quantiles;
   protected PooledObject[] pooled_objects;
   
   /** The base ID we'll use. */
-  protected TimeSeriesId id;
+  protected TimeSeriesId base_id;
   
   /** Final result length for each quantile. */
   protected int limit;
   
-  BucketQuantileComputer(final int index,
-      final BucketQuantile node,
-      final TimeSeries[] sources) {
+  /**
+   * Default ctor.
+   * @param index The real index of this processor in the result set.
+   * @param node The node we belong to.
+   * @param sources The array of source metrics.
+   */
+  BucketQuantileProcessor(final int index,
+                          final BucketQuantile node,
+                          final TimeSeries[] sources,
+                          final TimeSeriesId base_id) {
     this.index = index;
     this.node = node;
     this.sources = sources;
+    this.base_id = base_id;
   }
   
+  /**
+   * Called when we need to pull out a time series from the overall result set.
+   */
   abstract void run();
   
-  abstract TimeSeries getSeries(final int percentile_index);
+  /**
+   * Gets the time series with the percentile appended and iterates over the
+   * quantiles already calculated by {@link #run()}.
+   * 
+   * @param quantile_index The index of the quantile in the list of quantiles
+   * requested by the user.
+   * @return The non-null time series to work with.
+   */
+  abstract TimeSeries getSeries(final int quantile_index);
 }

@@ -58,14 +58,14 @@ public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
   
   private final String bucket_regex;
   private final Pattern pattern;
-  private final double over_flow_max;
-  private final String over_flow;
-  private final String over_flow_metric;
-  private final QueryResultId over_flow_id;
-  private final double under_flow_min;
-  private final String under_flow;
-  private final String under_flow_metric;
-  private final QueryResultId under_flow_id;
+  private final double overflow_max;
+  private final String overflow;
+  private final String overflow_metric;
+  private final QueryResultId overflow_id;
+  private final double underflow_min;
+  private final String underflow;
+  private final String underflow_metric;
+  private final QueryResultId underflow_id;
   private final OutputOfBucket output_of_bucket;
   private final List<String> histograms;
   private final List<String> histogram_metrics;
@@ -82,14 +82,14 @@ public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
     super(builder);
     bucket_regex = Strings.isNullOrEmpty(builder.bucket_regex) ?
         DEFAULT_PATTERN : builder.bucket_regex;
-    over_flow = builder.over_flow;
-    over_flow_max = builder.over_flow_max;
-    over_flow_metric = builder.over_flow_metric;
-    over_flow_id = builder.over_flow_id;
-    under_flow = builder.under_flow;
-    under_flow_min = builder.under_flow_min;
-    under_flow_metric = builder.under_flow_metric;
-    under_flow_id = builder.under_flow_id;
+    overflow = builder.overflow;
+    overflow_max = builder.overflow_max;
+    overflow_metric = builder.overflow_metric;
+    overflow_id = builder.overflow_id;
+    underflow = builder.underflow;
+    underflow_min = builder.underflow_min;
+    underflow_metric = builder.underflow_metric;
+    underflow_id = builder.underflow_id;
     output_of_bucket = builder.output_of_bucket == null ? 
         OutputOfBucket.MEAN : builder.output_of_bucket;
     histograms = builder.histograms;
@@ -107,7 +107,7 @@ public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
       throw new IllegalArgumentException("As cannot be null or empty.");
     }
     if (builder.quantiles == null || builder.quantiles.isEmpty()) {
-      throw new IllegalArgumentException("Percentiles cannot be null or empty.");
+      throw new IllegalArgumentException("Quantiles cannot be null or empty.");
     }
     if (histograms == null || histograms.isEmpty()) {
       throw new IllegalArgumentException("Histograms cannot be empty.");
@@ -145,36 +145,36 @@ public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
     return pattern;
   }
   
-  public String getOverFlow() {
-    return over_flow;
+  public String getOverflow() {
+    return overflow;
   }
   
-  public double getOverFlowMax() {
-    return over_flow_max;
+  public double getOverflowMax() {
+    return overflow_max;
   }
   
-  public String overFlowMetric() {
-    return over_flow_metric;
+  public String overflowMetric() {
+    return overflow_metric;
   }
   
-  public QueryResultId overFlowId() {
-    return over_flow_id;
+  public QueryResultId overflowId() {
+    return overflow_id;
   }
   
-  public String getUnderFlow() {
-    return under_flow;
+  public String getUnderflow() {
+    return underflow;
   }
   
-  public double getUnderFlowMin() {
-    return under_flow_min;
+  public double getUnderflowMin() {
+    return underflow_min;
   }
   
-  public String underFlowMetric() {
-    return under_flow_metric;
+  public String underflowMetric() {
+    return underflow_metric;
   }
   
-  public QueryResultId underFlowId() {
-    return under_flow_id;
+  public QueryResultId underflowId() {
+    return underflow_id;
   }
   
   public OutputOfBucket getOutputOfBucket() {
@@ -240,14 +240,14 @@ public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
     final Builder builder = new Builder()
         .setAs(as)
         .setBucketRegex(bucket_regex)
-        .setOverFlowMax(over_flow_max)
-        .setOverFlow(over_flow)
-        .setOverFlowMetric(over_flow_metric)
-        .setUnderFlowMin(under_flow_min)
-        .setOverFlowId(over_flow_id)
-        .setUnderFlow(under_flow)
-        .setUnderFlowMetric(under_flow_metric)
-        .setUnderFlowId(under_flow_id)
+        .setOverflowMax(overflow_max)
+        .setOverflow(overflow)
+        .setOverflowMetric(overflow_metric)
+        .setUnderflowMin(underflow_min)
+        .setOverflowId(overflow_id)
+        .setUnderflow(underflow)
+        .setUnderflowMetric(underflow_metric)
+        .setUnderflowId(underflow_id)
         .setOutputOfBucket(output_of_bucket)
         .setHistograms(Lists.newArrayList(histograms))
         .setHistogramMetrics(histogram_metrics == null ? null : 
@@ -275,10 +275,10 @@ public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
     final BucketQuantileConfig config = (BucketQuantileConfig) o;
     return Objects.equal(as, config.getAs()) &&
         Objects.equal(bucket_regex, config.bucket_regex) &&
-        Objects.equal(over_flow, config.over_flow) &&
-        Objects.equal(over_flow_max, config.over_flow_max) &&
-        Objects.equal(under_flow, config.under_flow) &&
-        Objects.equal(under_flow_min, config.under_flow_min) &&
+        Objects.equal(overflow, config.overflow) &&
+        Objects.equal(overflow_max, config.overflow_max) &&
+        Objects.equal(underflow, config.underflow) &&
+        Objects.equal(underflow_min, config.underflow_min) &&
         Objects.equal(output_of_bucket, config.output_of_bucket) &&
         Objects.equal(histograms, config.getHistograms()) &&
         Objects.equal(quantiles, config.quantiles) &&
@@ -304,10 +304,10 @@ public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
         
     final Hasher hasher = Const.HASH_FUNCTION().newHasher();
     hasher.putString(bucket_regex, Const.UTF8_CHARSET)
-          .putDouble(over_flow_max)
-          .putString(over_flow == null ? "" : over_flow, Const.UTF8_CHARSET)
-          .putDouble(under_flow_min)
-          .putString(under_flow == null ? "" : under_flow, Const.UTF8_CHARSET)
+          .putDouble(overflow_max)
+          .putString(overflow == null ? "" : overflow, Const.UTF8_CHARSET)
+          .putDouble(underflow_min)
+          .putString(underflow == null ? "" : underflow, Const.UTF8_CHARSET)
           .putInt(output_of_bucket.ordinal())
           .putString(as, Const.UTF8_CHARSET)
           .putBoolean(cumulative_buckets)
@@ -368,24 +368,24 @@ public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
       builder.setBucketRegex(n.asText());
     }
     
-    n = node.get("overFlow");
+    n = node.get("overflow");
     if (n != null && !n.isNull()) {
-      builder.setOverFlow(n.asText());
+      builder.setOverflow(n.asText());
     }
     
-    n = node.get("overFlowMax");
+    n = node.get("overflowMax");
     if (n != null && !n.isNull()) {
-      builder.setOverFlowMax(n.asDouble());
+      builder.setOverflowMax(n.asDouble());
     }
     
-    n = node.get("underFlow");
+    n = node.get("underflow");
     if (n != null && !n.isNull()) {
-      builder.setUnderFlow(n.asText());
+      builder.setUnderflow(n.asText());
     }
     
-    n = node.get("underFlowMin");
+    n = node.get("underflowMin");
     if (n != null && !n.isNull()) {
-      builder.setUnderFlowMin(n.asDouble());
+      builder.setUnderflowMin(n.asDouble());
     }
     
     n = node.get("outputOfBucket");
@@ -432,14 +432,14 @@ public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
   public static final class Builder extends BaseQueryNodeConfigWithInterpolators.Builder
       <Builder, BucketQuantileConfig> {
     private String bucket_regex;
-    private String over_flow;
-    private double over_flow_max;
-    private String over_flow_metric;
-    private QueryResultId over_flow_id;
-    private String under_flow;
-    private double under_flow_min;
-    private String under_flow_metric;
-    private QueryResultId under_flow_id;
+    private String overflow;
+    private double overflow_max;
+    private String overflow_metric;
+    private QueryResultId overflow_id;
+    private String underflow;
+    private double underflow_min;
+    private String underflow_metric;
+    private QueryResultId underflow_id;
     private OutputOfBucket output_of_bucket;
     private List<String> histograms;
     private List<String> histogram_metrics;
@@ -457,11 +457,11 @@ public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
     }
     
     public QueryResultId overFlowId() {
-      return over_flow_id;
+      return overflow_id;
     }
     
     public QueryResultId underFlowId() {
-      return under_flow_id;
+      return underflow_id;
     }
     
     public List<QueryResultId> histogramIds() {
@@ -517,43 +517,43 @@ public class BucketQuantileConfig extends BaseQueryNodeConfigWithInterpolators<
       return this;
     }
     
-    public Builder setOverFlow(final String over_flow) {
-      this.over_flow = over_flow;
+    public Builder setOverflow(final String over_flow) {
+      this.overflow = over_flow;
       return this;
     }
     
-    public Builder setOverFlowMetric(final String over_flow_metric) {
-      this.over_flow_metric = over_flow_metric;
+    public Builder setOverflowMetric(final String over_flow_metric) {
+      this.overflow_metric = over_flow_metric;
       return this;
     }
     
-    public Builder setOverFlowId(final QueryResultId over_flow_id) {
-      this.over_flow_id = over_flow_id;
+    public Builder setOverflowId(final QueryResultId over_flow_id) {
+      this.overflow_id = over_flow_id;
       return this;
     }
     
-    public Builder setOverFlowMax(final double over_flow_max) {
-      this.over_flow_max = over_flow_max;
+    public Builder setOverflowMax(final double over_flow_max) {
+      this.overflow_max = over_flow_max;
       return this;
     }
     
-    public Builder setUnderFlow(final String under_flow) {
-      this.under_flow = under_flow;
+    public Builder setUnderflow(final String under_flow) {
+      this.underflow = under_flow;
       return this;
     }
     
-    public Builder setUnderFlowMetric(final String under_flow_metric) {
-      this.under_flow_metric = under_flow_metric;
+    public Builder setUnderflowMetric(final String under_flow_metric) {
+      this.underflow_metric = under_flow_metric;
       return this;
     }
     
-    public Builder setUnderFlowId(final QueryResultId under_flow_id) {
-      this.under_flow_id = under_flow_id;
+    public Builder setUnderflowId(final QueryResultId under_flow_id) {
+      this.underflow_id = under_flow_id;
       return this;
     }
     
-    public Builder setUnderFlowMin(final double under_flow_min) {
-      this.under_flow_min = under_flow_min;
+    public Builder setUnderflowMin(final double under_flow_min) {
+      this.underflow_min = under_flow_min;
       return this;
     }
     

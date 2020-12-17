@@ -159,11 +159,11 @@ public class TestBucketQuantileFactory {
   public void setupGraphDirect() throws Exception {
     BucketQuantileConfig config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
-        .setOverFlow("m4")
+        .setOverflow("m4")
         .addHistogram("m2")
         .addHistogram("m3")
         .addHistogram("m1")
-        .setUnderFlow("m5")
+        .setUnderflow("m5")
         .addQuantile(99.9)
         .addQuantile(99.99)
         .addQuantile(99.0)
@@ -201,21 +201,21 @@ public class TestBucketQuantileFactory {
     assertTrue(config.histogramIds().contains(new DefaultQueryResultId("m2", "m2")));
     assertTrue(config.histogramMetrics().contains("m_500_1000"));
     assertTrue(config.histogramIds().contains(new DefaultQueryResultId("m3", "m3")));
-    assertEquals("m_over", config.overFlowMetric());
-    assertEquals(new DefaultQueryResultId("m4", "m4"), config.overFlowId());
-    assertEquals("m_under", config.underFlowMetric());
-    assertEquals(new DefaultQueryResultId("m5", "m5"), config.underFlowId());
+    assertEquals("m_over", config.overflowMetric());
+    assertEquals(new DefaultQueryResultId("m4", "m4"), config.overflowId());
+    assertEquals("m_under", config.underflowMetric());
+    assertEquals(new DefaultQueryResultId("m5", "m5"), config.underflowId());
   }
   
   @Test
   public void setupGraphThroughNodes() throws Exception {
     BucketQuantileConfig config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
-        .setOverFlow("m4")
+        .setOverflow("m4")
         .addHistogram("m2")
         .addHistogram("m3")
         .addHistogram("m1")
-        .setUnderFlow("m5")
+        .setUnderflow("m5")
         .addQuantile(99.9)
         .addQuantile(99.99)
         .addQuantile(99.0)
@@ -254,21 +254,21 @@ public class TestBucketQuantileFactory {
     assertTrue(config.histogramIds().contains(new DefaultQueryResultId("gb_m2", "m2")));
     assertTrue(config.histogramMetrics().contains("m_500_1000"));
     assertTrue(config.histogramIds().contains(new DefaultQueryResultId("gb_m3", "m3")));
-    assertEquals("m_over", config.overFlowMetric());
-    assertEquals(new DefaultQueryResultId("gb_m4", "m4"), config.overFlowId());
-    assertEquals("m_under", config.underFlowMetric());
-    assertEquals(new DefaultQueryResultId("gb_m5", "m5"), config.underFlowId());
+    assertEquals("m_over", config.overflowMetric());
+    assertEquals(new DefaultQueryResultId("gb_m4", "m4"), config.overflowId());
+    assertEquals("m_under", config.underflowMetric());
+    assertEquals(new DefaultQueryResultId("gb_m5", "m5"), config.underflowId());
   }
   
   @Test
   public void setupGraphMissingNodes() throws Exception {
     BucketQuantileConfig config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
-        .setOverFlow("m4")
+        .setOverflow("m4")
         .addHistogram("m2")
         .addHistogram("m3")
         .addHistogram("m1")
-        .setUnderFlow("m5")
+        .setUnderflow("m5")
         .addQuantile(99.9)
         .addQuantile(99.99)
         .addQuantile(99.0)
@@ -306,11 +306,11 @@ public class TestBucketQuantileFactory {
     // overflow
     config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
-        .setOverFlow("m4")
+        .setOverflow("m4")
         .addHistogram("m2")
         .addHistogram("m3")
         .addHistogram("m1")
-        .setUnderFlow("m5")
+        .setUnderflow("m5")
         .addQuantile(99.9)
         .addQuantile(99.99)
         .addQuantile(99.0)
@@ -347,11 +347,11 @@ public class TestBucketQuantileFactory {
     // underflow
     config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
-        .setOverFlow("m4")
+        .setOverflow("m4")
         .addHistogram("m2")
         .addHistogram("m3")
         .addHistogram("m1")
-        .setUnderFlow("m5")
+        .setUnderflow("m5")
         .addQuantile(99.9)
         .addQuantile(99.99)
         .addQuantile(99.0)

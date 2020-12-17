@@ -51,9 +51,9 @@ import net.opentsdb.pools.PooledObject;
  * 
  * @since 3.0
  */
-public class BucketQuantileNumericArrayComputation extends BucketQuantileComputer {
+public class BucketQuantileNumericArrayProcessor extends BucketQuantileProcessor {
   private static final Logger LOG = LoggerFactory.getLogger(
-      BucketQuantileNumericArrayComputation.class);
+      BucketQuantileNumericArrayProcessor.class);
   
   /** The timestamp we'll return for the array. */
   protected TimeStamp timestamp;
@@ -64,10 +64,11 @@ public class BucketQuantileNumericArrayComputation extends BucketQuantileCompute
    * @param node The non-null node.
    * @param sources The non-null source.
    */
-  BucketQuantileNumericArrayComputation(final int index,
+  BucketQuantileNumericArrayProcessor(final int index,
                                         final BucketQuantile node,
-                                        final TimeSeries[] sources) {
-    super(index, node, sources);
+                                        final TimeSeries[] sources,
+                                        final TimeSeriesId base_id) {
+    super(index, node, sources, base_id);
     limit = -1;
   }
   
@@ -139,7 +140,9 @@ public class BucketQuantileNumericArrayComputation extends BucketQuantileCompute
         
         if (timestamp == null) {
           timestamp = value.timestamp().getCopy();
-          id = sources[i].id();
+          if (base_id == null) {
+            base_id = sources[i].id();
+          }
         }
         indices[i] = value.value().offset();
         if (limit < 0) {

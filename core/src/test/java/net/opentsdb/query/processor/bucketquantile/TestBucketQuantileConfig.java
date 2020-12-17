@@ -59,10 +59,10 @@ public class TestBucketQuantileConfig {
     BucketQuantileConfig config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -81,10 +81,10 @@ public class TestBucketQuantileConfig {
     
     assertEquals("quantile", config.getAs());
     assertEquals("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)", config.getBucketRegex());
-    assertEquals(1024, config.getOverFlowMax(), 0.001);
-    assertEquals("m_overflow", config.getOverFlow());
-    assertEquals(1, config.getUnderFlowMin(), 0.001);
-    assertEquals("m_underflow", config.getUnderFlow());
+    assertEquals(1024, config.getOverflowMax(), 0.001);
+    assertEquals("m_overflow", config.getOverflow());
+    assertEquals(1, config.getUnderflowMin(), 0.001);
+    assertEquals("m_underflow", config.getUnderflow());
     assertEquals(OutputOfBucket.BOTTOM, config.getOutputOfBucket());
     assertEquals(3, config.getHistograms().size());
     assertEquals("m1", config.getHistograms().get(0));
@@ -116,10 +116,10 @@ public class TestBucketQuantileConfig {
         .build();
     assertEquals("quantile", config.getAs());
     assertEquals(BucketQuantileConfig.DEFAULT_PATTERN, config.getBucketRegex());
-    assertEquals(0, config.getOverFlowMax(), 0.001);
-    assertNull(config.getOverFlow());
-    assertEquals(0, config.getUnderFlowMin(), 0.001);
-    assertNull(config.getUnderFlow());
+    assertEquals(0, config.getOverflowMax(), 0.001);
+    assertNull(config.getOverflow());
+    assertEquals(0, config.getUnderflowMin(), 0.001);
+    assertNull(config.getUnderflow());
     assertEquals(OutputOfBucket.MEAN, config.getOutputOfBucket());
     assertEquals(3, config.getHistograms().size());
     assertEquals("m1", config.getHistograms().get(0));
@@ -200,10 +200,10 @@ public class TestBucketQuantileConfig {
     final BucketQuantileConfig config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -223,10 +223,10 @@ public class TestBucketQuantileConfig {
     BucketQuantileConfig config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -248,10 +248,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quan") // <-- Diff
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -273,10 +273,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         //.setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -299,9 +299,9 @@ public class TestBucketQuantileConfig {
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
         //.setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -323,10 +323,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
+        .setOverflowMax(1024)
         //.setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -348,10 +348,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
         //.setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -373,9 +373,9 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
         //.setUnderFlow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
@@ -398,10 +398,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         //.setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -423,10 +423,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m1") // <-- Diff order is ok
         .addHistogram("m2")
@@ -448,10 +448,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         //.addHistogram("m3")
@@ -473,10 +473,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -498,10 +498,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -523,10 +523,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -548,10 +548,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -573,10 +573,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -598,10 +598,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -623,10 +623,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -648,10 +648,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -673,10 +673,10 @@ public class TestBucketQuantileConfig {
     config2 = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -705,10 +705,10 @@ public class TestBucketQuantileConfig {
     BucketQuantileConfig config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -733,10 +733,10 @@ public class TestBucketQuantileConfig {
     assertTrue(json.contains("\"counterBuckets\":true"));
     assertTrue(json.contains("\"as\":\"quantile\""));
     assertTrue(json.contains("\"bucketRegex\":\"([\\\\-0-9\\\\.]+)[_\\\\-]([\\\\-0-9\\\\.]+)\""));
-    assertTrue(json.contains("\"overFlowMax\":1024.0"));
-    assertTrue(json.contains("\"overFlow\":\"m_overflow\""));
-    assertTrue(json.contains("\"underFlowMin\":1.0"));
-    assertTrue(json.contains("\"underFlow\":\"m_underflow\""));
+    assertTrue(json.contains("\"overflowMax\":1024.0"));
+    assertTrue(json.contains("\"overflow\":\"m_overflow\""));
+    assertTrue(json.contains("\"underflowMin\":1.0"));
+    assertTrue(json.contains("\"underflow\":\"m_underflow\""));
     assertTrue(json.contains("\"outputOfBucket\":\"BOTTOM\""));
     assertTrue(json.contains("\"histograms\":[\"m1\",\"m2\",\"m3\"]"));
     assertTrue(json.contains("\"quantiles\":[0.99,0.9990000000000001,0.9998999999999999]"));
@@ -750,10 +750,10 @@ public class TestBucketQuantileConfig {
     
     assertEquals("quantile", config.getAs());
     assertEquals("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)", config.getBucketRegex());
-    assertEquals(1024, config.getOverFlowMax(), 0.001);
-    assertEquals("m_overflow", config.getOverFlow());
-    assertEquals(1, config.getUnderFlowMin(), 0.001);
-    assertEquals("m_underflow", config.getUnderFlow());
+    assertEquals(1024, config.getOverflowMax(), 0.001);
+    assertEquals("m_overflow", config.getOverflow());
+    assertEquals(1, config.getUnderflowMin(), 0.001);
+    assertEquals("m_underflow", config.getUnderflow());
     assertEquals(OutputOfBucket.BOTTOM, config.getOutputOfBucket());
     assertEquals(3, config.getHistograms().size());
     assertEquals("m1", config.getHistograms().get(0));
@@ -777,10 +777,10 @@ public class TestBucketQuantileConfig {
     BucketQuantileConfig old_config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
         .setBucketRegex("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)")
-        .setOverFlowMax(1024)
-        .setOverFlow("m_overflow")
-        .setUnderFlowMin(1)
-        .setUnderFlow("m_underflow")
+        .setOverflowMax(1024)
+        .setOverflow("m_overflow")
+        .setUnderflowMin(1)
+        .setUnderflow("m_underflow")
         .setOutputOfBucket(OutputOfBucket.BOTTOM)
         .addHistogram("m2")
         .addHistogram("m3")
@@ -800,10 +800,10 @@ public class TestBucketQuantileConfig {
     BucketQuantileConfig config = (BucketQuantileConfig) old_config.toBuilder().build();
     assertEquals("quantile", config.getAs());
     assertEquals("([\\-0-9\\.]+)[_\\-]([\\-0-9\\.]+)", config.getBucketRegex());
-    assertEquals(1024, config.getOverFlowMax(), 0.001);
-    assertEquals("m_overflow", config.getOverFlow());
-    assertEquals(1, config.getUnderFlowMin(), 0.001);
-    assertEquals("m_underflow", config.getUnderFlow());
+    assertEquals(1024, config.getOverflowMax(), 0.001);
+    assertEquals("m_overflow", config.getOverflow());
+    assertEquals(1, config.getUnderflowMin(), 0.001);
+    assertEquals("m_underflow", config.getUnderflow());
     assertEquals(OutputOfBucket.BOTTOM, config.getOutputOfBucket());
     assertEquals(3, config.getHistograms().size());
     assertEquals("m1", config.getHistograms().get(0));

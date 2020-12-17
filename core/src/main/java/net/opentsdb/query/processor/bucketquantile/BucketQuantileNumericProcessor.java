@@ -33,7 +33,7 @@ import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.pools.PooledObject;
 
 /**
- * Computes percentiles on {@link NumericType} values.
+ * Computes quantiles on {@link NumericType} values.
  * Notes:
  * - If all series are null or don't have data, we'll return series without data.
  * - If all values for a time are 0, we skip the value for all quantiles.
@@ -41,7 +41,7 @@ import net.opentsdb.pools.PooledObject;
  *   configured.
  * - Negative values in the source are treated as NaNs.
  * 
- * Also note that we compute ALL percentiles in one pass so we avoid re-doing
+ * Also note that we compute ALL quantiles in one pass so we avoid re-doing
  * the iteration.
  * 
  * TODO - may be some stuff around counters. For now if we have all of the 
@@ -52,11 +52,11 @@ import net.opentsdb.pools.PooledObject;
  * 
  * @since 3.0
  */
-public class BucketQuantileNumericComputation extends BucketQuantileComputer {
+public class BucketQuantileNumericProcessor extends BucketQuantileProcessor {
   private static final Logger LOG = LoggerFactory.getLogger(
-      BucketQuantileNumericComputation.class);
+      BucketQuantileNumericProcessor.class);
   
-  /** The percentiles we'll populate and return to the caller. */
+  /** The quantiles we'll populate and return to the caller. */
   protected long[] timestamps;
   protected PooledObject timestamps_pooled;
   
@@ -66,10 +66,11 @@ public class BucketQuantileNumericComputation extends BucketQuantileComputer {
    * @param node The non-null node.
    * @param sources The non-null source.
    */
-  BucketQuantileNumericComputation(final int index,
-                                          final BucketQuantile node,
-                                          final TimeSeries[] sources) {
-    super(index, node, sources);
+  BucketQuantileNumericProcessor(final int index,
+                                 final BucketQuantile node,
+                                 final TimeSeries[] sources,
+                                 final TimeSeriesId base_id) {
+    super(index, node, sources, base_id);
   }
   
   @Override
@@ -118,6 +119,9 @@ public class BucketQuantileNumericComputation extends BucketQuantileComputer {
         }
         iterators[i] = iterator;
         have_series = true;
+        if (base_id == null) {
+          base_id = sources[i].id();
+        }
       }
       
       if (!have_series) {
@@ -153,7 +157,7 @@ public class BucketQuantileNumericComputation extends BucketQuantileComputer {
       }
       
       // here's the big loop where we iterate, sync up the timestamps and
-      // populate the percentiles arrays.
+      // populate the quantiles arrays.
       final long[] includes = new long[sources.length];
       BigLoop:
       while (true) {
@@ -353,8 +357,8 @@ public class BucketQuantileNumericComputation extends BucketQuantileComputer {
   }
 
   @Override
-  TimeSeries getSeries(final int percentile_index) {
-    return new BucketQuantileNumericIterator(percentile_index, this);
+  TimeSeries getSeries(final int quantile_index) {
+    return new BucketQuantileNumericIterator(quantile_index, this);
   }
   
   boolean advance(final TypedTimeSeriesIterator[] iterators, 

@@ -84,11 +84,11 @@ public class BucketQuantile extends AbstractQueryNode {
     this.config = config;
     results = Maps.newConcurrentMap();
     failed = new AtomicBoolean();
-    if (config.underFlowId() != null) {
-      results.put(config.underFlowId(), DUMMY);
+    if (config.underflowId() != null) {
+      results.put(config.underflowId(), DUMMY);
     }
-    if (config.overFlowId() != null) {
-      results.put(config.overFlowId(), DUMMY);
+    if (config.overflowId() != null) {
+      results.put(config.overflowId(), DUMMY);
     }
     
     for (final QueryResultId id : config.histogramIds()) {
@@ -131,12 +131,12 @@ public class BucketQuantile extends AbstractQueryNode {
       buckets[bucket_idx++] = new Bucket(histogram, lower, upper);
     }
     
-    if (!Strings.isNullOrEmpty(config.underFlowMetric())) {
-      buckets[bucket_idx++] = new Bucket(config.underFlowMetric(), false, true);
+    if (!Strings.isNullOrEmpty(config.underflowMetric())) {
+      buckets[bucket_idx++] = new Bucket(config.underflowMetric(), false, true);
     }
     
-    if (!Strings.isNullOrEmpty(config.overFlowMetric())) {
-      buckets[bucket_idx++] = new Bucket(config.overFlowMetric(), true, false);
+    if (!Strings.isNullOrEmpty(config.overflowMetric())) {
+      buckets[bucket_idx++] = new Bucket(config.overflowMetric(), true, false);
     }
     
     Arrays.sort(buckets, BUCKET_COMPARATOR);
@@ -280,9 +280,9 @@ public class BucketQuantile extends AbstractQueryNode {
       this.is_overflow = is_overflow;
       this.is_underflow = is_underflow;
       if (is_overflow) {
-        report = config.getOverFlowMax();
+        report = config.getOverflowMax();
       } else {
-        report = config.getUnderFlowMin();
+        report = config.getUnderflowMin();
       }
     }
     

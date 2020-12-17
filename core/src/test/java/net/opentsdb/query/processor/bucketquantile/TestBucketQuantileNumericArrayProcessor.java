@@ -15,17 +15,20 @@
 package net.opentsdb.query.processor.bucketquantile;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.Before;
 import org.junit.Test;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.core.MockTSDBDefault;
@@ -33,6 +36,8 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.data.BaseTimeSeriesStringId;
 import net.opentsdb.data.MillisecondTimeStamp;
 import net.opentsdb.data.TimeSeries;
+import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericArrayTimeSeries;
@@ -45,7 +50,7 @@ import net.opentsdb.query.QueryFillPolicy.FillWithRealPolicy;
 import net.opentsdb.query.interpolation.types.numeric.NumericInterpolatorConfig;
 import net.opentsdb.query.pojo.FillPolicy;
 
-public class TestBucketQuantileNumericArrayComputation {
+public class TestBucketQuantileNumericArrayProcessor {
 
   private BucketQuantile node;
   private BucketQuantileConfig config;
@@ -64,10 +69,10 @@ public class TestBucketQuantileNumericArrayComputation {
     
     config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
-        .setOverFlowMax(1024)
-        .setOverFlow("m4")
-        .setOverFlowMetric("m_over")
-        .setOverFlowId(new DefaultQueryResultId("m4", "m4"))
+        .setOverflowMax(1024)
+        .setOverflow("m4")
+        .setOverflowMetric("m_over")
+        .setOverflowId(new DefaultQueryResultId("m4", "m4"))
         .addHistogram("m2")
         .addHistogramMetric("m_250_500")
         .addHistogramId(new DefaultQueryResultId("m2", "m2"))
@@ -77,10 +82,10 @@ public class TestBucketQuantileNumericArrayComputation {
         .addHistogram("m1")
         .addHistogramMetric("m_0_250")
         .addHistogramId(new DefaultQueryResultId("m1", "m1"))
-        .setUnderFlow("m5")
-        .setUnderFlowMetric("m_under")
-        .setUnderFlowId(new DefaultQueryResultId("m5", "m5"))
-        .setUnderFlowMin(2)
+        .setUnderflow("m5")
+        .setUnderflowMetric("m_under")
+        .setUnderflowId(new DefaultQueryResultId("m5", "m5"))
+        .setUnderflowMin(2)
         .addQuantile(55)
         .addQuantile(99.99)
         .addQuantile(10.0)
@@ -99,23 +104,29 @@ public class TestBucketQuantileNumericArrayComputation {
   public void fullSetLongs() throws Exception {
     TimeSeries[] array = new TimeSeries[5];
     generateTimeSeries(array, false);
-    BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
-        array);
+    BucketQuantileNumericArrayProcessor computer = new BucketQuantileNumericArrayProcessor(0, node, 
+        array, null);
     computer.run();
     
     TimeSeries series = computer.getSeries(0);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "10.000", "host", "web01", "dc", "DEN"));
     TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     TimeSeriesValue<NumericArrayType> value = it.next();
     assertArrayEquals(new double[] { 125, 375, 125, 125 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(1);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "55.000", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
     assertArrayEquals(new double[] { 375, 375, 125, 750 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(2);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "99.990", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
@@ -126,23 +137,29 @@ public class TestBucketQuantileNumericArrayComputation {
   public void fullSetDoubles() throws Exception {
     TimeSeries[] array = new TimeSeries[5];
     generateTimeSeries(array, true);
-    BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
-        array);
+    BucketQuantileNumericArrayProcessor computer = new BucketQuantileNumericArrayProcessor(0, node, 
+        array, null);
     computer.run();
     
     TimeSeries series = computer.getSeries(0);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "10.000", "host", "web01", "dc", "DEN"));
     TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     TimeSeriesValue<NumericArrayType> value = it.next();
     assertArrayEquals(new double[] { 125, 375, 125, 125 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(1);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "55.000", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
     assertArrayEquals(new double[] { 375, 375, 125, 750 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(2);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "99.990", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
@@ -157,23 +174,29 @@ public class TestBucketQuantileNumericArrayComputation {
     ((NumericArrayTimeSeries) array[2]).replace(1, Double.NaN);
     ((NumericArrayTimeSeries) array[3]).replace(3, Double.NaN);
     
-    BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
-        array);
+    BucketQuantileNumericArrayProcessor computer = new BucketQuantileNumericArrayProcessor(0, node, 
+        array, null);
     computer.run();
     
     TimeSeries series = computer.getSeries(0);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "10.000", "host", "web01", "dc", "DEN"));
     TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     TimeSeriesValue<NumericArrayType> value = it.next();
     assertArrayEquals(new double[] { 125, 125, 125, 125 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(1);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "55.000", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
     assertArrayEquals(new double[] { 375, 750, 125, 1024 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(2);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "99.990", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
@@ -184,10 +207,10 @@ public class TestBucketQuantileNumericArrayComputation {
   public void fullSetSomeNaNsThreshold() throws Exception {
     config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
-        .setOverFlowMax(1024)
-        .setOverFlow("m4")
-        .setOverFlowMetric("m_over")
-        .setOverFlowId(new DefaultQueryResultId("m4", "m4"))
+        .setOverflowMax(1024)
+        .setOverflow("m4")
+        .setOverflowMetric("m_over")
+        .setOverflowId(new DefaultQueryResultId("m4", "m4"))
         .addHistogram("m2")
         .addHistogramMetric("m_250_500")
         .addHistogramId(new DefaultQueryResultId("m2", "m2"))
@@ -197,10 +220,10 @@ public class TestBucketQuantileNumericArrayComputation {
         .addHistogram("m1")
         .addHistogramMetric("m_0_250")
         .addHistogramId(new DefaultQueryResultId("m1", "m1"))
-        .setUnderFlow("m5")
-        .setUnderFlowMetric("m_under")
-        .setUnderFlowId(new DefaultQueryResultId("m5", "m5"))
-        .setUnderFlowMin(2)
+        .setUnderflow("m5")
+        .setUnderflowMetric("m_under")
+        .setUnderflowId(new DefaultQueryResultId("m5", "m5"))
+        .setUnderflowMin(2)
         .addQuantile(55)
         .addQuantile(99.99)
         .addQuantile(10.0)
@@ -215,23 +238,29 @@ public class TestBucketQuantileNumericArrayComputation {
     ((NumericArrayTimeSeries) array[2]).replace(1, Double.NaN);
     ((NumericArrayTimeSeries) array[3]).replace(3, Double.NaN);
     
-    BucketQuantileNumericArrayComputation computer = 
-        new BucketQuantileNumericArrayComputation(0, node, array);
+    BucketQuantileNumericArrayProcessor computer = 
+        new BucketQuantileNumericArrayProcessor(0, node, array, null);
     computer.run();
     
     TimeSeries series = computer.getSeries(0);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "10.000", "host", "web01", "dc", "DEN"));
     TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     TimeSeriesValue<NumericArrayType> value = it.next();
     assertArrayEquals(new double[] { 125, Double.NaN, 125, 125 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(1);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "55.000", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
     assertArrayEquals(new double[] { 375, Double.NaN, 125, 1024 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(2);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "99.990", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
@@ -245,23 +274,29 @@ public class TestBucketQuantileNumericArrayComputation {
     ((NumericArrayTimeSeries) array[1]).replace(1, 0);
     ((NumericArrayTimeSeries) array[2]).replace(1, 0);
     ((NumericArrayTimeSeries) array[3]).replace(1, 0);
-    BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
-        array);
+    BucketQuantileNumericArrayProcessor computer = new BucketQuantileNumericArrayProcessor(0, node, 
+        array, null);
     computer.run();
     
     TimeSeries series = computer.getSeries(0);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "10.000", "host", "web01", "dc", "DEN"));
     TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     TimeSeriesValue<NumericArrayType> value = it.next();
     assertArrayEquals(new double[] { 125, Double.NaN, 125, 125 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(1);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "55.000", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
     assertArrayEquals(new double[] { 375, Double.NaN, 125, 750 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(2);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "99.990", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
@@ -273,23 +308,29 @@ public class TestBucketQuantileNumericArrayComputation {
     TimeSeries[] array = new TimeSeries[5];
     generateTimeSeries(array, false);
     array[1] = null;
-    BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
-        array);
+    BucketQuantileNumericArrayProcessor computer = new BucketQuantileNumericArrayProcessor(0, node, 
+        array, null);
     computer.run();
     
     TimeSeries series = computer.getSeries(0);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "10.000", "host", "web01", "dc", "DEN"));
     TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     TimeSeriesValue<NumericArrayType> value = it.next();
     assertArrayEquals(new double[] { 375, 375, 375, 750 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(1);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "55.000", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
     assertArrayEquals(new double[] { 375, 375, 375, 750 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(2);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "99.990", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
@@ -303,23 +344,29 @@ public class TestBucketQuantileNumericArrayComputation {
     array[1] = null;
     array[4] = null;
     
-    BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
-        array);
+    BucketQuantileNumericArrayProcessor computer = new BucketQuantileNumericArrayProcessor(0, node, 
+        array, null);
     computer.run();
     
     TimeSeries series = computer.getSeries(0);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "10.000", "host", "web01", "dc", "DEN"));
     TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     TimeSeriesValue<NumericArrayType> value = it.next();
     assertArrayEquals(new double[] { 375, 375, 375, 750 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(1);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "55.000", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
     assertArrayEquals(new double[] { 375, 375, 375, 750 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(2);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "99.990", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
@@ -330,10 +377,10 @@ public class TestBucketQuantileNumericArrayComputation {
   public void missingTwoSetsNaNThreshold() throws Exception {
     config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
-        .setOverFlowMax(1024)
-        .setOverFlow("m4")
-        .setOverFlowMetric("m_over")
-        .setOverFlowId(new DefaultQueryResultId("m4", "m4"))
+        .setOverflowMax(1024)
+        .setOverflow("m4")
+        .setOverflowMetric("m_over")
+        .setOverflowId(new DefaultQueryResultId("m4", "m4"))
         .addHistogram("m2")
         .addHistogramMetric("m_250_500")
         .addHistogramId(new DefaultQueryResultId("m2", "m2"))
@@ -343,10 +390,10 @@ public class TestBucketQuantileNumericArrayComputation {
         .addHistogram("m1")
         .addHistogramMetric("m_0_250")
         .addHistogramId(new DefaultQueryResultId("m1", "m1"))
-        .setUnderFlow("m5")
-        .setUnderFlowMetric("m_under")
-        .setUnderFlowId(new DefaultQueryResultId("m5", "m5"))
-        .setUnderFlowMin(2)
+        .setUnderflow("m5")
+        .setUnderflowMetric("m_under")
+        .setUnderflowId(new DefaultQueryResultId("m5", "m5"))
+        .setUnderflowMin(2)
         .addQuantile(55)
         .addQuantile(99.99)
         .addQuantile(10.0)
@@ -359,23 +406,29 @@ public class TestBucketQuantileNumericArrayComputation {
     generateTimeSeries(array, false);
     array[1] = null;
     array[4] = null;
-    BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
-        array);
+    BucketQuantileNumericArrayProcessor computer = new BucketQuantileNumericArrayProcessor(0, node, 
+        array, null);
     computer.run();
     
     TimeSeries series = computer.getSeries(0);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "10.000", "host", "web01", "dc", "DEN"));
     TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     TimeSeriesValue<NumericArrayType> value = it.next();
     assertArrayEquals(new double[] { Double.NaN, Double.NaN, Double.NaN, Double.NaN }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(1);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "55.000", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
     assertArrayEquals(new double[] { Double.NaN, Double.NaN, Double.NaN, Double.NaN }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(2);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "99.990", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
@@ -388,23 +441,29 @@ public class TestBucketQuantileNumericArrayComputation {
     generateTimeSeries(array, false);
     array[1] = mock(TimeSeries.class);
     when(array[1].iterator(any(TypeToken.class))).thenReturn(Optional.empty());
-    BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
-        array);
+    BucketQuantileNumericArrayProcessor computer = new BucketQuantileNumericArrayProcessor(0, node, 
+        array, null);
     computer.run();
     
     TimeSeries series = computer.getSeries(0);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "10.000", "host", "web01", "dc", "DEN"));
     TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     TimeSeriesValue<NumericArrayType> value = it.next();
     assertArrayEquals(new double[] { 375, 375, 375, 750 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(1);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "55.000", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
     assertArrayEquals(new double[] { 375, 375, 375, 750 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(2);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "99.990", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
@@ -419,23 +478,29 @@ public class TestBucketQuantileNumericArrayComputation {
     TypedTimeSeriesIterator<NumericArrayType> iterator = mock(TypedTimeSeriesIterator.class);
     when(array[1].iterator(any(TypeToken.class))).thenReturn(Optional.of(iterator));
     
-    BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
-        array);
+    BucketQuantileNumericArrayProcessor computer = new BucketQuantileNumericArrayProcessor(0, node, 
+        array, null);
     computer.run();
     
     TimeSeries series = computer.getSeries(0);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "10.000", "host", "web01", "dc", "DEN"));
     TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     TimeSeriesValue<NumericArrayType> value = it.next();
     assertArrayEquals(new double[] { 375, 375, 375, 750 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(1);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "55.000", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
     assertArrayEquals(new double[] { 375, 375, 375, 750 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(2);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "99.990", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
@@ -446,19 +511,25 @@ public class TestBucketQuantileNumericArrayComputation {
   public void allNull() throws Exception {
     // shouldn't happen
     TimeSeries[] array = new TimeSeries[5];
-    BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
-        array);
+    BucketQuantileNumericArrayProcessor computer = new BucketQuantileNumericArrayProcessor(0, node, 
+        array, null);
     computer.run();
     
     TimeSeries series = computer.getSeries(0);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "10.000"));
     TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertFalse(it.hasNext());
     
     series = computer.getSeries(1);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "55.000"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertFalse(it.hasNext());
     
     series = computer.getSeries(2);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "99.990"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertFalse(it.hasNext());
   }
@@ -467,10 +538,10 @@ public class TestBucketQuantileNumericArrayComputation {
   public void fullSetCumulativeCounter() throws Exception {
     config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
         .setAs("quantile")
-        .setOverFlowMax(1024)
-        .setOverFlow("m4")
-        .setOverFlowMetric("m_over")
-        .setOverFlowId(new DefaultQueryResultId("m4", "m4"))
+        .setOverflowMax(1024)
+        .setOverflow("m4")
+        .setOverflowMetric("m_over")
+        .setOverflowId(new DefaultQueryResultId("m4", "m4"))
         .addHistogram("m2")
         .addHistogramMetric("m_250_500")
         .addHistogramId(new DefaultQueryResultId("m2", "m2"))
@@ -480,10 +551,10 @@ public class TestBucketQuantileNumericArrayComputation {
         .addHistogram("m1")
         .addHistogramMetric("m_0_250")
         .addHistogramId(new DefaultQueryResultId("m1", "m1"))
-        .setUnderFlow("m5")
-        .setUnderFlowMetric("m_under")
-        .setUnderFlowId(new DefaultQueryResultId("m5", "m5"))
-        .setUnderFlowMin(2)
+        .setUnderflow("m5")
+        .setUnderflowMetric("m_under")
+        .setUnderflowId(new DefaultQueryResultId("m5", "m5"))
+        .setUnderflowMin(2)
         .addQuantile(55)
         .addQuantile(99.99)
         .addQuantile(10.0)
@@ -496,23 +567,29 @@ public class TestBucketQuantileNumericArrayComputation {
     
     TimeSeries[] array = new TimeSeries[5];
     generateCumulativeCounterTimeSeries(array);
-    BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
-        array);
+    BucketQuantileNumericArrayProcessor computer = new BucketQuantileNumericArrayProcessor(0, node, 
+        array, null);
     computer.run();
     
     TimeSeries series = computer.getSeries(0);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "10.000", "host", "web01", "dc", "DEN"));
     TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     TimeSeriesValue<NumericArrayType> value = it.next();
     assertArrayEquals(new double[] { 125, 375, 125, 125 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(1);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "55.000", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
     assertArrayEquals(new double[] { 375, 375, 125, 750 }, value.value().doubleArray(), 0.001);
     
     series = computer.getSeries(2);
+    assertTimeSeriesId(series.id(), config.getAs(), ImmutableMap.of(
+        BucketQuantileFactory.QUANTILE_TAG, "99.990", "host", "web01", "dc", "DEN"));
     it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
     assertTrue(it.hasNext());
     value = it.next();
@@ -523,6 +600,7 @@ public class TestBucketQuantileNumericArrayComputation {
     TimeSeries ts1 = new NumericArrayTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("m_under")
+        .setTags(ImmutableMap.of("host", "web01", "dc", "DEN"))
         .build(), new MillisecondTimeStamp(1000));
     if (doubles) {
       ((NumericArrayTimeSeries) ts1).add(0.0);
@@ -540,6 +618,7 @@ public class TestBucketQuantileNumericArrayComputation {
     TimeSeries ts2 = new NumericArrayTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("m_0_250")
+        .setTags(ImmutableMap.of("host", "web01", "dc", "DEN"))
         .build(), new MillisecondTimeStamp(1000));
     if (doubles) {
       ((NumericArrayTimeSeries) ts2).add(4.0);
@@ -557,6 +636,7 @@ public class TestBucketQuantileNumericArrayComputation {
     TimeSeries ts3 = new NumericArrayTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("m_250_500")
+        .setTags(ImmutableMap.of("host", "web01", "dc", "DEN"))
         .build(), new MillisecondTimeStamp(1000));
     if (doubles) {
       ((NumericArrayTimeSeries) ts3).add(16.0);
@@ -574,6 +654,7 @@ public class TestBucketQuantileNumericArrayComputation {
     TimeSeries ts4 = new NumericArrayTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("m_500_1000")
+        .setTags(ImmutableMap.of("host", "web01", "dc", "DEN"))
         .build(), new MillisecondTimeStamp(1000));
     if (doubles) {
       ((NumericArrayTimeSeries) ts4).add(7.0);
@@ -591,6 +672,7 @@ public class TestBucketQuantileNumericArrayComputation {
     TimeSeries ts5 = new NumericArrayTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("m_over")
+        .setTags(ImmutableMap.of("host", "web01", "dc", "DEN"))
         .build(), new MillisecondTimeStamp(1000));
     if (doubles) {
       ((NumericArrayTimeSeries) ts5).add(0.0);
@@ -610,6 +692,7 @@ public class TestBucketQuantileNumericArrayComputation {
     TimeSeries ts1 = new NumericArrayTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("m_under")
+        .setTags(ImmutableMap.of("host", "web01", "dc", "DEN"))
         .build(), new MillisecondTimeStamp(1000));
     ((NumericArrayTimeSeries) ts1).add(0);
     ((NumericArrayTimeSeries) ts1).add(0);
@@ -620,6 +703,7 @@ public class TestBucketQuantileNumericArrayComputation {
     TimeSeries ts2 = new NumericArrayTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("m_0_250")
+        .setTags(ImmutableMap.of("host", "web01", "dc", "DEN"))
         .build(), new MillisecondTimeStamp(1000));
     ((NumericArrayTimeSeries) ts2).add(4);
     ((NumericArrayTimeSeries) ts2).add(2);
@@ -630,6 +714,7 @@ public class TestBucketQuantileNumericArrayComputation {
     TimeSeries ts3 = new NumericArrayTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("m_250_500")
+        .setTags(ImmutableMap.of("host", "web01", "dc", "DEN"))
         .build(), new MillisecondTimeStamp(1000));
     ((NumericArrayTimeSeries) ts3).add(20);
     ((NumericArrayTimeSeries) ts3).add(23);
@@ -640,6 +725,7 @@ public class TestBucketQuantileNumericArrayComputation {
     TimeSeries ts4 = new NumericArrayTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("m_500_1000")
+        .setTags(ImmutableMap.of("host", "web01", "dc", "DEN"))
         .build(), new MillisecondTimeStamp(1000));
     ((NumericArrayTimeSeries) ts4).add(27);
     ((NumericArrayTimeSeries) ts4).add(25);
@@ -650,11 +736,20 @@ public class TestBucketQuantileNumericArrayComputation {
     TimeSeries ts5 = new NumericArrayTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
         .setMetric("m_over")
+        .setTags(ImmutableMap.of("host", "web01", "dc", "DEN"))
         .build(), new MillisecondTimeStamp(1000));
     ((NumericArrayTimeSeries) ts5).add(27);
     ((NumericArrayTimeSeries) ts5).add(25);
     ((NumericArrayTimeSeries) ts5).add(21);
     ((NumericArrayTimeSeries) ts5).add(10);
     array[4] = ts5;
+  }
+
+  static void assertTimeSeriesId(final TimeSeriesId id, 
+                                 final String metric, 
+                                 final Map<String, String> tags) {
+    TimeSeriesStringId string_id = (TimeSeriesStringId) id;
+    assertEquals(metric, string_id.metric());
+    assertEquals(tags, string_id.tags());
   }
 }
