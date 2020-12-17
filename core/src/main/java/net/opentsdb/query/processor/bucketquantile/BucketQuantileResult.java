@@ -47,6 +47,7 @@ import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.data.types.numeric.NumericSummaryType;
+import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.query.DefaultQueryResultId;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryResult;
@@ -314,7 +315,9 @@ public class BucketQuantileResult extends BaseTimeSeriesList implements QueryRes
         }
       }
       
-      if (type == NumericArrayType.TYPE) {
+      if (type == NumericType.TYPE) {
+        last_ts = new BucketQuantileNumericComputation(real_idx, node, set);
+      } else if (type == NumericArrayType.TYPE) {
         last_ts = new BucketQuantileNumericArrayComputation(real_idx, node, set);
       } else if (type == NumericSummaryType.TYPE) {
         last_ts = new BucketQuantileNumericSummaryComputation(real_idx, node, set);

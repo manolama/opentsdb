@@ -55,24 +55,8 @@ public class BucketQuantileNumericArrayComputation extends BucketQuantileCompute
   private static final Logger LOG = LoggerFactory.getLogger(
       BucketQuantileNumericArrayComputation.class);
   
-  /** The node we belong to. */
-  protected final BucketQuantile node;
-  
-  /** The sorted sources. */
-  protected final TimeSeries[] sources;
-  
-  /** The percentiles we'll populate and return to the caller. */
-  protected double[][] quantiles;
-  protected PooledObject[] pooled_objects;
-  
   /** The timestamp we'll return for the array. */
   protected TimeStamp timestamp;
-  
-  /** The base ID we'll use. */
-  protected TimeSeriesId id;
-  
-  /** Final result length for each quantile. */
-  protected int limit = -1;
   
   /**
    * Default ctor.
@@ -83,9 +67,8 @@ public class BucketQuantileNumericArrayComputation extends BucketQuantileCompute
   BucketQuantileNumericArrayComputation(final int index,
                                         final BucketQuantile node,
                                         final TimeSeries[] sources) {
-    super(index);
-    this.node = node;
-    this.sources = sources;
+    super(index, node, sources);
+    limit = -1;
   }
   
   @Override

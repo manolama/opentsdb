@@ -32,29 +32,33 @@ import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.pools.PooledObject;
 
+/**
+ * Computes percentiles on {@link NumericType} values.
+ * Notes:
+ * - If all series are null or don't have data, we'll return series without data.
+ * - If all values for a time are 0, we skip the value for all quantiles.
+ * - NaNs in values are skipped unless the count breaches the threshold when
+ *   configured.
+ * - Negative values in the source are treated as NaNs.
+ * 
+ * Also note that we compute ALL percentiles in one pass so we avoid re-doing
+ * the iteration.
+ * 
+ * TODO - may be some stuff around counters. For now if we have all of the 
+ * buckets then it doesn't matter if they are monotonically increasing counts
+ * as we compute the quantiles the same. BUT if it's expected that buckets 
+ * without changes are _not_ reported and the query system needs to derive the
+ * missing data, then we need to look at some history.
+ * 
+ * @since 3.0
+ */
 public class BucketQuantileNumericComputation extends BucketQuantileComputer {
   private static final Logger LOG = LoggerFactory.getLogger(
       BucketQuantileNumericComputation.class);
   
-  private static final int DEFAULT_ARRAY_SIZE = 4096;
-  
-  /** The node we belong to. */
-  protected final BucketQuantile node;
-  
-  /** The sorted sources. */
-  protected final TimeSeries[] sources;
-  
   /** The percentiles we'll populate and return to the caller. */
   protected long[] timestamps;
   protected PooledObject timestamps_pooled;
-  protected double[][] quantiles;
-  protected PooledObject[] pooled_objects;
-  
-  /** The base ID we'll use. */
-  protected TimeSeriesId id;
-  
-  /** Final result length for each quantile. */
-  protected int limit;
   
   /**
    * Default ctor.
@@ -65,9 +69,7 @@ public class BucketQuantileNumericComputation extends BucketQuantileComputer {
   BucketQuantileNumericComputation(final int index,
                                           final BucketQuantile node,
                                           final TimeSeries[] sources) {
-    super(index);
-    this.node = node;
-    this.sources = sources;
+    super(index, node, sources);
   }
   
   @Override

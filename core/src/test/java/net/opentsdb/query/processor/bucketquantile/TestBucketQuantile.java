@@ -31,6 +31,8 @@ import org.junit.Test;
 
 import com.google.common.collect.Lists;
 
+import net.opentsdb.core.MockTSDBDefault;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.data.types.numeric.NumericType;
 import net.opentsdb.exceptions.QueryDownstreamException;
 import net.opentsdb.query.QueryNodeFactory;
@@ -88,6 +90,8 @@ public class TestBucketQuantile {
     
     factory = mock(QueryNodeFactory.class);
     context = mock(QueryPipelineContext.class);
+    TSDB tsdb = MockTSDBDefault.getMockTSDB();
+    when(context.tsdb()).thenReturn(tsdb);
   }
   
   @Test

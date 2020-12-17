@@ -42,6 +42,8 @@ import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
 
 import net.opentsdb.common.Const;
+import net.opentsdb.core.MockTSDBDefault;
+import net.opentsdb.core.TSDB;
 import net.opentsdb.data.BaseTimeSeriesStringId;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesId;
@@ -106,6 +108,8 @@ public class TestBucketQuantileResult {
     
     factory = mock(QueryNodeFactory.class);
     context = mock(QueryPipelineContext.class);
+    TSDB tsdb = MockTSDBDefault.getMockTSDB();
+    when(context.tsdb()).thenReturn(tsdb);
     node = new BucketQuantile(factory, context, config);
   }
   

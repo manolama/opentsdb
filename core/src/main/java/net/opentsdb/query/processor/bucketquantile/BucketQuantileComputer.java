@@ -17,13 +17,36 @@ package net.opentsdb.query.processor.bucketquantile;
 import java.io.Closeable;
 
 import net.opentsdb.data.TimeSeries;
+import net.opentsdb.data.TimeSeriesId;
+import net.opentsdb.pools.PooledObject;
 
 public abstract class BucketQuantileComputer implements Closeable {
 
+  protected static final int DEFAULT_ARRAY_SIZE = 4096;
+  
+  /** The node we belong to. */
+  protected final BucketQuantile node;
+  
+  /** The sorted sources. */
+  protected final TimeSeries[] sources;
+  
   protected final int index;
   
-  BucketQuantileComputer(final int index) {
+  protected double[][] quantiles;
+  protected PooledObject[] pooled_objects;
+  
+  /** The base ID we'll use. */
+  protected TimeSeriesId id;
+  
+  /** Final result length for each quantile. */
+  protected int limit;
+  
+  BucketQuantileComputer(final int index,
+      final BucketQuantile node,
+      final TimeSeries[] sources) {
     this.index = index;
+    this.node = node;
+    this.sources = sources;
   }
   
   abstract void run();
