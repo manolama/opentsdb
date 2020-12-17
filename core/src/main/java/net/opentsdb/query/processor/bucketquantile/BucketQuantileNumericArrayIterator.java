@@ -30,7 +30,6 @@ import net.opentsdb.data.TimeSeriesValue;
 import net.opentsdb.data.TimeStamp;
 import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericArrayType;
-import net.opentsdb.query.QueryIterator;
 
 /**
  * Simple iterator that wraps up the quantiles array and returns it.
@@ -38,18 +37,14 @@ import net.opentsdb.query.QueryIterator;
  * @since 3.0
  */
 public class BucketQuantileNumericArrayIterator implements TimeSeries, 
-    QueryIterator, 
+    TypedTimeSeriesIterator<NumericArrayType>, 
     TimeSeriesValue<NumericArrayType>, 
-    NumericArrayType{
+    NumericArrayType {
   
-  private final TimeStamp timestamp;
-  private final double[] quantile;
   private final int quantiles_idx;
+  private final BucketQuantileNumericArrayComputation processor;
   private boolean has_next;
   private TimeSeriesId id;
-  private final TimeSeriesId base_id;
-  private final String as;
-  private final double ptile;
   
   /**
    * Default ctor.
@@ -60,19 +55,12 @@ public class BucketQuantileNumericArrayIterator implements TimeSeries,
    * @param as The as string to use as the metric.
    * @param quantile The quantile we're measuring.
    */
-  public BucketQuantileNumericArrayIterator(final TimeStamp timestamp,
-                                            final double[] quantiles,
-                                            final int quantiles_idx,
-                                            final TimeSeriesId base_id,
-                                            final String as,
-                                            final double quantile) {
-    this.timestamp = timestamp;
-    this.quantile = quantiles;
+  public BucketQuantileNumericArrayIterator(
+      final int quantiles_idx,
+      final BucketQuantileNumericArrayComputation processor) {
     this.quantiles_idx = quantiles_idx;
-    this.base_id = base_id;
-    this.as = as;
-    this.ptile = quantile;
-    has_next = quantiles != null && quantiles_idx > 0 ? true : false;
+    this.processor = processor;
+    has_next = processor.quantiles != null && processor.limit > 0 ? true : false;
   }
   
   @Override
@@ -118,12 +106,12 @@ public class BucketQuantileNumericArrayIterator implements TimeSeries,
 
   @Override
   public double[] doubleArray() {
-    return quantile;
+    return processor.quantiles[quantiles_idx];
   }
 
   @Override
   public TimeStamp timestamp() {
-    return timestamp;
+    return processor.timestamp;
   }
 
   @Override
@@ -143,12 +131,13 @@ public class BucketQuantileNumericArrayIterator implements TimeSeries,
     }
     // TODO - byte id
     id = BaseTimeSeriesStringId.newBuilder()
-        .setMetric(as)
-        .setTags(Maps.newHashMap(((TimeSeriesStringId) base_id).tags()))
+        .setMetric(((BucketQuantileConfig) processor.node.config()).getAs())
+        .setTags(Maps.newHashMap(((TimeSeriesStringId) processor.id).tags()))
         // TODO - ?
         //.setAggregatedTags(((TimeSeriesStringId) base_id).aggregatedTags())
         //.setDisjointTags(((TimeSeriesStringId) base_id).disjointTags())
-        .addTags(BucketQuantileFactory.PERCENTILE_TAG, Double.toString(ptile * 100))
+        .addTags(BucketQuantileFactory.PERCENTILE_TAG, Double.toString(
+            ((BucketQuantileConfig) processor.node.config()).getQuantiles().get(quantiles_idx) * 100))
         .build();
     return id;
   }

@@ -15,30 +15,16 @@
 package net.opentsdb.query.processor.bucketquantile;
 
 import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import com.google.common.reflect.TypeToken;
 
@@ -316,6 +302,7 @@ public class TestBucketQuantileNumericArrayComputation {
     generateTimeSeries(array, false);
     array[1] = null;
     array[4] = null;
+    
     BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
         array);
     computer.run();
@@ -476,6 +463,62 @@ public class TestBucketQuantileNumericArrayComputation {
     assertFalse(it.hasNext());
   }
   
+  @Test
+  public void fullSetCumulativeCounter() throws Exception {
+    config = (BucketQuantileConfig) BucketQuantileConfig.newBuilder()
+        .setAs("quantile")
+        .setOverFlowMax(1024)
+        .setOverFlow("m4")
+        .setOverFlowMetric("m_over")
+        .setOverFlowId(new DefaultQueryResultId("m4", "m4"))
+        .addHistogram("m2")
+        .addHistogramMetric("m_250_500")
+        .addHistogramId(new DefaultQueryResultId("m2", "m2"))
+        .addHistogram("m3")
+        .addHistogramMetric("m_500_1000")
+        .addHistogramId(new DefaultQueryResultId("m3", "m3"))
+        .addHistogram("m1")
+        .addHistogramMetric("m_0_250")
+        .addHistogramId(new DefaultQueryResultId("m1", "m1"))
+        .setUnderFlow("m5")
+        .setUnderFlowMetric("m_under")
+        .setUnderFlowId(new DefaultQueryResultId("m5", "m5"))
+        .setUnderFlowMin(2)
+        .addQuantile(55)
+        .addQuantile(99.99)
+        .addQuantile(10.0)
+        .setCumulativeBuckets(true)
+        .setCounterBuckets(true)
+        .addInterpolatorConfig(numeric_config)
+        .setId("q")
+        .build();
+    node = new BucketQuantile(factory, context, config);
+    
+    TimeSeries[] array = new TimeSeries[5];
+    generateCumulativeCounterTimeSeries(array);
+    BucketQuantileNumericArrayComputation computer = new BucketQuantileNumericArrayComputation(0, node, 
+        array);
+    computer.run();
+    
+    TimeSeries series = computer.getSeries(0);
+    TypedTimeSeriesIterator<NumericArrayType> it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
+    assertTrue(it.hasNext());
+    TimeSeriesValue<NumericArrayType> value = it.next();
+    assertArrayEquals(new double[] { 125, 375, 125, 125 }, value.value().doubleArray(), 0.001);
+    
+    series = computer.getSeries(1);
+    it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
+    assertTrue(it.hasNext());
+    value = it.next();
+    assertArrayEquals(new double[] { 375, 375, 125, 750 }, value.value().doubleArray(), 0.001);
+    
+    series = computer.getSeries(2);
+    it = (TypedTimeSeriesIterator<NumericArrayType>) series.iterator(NumericArrayType.TYPE).get();
+    assertTrue(it.hasNext());
+    value = it.next();
+    assertArrayEquals(new double[] { 750, 750, 375, 1024 }, value.value().doubleArray(), 0.001);
+  }
+  
   void generateTimeSeries(final TimeSeries[] array, final boolean doubles) {
     TimeSeries ts1 = new NumericArrayTimeSeries(
         BaseTimeSeriesStringId.newBuilder()
@@ -560,6 +603,58 @@ public class TestBucketQuantileNumericArrayComputation {
       ((NumericArrayTimeSeries) ts5).add(0);
       ((NumericArrayTimeSeries) ts5).add(1);
     }
+    array[4] = ts5;
+  }
+  
+  void generateCumulativeCounterTimeSeries(final TimeSeries[] array) {
+    TimeSeries ts1 = new NumericArrayTimeSeries(
+        BaseTimeSeriesStringId.newBuilder()
+        .setMetric("m_under")
+        .build(), new MillisecondTimeStamp(1000));
+    ((NumericArrayTimeSeries) ts1).add(0);
+    ((NumericArrayTimeSeries) ts1).add(0);
+    ((NumericArrayTimeSeries) ts1).add(1);
+    ((NumericArrayTimeSeries) ts1).add(0);
+    array[0] = ts1;
+    
+    TimeSeries ts2 = new NumericArrayTimeSeries(
+        BaseTimeSeriesStringId.newBuilder()
+        .setMetric("m_0_250")
+        .build(), new MillisecondTimeStamp(1000));
+    ((NumericArrayTimeSeries) ts2).add(4);
+    ((NumericArrayTimeSeries) ts2).add(2);
+    ((NumericArrayTimeSeries) ts2).add(17);
+    ((NumericArrayTimeSeries) ts2).add(3);
+    array[1] = ts2;
+    
+    TimeSeries ts3 = new NumericArrayTimeSeries(
+        BaseTimeSeriesStringId.newBuilder()
+        .setMetric("m_250_500")
+        .build(), new MillisecondTimeStamp(1000));
+    ((NumericArrayTimeSeries) ts3).add(20);
+    ((NumericArrayTimeSeries) ts3).add(23);
+    ((NumericArrayTimeSeries) ts3).add(21);
+    ((NumericArrayTimeSeries) ts3).add(3);
+    array[2] = ts3;
+    
+    TimeSeries ts4 = new NumericArrayTimeSeries(
+        BaseTimeSeriesStringId.newBuilder()
+        .setMetric("m_500_1000")
+        .build(), new MillisecondTimeStamp(1000));
+    ((NumericArrayTimeSeries) ts4).add(27);
+    ((NumericArrayTimeSeries) ts4).add(25);
+    ((NumericArrayTimeSeries) ts4).add(21);
+    ((NumericArrayTimeSeries) ts4).add(9);
+    array[3] = ts4;
+    
+    TimeSeries ts5 = new NumericArrayTimeSeries(
+        BaseTimeSeriesStringId.newBuilder()
+        .setMetric("m_over")
+        .build(), new MillisecondTimeStamp(1000));
+    ((NumericArrayTimeSeries) ts5).add(27);
+    ((NumericArrayTimeSeries) ts5).add(25);
+    ((NumericArrayTimeSeries) ts5).add(21);
+    ((NumericArrayTimeSeries) ts5).add(10);
     array[4] = ts5;
   }
 }

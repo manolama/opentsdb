@@ -43,6 +43,12 @@ import net.opentsdb.pools.PooledObject;
  * Also note that we compute ALL percentiles in one pass so we avoid re-doing
  * the iteration.
  * 
+ * TODO - may be some stuff around counters. For now if we have all of the 
+ * buckets then it doesn't matter if they are monotonically increasing counts
+ * as we compute the quantiles the same. BUT if it's expected that buckets 
+ * without changes are _not_ reported and the query system needs to derive the
+ * missing data, then we need to look at some history.
+ * 
  * @since 3.0
  */
 public class BucketQuantileNumericArrayComputation extends BucketQuantileComputer {
@@ -50,23 +56,23 @@ public class BucketQuantileNumericArrayComputation extends BucketQuantileCompute
       BucketQuantileNumericArrayComputation.class);
   
   /** The node we belong to. */
-  private final BucketQuantile node;
+  protected final BucketQuantile node;
   
   /** The sorted sources. */
-  private final TimeSeries[] sources;
+  protected final TimeSeries[] sources;
   
   /** The percentiles we'll populate and return to the caller. */
-  private double[][] quantiles;
-  private PooledObject[] pooled_objects;
+  protected double[][] quantiles;
+  protected PooledObject[] pooled_objects;
   
   /** The timestamp we'll return for the array. */
-  private TimeStamp timestamp;
+  protected TimeStamp timestamp;
   
   /** The base ID we'll use. */
-  private TimeSeriesId id;
+  protected TimeSeriesId id;
   
   /** Final result length for each quantile. */
-  private int limit = -1;
+  protected int limit = -1;
   
   /**
    * Default ctor.
@@ -105,6 +111,7 @@ public class BucketQuantileNumericArrayComputation extends BucketQuantileCompute
         pooled_objects = new PooledObject[qtiles.size()];
       }
       final double negative_threshold = ((BucketQuantileConfig) node.config()).getNanThreshold();
+      final boolean cumulative = ((BucketQuantileConfig) node.config()).getCumulativeBuckets();
       final long[] accumulator = accumulator_pooled == null ? new long[sources.length] :
           (long[]) accumulator_pooled.object();
       final long[][] results = new long[sources.length][];
@@ -189,6 +196,7 @@ public class BucketQuantileNumericArrayComputation extends BucketQuantileCompute
       if (limit < 0) {
         LOG.warn("No time series or data were found at index " + index);
         limit = 0;
+        return;
       }
       
       // setup the ptiles
@@ -199,9 +207,6 @@ public class BucketQuantileNumericArrayComputation extends BucketQuantileCompute
         }
         quantiles[i] = pooled_objects[i] == null ? new double[limit] :
           (double[]) pooled_objects[i].object();
-      }
-      if (limit == 0) {
-        return;
       }
       
       // now that we have all of the counts in order we can start the iteration.
@@ -219,7 +224,7 @@ public class BucketQuantileNumericArrayComputation extends BucketQuantileCompute
             accumulator[x] = results[x][indices[x]++];
             if (accumulator[x] < 0) {
               negatives++;
-            } else if (sum < 0) {
+            } else if (sum < 0 || cumulative) {
               sum = accumulator[x];
             } else {
               sum += accumulator[x];
@@ -237,10 +242,7 @@ public class BucketQuantileNumericArrayComputation extends BucketQuantileCompute
             // skip processing
             continue;
           }
-        }
-        
-        // now process.
-        if (sum < 0) {
+        } else if (sum < 0) {
           for (int y = 0; y < quantiles.length; y++) {
             quantiles[y][i] = Double.NaN;
           }
@@ -256,23 +258,27 @@ public class BucketQuantileNumericArrayComputation extends BucketQuantileCompute
         int threshold_idx = 0;
         double so_far = -1;
         int last_non_zero_bucket = -1;
+        OuterLoop:
         for (int z = 0; z < sources.length; z++) {
           if (accumulator[z] <= 0) {
             // nan or null.
             continue;
           }
           
-          so_far += accumulator[z];
+          if (cumulative) {
+            so_far = accumulator[z];
+          } else {
+            so_far += accumulator[z];
+          }
           last_non_zero_bucket = z;
           while (so_far >= p_thresholds[threshold_idx]) {
             quantiles[threshold_idx][i] = 
                 ((BucketQuantile) node).buckets()[z].report;
             p_thresholds[threshold_idx] = -Double.MIN_VALUE;
             threshold_idx++;
-            
             if (threshold_idx >= quantiles.length) {
               // done, no more work to do.
-              break;
+              break OuterLoop;
             }
           }
         }
@@ -341,11 +347,6 @@ public class BucketQuantileNumericArrayComputation extends BucketQuantileCompute
 
   @Override
   TimeSeries getSeries(final int percentile_index) {
-    return new BucketQuantileNumericArrayIterator(timestamp,
-        quantiles[percentile_index],
-        limit,
-        id, 
-        ((BucketQuantileConfig) node.config()).getAs(),
-        ((BucketQuantileConfig) node.config()).getQuantiles().get(percentile_index));
+    return new BucketQuantileNumericArrayIterator(percentile_index, this);
   }
 }
