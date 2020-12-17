@@ -42,11 +42,9 @@ import net.opentsdb.common.Const;
 import net.opentsdb.data.BaseTimeSeriesList;
 import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesByteId;
-import net.opentsdb.data.TimeSeriesDataType;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSeriesStringId;
 import net.opentsdb.data.TimeSpecification;
-import net.opentsdb.data.TypedTimeSeriesIterator;
 import net.opentsdb.data.types.numeric.NumericArrayType;
 import net.opentsdb.query.DefaultQueryResultId;
 import net.opentsdb.query.QueryNode;
@@ -54,7 +52,6 @@ import net.opentsdb.query.QueryResult;
 import net.opentsdb.query.QueryResultId;
 import net.opentsdb.rollup.RollupConfig;
 import net.opentsdb.utils.XXHash;
-import net.opentsdb.utils.Bytes.ByteMap;
 import net.opentsdb.utils.Deferreds;
 
 /**

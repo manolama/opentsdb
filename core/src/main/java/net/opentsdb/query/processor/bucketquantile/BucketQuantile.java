@@ -38,6 +38,11 @@ import net.opentsdb.data.TimeSeries;
 import net.opentsdb.data.TimeSeriesId;
 import net.opentsdb.data.TimeSpecification;
 import net.opentsdb.exceptions.QueryDownstreamException;
+import net.opentsdb.pools.ArrayObjectPool;
+import net.opentsdb.pools.DoubleArrayPool;
+import net.opentsdb.pools.IntArrayPool;
+import net.opentsdb.pools.LongArrayPool;
+import net.opentsdb.pools.ObjectPool;
 import net.opentsdb.query.AbstractQueryNode;
 import net.opentsdb.query.QueryNode;
 import net.opentsdb.query.QueryNodeConfig;
@@ -62,6 +67,9 @@ public class BucketQuantile extends AbstractQueryNode {
   private final Map<QueryResultId, QueryResult> results;
   private final Bucket[] buckets;
   private final AtomicBoolean failed;
+  private final ArrayObjectPool int_array_pool;
+  private final ArrayObjectPool long_array_pool;
+  private final ArrayObjectPool double_array_pool;
   
   /**
    * Default ctor.
@@ -132,6 +140,12 @@ public class BucketQuantile extends AbstractQueryNode {
     }
     
     Arrays.sort(buckets, BUCKET_COMPARATOR);
+    ObjectPool pool = context.tsdb().getRegistry().getObjectPool(IntArrayPool.TYPE); 
+    int_array_pool = pool != null ? (ArrayObjectPool) pool : null;
+    pool = context.tsdb().getRegistry().getObjectPool(LongArrayPool.TYPE);
+    long_array_pool = pool != null ? (ArrayObjectPool) pool : null;
+    pool = context.tsdb().getRegistry().getObjectPool(DoubleArrayPool.TYPE);
+    double_array_pool = pool != null ? (ArrayObjectPool) pool : null;
   }
 
   @Override
@@ -215,6 +229,18 @@ public class BucketQuantile extends AbstractQueryNode {
 
   Map<QueryResultId, QueryResult> results() {
     return results;
+  }
+  
+  ArrayObjectPool intArrayPool() {
+    return int_array_pool;
+  }
+  
+  ArrayObjectPool longArrayPool() {
+    return long_array_pool;
+  }
+  
+  ArrayObjectPool doubleArrayPool() {
+    return double_array_pool;
   }
   
   /**

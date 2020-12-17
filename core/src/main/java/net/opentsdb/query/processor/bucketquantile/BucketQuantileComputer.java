@@ -20,7 +20,7 @@ import net.opentsdb.data.TimeSeries;
 
 public abstract class BucketQuantileComputer implements Closeable {
 
-  final int index;
+  protected final int index;
   
   BucketQuantileComputer(final int index) {
     this.index = index;
